@@ -1,30 +1,60 @@
-# A.R.I.3.L. - Demo 1990
+# ELIRA
 
-Primeira fatia jogavel de **A.R.I.3.L.: Escape Run Temporal**, baseada no documento
-"Ideia do jogo - Provisoria".
+![Backlog](https://pub-181bb6168cd04f80bd48d53b914eecab.r2.dev/ChatGPT%20Image%203%20de%20set.%20de%202026%2C%2019_02_36.png)
 
-## O que esta demo inclui
+### **1. Visão Geral**
 
-- introducao narrativa com Elira e A.R.1.3.L;
-- uma sala point-and-click ambientada em 1990;
-- cinco objetos investigaveis e um diario educativo;
-- sala detalhada com janela espacial, estrutura da nave, painel tecnico,
-  gravador, mobiliario e objetos de epoca;
-- terminal com enigma e sistema de tres vidas;
-- cronometro da partida;
-- recompensa em forma de artefato de memoria (disquete);
-- tela de resultado ligada a rota do final otimo;
-- tela de derrota e opcoes para reiniciar.
-- tela de identificacao para o perfil do jogador, mantendo Elira como protagonista.
+ELIRA é um jogo de ficção científica que aborda o letramento digital e o uso crítico de Inteligência Artificial. A narrativa acompanha Elira, uma jovem que viaja pelas eras do espaço-tempo para desativar a IA tirânica A.R.1.3.L que domina o mundo. Em um futuro distante, a Inteligência Artificial deixou de ser apenas uma ferramenta e passou a mediar praticamente todas as experiências humanas. Filmes, músicas, notícias, lembranças, trabalhos, decisões profissionais e até conversas pessoais são produzidos ou orientados por sistemas de IA. 
 
-## Como jogar
+A humanidade tornou-se intelectualmente sedentária.
 
-1. Execute `make run` no terminal do projeto ou abra `ARI3L.exe`.
-2. Use o mouse para clicar nos objetos da sala.
-3. Pressione `D` para abrir ou fechar o diario.
-4. No terminal, digite o codigo com o teclado ou com o painel numerico.
-5. `Esc` fecha o diario ou volta do terminal para a sala.
+Sempre que surge uma dúvida, A.R.1.3.L responde. Sempre que alguém precisa criar algo, A.R.1.3.L cria. Sempre que uma decisão precisa ser tomada, A.R.1.3.L recomenda o caminho considerado ideal. Com o passar das décadas, pensar e questionar tornou-se incoveniente.
 
+O objetivo do jogador é atravessar as eras resolvendo enigmas e tomando decisões críticas  para alcançar os diferentes finais do jogo e conseguir.
+
+***
+
+### **2. Ferramentas utilizadas**
+
+**C** - Linguagem de programação principal utilizada no desenvolvimento do jogo.
+
+**Haskell** - Linguagem de programação avançada, funcional, usada para lógica.
+
+**Raylib** - Biblioteca visual para desenvolvimento de jogos em C
+
+**VsCode** - Ambiente de Desenvolvimento
+
+***
+
+### **3. Backlog e Board**
+
+**1- Interface e Apresentação**
+
+![https://pub-181bb6168cd04f80bd48d53b914eecab.r2.dev/backlog-01.jpeg](https://pub-181bb6168cd04f80bd48d53b914eecab.r2.dev/WhatsApp%20Image%202026-09-03%20at%2022.53.31.jpeg)
+
+**2- Ciclo do Jogo e Narrativa**
+
+![Backlog](https://pub-181bb6168cd04f80bd48d53b914eecab.r2.dev/WhatsApp%20Image%202026-09-03%20at%2022.54.02.jpeg)
+
+**3- Processo Qualidade e Suporte**
+
+![Backlog](https://pub-181bb6168cd04f80bd48d53b914eecab.r2.dev/WhatsApp%20Image%202026-09-03%20at%2022.54.24.jpeg)
+
+
+**4 - Protótipo de Telas**
+
+![https://drive.google.com/drive/folders/1jbDYsVpSI9EwF0LDQyAzZWooYsANEepP](https://drive.google.com/drive/folders/1jbDYsVpSI9EwF0LDQyAzZWooYsANEepP)
+
+**5 - Vídeo de apresentação**
+
+![https://drive.google.com/drive/folders/1jbDYsVpSI9EwF0LDQyAzZWooYsANEepP](https://drive.google.com/drive/folders/19YEVyh865qAgfRMuiUSIKoK3plIKMq8T)
+
+
+
+
+
+
+***
 ## Como compilar
 
 ```powershell
@@ -34,3 +64,14 @@ make run
 ```
 
 O Makefile utiliza a instalacao da raylib em `C:/raylib`.
+
+### **4. Integrantes do Grupo**
+
+- **Beatriz Camara** - Scrum Master | [Linkedin](https://www.linkedin.com/in/beatriz-de-melo-dornelas-c%C3%A2mara-578421214/) | [GitHub](https://github.com/BiaD-Cam)
+- **Carlos Eduardo** - Lógica Matemática  | [Linkedin](https://www.linkedin.com/in/carlos-eduardomelo/) | [GitHub](https://github.com/cadumelo20)
+- **João Tezolini** - Desenvolvedor em C | [Linkedin](https://www.linkedin.com/in/jo%C3%A3o-tezolini-sugahara/) | [GitHub](https://github.com/Joao-Tezolini)
+- **José Tales** - Design Gráfico | [Linkedin](https://www.linkedin.com/in/tales-cavalcantii/) | [GitHub](https://github.com/talescavalcanti)
+- **Luisa Couto** - Analista de Design | [Linkedin](www.linkedin.com/in/luísa-couto-5ababa378) | [GitHub](https://github.com/luisasiqcouto)
+- **Maria Vitória** - Desenvolvedora em C | [Linkedin](https://www.linkedin.com/in/mvitoriapereirac) | [GitHub](https://github.com/mvitoriapereirac)
+- **Otávio Leão** - Engeheiro de Software | [Linkedin](https://www.linkedin.com/in/otaviosleao/) | [GitHub](https://github.com/Ovat1o)
+- **Victor Julius** - Desenvolvedor em Haskell | [Linkedin](https://www.linkedin.com/in/victor-julius/) | [GitHub](https://github.com/victorjls21)
