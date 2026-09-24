@@ -42,28 +42,18 @@ O objetivo do jogador é atravessar as eras resolvendo enigmas e tomando decisõ
 
 ![Backlog](https://pub-181bb6168cd04f80bd48d53b914eecab.r2.dev/WhatsApp%20Image%202026-09-03%20at%2022.54.24.jpeg)
 
+***
 
-**4 - Protótipo de Telas**
+### **4 - [Protótipo de Telas](https://drive.google.com/drive/folders/1jbDYsVpSI9EwF0LDQyAzZWooYsANEepP)**
 
-[https://drive.google.com/drive/folders/1jbDYsVpSI9EwF0LDQyAzZWooYsANEepP](https://drive.google.com/drive/folders/1jbDYsVpSI9EwF0LDQyAzZWooYsANEepP)
+### **5 - [Vídeo de apresentação](https://drive.google.com/drive/folders/19YEVyh865qAgfRMuiUSIKoK3plIKMq8T)**
 
-**5 - Vídeo de apresentação**
+### **6 - [Jira](https://csprj-adsr-2p-e4.atlassian.net/jira/software/c/projects/PI2/list?jql=project%20%3D%20PI2%20AND%20parent%20%3D%20PI2-9%20AND%20fixVersion%20%3D%20empty%20ORDER%20BY%20resolution%20DESC%2C%20cf%5B10019%5D%20ASC)**
 
-[https://drive.google.com/drive/folders/1jbDYsVpSI9EwF0LDQyAzZWooYsANEepP](https://drive.google.com/drive/folders/19YEVyh865qAgfRMuiUSIKoK3plIKMq8T)
-
-**6 - Jira**
-
-[https://csprj-adsr-2p-e4.atlassian.net/jira/software/c/projects/PI2/list](https://csprj-adsr-2p-e4.atlassian.net/jira/software/c/projects/PI2/list?jql=project%20%3D%20PI2%20AND%20parent%20%3D%20PI2-9%20AND%20fixVersion%20%3D%20empty%20ORDER%20BY%20resolution%20DESC%2C%20cf%5B10019%5D%20ASC)
-
-**7 - Diagrama das UHs**
-
-[https://docs.google.com/document/d/1DT3npOZVw_-bCEAFb01KWhnt9JGE5SIf2Vkzfs2q1mk/edit?tab=t.0#heading=h.ld230wkn1wjo](https://docs.google.com/document/d/1DT3npOZVw_-bCEAFb01KWhnt9JGE5SIf2Vkzfs2q1mk/edit?tab=t.0#heading=h.ld230wkn1wjo)
-
-
-
-
+### **7 - [Diagrama das UHs](https://docs.google.com/document/d/1DT3npOZVw_-bCEAFb01KWhnt9JGE5SIf2Vkzfs2q1mk/edit?tab=t.0#heading=h.ld230wkn1wjo)**
 
 ***
+
 ## Como compilar
 
 ```powershell
@@ -74,7 +64,7 @@ make run
 
 O Makefile utiliza a instalacao da raylib em `C:/raylib`.
 
-### **4. Integrantes do Grupo**
+### **8. Integrantes do Grupo**
 
 - **Beatriz Camara** - Scrum Master | [Linkedin](https://www.linkedin.com/in/beatriz-de-melo-dornelas-c%C3%A2mara-578421214/) | [GitHub](https://github.com/BiaD-Cam)
 - **Carlos Eduardo** - Lógica Matemática  | [Linkedin](https://www.linkedin.com/in/carlos-eduardomelo/) | [GitHub](https://github.com/cadumelo20)
