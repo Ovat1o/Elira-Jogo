@@ -1,5 +1,6 @@
 #include "raylib.h"
 
+#include <math.h>
 #include <stdbool.h>
 #include <stdio.h>
 #include <string.h>
@@ -87,6 +88,63 @@ static void DrawBackground(void)
     }
 }
 
+static void DrawTitleSpaceBackground(void)
+{
+    float time = (float)GetTime();
+
+    ClearBackground((Color){3, 7, 18, 255});
+    DrawRectangleGradientV(0, 0, SCREEN_WIDTH, SCREEN_HEIGHT,
+                           (Color){12, 27, 54, 255},
+                           (Color){3, 7, 18, 255});
+
+    BeginBlendMode(BLEND_ADDITIVE);
+    for (int radius = 310; radius >= 70; radius -= 24)
+    {
+        float alpha = 0.008f + (310 - radius) * 0.00006f;
+        DrawCircle(760, 280, (float)radius,
+                   Fade((Color){38, 92, 150, 255}, alpha));
+    }
+    for (int radius = 220; radius >= 55; radius -= 22)
+    {
+        float alpha = 0.008f + (220 - radius) * 0.00008f;
+        DrawCircle(1115, 190, (float)radius,
+                   Fade((Color){106, 48, 127, 255}, alpha));
+    }
+    EndBlendMode();
+
+    for (int i = 0; i < 150; i++)
+    {
+        int x = (i * 83 + i * i * 7 + 29) % SCREEN_WIDTH;
+        int y = (i * 47 + i * i * 3 + 17) % SCREEN_HEIGHT;
+        float pulse = 0.58f + 0.24f * sinf(time * (0.7f + (i % 5) * 0.1f) + i);
+        float radius = (i % 19 == 0) ? 2.0f : ((i % 7 == 0) ? 1.4f : 0.9f);
+        Color star = (i % 11 == 0) ? (Color){141, 218, 255, 255} : RAYWHITE;
+        DrawCircle(x, y, radius, Fade(star, pulse));
+        if (i % 31 == 0)
+        {
+            DrawLine(x - 5, y, x + 5, y, Fade(star, pulse * 0.55f));
+            DrawLine(x, y - 5, x, y + 5, Fade(star, pulse * 0.55f));
+        }
+    }
+
+    DrawEllipseLines(1030, 370, 220, 72, Fade(CYAN_COLOR, 0.22f));
+    DrawEllipseLines(1030, 370, 244, 84, Fade(RAYWHITE, 0.08f));
+    DrawCircleGradient((Vector2){1030, 370}, 154,
+                       (Color){80, 147, 181, 255},
+                       (Color){17, 35, 64, 255});
+    DrawCircle(1087, 350, 132, Fade((Color){2, 7, 19, 255}, 0.72f));
+    DrawCircleGradient((Vector2){980, 318}, 34,
+                       Fade(RAYWHITE, 0.19f), BLANK);
+    DrawEllipseLines(1030, 370, 170, 34, Fade(CYAN_COLOR, 0.13f));
+    DrawEllipseLines(1030, 394, 142, 22, Fade(GOLD_COLOR, 0.12f));
+
+    DrawRectangleGradientH(0, 90, 750, 430,
+                           Fade((Color){3, 7, 18, 255}, 0.96f),
+                           Fade((Color){3, 7, 18, 255}, 0.0f));
+    DrawRectangleGradientV(0, 600, SCREEN_WIDTH, 120,
+                           BLANK, Fade(BLACK, 0.62f));
+}
+
 static void SetMessage(GameState *game, const char *message)
 {
     snprintf(game->message, sizeof(game->message), "%s", message);
@@ -146,22 +204,25 @@ static void UpdatePlayerName(GameState *game)
 
 static void DrawTitle(void)
 {
-    Vector2 center = {SCREEN_WIDTH / 2.0f, 245.0f};
-    DrawBackground();
-    for (int radius = 150; radius >= 45; radius -= 18)
-    {
-        float alpha = 0.05f + (150 - radius) * 0.002f;
-        DrawRing(center, (float)radius - 4, (float)radius, 0, 360, 96,
-                 Fade(CYAN_COLOR, alpha));
-    }
-    DrawCircleV(center, 38, Fade(GOLD_COLOR, 0.22f));
-    DrawCircleLines((int)center.x, (int)center.y, 38, GOLD_COLOR);
-    CenterText("A.R.I.3.L.", 200, 58, RAYWHITE);
-    CenterText("ESCAPE RUN TEMPORAL", 280, 20, CYAN_COLOR);
-    CenterText("DEMO 1990  |  O PROTOTIPO", 328, 18, GRAY);
-    DrawButton((Rectangle){490, 430, 300, 62}, "INICIAR MISSAO", CYAN_COLOR);
-    CenterText("Point & click narrativo", 530, 18, DARKGRAY);
-    CenterText("Mouse para investigar  |  D para abrir o diario", 570, 18, GRAY);
+    Rectangle startButton = {86, 472, 350, 66};
+
+    DrawTitleSpaceBackground();
+    DrawText("ARQUIVO DE MEMORIA  //  TRANSMISSAO 01", 90, 116, 17,
+             Fade(CYAN_COLOR, 0.75f));
+    DrawText("A.R.I.3.L.", 82, 164, 96, RAYWHITE);
+    DrawRectangle(88, 274, 554, 3, CYAN_COLOR);
+    DrawRectangle(88, 281, 218, 2, GOLD_COLOR);
+    DrawText("ESCAPE RUN TEMPORAL", 90, 307, 29, CYAN_COLOR);
+    DrawText("ENTRE NAS MEMORIAS DA MAQUINA", 91, 355, 19,
+             Fade(RAYWHITE, 0.72f));
+    DrawText("Descubra o que existia antes de A.R.I.3.L. controlar o futuro.",
+             91, 386, 18, GRAY);
+    DrawButton(startButton, "INICIAR MISSAO", CYAN_COLOR);
+    DrawText("ENTER ou ESPACO", 101, 555, 16, Fade(GOLD_COLOR, 0.82f));
+    DrawText("DEMO 1990  //  O PROTOTIPO", 91, 633, 16,
+             Fade(LIGHTGRAY, 0.62f));
+    DrawText("Point & click narrativo", 946, 650, 16,
+             Fade(LIGHTGRAY, 0.50f));
 }
 
 static void DrawPlayerName(const GameState *game)
@@ -751,7 +812,7 @@ int main(void)
         switch (game.screen)
         {
             case SCREEN_TITLE:
-                if (Clicked((Rectangle){490, 430, 300, 62}) ||
+                if (Clicked((Rectangle){86, 472, 350, 66}) ||
                     IsKeyPressed(KEY_ENTER) || IsKeyPressed(KEY_SPACE))
                     game.screen = SCREEN_PLAYER_NAME;
                 break;
