@@ -16,6 +16,8 @@ O objetivo do jogador é atravessar as eras resolvendo enigmas e tomando decisõ
 
 ### **2. Ferramentas utilizadas**
 
+**Jira** - Ferramenta de Gestão de Projeto
+
 **C** - Linguagem de programação principal utilizada no desenvolvimento do jogo.
 
 **Haskell** - Linguagem de programação avançada, funcional, usada para lógica.
@@ -49,6 +51,13 @@ O objetivo do jogador é atravessar as eras resolvendo enigmas e tomando decisõ
 
 ![https://drive.google.com/drive/folders/1jbDYsVpSI9EwF0LDQyAzZWooYsANEepP](https://drive.google.com/drive/folders/19YEVyh865qAgfRMuiUSIKoK3plIKMq8T)
 
+**6 - Jira**
+
+![https://csprj-adsr-2p-e4.atlassian.net/jira/software/c/projects/PI2/list]()
+
+**7 - Diagrama das UHs**
+
+![https://docs.google.com/document/d/1DT3npOZVw_-bCEAFb01KWhnt9JGE5SIf2Vkzfs2q1mk/edit?tab=t.0#heading=h.ld230wkn1wjo]()
 
 
 
