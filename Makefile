@@ -11,7 +11,7 @@ CFLAGS := -std=c99 -Wall -Wextra
 LDLIBS := -L$(RAYLIB_DIR)/raylib/src -lraylib -lopengl32 -lgdi32 -lwinmm
 
 SRC := src/main.c
-OUT := DecifraIA.exe
+OUT := ARI3L.exe
 
 .PHONY: all run clean
 

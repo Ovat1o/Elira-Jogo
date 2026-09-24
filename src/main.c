@@ -7,10 +7,12 @@
 #define SCREEN_WIDTH 1280
 #define SCREEN_HEIGHT 720
 #define ACCESS_CODE "1950"
+#define PLAYER_NAME_MAX 20
 
 typedef enum GameScreen
 {
     SCREEN_TITLE,
+    SCREEN_PLAYER_NAME,
     SCREEN_INTRO,
     SCREEN_ROOM,
     SCREEN_TERMINAL,
@@ -28,6 +30,8 @@ typedef struct GameState
     bool foundBlueprint;
     bool foundTape;
     bool journalOpen;
+    char playerName[PLAYER_NAME_MAX + 1];
+    int playerNameLength;
     char code[5];
     int codeLength;
     double startTime;
@@ -115,6 +119,31 @@ static void ResetDemo(GameState *game)
     game->messageTimer = 0.0f;
 }
 
+static void UpdatePlayerName(GameState *game)
+{
+    int character = GetCharPressed();
+
+    while (character > 0)
+    {
+        bool allowed = (character >= 'A' && character <= 'Z') ||
+                       (character >= 'a' && character <= 'z') ||
+                       (character >= '0' && character <= '9') ||
+                       character == ' ' || character == '-' || character == '_';
+
+        if (allowed && game->playerNameLength < PLAYER_NAME_MAX)
+        {
+            game->playerName[game->playerNameLength++] = (char)character;
+            game->playerName[game->playerNameLength] = '\0';
+        }
+        character = GetCharPressed();
+    }
+
+    if (IsKeyPressed(KEY_BACKSPACE) && game->playerNameLength > 0)
+    {
+        game->playerName[--game->playerNameLength] = '\0';
+    }
+}
+
 static void DrawTitle(void)
 {
     Vector2 center = {SCREEN_WIDTH / 2.0f, 245.0f};
@@ -127,7 +156,7 @@ static void DrawTitle(void)
     }
     DrawCircleV(center, 38, Fade(GOLD_COLOR, 0.22f));
     DrawCircleLines((int)center.x, (int)center.y, 38, GOLD_COLOR);
-    CenterText("DECIFRA.IA", 200, 58, RAYWHITE);
+    CenterText("A.R.I.3.L.", 200, 58, RAYWHITE);
     CenterText("ESCAPE RUN TEMPORAL", 280, 20, CYAN_COLOR);
     CenterText("DEMO 1990  |  O PROTOTIPO", 328, 18, GRAY);
     DrawButton((Rectangle){490, 430, 300, 62}, "INICIAR MISSAO", CYAN_COLOR);
@@ -135,7 +164,32 @@ static void DrawTitle(void)
     CenterText("Mouse para investigar  |  D para abrir o diario", 570, 18, GRAY);
 }
 
-static void DrawIntro(void)
+static void DrawPlayerName(const GameState *game)
+{
+    Rectangle field = {360, 330, 560, 64};
+    bool focused = CheckCollisionPointRec(GetMousePosition(), field);
+
+    DrawBackground();
+    CenterText("IDENTIFICACAO DO OPERADOR", 135, 34, CYAN_COLOR);
+    CenterText("Antes de acompanhar Elira, informe como voce quer ser identificado.",
+               202, 21, LIGHTGRAY);
+    CenterText("Seu nome sera usado apenas como perfil na interface.", 238, 18, GRAY);
+
+    DrawRectangleRounded(field, 0.12f, 8, PANEL_COLOR);
+    DrawRectangleRoundedLinesEx(field, 0.12f, 8, 2,
+                                focused ? CYAN_COLOR : PANEL_LIGHT);
+    DrawText(game->playerNameLength > 0 ? game->playerName : "Digite seu nome...",
+             388, 349, 25, game->playerNameLength > 0 ? RAYWHITE : GRAY);
+    DrawText(TextFormat("%d/%d", game->playerNameLength, PLAYER_NAME_MAX),
+             842, 412, 16, GRAY);
+
+    DrawButton((Rectangle){490, 470, 300, 58}, "CONFIRMAR PERFIL", GOLD_COLOR);
+    if (game->messageTimer > 0)
+        CenterText(game->message, 425, 18, RED_COLOR);
+    CenterText("Pressione ENTER para continuar", 560, 16, DARKGRAY);
+}
+
+static void DrawIntro(const GameState *game)
 {
     DrawBackground();
     DrawText("ARQUIVO TEMPORAL // 1990", 90, 70, 20, CYAN_COLOR);
@@ -149,6 +203,8 @@ static void DrawIntro(void)
              24, LIGHTGRAY);
     DrawText("a origem da entidade que controla o mundo.", 90, 350, 24,
              LIGHTGRAY);
+    DrawText(TextFormat("OPERADOR: %s  |  PROTAGONISTA: ELIRA", game->playerName),
+             90, 397, 18, GOLD_COLOR);
 
     DrawRectangleRounded((Rectangle){850, 215, 340, 230}, 0.08f, 8,
                          Fade(PANEL_LIGHT, 0.85f));
@@ -182,25 +238,74 @@ static void DrawRoom(const GameState *game)
     Rectangle blueprint = {815, 132, 160, 125};
     Rectangle tape = {825, 390, 125, 75};
 
-    ClearBackground((Color){35, 43, 50, 255});
-    DrawRectangleGradientV(0, 70, SCREEN_WIDTH, 465,
-                           (Color){62, 73, 79, 255}, (Color){33, 42, 47, 255});
-    DrawRectangleGradientV(0, 535, SCREEN_WIDTH, 185,
-                           (Color){55, 44, 38, 255}, (Color){25, 23, 23, 255});
+    ClearBackground((Color){20, 27, 34, 255});
 
-    /* Estrutura metalica da nave e iluminacao do teto. */
-    DrawRectangle(0, 70, SCREEN_WIDTH, 32, (Color){22, 31, 38, 255});
-    DrawRectangle(0, 101, SCREEN_WIDTH, 5, (Color){10, 17, 23, 255});
-    for (int x = 20; x < SCREEN_WIDTH; x += 210)
-    {
-        DrawRectangle(x, 78, 150, 12, (Color){119, 135, 133, 255});
-        DrawRectangle(x + 8, 81, 134, 6, Fade(CYAN_COLOR, 0.35f));
-    }
-    for (int x = 0; x < SCREEN_WIDTH; x += 255)
-        DrawLine(x, 106, x + 40, 535, Fade(BLACK, 0.18f));
-    DrawLine(0, 362, SCREEN_WIDTH, 362, Fade(BLACK, 0.22f));
-    for (int x = 80; x < SCREEN_WIDTH; x += 170)
-        DrawCircle(x, 112, 3, (Color){91, 105, 109, 255});
+    /* Teto em perspectiva. */
+    DrawTriangle((Vector2){0, 70}, (Vector2){1090, 126}, (Vector2){1280, 70},
+                 (Color){28, 39, 48, 255});
+    DrawTriangle((Vector2){0, 70}, (Vector2){190, 126}, (Vector2){1090, 126},
+                 (Color){34, 47, 56, 255});
+    DrawLineEx((Vector2){0, 70}, (Vector2){190, 126}, 4,
+               (Color){91, 112, 119, 255});
+    DrawLineEx((Vector2){1280, 70}, (Vector2){1090, 126}, 4,
+               (Color){91, 112, 119, 255});
+    DrawLineEx((Vector2){190, 126}, (Vector2){1090, 126}, 4,
+               (Color){70, 92, 100, 255});
+
+    /* Parede central e paredes laterais convergem para o fundo. */
+    DrawTriangle((Vector2){190, 126}, (Vector2){1010, 515}, (Vector2){1090, 126},
+                 (Color){50, 64, 70, 255});
+    DrawTriangle((Vector2){190, 126}, (Vector2){270, 515}, (Vector2){1010, 515},
+                 (Color){55, 69, 75, 255});
+    DrawTriangle((Vector2){0, 70}, (Vector2){270, 515}, (Vector2){190, 126},
+                 (Color){42, 56, 63, 255});
+    DrawTriangle((Vector2){0, 70}, (Vector2){0, 535}, (Vector2){270, 515},
+                 (Color){37, 49, 57, 255});
+    DrawTriangle((Vector2){1280, 70}, (Vector2){1090, 126}, (Vector2){1010, 515},
+                 (Color){42, 56, 63, 255});
+    DrawTriangle((Vector2){1280, 70}, (Vector2){1010, 515}, (Vector2){1280, 535},
+                 (Color){37, 49, 57, 255});
+
+    /* Placas da parede do fundo reforcam escala e profundidade. */
+    DrawLine(205, 205, 1073, 205, Fade(BLACK, 0.20f));
+    DrawLine(222, 292, 1055, 292, Fade(BLACK, 0.20f));
+    DrawLine(240, 382, 1037, 382, Fade(BLACK, 0.20f));
+    DrawLine(258, 470, 1019, 470, Fade(BLACK, 0.20f));
+    DrawLine(350, 126, 390, 515, Fade(BLACK, 0.18f));
+    DrawLine(510, 126, 520, 515, Fade(BLACK, 0.18f));
+    DrawLine(670, 126, 650, 515, Fade(BLACK, 0.18f));
+    DrawLine(830, 126, 780, 515, Fade(BLACK, 0.18f));
+    DrawLine(990, 126, 910, 515, Fade(BLACK, 0.18f));
+
+    /* Piso com linhas que apontam para o centro da sala. */
+    DrawTriangle((Vector2){0, 650}, (Vector2){1010, 515}, (Vector2){270, 515},
+                 (Color){48, 39, 37, 255});
+    DrawTriangle((Vector2){0, 650}, (Vector2){1280, 650}, (Vector2){1010, 515},
+                 (Color){39, 33, 34, 255});
+    for (int x = 0; x <= SCREEN_WIDTH; x += 160)
+        DrawLine(640, 510, x, 650, Fade((Color){100, 76, 65, 255}, 0.28f));
+    DrawLine(0, 558, 1280, 558, Fade((Color){118, 87, 71, 255}, 0.28f));
+    DrawLine(0, 607, 1280, 607, Fade((Color){118, 87, 71, 255}, 0.22f));
+
+    /* Luminaria central e cone de luz discreto. */
+    DrawTriangle((Vector2){545, 108}, (Vector2){850, 505}, (Vector2){735, 108},
+                 Fade(CYAN_COLOR, 0.035f));
+    DrawTriangle((Vector2){545, 108}, (Vector2){430, 505}, (Vector2){850, 505},
+                 Fade(CYAN_COLOR, 0.035f));
+    DrawRectangleRounded((Rectangle){548, 78, 184, 30}, 0.18f, 8,
+                         (Color){93, 108, 109, 255});
+    DrawRectangleRounded((Rectangle){560, 87, 160, 14}, 0.18f, 8,
+                         (Color){136, 214, 207, 255});
+    DrawCircle(560, 94, 3, RAYWHITE);
+    DrawCircle(720, 94, 3, RAYWHITE);
+
+    /* Estruturas verticais nas quinas da nave. */
+    DrawLineEx((Vector2){190, 126}, (Vector2){270, 515}, 7,
+               (Color){76, 91, 97, 255});
+    DrawLineEx((Vector2){1090, 126}, (Vector2){1010, 515}, 7,
+               (Color){76, 91, 97, 255});
+    DrawLineEx((Vector2){270, 515}, (Vector2){1010, 515}, 8,
+               (Color){31, 39, 44, 255});
 
     /* Janela para o espaco, reforcando que a sala fica na nave. */
     DrawRectangleRounded((Rectangle){270, 120, 200, 145}, 0.08f, 8,
@@ -223,10 +328,10 @@ static void DrawRoom(const GameState *game)
     DrawRectangle(16, 118, 18, 405, (Color){70, 78, 78, 255});
     DrawRectangle(34, 118, 34, 14, (Color){87, 94, 91, 255});
     DrawRectangle(17, 245, 16, 32, (Color){118, 64, 52, 255});
-    for (int x = 0; x < SCREEN_WIDTH; x += 42)
+    for (int x = 252; x < 1028; x += 42)
     {
         Color stripe = (x / 42) % 2 == 0 ? GOLD_COLOR : (Color){33, 34, 35, 255};
-        DrawRectangle(x, 522, 42, 13, stripe);
+        DrawRectangle(x, 510, 42, 10, stripe);
     }
 
     /* Painel tecnico: uma das novas pistas. */
@@ -267,8 +372,25 @@ static void DrawRoom(const GameState *game)
         }
     }
 
-    DrawRectangle(320, 465, 610, 45, (Color){117, 82, 56, 255});
+    /* Tapete trapezoidal acompanha as linhas de perspectiva do piso. */
+    DrawTriangle((Vector2){395, 650}, (Vector2){780, 565}, (Vector2){500, 565},
+                 (Color){46, 62, 68, 255});
+    DrawTriangle((Vector2){395, 650}, (Vector2){885, 650}, (Vector2){780, 565},
+                 (Color){39, 52, 58, 255});
+    DrawLineEx((Vector2){395, 650}, (Vector2){885, 650}, 4,
+               Fade(CYAN_COLOR, 0.25f));
+    DrawLineEx((Vector2){500, 565}, (Vector2){780, 565}, 3,
+               Fade(CYAN_COLOR, 0.18f));
+
+    DrawEllipse(625, 612, 340, 32, Fade(BLACK, 0.35f));
+    DrawRectangle(320, 465, 610, 38, (Color){128, 89, 59, 255});
+    DrawRectangle(320, 496, 610, 12, (Color){72, 51, 42, 255});
     DrawRectangle(350, 510, 540, 105, (Color){91, 62, 45, 255});
+    DrawRectangleGradientV(350, 510, 540, 105,
+                           Fade((Color){126, 87, 58, 255}, 0.45f),
+                           (Color){73, 51, 43, 255});
+    DrawLine(350, 510, 890, 510, (Color){147, 100, 63, 255});
+    DrawLine(350, 615, 890, 615, (Color){42, 33, 31, 255});
     DrawRectangleRec(drawer, (Color){105, 73, 51, 255});
     DrawRectangleLinesEx(drawer, 3, (Color){62, 42, 33, 255});
     DrawCircle(510, 550, 6, GOLD_COLOR);
@@ -283,9 +405,6 @@ static void DrawRoom(const GameState *game)
                (Color){51, 58, 62, 255});
     DrawLineEx((Vector2){828, 607}, (Vector2){852, 633}, 6,
                (Color){51, 58, 62, 255});
-    for (int x = 50; x < SCREEN_WIDTH; x += 220)
-        DrawRectangleLines(x, 548, 175, 82, Fade((Color){91, 80, 73, 255}, 0.28f));
-
     DrawRectangleRounded((Rectangle){500, 223, 300, 218}, 0.08f, 10,
                          (Color){184, 176, 147, 255});
     DrawRectangleRounded((Rectangle){528, 249, 244, 145}, 0.06f, 8,
@@ -316,9 +435,9 @@ static void DrawRoom(const GameState *game)
     DrawRectangle(875, 418, 24, 16, (Color){164, 151, 119, 255});
     DrawCircle(936, 403, 4, game->foundTape ? CYAN_COLOR : RED_COLOR);
 
-    DrawRectangle(960, 408, 30, 57, (Color){118, 122, 113, 255});
-    DrawRectangle(956, 404, 38, 7, (Color){157, 159, 147, 255});
-    DrawLineEx((Vector2){970, 408}, (Vector2){950, 350}, 3,
+    DrawRectangle(370, 417, 30, 48, (Color){118, 122, 113, 255});
+    DrawRectangle(366, 413, 38, 7, (Color){157, 159, 147, 255});
+    DrawLineEx((Vector2){390, 417}, (Vector2){383, 390}, 3,
                (Color){43, 45, 43, 255});
 
     DrawHotspot(calendar, "Examinar calendario");
@@ -336,6 +455,7 @@ static void DrawHud(const GameState *game)
     int seconds = totalSeconds % 60;
     DrawRectangle(0, 0, SCREEN_WIDTH, 70, Fade(VOID_COLOR, 0.94f));
     DrawText("ARQUIVO 01 // 1990", 28, 20, 22, CYAN_COLOR);
+    DrawText(TextFormat("OPERADOR: %s", game->playerName), 270, 23, 17, GRAY);
     DrawText(TextFormat("PISTAS %d/5", ClueCount(game)), 900, 20, 20, LIGHTGRAY);
     DrawText(TextFormat("VIDAS %d", game->lives), 1050, 20, 20,
              game->lives == 1 ? RED_COLOR : RAYWHITE);
@@ -597,6 +717,7 @@ static void DrawResult(const GameState *game)
              545, 455, 22, CYAN_COLOR);
     DrawText(TextFormat("VIDAS: %d/3", game->lives), 800, 455, 22,
              game->lives == 3 ? GOLD_COLOR : RAYWHITE);
+    DrawText(TextFormat("PERFIL: %s", game->playerName), 545, 525, 17, GRAY);
     DrawText("ROTA DO FINAL OTIMO AUMENTADA", 545, 492, 17,
              (Color){101, 232, 151, 255});
     DrawButton((Rectangle){410, 590, 230, 56}, "JOGAR NOVAMENTE", CYAN_COLOR);
@@ -618,7 +739,7 @@ int main(void)
 {
     GameState game = {0};
     SetConfigFlags(FLAG_MSAA_4X_HINT | FLAG_VSYNC_HINT);
-    InitWindow(SCREEN_WIDTH, SCREEN_HEIGHT, "DecifraIA - Escape Run Temporal");
+    InitWindow(SCREEN_WIDTH, SCREEN_HEIGHT, "A.R.I.3.L. - Escape Run Temporal");
     SetTargetFPS(60);
     game.screen = SCREEN_TITLE;
     ResetDemo(&game);
@@ -632,7 +753,21 @@ int main(void)
             case SCREEN_TITLE:
                 if (Clicked((Rectangle){490, 430, 300, 62}) ||
                     IsKeyPressed(KEY_ENTER) || IsKeyPressed(KEY_SPACE))
-                    game.screen = SCREEN_INTRO;
+                    game.screen = SCREEN_PLAYER_NAME;
+                break;
+            case SCREEN_PLAYER_NAME:
+                UpdatePlayerName(&game);
+                if (Clicked((Rectangle){490, 470, 300, 58}) || IsKeyPressed(KEY_ENTER))
+                {
+                    if (game.playerNameLength > 0)
+                    {
+                        game.message[0] = '\0';
+                        game.messageTimer = 0.0f;
+                        game.screen = SCREEN_INTRO;
+                    }
+                    else
+                        SetMessage(&game, "Informe um nome para criar seu perfil.");
+                }
                 break;
             case SCREEN_INTRO:
                 if (Clicked((Rectangle){490, 575, 300, 58}) ||
@@ -672,7 +807,8 @@ int main(void)
         switch (game.screen)
         {
             case SCREEN_TITLE: DrawTitle(); break;
-            case SCREEN_INTRO: DrawIntro(); break;
+            case SCREEN_PLAYER_NAME: DrawPlayerName(&game); break;
+            case SCREEN_INTRO: DrawIntro(&game); break;
             case SCREEN_ROOM:
                 DrawRoom(&game);
                 DrawHud(&game);
