@@ -53,11 +53,11 @@ O objetivo do jogador é atravessar as eras resolvendo enigmas e tomando decisõ
 
 **6 - Jira**
 
-[https://csprj-adsr-2p-e4.atlassian.net/jira/software/c/projects/PI2/list]()
+[https://csprj-adsr-2p-e4.atlassian.net/jira/software/c/projects/PI2/list](https://csprj-adsr-2p-e4.atlassian.net/jira/software/c/projects/PI2/list?jql=project%20%3D%20PI2%20AND%20parent%20%3D%20PI2-9%20AND%20fixVersion%20%3D%20empty%20ORDER%20BY%20resolution%20DESC%2C%20cf%5B10019%5D%20ASC)
 
 **7 - Diagrama das UHs**
 
-[https://docs.google.com/document/d/1DT3npOZVw_-bCEAFb01KWhnt9JGE5SIf2Vkzfs2q1mk/edit?tab=t.0#heading=h.ld230wkn1wjo]()
+[https://docs.google.com/document/d/1DT3npOZVw_-bCEAFb01KWhnt9JGE5SIf2Vkzfs2q1mk/edit?tab=t.0#heading=h.ld230wkn1wjo](https://docs.google.com/document/d/1DT3npOZVw_-bCEAFb01KWhnt9JGE5SIf2Vkzfs2q1mk/edit?tab=t.0#heading=h.ld230wkn1wjo)
 
 
 
