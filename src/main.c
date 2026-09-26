@@ -278,7 +278,7 @@ static void ResetDemo(GameState *game)
     game->foundTape = false;
     game->journalOpen = false;
     game->journalPage = 0;
-    game->journalYearTab = 3;
+    game->journalYearTab = 0;
     game->code[0] = '\0';
     game->codeLength = 0;
     game->startTime = GetTime();
@@ -1374,21 +1374,21 @@ static void DrawPadlockIcon(int centerX, int centerY, float scale, Color bodyCol
 
 static void DrawJournalTabs(const GameState *game, int bookX, int bookY)
 {
-    static const char *tabLabels[6] = {
-        "1950", "1956", "1958", "1990", "2000", "2026"
+    static const char *tabLabels[4] = {
+        "1990", "2008", "2026", "2048"
     };
 
     int tabX = bookX + 1040;
-    int tabW = 84;
-    int tabH = 50;
-    int tabGap = 58;
+    int tabW = 86;
+    int tabH = 54;
+    int tabGap = 66;
 
-    for (int i = 0; i < 6; i++)
+    for (int i = 0; i < 4; i++)
     {
-        int tabY = bookY + 34 + i * tabGap;
+        int tabY = bookY + 42 + i * tabGap;
         Rectangle tabRect = {(float)tabX, (float)tabY, (float)tabW, (float)tabH};
         bool isCurrent = (game->journalYearTab == i);
-        bool is1990 = (i == 3);
+        bool is1990 = (i == 0);
         bool hover = CheckCollisionPointRec(GetVirtualMouse(), tabRect);
 
         Color tabBg;
@@ -1436,13 +1436,13 @@ static void DrawJournalTabs(const GameState *game, int bookX, int bookY)
             /* Ponto verde indicando ano ativo disponivel */
             DrawCircle(tabX + 16, tabY + tabH / 2, 5, (Color){35, 145, 55, 255});
             DrawCircleLines(tabX + 16, tabY + tabH / 2, 5, RAYWHITE);
-            DrawText(tabLabels[i], tabX + 28, tabY + 16, 17, tabText);
+            DrawText(tabLabels[i], tabX + 28, tabY + 18, 17, tabText);
         }
         else
         {
             /* Cadeado para anos bloqueados */
-            DrawPadlockIcon(tabX + 16, tabY + tabH / 2 + 1, 0.72f, (Color){190, 145, 60, 255}, (Color){215, 215, 220, 255});
-            DrawText(tabLabels[i], tabX + 28, tabY + 16, 16, tabText);
+            DrawPadlockIcon(tabX + 16, tabY + tabH / 2 + 1, 0.75f, (Color){190, 145, 60, 255}, (Color){215, 215, 220, 255});
+            DrawText(tabLabels[i], tabX + 28, tabY + 18, 16, tabText);
         }
     }
 }
@@ -1554,35 +1554,36 @@ static void DrawJournal(const GameState *game)
                  (Color){68, 38, 22, 255});
 
     int footY = bookY + 542;
-    static const char *tabLabels[6] = { "1950", "1956", "1958", "1990", "2000", "2026" };
+    static const char *tabLabels[4] = { "1990", "2008", "2026", "2048" };
 
-    if (game->journalYearTab != 3)
+    if (game->journalYearTab != 0)
     {
         /* ========================================================= */
-        /* TELA DE ANO BLOQUEADO (1950, 1956, 1958, 2000, 2026)      */
+        /* TELA DE ANO BLOQUEADO (2008, 2026, 2048)                  */
         /* ========================================================= */
         const char *lockedYear = tabLabels[game->journalYearTab];
+        int phaseNumber = game->journalYearTab + 1;
 
         /* --- Pagina Esquerda --- */
         DrawText(TextFormat("ARQUIVO CRONOLOGICO // %s", lockedYear), bookX + 35, bookY + 22, 22, (Color){125, 35, 18, 255});
-        DrawText("PROJETO A.R.1.3.L. - ACESSO RESTRITO", bookX + 35, bookY + 46, 15, (Color){110, 75, 50, 255});
+        DrawText(TextFormat("FASE %d - SISTEMA A.R.1.3.L. (ACESSO RESTRITO)", phaseNumber), bookX + 35, bookY + 46, 15, (Color){110, 75, 50, 255});
         DrawLine(bookX + 35, bookY + 66, bookX + 482, bookY + 66, Fade((Color){125, 35, 18, 255}, 0.40f));
 
         Rectangle lockBox = {(float)(bookX + 35), (float)(bookY + 95), 448, 86};
         DrawRectangleRounded(lockBox, 0.12f, 6, Fade((Color){185, 50, 40, 255}, 0.14f));
         DrawRectangleRoundedLinesEx(lockBox, 0.12f, 6, 2, (Color){185, 50, 40, 255});
         DrawPadlockIcon(bookX + 70, bookY + 138, 1.4f, GOLD_COLOR, RAYWHITE);
-        DrawText("ANO BLOQUEADO - CADEADO ATIVO", bookX + 105, bookY + 115, 18, (Color){165, 35, 25, 255});
-        DrawText("Este arquivo cronologico permanece trancado.", bookX + 105, bookY + 142, 15, INK_COLOR);
+        DrawText("FASE BLOQUEADA - CADEADO ATIVO", bookX + 105, bookY + 115, 18, (Color){165, 35, 25, 255});
+        DrawText(TextFormat("O arquivo de %s sera liberado nas proximas fases.", lockedYear), bookX + 105, bookY + 142, 15, INK_COLOR);
 
         DrawText("DIRETRIZ DE INVESTIGACAO TEMPORAL:", bookX + 35, bookY + 210, 17, (Color){125, 35, 18, 255});
-        DrawText("Cada ano do diario possui apenas duas paginas.", bookX + 35, bookY + 242, 16, INK_COLOR);
-        DrawText("A missao atual esta restrita ao ano de 1990.", bookX + 35, bookY + 272, 16, INK_COLOR);
+        DrawText("Cada fase/ano do jogo possui apenas duas paginas.", bookX + 35, bookY + 242, 16, INK_COLOR);
+        DrawText("A missao atual esta restrita a Fase 1 (Ano de 1990).", bookX + 35, bookY + 272, 16, INK_COLOR);
         DrawText("Por esse motivo, apenas as duas paginas de 1990", bookX + 35, bookY + 302, 16, INK_COLOR);
-        DrawText("estao liberadas para resolucao dos enigmas.", bookX + 35, bookY + 332, 16, INK_COLOR);
+        DrawText("estao desbloqueadas para a investigacao do prototipo.", bookX + 35, bookY + 332, 16, INK_COLOR);
 
-        DrawText("Para decifrar o terminal, revise o diario de 1990", bookX + 35, bookY + 380, 16, (Color){115, 75, 45, 255});
-        DrawText("e investigue os 5 objetos presentes no laboratorio.", bookX + 35, bookY + 406, 16, (Color){115, 75, 45, 255});
+        DrawText(TextFormat("Para avancar para %s, conclua os desafios", lockedYear), bookX + 35, bookY + 380, 16, (Color){115, 75, 45, 255});
+        DrawText("e desvende o codigo no computador do laboratorio.", bookX + 35, bookY + 406, 16, (Color){115, 75, 45, 255});
 
         Rectangle retBtnL = {(float)(bookX + 50), (float)(bookY + 450), 410, 46};
         bool retHoverL = CheckCollisionPointRec(GetVirtualMouse(), retBtnL);
@@ -1592,7 +1593,7 @@ static void DrawJournal(const GameState *game)
 
         /* --- Pagina Direita --- */
         DrawText(TextFormat("CRIPTOGRAFIA TEMPORAL // %s", lockedYear), bookX + 560, bookY + 22, 20, (Color){125, 35, 18, 255});
-        DrawText("PROTOCOLO DE SEGURANCA ATIVO", bookX + 560, bookY + 46, 15, (Color){110, 75, 50, 255});
+        DrawText(TextFormat("PROTOCOLO DE SEGURANCA // FASE %d", phaseNumber), bookX + 560, bookY + 46, 15, (Color){110, 75, 50, 255});
         DrawLine(bookX + 560, bookY + 66, bookX + 1008, bookY + 66, Fade((Color){125, 35, 18, 255}, 0.40f));
 
         int lockCenterX = bookX + 784;
@@ -1614,8 +1615,8 @@ static void DrawJournal(const GameState *game)
         DrawRectangle(lockCenterX - 6, lockCenterY + 45, 12, 32, (Color){35, 18, 10, 255});
         DrawCircle(lockCenterX, lockCenterY + 45, 5, (Color){225, 50, 40, 255});
 
-        DrawText("STATUS: ARQUIVO BLOQUEADO", bookX + 645, bookY + 365, 18, (Color){165, 40, 30, 255});
-        DrawText(TextFormat("Registros de %s indisponiveis nesta missao.", lockedYear), bookX + 610, bookY + 395, 16, INK_COLOR);
+        DrawText("STATUS: FASE BLOQUEADA", bookX + 660, bookY + 365, 18, (Color){165, 40, 30, 255});
+        DrawText(TextFormat("Registros de %s indisponiveis nesta fase.", lockedYear), bookX + 610, bookY + 395, 16, INK_COLOR);
 
         /* Footer da tela bloqueada */
         Rectangle closeBtnB = {(float)(bookX + 680), (float)footY, 150, 36};
@@ -1637,13 +1638,12 @@ static void DrawJournal(const GameState *game)
             /* PAGINA 1 DE 1990: REGISTRO DE OPERACOES & SINTESE     */
             /* ----------------------------------------------------- */
             /* Pagina Esquerda */
-            DrawText("DIARIO DE PESQUISA // PROJETO A.R.1.3.L.", bookX + 32, bookY + 20, 20, (Color){125, 35, 18, 255});
-            DrawText("DRA. ELIRA RAMOS - LAB. DE CIBERNETICA (1990)", bookX + 32, bookY + 44, 15, (Color){110, 75, 50, 255});
-            DrawLine(bookX + 32, bookY + 65, bookX + 482, bookY + 65, Fade((Color){125, 35, 18, 255}, 0.45f));
+            DrawText("DIARIO DE PESQUISA // PROJETO A.R.1.3.L.", bookX + 32, bookY + 22, 20, (Color){125, 35, 18, 255});
+            DrawLine(bookX + 32, bookY + 52, bookX + 482, bookY + 52, Fade((Color){125, 35, 18, 255}, 0.45f));
 
-            DrawText("REGISTRO DE OPERACOES", bookX + 32, bookY + 76, 18, (Color){125, 35, 18, 255});
-            DrawText("Acesso ao terminal protegido por chave cronologica.", bookX + 32, bookY + 98, 15, INK_COLOR);
-            DrawText(TextFormat("Pistas no laboratorio: %d de 5 descobertas", ClueCount(game)), bookX + 32, bookY + 120, 16,
+            DrawText("REGISTRO DE OPERACOES", bookX + 32, bookY + 68, 18, (Color){125, 35, 18, 255});
+            DrawText("Acesso ao terminal protegido por chave cronologica.", bookX + 32, bookY + 92, 15, INK_COLOR);
+            DrawText("Pistas no laboratorio:", bookX + 32, bookY + 116, 16,
                      ClueCount(game) == 5 ? (Color){20, 120, 45, 255} : (Color){145, 65, 30, 255});
 
             /* 5 Caixas de pistas com fonte grande e legivel */
@@ -1655,11 +1655,11 @@ static void DrawJournal(const GameState *game)
                 "Gravador: Fita com Voz da Dra. Ramos (1990)"
             };
             const char *itemTitlesMissing[5] = {
-                "1. Calendario de Parede (Nao inspecionado)",
-                "2. Estante de Livros (Nao inspecionada)",
-                "3. Gaveta da Mesa (Nao inspecionada)",
-                "4. Esquema Tecnico (Nao inspecionado)",
-                "5. Gravador Magnetico (Nao inspecionado)"
+                "1. (Nao inspecionado)",
+                "2. (Nao inspecionado)",
+                "3. (Nao inspecionado)",
+                "4. (Nao inspecionado)",
+                "5. (Nao inspecionado)"
             };
             bool itemFound[5] = {
                 game->foundCalendar, game->foundBooks, game->foundDrawer,
@@ -1668,7 +1668,7 @@ static void DrawJournal(const GameState *game)
 
             for (int i = 0; i < 5; i++)
             {
-                int iy = bookY + 148 + i * 42;
+                int iy = bookY + 144 + i * 42;
                 Rectangle boxR = {(float)(bookX + 32), (float)iy, 448, 36};
                 DrawRectangleRounded(boxR, 0.2f, 6, itemFound[i] ? Fade((Color){45, 135, 65, 255}, 0.14f) : Fade((Color){140, 125, 105, 255}, 0.12f));
                 DrawRectangleRoundedLinesEx(boxR, 0.2f, 6, 1, itemFound[i] ? (Color){45, 135, 65, 255} : (Color){190, 175, 150, 255});
@@ -1681,49 +1681,47 @@ static void DrawJournal(const GameState *game)
             DrawText("CONFIDENCIAL", bookX + 295, bookY + 375, 18, (Color){175, 45, 45, 255});
             DrawText("ARQUIVO HISTORICO 1990", bookX + 288, bookY + 396, 12, (Color){175, 45, 45, 255});
 
-            DrawText("Anotacoes da Dra. Ramos:", bookX + 32, bookY + 424, 16, (Color){125, 65, 35, 255});
-            DrawText("Investigue os objetos do quarto para preencher", bookX + 32, bookY + 448, 15, INK_COLOR);
-            DrawText("as folhas do diario com os dados do prototipo.", bookX + 32, bookY + 470, 15, INK_COLOR);
-            DrawText("Avance para a Pagina 2 para o dossie completo.", bookX + 32, bookY + 494, 15, (Color){125, 35, 18, 255});
+            DrawText("Investigue os objetos do quarto para preencher", bookX + 32, bookY + 430, 15, INK_COLOR);
+            DrawText("as folhas do diario com os dados do prototipo.", bookX + 32, bookY + 454, 15, INK_COLOR);
+            DrawText("Avance para a Pagina 2 para o dossie completo.", bookX + 32, bookY + 480, 15, (Color){125, 35, 18, 255});
 
             /* Pagina Direita */
-            DrawText("SINTESE & DEDUCAO DO TERMINAL", bookX + 560, bookY + 20, 20, (Color){125, 35, 18, 255});
-            DrawText("INSTRUCOES DO SISTEMA A.R.1.3.L. (1990)", bookX + 560, bookY + 44, 15, (Color){110, 75, 50, 255});
-            DrawLine(bookX + 560, bookY + 65, bookX + 1008, bookY + 65, Fade((Color){125, 35, 18, 255}, 0.45f));
+            DrawText("SINTESE & DEDUCAO DO TERMINAL", bookX + 560, bookY + 22, 20, (Color){125, 35, 18, 255});
+            DrawLine(bookX + 560, bookY + 52, bookX + 1008, bookY + 52, Fade((Color){125, 35, 18, 255}, 0.45f));
 
-            /* Card Como desvendar */
-            Rectangle cardR1 = {(float)(bookX + 560), (float)(bookY + 78), 448, 145};
+            /* Card Como desvendar - perfeitamente enquadrado */
+            Rectangle cardR1 = {(float)(bookX + 560), (float)(bookY + 76), 452, 146};
             DrawRectangleRounded(cardR1, 0.08f, 6, Fade((Color){168, 142, 93, 255}, 0.16f));
             DrawRectangleRoundedLinesEx(cardR1, 0.08f, 6, 1.5f, (Color){185, 155, 110, 255});
-            DrawText("COMO DESVENDAR O CODIGO:", bookX + 578, bookY + 92, 17, (Color){125, 35, 18, 255});
-            DrawText("- O computador exige uma chave numerica de 4 digitos.", bookX + 578, bookY + 118, 15, INK_COLOR);
-            DrawText("- Cada pista na sala representa um passo na evolucao da IA.", bookX + 578, bookY + 142, 15, INK_COLOR);
-            DrawText("- O ponto de partida foi quando um matematico perguntou:", bookX + 578, bookY + 166, 15, INK_COLOR);
-            DrawText("  'Podem as maquinas pensar?'", bookX + 578, bookY + 190, 16, (Color){135, 35, 18, 255});
+            DrawText("COMO DESVENDAR O CODIGO:", bookX + 576, bookY + 90, 17, (Color){125, 35, 18, 255});
+            DrawText("- O computador exige uma chave de 4 digitos.", bookX + 576, bookY + 115, 15, INK_COLOR);
+            DrawText("- Cada pista na sala e um marco historico da IA.", bookX + 576, bookY + 138, 15, INK_COLOR);
+            DrawText("- Ponto de partida: a questao de Turing:", bookX + 576, bookY + 161, 15, INK_COLOR);
+            DrawText("  'Podem as maquinas pensar?'", bookX + 576, bookY + 186, 16, (Color){135, 35, 18, 255});
 
             /* Card Status do Codigo */
-            Rectangle cardR2 = {(float)(bookX + 560), (float)(bookY + 238), 448, 125};
+            Rectangle cardR2 = {(float)(bookX + 560), (float)(bookY + 238), 452, 125};
             DrawRectangleRounded(cardR2, 0.08f, 6, (Color){238, 232, 218, 255});
             DrawRectangleRoundedLinesEx(cardR2, 0.08f, 6, 1.5f, (Color){175, 155, 125, 255});
-            DrawText("STATUS DO CODIGO DE ACESSO:", bookX + 578, bookY + 252, 16, (Color){125, 65, 35, 255});
+            DrawText("STATUS DO CODIGO DE ACESSO:", bookX + 576, bookY + 252, 16, (Color){125, 65, 35, 255});
 
             if (ClueCount(game) == 5)
             {
                 DrawText("[ 1 ]   [ 9 ]   [ 5 ]   [ 0 ]", bookX + 645, bookY + 280, 28, (Color){25, 125, 50, 255});
-                DrawText("Chave decifrada! Digite 1950 no computador.", bookX + 578, bookY + 326, 15, (Color){25, 125, 50, 255});
+                DrawText("Chave decifrada! Digite 1950 no computador.", bookX + 576, bookY + 326, 15, (Color){25, 125, 50, 255});
             }
             else
             {
                 DrawText("[ ? ]   [ ? ]   [ ? ]   [ ? ]", bookX + 645, bookY + 280, 28, (Color){165, 45, 35, 255});
                 DrawText(TextFormat("Ainda faltam %d pistas para consolidar a deducao.", 5 - ClueCount(game)),
-                         bookX + 578, bookY + 326, 15, (Color){135, 55, 40, 255});
+                         bookX + 576, bookY + 326, 15, (Color){135, 55, 40, 255});
             }
 
             /* Dica de navegacao */
             DrawText("DICAS DE NAVEGACAO DESTE ARQUIVO:", bookX + 560, bookY + 385, 16, (Color){125, 35, 18, 255});
             DrawText("- Clique em 'Proxima [E]' para acessar a Pagina 2 de 1990.", bookX + 560, bookY + 412, 15, INK_COLOR);
-            DrawText("- As abas com cadeado [🔒] pertencem a outros anos.", bookX + 560, bookY + 438, 15, INK_COLOR);
-            DrawText("- Pressione [D] ou [ESC] para retornar ao quarto.", bookX + 560, bookY + 464, 15, INK_COLOR);
+            DrawText("- As abas com cadeado pertencem a outros anos.", bookX + 560, bookY + 438, 15, INK_COLOR);
+            DrawText("- Pressione [D] para retornar ao quarto.", bookX + 560, bookY + 464, 15, INK_COLOR);
         }
         else
         {
@@ -1894,8 +1892,8 @@ static void UpdateRoom(GameState *game)
             return;
         }
 
-        /* Se estiver no ano 1990 (ano ativo, tab 3) */
-        if (game->journalYearTab == 3)
+        /* Se estiver no ano 1990 (ano ativo, tab 0) */
+        if (game->journalYearTab == 0)
         {
             if (IsKeyPressed(KEY_Q) || IsKeyPressed(KEY_LEFT) || IsKeyPressed(KEY_ONE))
             {
@@ -1915,7 +1913,7 @@ static void UpdateRoom(GameState *game)
         Rectangle closeBtn = {(float)(bookX + 660), (float)footY, 145, 36};
         Rectangle nextBtn = {(float)(bookX + 835), (float)footY, 155, 36};
 
-        if (game->journalYearTab == 3)
+        if (game->journalYearTab == 0)
         {
             if (Clicked(prevBtn) && game->journalPage > 0)
             {
@@ -1932,7 +1930,7 @@ static void UpdateRoom(GameState *game)
             Rectangle retBtnL = {(float)(bookX + 50), (float)(bookY + 450), 410, 46};
             if (Clicked(retBtnL))
             {
-                game->journalYearTab = 3;
+                game->journalYearTab = 0;
                 game->journalPage = 0;
             }
         }
@@ -1942,19 +1940,19 @@ static void UpdateRoom(GameState *game)
             game->journalOpen = false;
         }
 
-        /* Clique nas abas laterais a direita */
+        /* Clique nas abas laterais a direita (1990, 2008, 2026, 2048) */
         int tabX = bookX + 1040;
-        int tabW = 84;
-        int tabH = 50;
-        int tabGap = 58;
-        for (int i = 0; i < 6; i++)
+        int tabW = 86;
+        int tabH = 54;
+        int tabGap = 66;
+        for (int i = 0; i < 4; i++)
         {
-            int tabY = bookY + 34 + i * tabGap;
+            int tabY = bookY + 42 + i * tabGap;
             Rectangle tabRect = {(float)tabX, (float)tabY, (float)tabW, (float)tabH};
             if (Clicked(tabRect))
             {
                 game->journalYearTab = i;
-                if (i == 3)
+                if (i == 0)
                 {
                     /* Ao clicar em 1990, garante pagina valida */
                     if (game->journalPage > 1) game->journalPage = 0;
@@ -1969,35 +1967,35 @@ static void UpdateRoom(GameState *game)
     if (Clicked(calendar))
     {
         game->foundCalendar = true;
-        game->journalYearTab = 3;
+        game->journalYearTab = 0;
         game->journalPage = 1;
         SetMessage(game, "Pista: o Teste de Turing foi proposto em 1950.");
     }
     else if (Clicked(books))
     {
         game->foundBooks = true;
-        game->journalYearTab = 3;
+        game->journalYearTab = 0;
         game->journalPage = 1;
         SetMessage(game, "Registro: a IA recebeu seu nome em 1956.");
     }
     else if (Clicked(drawer))
     {
         game->foundDrawer = true;
-        game->journalYearTab = 3;
+        game->journalYearTab = 0;
         game->journalPage = 1;
         SetMessage(game, "A gaveta contem o disquete com os dados de treino.");
     }
     else if (Clicked(blueprint))
     {
         game->foundBlueprint = true;
-        game->journalYearTab = 3;
+        game->journalYearTab = 0;
         game->journalPage = 1;
         SetMessage(game, "Esquema: o Perceptron foi apresentado em 1958.");
     }
     else if (Clicked(tape))
     {
         game->foundTape = true;
-        game->journalYearTab = 3;
+        game->journalYearTab = 0;
         game->journalPage = 1;
         SetMessage(game, "Gravacao: o terminal exige o marco fundamental (1950).");
     }
