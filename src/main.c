@@ -379,23 +379,25 @@ static void DrawTitle(void)
     DrawText("ARQUIVO DE MEMORIA  //  TRANSMISSAO 01", 90, 116, 17,
              Fade(CYAN_COLOR, 0.82f));
 
-    /* 2. Titulo A.R.I.3.L. com aura neon e micro-glitch sci-fi */
+    /* 2. Titulo ELIRA com aura neon e micro-glitch sci-fi */
+    const char *titleText = "ELIRA";
+    int titleW = MeasureText(titleText, 96);
     float titleGlow = 0.30f + 0.18f * sinf(time * 2.2f);
-    DrawText("A.R.I.3.L.", 81, 164, 96, Fade(CYAN_COLOR, titleGlow * 0.45f));
-    DrawText("A.R.I.3.L.", 83, 164, 96, Fade(CYAN_COLOR, titleGlow * 0.45f));
-    DrawText("A.R.I.3.L.", 82, 163, 96, Fade(CYAN_COLOR, titleGlow * 0.45f));
-    DrawText("A.R.I.3.L.", 82, 165, 96, Fade(CYAN_COLOR, titleGlow * 0.45f));
+    DrawText(titleText, 81, 164, 96, Fade(CYAN_COLOR, titleGlow * 0.45f));
+    DrawText(titleText, 83, 164, 96, Fade(CYAN_COLOR, titleGlow * 0.45f));
+    DrawText(titleText, 82, 163, 96, Fade(CYAN_COLOR, titleGlow * 0.45f));
+    DrawText(titleText, 82, 165, 96, Fade(CYAN_COLOR, titleGlow * 0.45f));
 
     float glitchCycle = fmodf(time, 4.2f);
     bool isGlitch = (glitchCycle < 0.10f) || (glitchCycle > 2.10f && glitchCycle < 2.17f);
     if (isGlitch)
     {
         float shift = sinf(time * 50.0f) * 4.0f;
-        DrawText("A.R.I.3.L.", (int)(82 + shift), 164, 96, Fade(CYAN_COLOR, 0.70f));
-        DrawText("A.R.I.3.L.", (int)(82 - shift), 164, 96, Fade(RED_COLOR, 0.60f));
-        DrawRectangle(80, 198, 430, 3, Fade(CYAN_COLOR, 0.45f));
+        DrawText(titleText, (int)(82 + shift), 164, 96, Fade(CYAN_COLOR, 0.70f));
+        DrawText(titleText, (int)(82 - shift), 164, 96, Fade(RED_COLOR, 0.60f));
+        DrawRectangle(80, 198, titleW + 16, 3, Fade(CYAN_COLOR, 0.45f));
     }
-    DrawText("A.R.I.3.L.", 82, 164, 96, RAYWHITE);
+    DrawText(titleText, 82, 164, 96, RAYWHITE);
 
     /* 3. Linhas decorativas com pulso de luz laser em movimento */
     DrawRectangle(88, 274, 554, 3, CYAN_COLOR);
@@ -907,68 +909,88 @@ static void DrawRoom(const GameState *game)
     DrawEllipseLines(42, 325, 55, 165, Fade(CYAN_COLOR, 0.45f));
     DrawEllipseLines(42, 325, 42, 145, Fade(GOLD_COLOR, 0.40f));
 
-    /* --- CALENDÁRIO COM PERSPECTIVA DA PAREDE INCLINADA --- */
-    /* Sombra do calendário projetada na parede */
-    DrawTriangle((Vector2){78, 120}, (Vector2){78, 294}, (Vector2){238, 312}, Fade(BLACK, 0.35f));
-    DrawTriangle((Vector2){238, 312}, (Vector2){238, 148}, (Vector2){78, 120}, Fade(BLACK, 0.35f));
+    /* --- CALENDÁRIO RETO (ALINHADO, NITIDO E EM HARMONIA COM A PAREDE) --- */
+    /* Sombra suave projetada na parede */
+    DrawRectangle(79, 119, 160, 185, Fade(BLACK, 0.40f));
 
-    /* Folha do calendário em perspectiva inclinada */
-    DrawTriangle((Vector2){75, 116}, (Vector2){75, 290}, (Vector2){235, 308}, (Color){226, 218, 194, 255});
-    DrawTriangle((Vector2){235, 308}, (Vector2){235, 144}, (Vector2){75, 116}, (Color){216, 206, 180, 255});
+    /* Folha base do calendário (papel marfim retro) */
+    Rectangle calRect = {75, 115, 160, 185};
+    DrawRectangleRec(calRect, (Color){236, 230, 212, 255});
+    DrawRectangleLinesEx(calRect, 1, (Color){185, 175, 150, 255});
+    /* Efeito de espessura de papel nas bordas direita e inferior */
+    DrawLine(76, 299, 234, 299, (Color){175, 165, 140, 255});
+    DrawLine(234, 116, 234, 299, (Color){175, 165, 140, 255});
 
-    /* Cabeçalho vinho em perspectiva */
-    DrawTriangle((Vector2){75, 116}, (Vector2){75, 158}, (Vector2){235, 182}, (Color){158, 48, 52, 255});
-    DrawTriangle((Vector2){235, 182}, (Vector2){235, 144}, (Vector2){75, 116}, (Color){140, 38, 42, 255});
+    /* Cabeçalho vinho reto */
+    Rectangle headRect = {75, 115, 160, 42};
+    DrawRectangleRec(headRect, (Color){152, 42, 46, 255});
+    DrawLine(75, 115, 235, 115, (Color){185, 65, 70, 255});
+    DrawLine(75, 156, 235, 156, (Color){112, 28, 32, 255});
 
-    /* Fixador superior com ilhós metálico e furos do espiral */
-    DrawCircle(155, 124, 3.5f, (Color){60, 65, 70, 255});
-    DrawCircle(155, 124, 1.5f, (Color){180, 185, 190, 255});
+    /* Argolas metálicas do espiral superior alinhadas retas */
     for (int ring = 0; ring < 7; ring++)
     {
-        int rx = 88 + ring * 20;
-        int ry = 118 + ring * 3;
-        DrawLineEx((Vector2){(float)rx, (float)ry}, (Vector2){(float)rx + 4, (float)ry + 8}, 2, (Color){180, 185, 190, 255});
+        int rx = 87 + ring * 21;
+        /* Furo no papel */
+        DrawRectangle(rx - 1, 119, 3, 3, (Color){45, 15, 18, 255});
+        /* Elo metálico */
+        DrawRectangle(rx - 1, 111, 3, 9, (Color){180, 185, 190, 255});
+        DrawRectangle(rx, 111, 1, 9, RAYWHITE);
     }
 
     /* Textos do cabeçalho */
-    DrawText("OUTUBRO", 98, 137, 17, RAYWHITE);
-    DrawText("1990", 188, 150, 15, GOLD_COLOR);
+    DrawText("OUTUBRO", 84, 131, 16, RAYWHITE);
+    DrawText("1990", 188, 131, 16, GOLD_COLOR);
 
-    /* Grade de dias da semana */
-    DrawText("D  S  T  Q  Q  S  S", 92, 188, 11, (Color){135, 70, 65, 255});
+    /* Faixa sutil dos dias da semana */
+    Rectangle daysBar = {75, 157, 160, 16};
+    DrawRectangleRec(daysBar, (Color){224, 216, 196, 255});
+    DrawLine(75, 172, 235, 172, (Color){200, 190, 170, 255});
 
-    /* Matriz de dias do mês de Outubro */
+    const char *weekdays[7] = { "D", "S", "T", "Q", "Q", "S", "S" };
+    for (int c = 0; c < 7; c++)
+    {
+        int cx = 86 + c * 21;
+        DrawText(weekdays[c], cx, 160, 11, (c == 0) ? (Color){185, 45, 45, 255} : (Color){100, 85, 75, 255});
+    }
+
+    /* Grade de dias do mês (1 a 31) */
     for (int day = 1; day <= 31; day++)
     {
-        int dayIndex = day + 0;
-        int col = dayIndex % 7;
-        int row = dayIndex / 7;
-        int dx = 94 + col * 19;
-        int dy = 205 + row * 13;
+        int col = (day + 0) % 7;
+        int row = (day + 0) / 7;
+        int dx = 84 + col * 21;
+        int dy = 176 + row * 13;
         if (day == 24)
         {
-            DrawCircle(dx + 5, dy + 5, 7, Fade(RED_COLOR, 0.35f));
-            DrawCircleLines(dx + 5, dy + 5, 7, RED_COLOR);
+            DrawCircle(dx + 6, dy + 5, 8, Fade(RED_COLOR, 0.35f));
+            DrawCircleLines(dx + 6, dy + 5, 8, RED_COLOR);
             DrawText(TextFormat("%d", day), dx, dy, 10, RED_COLOR);
         }
         else
         {
-            DrawText(TextFormat("%2d", day), dx, dy, 10, (Color){70, 65, 58, 255});
+            Color dayColor = (col == 0) ? (Color){175, 55, 55, 255} : (Color){60, 55, 50, 255};
+            DrawText(TextFormat("%2d", day), dx, dy, 10, dayColor);
         }
     }
 
     /* Pista manuscrita sobre Alan Turing / 1950 */
     if (game->foundCalendar)
     {
-        Rectangle postIt = {92, 268, 134, 32};
-        DrawRectangleRec(postIt, (Color){245, 230, 110, 255});
-        DrawRectangleLinesEx(postIt, 1, (Color){210, 190, 80, 255});
-        DrawText("1950 - TURING TEST", 96, 273, 11, (Color){160, 40, 40, 255});
-        DrawText("Computing Machinery", 96, 286, 9, (Color){70, 50, 40, 255});
+        Rectangle postIt = {82, 248, 146, 42};
+        DrawRectangle(84, 250, 146, 42, Fade(BLACK, 0.22f));
+        DrawRectangleRec(postIt, (Color){254, 244, 138, 255});
+        DrawRectangle(82, 248, 146, 6, (Color){240, 225, 100, 255});
+        DrawRectangleLinesEx(postIt, 1, (Color){218, 198, 80, 255});
+        DrawText("1950 - TURING TEST", 88, 256, 11, (Color){160, 40, 40, 255});
+        DrawText("Computing Machinery", 88, 271, 9, (Color){70, 55, 45, 255});
     }
     else
     {
-        DrawText("[ ? ]", 140, 278, 13, GRAY);
+        Rectangle tagBox = {88, 254, 134, 32};
+        DrawRectangleRounded(tagBox, 0.25f, 4, Fade((Color){180, 170, 150, 255}, 0.25f));
+        DrawRectangleRoundedLinesEx(tagBox, 0.25f, 4, 1, (Color){190, 180, 160, 255});
+        DrawText("[ ? ]", 142, 263, 14, (Color){120, 105, 95, 255});
     }
 
     /* --- ARMÁRIO / ESTANTE DE LIVROS (APOIADO FIRMEMENTE NO PISO COM PERSPECTIVA) --- */
@@ -2374,7 +2396,7 @@ int main(void)
 {
     GameState game = {0};
     SetConfigFlags(FLAG_MSAA_4X_HINT | FLAG_VSYNC_HINT);
-    InitWindow(SCREEN_WIDTH, SCREEN_HEIGHT, "A.R.I.3.L. - Escape Run Temporal");
+    InitWindow(SCREEN_WIDTH, SCREEN_HEIGHT, "ELIRA - Escape Run Temporal");
     InitAudioDevice();
 
     EnsureAmbientMusicFile();
