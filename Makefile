@@ -11,7 +11,7 @@ CFLAGS := -std=c99 -Wall -Wextra
 LDLIBS := -L$(RAYLIB_DIR)/raylib/src -lraylib -lopengl32 -lgdi32 -lwinmm
 
 SRC := src/main.c
-OUT := ARI3L.exe
+OUT := ELIRA.exe
 
 .PHONY: all run clean
 
@@ -24,4 +24,8 @@ run: $(OUT)
 	./$(OUT)
 
 clean:
-	$(RM) $(OUT)
+ifeq ($(OS),Windows_NT)
+	-@cmd /c if exist $(OUT) del /f /q $(OUT) 2>nul
+else
+	-@$(RM) $(OUT) 2>/dev/null || true
+endif
