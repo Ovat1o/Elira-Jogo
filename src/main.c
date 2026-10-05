@@ -12,6 +12,11 @@
 #define ACCESS_CODE "1950"
 #define PLAYER_NAME_MAX 20
 
+static inline void DrawRectangleRoundedLinesEx(Rectangle rec, float roundness, int segments, float lineThick, Color color)
+{
+    DrawRectangleRoundedLines(rec, roundness, segments, lineThick, color);
+}
+
 typedef enum GameScreen
 {
     SCREEN_TITLE,
@@ -21,6 +26,9 @@ typedef enum GameScreen
     SCREEN_ROOM,
     SCREEN_TERMINAL,
     SCREEN_RESULT,
+    SCREEN_ROOM_2,
+    SCREEN_PUZZLE_FILES,
+    SCREEN_RESULT_2,
     SCREEN_FAILURE
 } GameScreen;
 
@@ -45,6 +53,15 @@ typedef struct GameState
     double elapsedTime;
     char message[160];
     float messageTimer;
+
+    /* --- QUARTO 2 & PUZZLE DE ARQUIVOS/PASTAS (AMONG US STYLE) --- */
+    bool room2CabinetInspected;
+    bool room2DoorInspected;
+    bool puzzleFilesCompleted;
+    int draggingFileIndex;
+    int fileConnections[4];
+    int rightFolderColors[4];
+    float puzzleCompleteTimer;
 } GameState;
 
 static const Color VOID_COLOR = {8, 12, 24, 255};
@@ -55,6 +72,22 @@ static const Color GOLD_COLOR = {242, 186, 73, 255};
 static const Color RED_COLOR = {231, 76, 94, 255};
 static const Color PAPER_COLOR = {230, 220, 184, 255};
 static const Color INK_COLOR = {43, 40, 35, 255};
+static const Color WIRE_YELLOW = {245, 212, 50, 255};
+static const Color WIRE_RED    = {235, 62, 70, 255};
+static const Color WIRE_BLUE   = {52, 142, 245, 255};
+static const Color WIRE_PINK   = {240, 75, 190, 255};
+
+static Color GetFileWireColor(int colorIndex)
+{
+    switch (colorIndex)
+    {
+        case 0: return WIRE_YELLOW;
+        case 1: return WIRE_RED;
+        case 2: return WIRE_BLUE;
+        case 3: return WIRE_PINK;
+        default: return RAYWHITE;
+    }
+}
 
 static int g_currentRes = 0; /* 0: 1280x720, 1: 1600x900, 2: 1920x1080 */
 static float g_musicVolume = 0.45f;
@@ -213,7 +246,7 @@ static void DrawTitleSpaceBackground(void)
     DrawEllipseLines((int)planetX, (int)planetY, 222, 73, Fade(CYAN_COLOR, 0.24f + 0.08f * sinf(time * 2.0f)));
 
     /* Esfera do planeta */
-    DrawCircleGradient((Vector2){planetX, planetY}, 154,
+    DrawCircleGradient((int)planetX, (int)planetY, 154,
                        (Color){80, 147, 181, 255},
                        (Color){17, 35, 64, 255});
 
@@ -221,7 +254,7 @@ static void DrawTitleSpaceBackground(void)
     DrawCircle((int)(planetX + 57), (int)(planetY - 20), 132, Fade((Color){2, 7, 19, 255}, 0.74f));
 
     /* Ponto de luz especular pulsante */
-    DrawCircleGradient((Vector2){planetX - 50.0f, planetY - 52.0f}, 36,
+    DrawCircleGradient((int)(planetX - 50.0f), (int)(planetY - 52.0f), 36,
                        Fade(RAYWHITE, 0.20f + 0.06f * sinf(time * 1.8f)), BLANK);
 
     /* Aneis internos */
@@ -268,6 +301,22 @@ static int ClueCount(const GameState *game)
            (game->foundTape ? 1 : 0);
 }
 
+static void InitRoom2Puzzle(GameState *game)
+{
+    game->puzzleFilesCompleted = false;
+    game->draggingFileIndex = -1;
+    game->puzzleCompleteTimer = 0.0f;
+    for (int i = 0; i < 4; i++)
+    {
+        game->fileConnections[i] = -1;
+    }
+    /* Ordem embaralhada das pastas no lado direito: Vermelho(1), Amarelo(0), Rosa(3), Azul(2) */
+    game->rightFolderColors[0] = 1;
+    game->rightFolderColors[1] = 0;
+    game->rightFolderColors[2] = 3;
+    game->rightFolderColors[3] = 2;
+}
+
 static void ResetDemo(GameState *game)
 {
     game->lives = 3;
@@ -285,6 +334,10 @@ static void ResetDemo(GameState *game)
     game->elapsedTime = 0.0;
     game->message[0] = '\0';
     game->messageTimer = 0.0f;
+
+    game->room2CabinetInspected = false;
+    game->room2DoorInspected = false;
+    InitRoom2Puzzle(game);
 }
 
 static void UpdatePlayerName(GameState *game)
@@ -720,9 +773,9 @@ static void DrawRoomWindow(void)
     /* Nebulosa suave se deslocando lentamente ao fundo */
     float nebX = 330.0f + sinf(time * 0.3f) * 10.0f;
     float nebY = 175.0f + cosf(time * 0.4f) * 6.0f;
-    DrawCircleGradient((Vector2){nebX, nebY}, 54,
+    DrawCircleGradient((int)nebX, (int)nebY, 54,
                        Fade((Color){28, 62, 115, 255}, 0.28f), BLANK);
-    DrawCircleGradient((Vector2){nebX + 42.0f, nebY + 18.0f}, 42,
+    DrawCircleGradient((int)(nebX + 42.0f), (int)(nebY + 18.0f), 42,
                        Fade((Color){75, 35, 95, 255}, 0.20f), BLANK);
 
     /* Estrelas em movimento contínuo da direita para a esquerda (efeito de voo da nave) */
@@ -774,7 +827,7 @@ static void DrawRoomWindow(void)
     DrawEllipseLines((int)pwX, (int)pwY, 48, 15, Fade(RAYWHITE, 0.10f));
 
     /* Esfera planetaria */
-    DrawCircleGradient((Vector2){pwX, pwY}, 28,
+    DrawCircleGradient((int)pwX, (int)pwY, 28,
                        (Color){61, 121, 173, 255},
                        (Color){12, 27, 47, 255});
 
@@ -782,7 +835,7 @@ static void DrawRoomWindow(void)
     DrawCircle((int)(pwX + 10), (int)(pwY - 4), 24, Fade((Color){2, 7, 19, 255}, 0.74f));
 
     /* Ponto de reflexo especular pulsante */
-    DrawCircleGradient((Vector2){pwX - 9, pwY - 8}, 8,
+    DrawCircleGradient((int)(pwX - 9), (int)(pwY - 8), 8,
                        Fade(RAYWHITE, 0.22f + 0.08f * sinf(time * 1.8f)), BLANK);
 
     /* Arco do anel em primeiro plano */
@@ -2172,10 +2225,12 @@ static void DrawResult(const GameState *game)
     DrawText(TextFormat("VIDAS: %d/3", game->lives), 800, 455, 22,
              game->lives == 3 ? GOLD_COLOR : RAYWHITE);
     DrawText(TextFormat("PERFIL: %s", game->playerName), 545, 525, 17, GRAY);
-    DrawText("ROTA DO FINAL OTIMO AUMENTADA", 545, 492, 17,
-             (Color){101, 232, 151, 255});
-    DrawButton((Rectangle){410, 590, 230, 56}, "JOGAR NOVAMENTE", CYAN_COLOR);
-    DrawButton((Rectangle){660, 590, 210, 56}, "MENU INICIAL", GOLD_COLOR);
+    Rectangle btnNext = {340, 588, 380, 56};
+    Rectangle btnReplay = {740, 588, 210, 56};
+    Rectangle btnMenu = {970, 588, 190, 56};
+    DrawButton(btnNext, "IR PARA SALA DE ARQUIVOS >> [ENTER]", GOLD_COLOR);
+    DrawButton(btnReplay, "REINICIAR SALA 1", CYAN_COLOR);
+    DrawButton(btnMenu, "MENU INICIAL", PANEL_LIGHT);
 }
 
 static void DrawFailure(void)
@@ -2187,6 +2242,728 @@ static void DrawFailure(void)
     CenterText("Revise as pistas no diario e tente novamente.", 350, 19, GRAY);
     DrawButton((Rectangle){490, 460, 300, 60}, "REINICIAR SALA", RED_COLOR);
     DrawButton((Rectangle){520, 550, 240, 48}, "MENU INICIAL", CYAN_COLOR);
+}
+
+/* ========================================================================= */
+/* QUARTO 2 (ANO 1990) - SALA DE ARQUIVOS & PUZZLE DE PASTAS (ESTILO AMONG US)*/
+/* ========================================================================= */
+
+static void DrawTapeCassette(Vector2 position, float scale)
+{
+    float w = 240.0f * scale;
+    float h = 150.0f * scale;
+    Rectangle body = {position.x, position.y, w, h};
+
+    /* Sombra */
+    DrawRectangleRounded((Rectangle){body.x + 6, body.y + 8, body.width, body.height}, 0.08f, 8, Fade(BLACK, 0.40f));
+
+    /* Corpo da fita de dados */
+    DrawRectangleRounded(body, 0.08f, 8, (Color){38, 44, 48, 255});
+    DrawRectangleRoundedLinesEx(body, 0.08f, 8, 2.0f, (Color){70, 78, 85, 255});
+
+    /* Parafusos nos cantos */
+    DrawCircle((int)(body.x + 12 * scale), (int)(body.y + 12 * scale), 3 * scale, (Color){180, 185, 190, 255});
+    DrawCircle((int)(body.x + body.width - 12 * scale), (int)(body.y + 12 * scale), 3 * scale, (Color){180, 185, 190, 255});
+    DrawCircle((int)(body.x + 12 * scale), (int)(body.y + body.height - 12 * scale), 3 * scale, (Color){180, 185, 190, 255});
+    DrawCircle((int)(body.x + body.width - 12 * scale), (int)(body.y + body.height - 12 * scale), 3 * scale, (Color){180, 185, 190, 255});
+
+    /* Rótulo de papel kraft */
+    Rectangle label = {body.x + 20 * scale, body.y + 15 * scale, body.width - 40 * scale, 55 * scale};
+    DrawRectangleRounded(label, 0.06f, 6, PAPER_COLOR);
+    DrawRectangleRoundedLinesEx(label, 0.06f, 6, 1.0f, (Color){185, 175, 150, 255});
+    DrawText("DADOS // ARQUIVO-1990", (int)(label.x + 14 * scale), (int)(label.y + 10 * scale), (int)(14 * scale), INK_COLOR);
+    DrawText("MATRIZ DE TREINO A.R.1.3.L", (int)(label.x + 14 * scale), (int)(label.y + 30 * scale), (int)(11 * scale), (Color){125, 45, 30, 255});
+
+    /* Visor transparente central com as duas bobinas */
+    Rectangle window = {body.x + 40 * scale, body.y + 78 * scale, body.width - 80 * scale, 52 * scale};
+    DrawRectangleRounded(window, 0.12f, 6, (Color){20, 24, 28, 255});
+    DrawRectangleRoundedLinesEx(window, 0.12f, 6, 1.5f, (Color){85, 95, 105, 255});
+
+    /* Fita magnética marrom entre as bobinas */
+    DrawRectangle((int)(window.x + 35 * scale), (int)(window.y + 16 * scale), (int)(window.width - 70 * scale), (int)(20 * scale), (Color){75, 40, 25, 255});
+
+    /* Bobinas dentadas */
+    float sp1X = window.x + 28 * scale;
+    float sp2X = window.x + window.width - 28 * scale;
+    float spY = window.y + 26 * scale;
+    DrawCircle((int)sp1X, (int)spY, 16 * scale, RAYWHITE);
+    DrawCircle((int)sp1X, (int)spY, 11 * scale, (Color){38, 44, 48, 255});
+    DrawCircle((int)sp2X, (int)spY, 16 * scale, RAYWHITE);
+    DrawCircle((int)sp2X, (int)spY, 11 * scale, (Color){38, 44, 48, 255});
+}
+
+static void DrawRoom2(const GameState *game)
+{
+    float time = (float)GetTime();
+    Rectangle armarios = {70, 160, 280, 420};
+    Rectangle porta = {480, 155, 210, 360};
+    Rectangle terminal = {790, 240, 340, 290};
+    Rectangle btnVoltar = {70, 600, 240, 42};
+
+    ClearBackground((Color){14, 20, 24, 255});
+
+    /* Perspectiva da sala industrial dos anos 90 */
+    /* Teto */
+    DrawTriangle((Vector2){0, 70}, (Vector2){1120, 120}, (Vector2){1280, 70}, (Color){22, 28, 34, 255});
+    DrawTriangle((Vector2){0, 70}, (Vector2){160, 120}, (Vector2){1120, 120}, (Color){26, 34, 40, 255});
+    DrawLineEx((Vector2){0, 70}, (Vector2){160, 120}, 3, (Color){55, 70, 80, 255});
+    DrawLineEx((Vector2){1280, 70}, (Vector2){1120, 120}, 3, (Color){55, 70, 80, 255});
+    DrawLineEx((Vector2){160, 120}, (Vector2){1120, 120}, 3, (Color){45, 60, 70, 255});
+
+    /* Paredes laterais e do fundo */
+    DrawTriangle((Vector2){0, 70}, (Vector2){160, 120}, (Vector2){240, 520}, (Color){30, 40, 48, 255});
+    DrawTriangle((Vector2){0, 70}, (Vector2){240, 520}, (Vector2){0, 540}, (Color){25, 34, 42, 255});
+
+    DrawTriangle((Vector2){1280, 70}, (Vector2){1040, 520}, (Vector2){1120, 120}, (Color){30, 40, 48, 255});
+    DrawTriangle((Vector2){1280, 70}, (Vector2){1280, 540}, (Vector2){1040, 520}, (Color){25, 34, 42, 255});
+
+    /* Parede do fundo */
+    DrawTriangle((Vector2){160, 120}, (Vector2){1040, 520}, (Vector2){1120, 120}, (Color){38, 48, 56, 255});
+    DrawTriangle((Vector2){160, 120}, (Vector2){240, 520}, (Vector2){1040, 520}, (Color){42, 54, 62, 255});
+
+    /* Piso industrial em perspectiva */
+    DrawTriangle((Vector2){0, 650}, (Vector2){1040, 520}, (Vector2){240, 520}, (Color){34, 38, 42, 255});
+    DrawTriangle((Vector2){0, 650}, (Vector2){1280, 650}, (Vector2){1040, 520}, (Color){28, 32, 36, 255});
+    for (int x = 0; x <= SCREEN_WIDTH; x += 140)
+    {
+        DrawLine(640, 515, x, 650, Fade((Color){70, 85, 95, 255}, 0.25f));
+    }
+    DrawLine(0, 560, 1280, 560, Fade((Color){80, 95, 105, 255}, 0.20f));
+    DrawLine(0, 605, 1280, 605, Fade((Color){80, 95, 105, 255}, 0.18f));
+
+    /* Luminária fluorescente tubular industrial */
+    DrawRectangleRounded((Rectangle){500, 82, 280, 22}, 0.2f, 6, (Color){60, 72, 80, 255});
+    float tubePulse = 0.85f + 0.15f * sinf(time * 12.0f);
+    DrawRectangleRounded((Rectangle){515, 87, 250, 12}, 0.3f, 6, Fade((Color){200, 240, 255, 255}, tubePulse));
+    DrawTriangle((Vector2){510, 104}, (Vector2){380, 515}, (Vector2){900, 515}, Fade(CYAN_COLOR, 0.025f));
+
+    /* Tubulações e eletrocalhas no teto e paredes */
+    DrawRectangle(30, 115, 14, 410, (Color){55, 65, 72, 255});
+    DrawRectangle(1240, 115, 14, 410, (Color){55, 65, 72, 255});
+    DrawRectangle(170, 128, 940, 10, (Color){48, 58, 65, 255});
+
+    /* Grelha de ventilação no fundo */
+    DrawRectangle(320, 145, 110, 80, (Color){24, 30, 36, 255});
+    DrawRectangleLinesEx((Rectangle){320, 145, 110, 80}, 2, (Color){55, 68, 78, 255});
+    for (int gy = 155; gy < 220; gy += 10)
+    {
+        DrawLine(324, gy, 426, gy, (Color){45, 55, 64, 255});
+    }
+
+    /* --- LADO ESQUERDO: ARMÁRIOS DE ARQUIVO EM AÇO (FICHÁRIOS) --- */
+    DrawRectangle(65, 155, 290, 420, Fade(BLACK, 0.40f));
+    DrawRectangleRounded(armarios, 0.04f, 6, (Color){52, 64, 72, 255});
+    DrawRectangleRoundedLinesEx(armarios, 0.04f, 6, 2.5f, (Color){75, 92, 102, 255});
+
+    /* 3 colunas x 4 gavetas de fichário de aço */
+    for (int col = 0; col < 3; col++)
+    {
+        for (int row = 0; row < 4; row++)
+        {
+            Rectangle gaveta = {(float)(78 + col * 90), (float)(170 + row * 98), 82, 88};
+            DrawRectangleRec(gaveta, (Color){42, 52, 58, 255});
+            DrawRectangleLinesEx(gaveta, 1.5f, (Color){68, 82, 92, 255});
+
+            /* Placa de identificação / etiqueta de fichário */
+            DrawRectangle((int)gaveta.x + 14, (int)gaveta.y + 14, 54, 18, (Color){220, 214, 195, 255});
+            DrawRectangleLines((int)gaveta.x + 14, (int)gaveta.y + 14, 54, 18, (Color){150, 140, 120, 255});
+            DrawText("1990", (int)gaveta.x + 24, (int)gaveta.y + 18, 10, INK_COLOR);
+
+            /* Puxador metálico cromado */
+            DrawRectangleRounded((Rectangle){gaveta.x + 18, gaveta.y + 44, 46, 12}, 0.4f, 4, (Color){185, 195, 205, 255});
+            DrawRectangle((int)gaveta.x + 22, (int)gaveta.y + 47, 38, 6, (Color){30, 36, 40, 255});
+        }
+    }
+    DrawText("ARQUIVO CENTRAL // REGISTROS", 80, 550, 14, (Color){160, 185, 200, 255});
+
+    /* Caixas de arquivo no chão em frente */
+    DrawRectangle(140, 540, 75, 52, (Color){145, 115, 80, 255});
+    DrawRectangleLines(140, 540, 75, 52, (Color){115, 88, 55, 255});
+    DrawText("DISKS", 152, 560, 12, INK_COLOR);
+
+    /* --- CENTRO/DIREITA AO FUNDO: PORTA DE SEGURANÇA REFORÇADA --- */
+    DrawRectangle(475, 150, 220, 370, Fade(BLACK, 0.45f));
+    DrawRectangleRounded(porta, 0.05f, 6, (Color){46, 56, 64, 255});
+    DrawRectangleRoundedLinesEx(porta, 0.05f, 6, 3.0f, (Color){85, 105, 118, 255});
+
+    /* Frisos e reforços da porta */
+    DrawRectangle(490, 170, 190, 8, (Color){32, 40, 46, 255});
+    DrawRectangle(490, 480, 190, 8, (Color){32, 40, 46, 255});
+
+    /* Visor de vidro blindado */
+    Rectangle visor = {535, 210, 100, 110};
+    DrawRectangleRounded(visor, 0.08f, 6, (Color){18, 28, 36, 255});
+    DrawRectangleRoundedLinesEx(visor, 0.08f, 6, 2, (Color){60, 80, 95, 255});
+    DrawLine(545, 220, 620, 305, Fade(RAYWHITE, 0.15f));
+
+    /* Painel de tranca eletrônica */
+    Rectangle lockPanel = {515, 345, 140, 78};
+    DrawRectangleRounded(lockPanel, 0.12f, 6, (Color){24, 30, 36, 255});
+    DrawRectangleRoundedLinesEx(lockPanel, 0.12f, 6, 1.5f, (Color){65, 80, 92, 255});
+
+    if (game->puzzleFilesCompleted)
+    {
+        /* Status liberado (Verde) */
+        float bGlow = 0.6f + 0.4f * sinf(time * 4.0f);
+        DrawCircle(540, 368, 6, Fade((Color){50, 240, 100, 255}, bGlow));
+        DrawText("ACESSO", 560, 355, 14, (Color){50, 240, 100, 255});
+        DrawText("LIBERADO", 560, 372, 14, (Color){50, 240, 100, 255});
+        DrawText("[ ENTRAR ]", 535, 396, 15, GOLD_COLOR);
+    }
+    else
+    {
+        /* Status travado (Vermelho) */
+        float rGlow = 0.6f + 0.4f * sinf(time * 5.0f);
+        DrawCircle(540, 368, 6, Fade(RED_COLOR, rGlow));
+        DrawText("TRAVADA", 560, 355, 14, RED_COLOR);
+        DrawText("REQUER", 560, 372, 13, GRAY);
+        DrawText("INDEXACAO", 535, 396, 13, (Color){245, 185, 75, 255});
+    }
+
+    /* Maçaneta rotativa de escotilha */
+    DrawCircle(645, 384, 18, (Color){70, 84, 94, 255});
+    DrawCircleLines(645, 384, 18, RAYWHITE);
+    DrawLineEx((Vector2){635, 384}, (Vector2){655, 384}, 4, (Color){30, 36, 42, 255});
+
+    /* --- LADO DIREITO: MESA TÉCNICA COM COMPUTADOR DE INDEXAÇÃO --- */
+    /* Mesa */
+    DrawRectangle(740, 480, 420, 28, (Color){85, 62, 45, 255});
+    DrawRectangle(740, 506, 420, 8, (Color){55, 40, 28, 255});
+    DrawRectangle(770, 514, 24, 95, (Color){45, 52, 58, 255});
+    DrawRectangle(1110, 514, 24, 95, (Color){45, 52, 58, 255});
+
+    /* Monitor CRT do Terminal de Indexação */
+    DrawRectangleRounded((Rectangle){810, 245, 300, 220}, 0.08f, 8, (Color){185, 178, 152, 255});
+    DrawRectangleRoundedLinesEx((Rectangle){810, 245, 300, 220}, 0.08f, 8, 2, (Color){145, 138, 115, 255});
+
+    /* Tela CRT */
+    Rectangle screenRec = {830, 265, 260, 160};
+    Color crtBg = game->puzzleFilesCompleted ? (Color){12, 38, 22, 255} : (Color){28, 22, 12, 255};
+    Color crtText = game->puzzleFilesCompleted ? (Color){80, 240, 120, 255} : GOLD_COLOR;
+    DrawRectangleRounded(screenRec, 0.06f, 6, crtBg);
+    DrawRectangleRoundedLinesEx(screenRec, 0.06f, 6, 2, crtText);
+
+    DrawText("TERMINAL DE DADOS // 1990", 845, 280, 15, crtText);
+    DrawLine(845, 300, 1075, 300, Fade(crtText, 0.5f));
+
+    if (game->puzzleFilesCompleted)
+    {
+        DrawText("[OK] DADOS SINCRONIZADOS", 845, 318, 16, crtText);
+        DrawText("Todos os 4 arquivos", 845, 345, 15, RAYWHITE);
+        DrawText("conectados as pastas!", 845, 368, 15, RAYWHITE);
+        DrawText("> TRAVA DA PORTA ABERTA <", 845, 396, 14, (Color){100, 245, 150, 255});
+    }
+    else
+    {
+        DrawText("[!] INDEXACAO PENDENTE", 845, 318, 16, GOLD_COLOR);
+        DrawText("Arraste os arquivos para", 845, 345, 15, RAYWHITE);
+        DrawText("as pastas da mesma cor.", 845, 368, 15, RAYWHITE);
+        float pBlink = 0.5f + 0.5f * sinf(time * 5.0f);
+        DrawText("> CLIQUE PARA INICIAR <", 845, 396, 14, Fade(CYAN_COLOR, pBlink));
+    }
+
+    /* Teclado na mesa */
+    Rectangle kbRec2 = {835, 484, 250, 22};
+    DrawRectangleRounded(kbRec2, 0.12f, 4, (Color){175, 168, 145, 255});
+    for (int k = 0; k < 10; k++)
+    {
+        DrawRectangle((int)kbRec2.x + 8 + k * 23, (int)kbRec2.y + 4, 18, 12, (Color){65, 68, 62, 255});
+    }
+
+    /* Disquetes e fichas na mesa ao lado */
+    DrawRectangle(1095, 476, 32, 28, (Color){45, 130, 220, 255});
+    DrawRectangle(1098, 472, 32, 28, (Color){230, 60, 60, 255});
+    DrawRectangle(1101, 468, 32, 28, GOLD_COLOR);
+
+    /* Botão de retorno ao Laboratório 1 */
+    DrawButton(btnVoltar, "< LAB. ANTERIOR", (Color){70, 95, 110, 255});
+
+    /* Hotspots ao passar o mouse */
+    DrawHotspot(armarios, "Examinar arquivos de fichas");
+    DrawHotspot(terminal, game->puzzleFilesCompleted ? "Terminal (Indexacao 100% OK)" : "Acessar terminal de indexacao [PUZZLE]");
+    DrawHotspot(porta, game->puzzleFilesCompleted ? "Acessar porta de saida [ENTRAR]" : "Porta trancada (requer indexacao)");
+    DrawHotspot(btnVoltar, "Retornar ao laboratorio 1");
+}
+
+static void DrawHudRoom2(const GameState *game)
+{
+    int totalSeconds = (int)(GetTime() - game->startTime);
+    int minutes = totalSeconds / 60;
+    int seconds = totalSeconds % 60;
+
+    DrawRectangle(0, 0, SCREEN_WIDTH, 70, Fade(VOID_COLOR, 0.94f));
+    DrawText("ARQUIVO 02 // 1990 - SETOR DE DADOS", 28, 20, 22, CYAN_COLOR);
+    DrawText(TextFormat("OPERADOR: %s", game->playerName), 450, 23, 17, GRAY);
+
+    /* Status da indexação */
+    if (game->puzzleFilesCompleted)
+    {
+        DrawText("[OK] INDEXACAO CONCLUIDA", 770, 22, 18, (Color){80, 235, 120, 255});
+    }
+    else
+    {
+        DrawText("[!] INDEXACAO PENDENTE", 770, 22, 18, GOLD_COLOR);
+    }
+
+    DrawText(TextFormat("VIDAS %d", game->lives), 1050, 20, 20, game->lives == 1 ? RED_COLOR : RAYWHITE);
+    DrawText(TextFormat("%02d:%02d", minutes, seconds), 1180, 20, 20, GOLD_COLOR);
+
+    /* Rodapé */
+    DrawRectangle(0, 650, SCREEN_WIDTH, 70, Fade(VOID_COLOR, 0.96f));
+    DrawText("Organize os arquivos por cor no terminal para destravar a porta.", 28, 675, 18, GRAY);
+
+    /* Botão de Áudio */
+    Rectangle audioBtn = {590, 665, 175, 40};
+    bool audioHover = CheckCollisionPointRec(GetVirtualMouse(), audioBtn);
+    DrawRectangleRounded(audioBtn, 0.22f, 6, audioHover ? (Color){30, 44, 62, 255} : (Color){18, 26, 38, 255});
+    DrawRectangleRoundedLinesEx(audioBtn, 0.22f, 6, 1.5f, audioHover ? CYAN_COLOR : (Color){50, 68, 92, 255});
+    DrawText(game->musicMuted ? "[M] AUDIO: MUDO" : "[M] AUDIO: ON",
+             612, 676, 14, game->musicMuted ? (Color){220, 90, 80, 255} : (Color){90, 220, 210, 255});
+
+    /* Botão do Diário */
+    DrawJournalHudButton(game);
+
+    if (game->messageTimer > 0)
+    {
+        int width = MeasureText(game->message, 19) + 34;
+        DrawRectangleRounded(
+            (Rectangle){(SCREEN_WIDTH - width) / 2.0f, 605, (float)width, 38},
+            0.2f, 8, Fade(PANEL_COLOR, 0.96f));
+        DrawText(game->message,
+                 (SCREEN_WIDTH - MeasureText(game->message, 19)) / 2,
+                 614, 19, RAYWHITE);
+    }
+}
+
+static void UpdateRoom2(GameState *game)
+{
+    Rectangle armarios = {70, 160, 280, 420};
+    Rectangle porta = {480, 155, 210, 360};
+    Rectangle terminal = {790, 240, 340, 290};
+    Rectangle btnVoltar = {70, 600, 240, 42};
+    Rectangle journalHudBtn = {1040, 658, 215, 54};
+
+    if (IsKeyPressed(KEY_D) || Clicked(journalHudBtn))
+    {
+        game->journalOpen = !game->journalOpen;
+    }
+
+    if (game->journalOpen)
+    {
+        if (IsKeyPressed(KEY_ESCAPE))
+        {
+            game->journalOpen = false;
+            return;
+        }
+
+        int bookX = 120;
+        int bookY = 56;
+        int footY = bookY + 542;
+        Rectangle prevBtn = {(float)(bookX + 32), (float)footY, 155, 36};
+        Rectangle closeBtn = {(float)(bookX + 660), (float)footY, 145, 36};
+        Rectangle nextBtn = {(float)(bookX + 835), (float)footY, 155, 36};
+
+        if (game->journalYearTab == 0)
+        {
+            if ((IsKeyPressed(KEY_Q) || Clicked(prevBtn)) && game->journalPage > 0) game->journalPage = 0;
+            if ((IsKeyPressed(KEY_E) || Clicked(nextBtn)) && game->journalPage < 1) game->journalPage = 1;
+        }
+        else
+        {
+            Rectangle retBtnL = {(float)(bookX + 50), (float)(bookY + 450), 410, 46};
+            if (Clicked(retBtnL)) { game->journalYearTab = 0; game->journalPage = 0; }
+        }
+
+        if (Clicked(closeBtn)) game->journalOpen = false;
+
+        /* Abas laterais */
+        for (int i = 0; i < 4; i++)
+        {
+            Rectangle tabRect = {(float)(bookX + 1040), (float)(bookY + 42 + i * 66), 86, 54};
+            if (Clicked(tabRect)) { game->journalYearTab = i; break; }
+        }
+        return;
+    }
+
+    if (Clicked(terminal))
+    {
+        if (!game->puzzleFilesCompleted)
+        {
+            game->screen = SCREEN_PUZZLE_FILES;
+        }
+        else
+        {
+            SetMessage(game, "Terminal sincronizado: todos os arquivos estao conectados!");
+        }
+    }
+    else if (Clicked(armarios))
+    {
+        game->room2CabinetInspected = true;
+        SetMessage(game, "Armarios de fichas: documentacao dos primeiros modelos de teste de 1990.");
+    }
+    else if (Clicked(porta))
+    {
+        if (game->puzzleFilesCompleted)
+        {
+            game->screen = SCREEN_RESULT_2;
+        }
+        else
+        {
+            game->room2DoorInspected = true;
+            SetMessage(game, "Porta trancada! Acesse o terminal e sincronize os arquivos pelas cores.");
+        }
+    }
+    else if (Clicked(btnVoltar))
+    {
+        game->screen = SCREEN_ROOM;
+    }
+}
+
+static void DrawPuzzleFiles(const GameState *game)
+{
+    float time = (float)GetTime();
+    Vector2 mouse = GetVirtualMouse();
+
+    /* Escurecimento do fundo */
+    DrawRectangle(0, 0, SCREEN_WIDTH, SCREEN_HEIGHT, Fade(BLACK, 0.88f));
+
+    /* Painel Central Estilo Among Us / Gabinete de Indexação dos Anos 90 */
+    Rectangle panel = {190, 45, 900, 630};
+    DrawRectangleRounded(panel, 0.03f, 8, (Color){20, 27, 34, 255});
+    DrawRectangleRoundedLinesEx(panel, 0.03f, 8, 3.0f, (Color){75, 95, 110, 255});
+
+    /* Parafusos metálicos nos cantos do painel */
+    DrawCircle((int)panel.x + 16, (int)panel.y + 16, 5, (Color){185, 195, 205, 255});
+    DrawCircle((int)(panel.x + panel.width - 16), (int)panel.y + 16, 5, (Color){185, 195, 205, 255});
+    DrawCircle((int)panel.x + 16, (int)(panel.y + panel.height - 16), 5, (Color){185, 195, 205, 255});
+    DrawCircle((int)(panel.x + panel.width - 16), (int)(panel.y + panel.height - 16), 5, (Color){185, 195, 205, 255});
+
+    /* Calha central interna escura com cabos passando ao fundo (estilo Among Us) */
+    DrawRectangle(475, 120, 330, 470, (Color){12, 16, 20, 255});
+    DrawRectangleLinesEx((Rectangle){475, 120, 330, 470}, 2, (Color){30, 40, 48, 255});
+
+    /* Feixes de cabos ao fundo na calha */
+    DrawLineEx((Vector2){580, 120}, (Vector2){620, 590}, 16, Fade((Color){85, 20, 20, 255}, 0.7f));
+    DrawLineEx((Vector2){650, 120}, (Vector2){640, 590}, 18, Fade((Color){20, 45, 85, 255}, 0.7f));
+    DrawLineEx((Vector2){700, 120}, (Vector2){670, 590}, 14, Fade((Color){85, 70, 20, 255}, 0.7f));
+
+    /* --- BARRA DE STATUS / PROGRESSO ESTILO AMONG US NO TOPO --- */
+    int connectedCount = 0;
+    for (int k = 0; k < 4; k++)
+    {
+        if (game->fileConnections[k] != -1) connectedCount++;
+    }
+
+    Rectangle taskBar = {220, 65, 520, 34};
+    DrawRectangleRounded(taskBar, 0.2f, 6, (Color){10, 14, 18, 255});
+    DrawRectangleRoundedLinesEx(taskBar, 0.2f, 6, 2, RAYWHITE);
+
+    float progressW = (taskBar.width - 6.0f) * ((float)connectedCount / 4.0f);
+    if (progressW > 0)
+    {
+        DrawRectangleRounded((Rectangle){taskBar.x + 3, taskBar.y + 3, progressW, taskBar.height - 6}, 0.2f, 4, (Color){60, 235, 110, 255});
+    }
+    DrawText(TextFormat("TOTAL DE ARQUIVOS CONECTADOS: %d / 4", connectedCount), (int)taskBar.x + 80, (int)taskBar.y + 8, 17, RAYWHITE);
+
+    /* Botão fechar [X] */
+    Rectangle btnClose = {960, 63, 110, 38};
+    DrawButton(btnClose, "SAIR [X]", RED_COLOR);
+
+    /* Posições verticais dos 4 slots */
+    int ySlots[4] = { 135, 250, 365, 480 };
+
+    /* --- LADO ESQUERDO: 4 ARQUIVOS COM CORES FIXAS (0=Amarelo, 1=Vermelho, 2=Azul, 3=Rosa) --- */
+    const char *fileNames[4] = {
+        "PARAM_NEURAL.DAT",
+        "CORE_SISTEMA.SYS",
+        "BASE_DADOS.BIN",
+        "INDICE_MEMORIA.LOG"
+    };
+
+    for (int i = 0; i < 4; i++)
+    {
+        int y = ySlots[i];
+        Rectangle fRec = {220, (float)y, 230, 84};
+        Color wColor = GetFileWireColor(i);
+        bool isConnected = (game->fileConnections[i] != -1);
+        bool isDraggingThis = (game->draggingFileIndex == i);
+
+        /* Card do arquivo */
+        DrawRectangleRounded(fRec, 0.12f, 6, (Color){38, 48, 56, 255});
+        DrawRectangleRoundedLinesEx(fRec, 0.12f, 6, 2, isDraggingThis ? wColor : (isConnected ? (Color){90, 220, 130, 255} : (Color){70, 85, 98, 255}));
+
+        /* Tarja vertical com a cor do arquivo */
+        DrawRectangleRounded((Rectangle){fRec.x + 4, fRec.y + 4, 18, fRec.height - 8}, 0.3f, 4, wColor);
+
+        /* Ícone de documento */
+        DrawRectangle((int)fRec.x + 30, (int)fRec.y + 16, 22, 28, PAPER_COLOR);
+        DrawTriangle((Vector2){fRec.x + 44, fRec.y + 16}, (Vector2){fRec.x + 52, fRec.y + 24}, (Vector2){fRec.x + 44, fRec.y + 24}, (Color){190, 180, 155, 255});
+
+        /* Textos */
+        DrawText(fileNames[i], (int)fRec.x + 60, (int)fRec.y + 22, 13, RAYWHITE);
+        DrawText("ARQUIVO DE DADOS", (int)fRec.x + 60, (int)fRec.y + 44, 12, Fade(wColor, 0.9f));
+
+        /* Terminal/conector de saída no lado direito do card */
+        Vector2 termL = {fRec.x + fRec.width, fRec.y + fRec.height * 0.5f};
+        DrawCircle((int)termL.x, (int)termL.y, 14, (Color){28, 36, 42, 255});
+        DrawCircle((int)termL.x, (int)termL.y, 10, wColor);
+        DrawCircleLines((int)termL.x, (int)termL.y, 14, isConnected ? (Color){80, 240, 120, 255} : GOLD_COLOR);
+
+        if (isConnected)
+        {
+            DrawCircle((int)termL.x, (int)termL.y, 4, RAYWHITE);
+        }
+    }
+
+    /* --- LADO DIREITO: 4 PASTAS SUSPENSAS (ORDEM EMBARALHADA) --- */
+    const char *folderNames[4] = {
+        "PASTA: PARAMETROS",
+        "PASTA: SISTEMA",
+        "PASTA: BANCO DADOS",
+        "PASTA: REGISTROS"
+    };
+
+    for (int j = 0; j < 4; j++)
+    {
+        int y = ySlots[j];
+        Rectangle foldRec = {830, (float)y, 230, 84};
+        int folderColorIdx = game->rightFolderColors[j];
+        Color folderColor = GetFileWireColor(folderColorIdx);
+
+        /* Checa se algum arquivo está conectado nesta pasta */
+        bool hasConnectedFile = false;
+        for (int k = 0; k < 4; k++)
+        {
+            if (game->fileConnections[k] == j) hasConnectedFile = true;
+        }
+
+        /* Card da pasta suspensa kraft */
+        DrawRectangleRounded(foldRec, 0.12f, 6, (Color){50, 42, 34, 255});
+        DrawRectangleRoundedLinesEx(foldRec, 0.12f, 6, 2, hasConnectedFile ? (Color){90, 230, 130, 255} : (Color){105, 88, 70, 255});
+
+        /* Aba/orelha superior colorida da pasta */
+        DrawRectangleRounded((Rectangle){foldRec.x + 18, foldRec.y + 4, 110, 14}, 0.3f, 4, folderColor);
+
+        /* Etiqueta e nome da pasta */
+        DrawText(folderNames[folderColorIdx], (int)foldRec.x + 22, (int)foldRec.y + 26, 14, RAYWHITE);
+        DrawText("DIRETORIO DE DESTINO", (int)foldRec.x + 22, (int)foldRec.y + 48, 12, Fade(folderColor, 0.9f));
+
+        /* LED indicador de status na pasta */
+        DrawCircle((int)foldRec.x + 195, (int)foldRec.y + 24, 5, hasConnectedFile ? (Color){60, 245, 110, 255} : (Color){140, 35, 35, 255});
+        DrawCircleLines((int)foldRec.x + 195, (int)foldRec.y + 24, 5, RAYWHITE);
+
+        /* Terminal/receptáculo de entrada no lado esquerdo da pasta */
+        Vector2 termR = {foldRec.x, foldRec.y + foldRec.height * 0.5f};
+        DrawCircle((int)termR.x, (int)termR.y, 14, (Color){28, 36, 42, 255});
+        DrawCircle((int)termR.x, (int)termR.y, 10, folderColor);
+        DrawCircleLines((int)termR.x, (int)termR.y, 14, hasConnectedFile ? (Color){80, 240, 120, 255} : (Color){185, 175, 150, 255});
+
+        if (hasConnectedFile)
+        {
+            DrawCircle((int)termR.x, (int)termR.y, 4, RAYWHITE);
+        }
+    }
+
+    /* --- DESENHO DOS CABOS / FIOS CONECTADOS --- */
+    for (int i = 0; i < 4; i++)
+    {
+        if (game->fileConnections[i] != -1)
+        {
+            int j = game->fileConnections[i];
+            Vector2 p1 = {450.0f, ySlots[i] + 42.0f};
+            Vector2 p2 = {830.0f, ySlots[j] + 42.0f};
+            Color col = GetFileWireColor(i);
+
+            /* Sombra do cabo */
+            DrawLineEx((Vector2){p1.x + 3, p1.y + 4}, (Vector2){p2.x + 3, p2.y + 4}, 14.0f, Fade(BLACK, 0.45f));
+            /* Cabo principal */
+            DrawLineEx(p1, p2, 10.0f, col);
+            /* Brilho no topo do cabo */
+            DrawLineEx((Vector2){p1.x, p1.y - 1}, (Vector2){p2.x, p2.y - 1}, 3.0f, Fade(RAYWHITE, 0.55f));
+
+            /* Conectores metálicos nas pontas */
+            DrawCircle((int)p1.x, (int)p1.y, 7, (Color){215, 195, 75, 255});
+            DrawCircle((int)p2.x, (int)p2.y, 7, (Color){215, 195, 75, 255});
+        }
+    }
+
+    /* --- DESENHO DO CABO SENDO ARRASTADO --- */
+    if (game->draggingFileIndex != -1)
+    {
+        int i = game->draggingFileIndex;
+        Vector2 p1 = {450.0f, ySlots[i] + 42.0f};
+        Vector2 p2 = mouse;
+        Color col = GetFileWireColor(i);
+
+        /* Sombra */
+        DrawLineEx((Vector2){p1.x + 3, p1.y + 4}, (Vector2){p2.x + 3, p2.y + 4}, 14.0f, Fade(BLACK, 0.40f));
+        /* Corpo do cabo */
+        DrawLineEx(p1, p2, 10.0f, col);
+        /* Brilho */
+        DrawLineEx((Vector2){p1.x, p1.y - 1}, (Vector2){p2.x, p2.y - 1}, 3.0f, Fade(RAYWHITE, 0.65f));
+
+        /* Plugue metálico na ponta do mouse */
+        DrawRectangleRounded((Rectangle){p2.x - 12, p2.y - 8, 24, 16}, 0.3f, 4, (Color){200, 205, 215, 255});
+        DrawCircle((int)p2.x, (int)p2.y, 5, col);
+        DrawCircle((int)p2.x, (int)p2.y, 9, Fade(col, 0.35f + 0.25f * sinf(time * 8.0f)));
+    }
+
+    /* Mensagem / Instrução na base */
+    DrawText("Dica: Clique em um arquivo e arraste o fio ate a pasta que tiver a MESMA cor.", 260, 580, 16, LIGHTGRAY);
+
+    /* --- FEEDBACK QUANDO TODOS ESTIVEREM CONECTADOS --- */
+    if (game->puzzleFilesCompleted)
+    {
+        Rectangle winBox = {330, 210, 620, 230};
+        DrawRectangleRounded(winBox, 0.08f, 8, Fade(PANEL_COLOR, 0.97f));
+        DrawRectangleRoundedLinesEx(winBox, 0.08f, 8, 3.0f, (Color){60, 235, 110, 255});
+
+        DrawText("[ ! ] TAREFA CONCLUIDA COM SUCESSO! [ ! ]", 380, 240, 22, (Color){60, 235, 110, 255});
+        DrawText("Todos os arquivos foram vinculados aos seus diretorios.", 370, 280, 17, RAYWHITE);
+        DrawText("A porta de seguranca do setor de dados foi destrancada!", 370, 310, 17, GOLD_COLOR);
+
+        Rectangle btnDone = {460, 355, 360, 54};
+        DrawButton(btnDone, "RETORNAR A SALA [ENTER]", (Color){60, 235, 110, 255});
+    }
+}
+
+static void UpdatePuzzleFiles(GameState *game)
+{
+    Vector2 mouse = GetVirtualMouse();
+    int ySlots[4] = { 135, 250, 365, 480 };
+
+    Rectangle btnClose = {960, 63, 110, 38};
+    if (Clicked(btnClose) || IsKeyPressed(KEY_ESCAPE))
+    {
+        game->screen = SCREEN_ROOM_2;
+        game->draggingFileIndex = -1;
+        return;
+    }
+
+    if (game->puzzleFilesCompleted)
+    {
+        Rectangle btnDone = {460, 355, 360, 54};
+        if (Clicked(btnDone) || IsKeyPressed(KEY_ENTER) || IsKeyPressed(KEY_SPACE))
+        {
+            game->screen = SCREEN_ROOM_2;
+        }
+        return;
+    }
+
+    /* Início do clique em um arquivo esquerdo */
+    if (IsMouseButtonPressed(MOUSE_BUTTON_LEFT))
+    {
+        for (int i = 0; i < 4; i++)
+        {
+            Rectangle fRec = {220, (float)ySlots[i], 250, 84};
+            if (CheckCollisionPointRec(mouse, fRec))
+            {
+                game->draggingFileIndex = i;
+                /* Desconecta conexão anterior se houver */
+                game->fileConnections[i] = -1;
+                break;
+            }
+        }
+    }
+
+    /* Soltar o mouse */
+    if (IsMouseButtonReleased(MOUSE_BUTTON_LEFT) && game->draggingFileIndex != -1)
+    {
+        int fileIdx = game->draggingFileIndex;
+        bool droppedOnFolder = false;
+
+        for (int j = 0; j < 4; j++)
+        {
+            Rectangle foldRec = {810, (float)ySlots[j], 250, 84};
+            if (CheckCollisionPointRec(mouse, foldRec))
+            {
+                droppedOnFolder = true;
+                int folderColor = game->rightFolderColors[j];
+
+                if (fileIdx == folderColor)
+                {
+                    /* Cor idêntica! Conexão bem-sucedida! */
+                    game->fileConnections[fileIdx] = j;
+                    SetMessage(game, "Arquivo conectado com sucesso na pasta correspondente!");
+
+                    /* Verifica se todos os 4 foram conectados */
+                    bool allConnected = true;
+                    for (int k = 0; k < 4; k++)
+                    {
+                        if (game->fileConnections[k] == -1) allConnected = false;
+                    }
+                    if (allConnected)
+                    {
+                        game->puzzleFilesCompleted = true;
+                        SetMessage(game, "Indexacao completa! A porta foi destrancada.");
+                    }
+                }
+                else
+                {
+                    /* Cor incorreta */
+                    SetMessage(game, "Cor incompativel! Conecte na pasta da mesma cor do arquivo.");
+                }
+                break;
+            }
+        }
+
+        if (!droppedOnFolder)
+        {
+            /* Soltou fora: o fio se retrai */
+            game->fileConnections[fileIdx] = -1;
+        }
+
+        game->draggingFileIndex = -1;
+    }
+}
+
+static void DrawResult2(const GameState *game)
+{
+    DrawBackground();
+    DrawText("ARTEFATO RECUPERADO", 90, 68, 20, CYAN_COLOR);
+    DrawText("FITA DE DADOS // 1990", 90, 108, 46, RAYWHITE);
+
+    /* Desenha a fita cassete recuperada */
+    DrawTapeCassette((Vector2){140, 260}, 1.4f);
+
+    /* Painel narrativo de avanço */
+    DrawRectangleRounded((Rectangle){505, 185, 670, 360}, 0.04f, 8, Fade(PANEL_COLOR, 0.96f));
+    DrawText("HISTORIA DA IA DESVENDADA // SALA 2 CONCLUIDA", 540, 215, 20, GOLD_COLOR);
+
+    DrawText("Com as pastas sincronizadas, Elira acessou os relatorios", 540, 260, 19, LIGHTGRAY);
+    DrawText("confidenciais dos primeiros testes de A.R.1.3.L. em 1990.", 540, 290, 19, LIGHTGRAY);
+    DrawText("A IA nao nasceu corrompida: o projeto visava uma mente", 540, 320, 19, LIGHTGRAY);
+    DrawText("livre e cooperativa. Foi nos anos 2000 que regras de controle", 540, 350, 19, (Color){245, 175, 75, 255});
+    DrawText("foram adicionadas para centralizar o poder e a decisao.", 540, 380, 19, (Color){245, 175, 75, 255});
+    DrawText("-> Proxima Fronteira Temporal: FASE 2 // ANO 2008!", 540, 420, 20, CYAN_COLOR);
+
+    DrawText(TextFormat("TEMPO TOTAL: %02d:%02d  |  VIDAS: %d/3",
+                        (int)(GetTime() - game->startTime) / 60,
+                        (int)(GetTime() - game->startTime) % 60,
+                        game->lives),
+             540, 465, 19, (Color){100, 235, 140, 255});
+
+    DrawText(TextFormat("OPERADOR: %s", game->playerName), 540, 500, 16, GRAY);
+
+    Rectangle btnBackRoom2 = {430, 580, 280, 56};
+    Rectangle btnTitle = {740, 580, 230, 56};
+    DrawButton(btnBackRoom2, "VOLTAR A SALA 2", CYAN_COLOR);
+    DrawButton(btnTitle, "MENU INICIAL", GOLD_COLOR);
+}
+
+static void UpdateResult2(GameState *game)
+{
+    Rectangle btnBackRoom2 = {430, 580, 280, 56};
+    Rectangle btnTitle = {740, 580, 230, 56};
+
+    if (Clicked(btnBackRoom2) || IsKeyPressed(KEY_ESCAPE))
+    {
+        game->screen = SCREEN_ROOM_2;
+    }
+    else if (Clicked(btnTitle) || IsKeyPressed(KEY_ENTER))
+    {
+        game->screen = SCREEN_TITLE;
+    }
 }
 
 typedef struct {
@@ -2498,13 +3275,29 @@ int main(void)
                 UpdateTerminal(&game);
                 break;
             case SCREEN_RESULT:
-                if (Clicked((Rectangle){410, 590, 230, 56}))
+                if (Clicked((Rectangle){340, 588, 380, 56}) || IsKeyPressed(KEY_ENTER) || IsKeyPressed(KEY_SPACE))
+                {
+                    game.screen = SCREEN_ROOM_2;
+                    SetMessage(&game, "Acesso ao Setor de Arquivos // 1990 liberado.");
+                }
+                else if (Clicked((Rectangle){740, 588, 210, 56}))
                 {
                     ResetDemo(&game);
                     game.screen = SCREEN_ROOM;
                 }
-                else if (Clicked((Rectangle){660, 590, 210, 56}))
+                else if (Clicked((Rectangle){970, 588, 190, 56}))
+                {
                     game.screen = SCREEN_TITLE;
+                }
+                break;
+            case SCREEN_ROOM_2:
+                UpdateRoom2(&game);
+                break;
+            case SCREEN_PUZZLE_FILES:
+                UpdatePuzzleFiles(&game);
+                break;
+            case SCREEN_RESULT_2:
+                UpdateResult2(&game);
                 break;
             case SCREEN_FAILURE:
                 if (Clicked((Rectangle){490, 460, 300, 60}))
@@ -2533,6 +3326,17 @@ int main(void)
                 break;
             case SCREEN_TERMINAL: DrawTerminal(&game); break;
             case SCREEN_RESULT: DrawResult(&game); break;
+            case SCREEN_ROOM_2:
+                DrawRoom2(&game);
+                DrawHudRoom2(&game);
+                if (game.journalOpen) DrawJournal(&game);
+                break;
+            case SCREEN_PUZZLE_FILES:
+                DrawPuzzleFiles(&game);
+                break;
+            case SCREEN_RESULT_2:
+                DrawResult2(&game);
+                break;
             case SCREEN_FAILURE: DrawFailure(); break;
         }
         EndTextureMode();
