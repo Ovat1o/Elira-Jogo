@@ -1367,7 +1367,10 @@ static void DrawRoom(const GameState *game)
     DrawHotspot(tape, "Ouvir gravacao");
     DrawHotspot(computer, "Usar terminal");
 
-    Rectangle btnBack1990 = {70, 600, 220, 42};
+    Rectangle btnBack2008 = {70, 600, 210, 42};
+    Rectangle btnBack1990 = {295, 600, 210, 42};
+    DrawButton(btnBack2008, "< SALA 2 (2008)", (Color){45, 115, 75, 255});
+    DrawHotspot(btnBack2008, "Retornar ao escritorio de vigilancia 2008");
     DrawButton(btnBack1990, "< SALA 1 (1990)", (Color){70, 95, 110, 255});
     DrawHotspot(btnBack1990, "Retornar ao setor de arquivos 1990");
 }
@@ -1481,7 +1484,7 @@ static void DrawHud(const GameState *game)
     int minutes = totalSeconds / 60;
     int seconds = totalSeconds % 60;
     DrawRectangle(0, 0, SCREEN_WIDTH, 70, Fade(VOID_COLOR, 0.94f));
-    DrawText("ARQUIVO 02 // 2048 - O PROTOTIPO", 28, 20, 22, CYAN_COLOR);
+    DrawText("ARQUIVO 03 // 2048 - O PROTOTIPO", 28, 20, 22, CYAN_COLOR);
     DrawText(TextFormat("OPERADOR: %s", game->playerName), 270, 23, 17, GRAY);
     DrawText(TextFormat("PISTAS %d/5", ClueCount(game)), 900, 20, 20, LIGHTGRAY);
     DrawText(TextFormat("VIDAS %d", game->lives), 1050, 20, 20,
@@ -2558,9 +2561,17 @@ static void UpdateRoom(GameState *game)
         return;
     }
 
-    Rectangle btnBack1990 = {70, 600, 220, 42};
+    Rectangle btnBack2008 = {70, 600, 210, 42};
+    Rectangle btnBack1990 = {295, 600, 210, 42};
+    if (Clicked(btnBack2008))
+    {
+        game->journalYearTab = 1;
+        game->screen = SCREEN_ROOM_2008;
+        return;
+    }
     if (Clicked(btnBack1990))
     {
+        game->journalYearTab = 0;
         game->screen = SCREEN_ROOM_2;
         return;
     }
@@ -2752,10 +2763,12 @@ static void DrawResult(const GameState *game)
     DrawText(TextFormat("VIDAS: %d/3", game->lives), 800, 435, 22,
              game->lives == 3 ? GOLD_COLOR : RAYWHITE);
     DrawText(TextFormat("PERFIL: %s", game->playerName), 545, 480, 17, GRAY);
-    Rectangle btnBack1990 = {340, 588, 380, 56};
-    Rectangle btnReplay2048 = {740, 588, 210, 56};
-    Rectangle btnMenu = {970, 588, 190, 56};
-    DrawButton(btnBack1990, "< VOLTAR A SALA 1 (1990)", CYAN_COLOR);
+    Rectangle btnBack2008 = {120, 588, 250, 56};
+    Rectangle btnBack1990 = {390, 588, 230, 56};
+    Rectangle btnReplay2048 = {640, 588, 260, 56};
+    Rectangle btnMenu = {920, 588, 220, 56};
+    DrawButton(btnBack2008, "< SALA 2 (2008)", CYAN_COLOR);
+    DrawButton(btnBack1990, "< SALA 1 (1990)", (Color){70, 95, 110, 255});
     DrawButton(btnReplay2048, "REINICIAR SALA 2048", GOLD_COLOR);
     DrawButton(btnMenu, "MENU INICIAL", PANEL_LIGHT);
 }
@@ -4061,6 +4074,13 @@ static void DrawRoom2008(const GameState *game)
     Rectangle btnVoltar1990 = {70, 600, 240, 42};
     DrawButton(btnVoltar1990, "< SALA 1 (1990)", (Color){70, 95, 110, 255});
 
+    /* Botao de avanco para Sala 3 (2048) se destravada */
+    Rectangle btnGo2048 = {SCREEN_WIDTH - 280, 600, 240, 42};
+    if (game->year2048Unlocked)
+    {
+        DrawButton(btnGo2048, "SALA 3 (2048) >", (Color){45, 115, 75, 255});
+    }
+
     /* Hotspots interativos ao passar o mouse */
     DrawHotspot(flyerRec, "Inspecionar Panfleto da Revolta [Doc 2]");
     DrawHotspot(cctvMonitor, "Analisar Monitor CFTV dos Servidores [Doc 4]");
@@ -4070,6 +4090,10 @@ static void DrawRoom2008(const GameState *game)
     DrawHotspot(fatherBookRec, "Ler Notas do Dr. Ramos (Origem Humanitaria)");
     DrawHotspot(govMemoRec, "Ler Memorando Governamental (Desvio de Uso)");
     DrawHotspot(btnVoltar1990, "Retornar ao Setor de Arquivos (1990)");
+    if (game->year2048Unlocked)
+    {
+        DrawHotspot(btnGo2048, "Avancar para o laboratorio do prototipo de 2048");
+    }
 }
 
 static void DrawHudRoom2008(const GameState *game)
@@ -4234,6 +4258,13 @@ static void UpdateRoom2008(GameState *game)
     {
         game->journalYearTab = 0;
         game->screen = SCREEN_ROOM_2;
+    }
+    else if (game->year2048Unlocked && Clicked((Rectangle){SCREEN_WIDTH - 280, 600, 240, 42}))
+    {
+        game->journalYearTab = 3;
+        game->journalPage = 0;
+        game->screen = SCREEN_ROOM;
+        SetMessage(game, "Laboratorio do Prototipo A.R.1.3.L. // ANO 2048.");
     }
 }
 
@@ -4620,26 +4651,28 @@ static void DrawResult2008(const GameState *game)
     DrawRectangleRounded(winBox, 0.04f, 8, Fade(PANEL_COLOR, 0.96f));
     DrawRectangleRoundedLinesEx(winBox, 0.04f, 8, 2.0f, GOLD_COLOR);
 
-    DrawText("DESVIO ALGORÍTMICO // FASE 2 (2008) CONCLUÍDA", 535, 205, 20, GOLD_COLOR);
+    DrawText("DESVIO ALGORÍTMICO // FASE 2 (2008) CONCLUÍDA", 535, 202, 20, GOLD_COLOR);
 
-    DrawText("Ao demonstrar o falso positivo através do crachá de ponto e do", 535, 248, 17, LIGHTGRAY);
-    DrawText("circuito interno, Elira impediu o drone e salvou a vida de Lucas Silva.", 535, 272, 17, LIGHTGRAY);
+    DrawText("Ao demonstrar o falso positivo através do crachá de ponto e do", 535, 236, 17, LIGHTGRAY);
+    DrawText("circuito interno, Elira impediu o drone e salvou a vida de Lucas Silva.", 535, 258, 17, LIGHTGRAY);
 
-    DrawText("O algoritmo de busca facial, concebido por seu pai para salvar", 535, 308, 17, LIGHTGRAY);
-    DrawText("vítimas em catástrofes, havia sido pervertido pelo governo para", 535, 332, 17, (Color){245, 175, 75, 255});
-    DrawText("perseguir líderes populares e ativistas civis.", 535, 356, 17, (Color){245, 175, 75, 255});
+    DrawText("O algoritmo de busca facial, concebido por seu pai para salvar", 535, 290, 17, LIGHTGRAY);
+    DrawText("vítimas em catástrofes, havia sido pervertido pelo governo para", 535, 312, 17, (Color){245, 175, 75, 255});
+    DrawText("perseguir líderes populares e ativistas civis.", 535, 334, 17, (Color){245, 175, 75, 255});
+
+    DrawText("-> Proxima Fronteira: FASE 3 // ANO 2048: O PROTOTIPO A.R.1.3.L.!", 535, 362, 17, CYAN_COLOR);
 
     if (game->room2008OptionalCompleted)
     {
-        DrawRectangleRounded((Rectangle){535, 390, 610, 48}, 0.12f, 4, Fade((Color){45, 165, 80, 255}, 0.20f));
-        DrawRectangleRoundedLinesEx((Rectangle){535, 390, 610, 48}, 0.12f, 4, 1.0f, (Color){60, 235, 110, 255});
-        DrawText("[DESTAQUE ÉTICO]: Despacho automático da filial desativado,", 550, 398, 14, (Color){60, 235, 110, 255});
-        DrawText("mantendo todas as 1.420 provas forenses intactas para o futuro.", 550, 418, 14, (Color){60, 235, 110, 255});
+        DrawRectangleRounded((Rectangle){535, 396, 610, 44}, 0.12f, 4, Fade((Color){45, 165, 80, 255}, 0.20f));
+        DrawRectangleRoundedLinesEx((Rectangle){535, 396, 610, 44}, 0.12f, 4, 1.0f, (Color){60, 235, 110, 255});
+        DrawText("[DESTAQUE ÉTICO]: Despacho automático da filial desativado,", 550, 402, 14, (Color){60, 235, 110, 255});
+        DrawText("mantendo todas as 1.420 provas forenses intactas para o futuro.", 550, 420, 14, (Color){60, 235, 110, 255});
     }
     else
     {
-        DrawText("[DESCOBERTA PENDENTE]: Havia um protocolo no escritório para", 535, 398, 14, GOLD_COLOR);
-        DrawText("desativar o envio automático da filial mantendo os registros como prova.", 535, 418, 14, GRAY);
+        DrawText("[DESCOBERTA PENDENTE]: Havia um protocolo no escritório para", 535, 400, 14, GOLD_COLOR);
+        DrawText("desativar o envio automático da filial mantendo os registros como prova.", 535, 420, 14, GRAY);
     }
 
     DrawText(TextFormat("TEMPO TOTAL: %02d:%02d  |  VIDAS: %d/3",
@@ -4650,21 +4683,32 @@ static void DrawResult2008(const GameState *game)
 
     DrawText(TextFormat("OPERADOR: %s", game->playerName), 535, 492, 16, GRAY);
 
-    Rectangle btnOffice = {340, 580, 280, 56};
-    Rectangle btnRoom1 = {650, 580, 260, 56};
-    Rectangle btnMenu = {940, 580, 220, 56};
-    DrawButton(btnOffice, "VOLTAR AO ESCRITÓRIO", CYAN_COLOR);
-    DrawButton(btnRoom1, "< SALA 1 (1990)", PANEL_LIGHT);
-    DrawButton(btnMenu, "MENU INICIAL", GOLD_COLOR);
+    Rectangle btnNext2048 = {180, 580, 380, 56};
+    Rectangle btnOffice = {580, 580, 220, 56};
+    Rectangle btnRoom1 = {820, 580, 220, 56};
+    Rectangle btnMenu = {1060, 580, 160, 56};
+    DrawButton(btnNext2048, "AVANCAR PARA ANO 2048 >> [ENTER]", GOLD_COLOR);
+    DrawButton(btnOffice, "REVER ESCRITORIO", CYAN_COLOR);
+    DrawButton(btnRoom1, "< SALA 1 (1990)", (Color){70, 95, 110, 255});
+    DrawButton(btnMenu, "MENU", PANEL_LIGHT);
 }
 
 static void UpdateResult2008(GameState *game)
 {
-    Rectangle btnOffice = {340, 580, 280, 56};
-    Rectangle btnRoom1 = {650, 580, 260, 56};
-    Rectangle btnMenu = {940, 580, 220, 56};
+    Rectangle btnNext2048 = {180, 580, 380, 56};
+    Rectangle btnOffice = {580, 580, 220, 56};
+    Rectangle btnRoom1 = {820, 580, 220, 56};
+    Rectangle btnMenu = {1060, 580, 160, 56};
 
-    if (Clicked(btnOffice) || IsKeyPressed(KEY_ENTER))
+    if (Clicked(btnNext2048) || IsKeyPressed(KEY_ENTER) || IsKeyPressed(KEY_SPACE))
+    {
+        game->year2048Unlocked = true;
+        game->journalYearTab = 3;
+        game->journalPage = 0;
+        game->screen = SCREEN_ROOM;
+        SetMessage(game, "Salto temporal concluido: O Prototipo de A.R.1.3.L. // ANO 2048.");
+    }
+    else if (Clicked(btnOffice))
     {
         game->screen = SCREEN_ROOM_2008;
     }
@@ -4988,12 +5032,19 @@ int main(void)
                 UpdateTerminal(&game);
                 break;
             case SCREEN_RESULT:
-                if (Clicked((Rectangle){340, 588, 380, 56}) || IsKeyPressed(KEY_BACKSPACE))
+                if (Clicked((Rectangle){120, 588, 250, 56}))
                 {
+                    game.journalYearTab = 1;
+                    game.screen = SCREEN_ROOM_2008;
+                    SetMessage(&game, "Retornando ao Escritorio // 2008.");
+                }
+                else if (Clicked((Rectangle){390, 588, 230, 56}) || IsKeyPressed(KEY_BACKSPACE))
+                {
+                    game.journalYearTab = 0;
                     game.screen = SCREEN_ROOM_2;
                     SetMessage(&game, "Retornando ao Setor de Arquivos // 1990.");
                 }
-                else if (Clicked((Rectangle){740, 588, 210, 56}))
+                else if (Clicked((Rectangle){640, 588, 260, 56}))
                 {
                     game.foundCalendar = false;
                     game.foundBooks = false;
@@ -5004,7 +5055,7 @@ int main(void)
                     game.code[0] = '\0';
                     game.screen = SCREEN_ROOM;
                 }
-                else if (Clicked((Rectangle){970, 588, 190, 56}) || IsKeyPressed(KEY_ENTER) || IsKeyPressed(KEY_SPACE))
+                else if (Clicked((Rectangle){920, 588, 220, 56}) || IsKeyPressed(KEY_ENTER) || IsKeyPressed(KEY_SPACE))
                 {
                     game.screen = SCREEN_TITLE;
                 }
