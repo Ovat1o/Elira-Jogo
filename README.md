@@ -1,6 +1,4 @@
-# ELIRA
-
-![Backlog](https://pub-181bb6168cd04f80bd48d53b914eecab.r2.dev/ChatGPT%20Image%203%20de%20set.%20de%202026%2C%2019_02_36.png)
+![ELIRA](docs/artes/banner.png)
 
 ### **1. Visão Geral**
 
