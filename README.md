@@ -66,11 +66,13 @@ O Makefile utiliza a instalacao da raylib em `C:/raylib`.
 
 ### **8. Integrantes do Grupo**
 
-- **Beatriz Camara** - Scrum Master | [Linkedin](https://www.linkedin.com/in/beatriz-de-melo-dornelas-c%C3%A2mara-578421214/) | [GitHub](https://github.com/BiaD-Cam)
-- **Carlos Eduardo** - Lógica Matemática  | [Linkedin](https://www.linkedin.com/in/carlos-eduardomelo/) | [GitHub](https://github.com/cadumelo20)
-- **João Tezolini** - Desenvolvedor em C | [Linkedin](https://www.linkedin.com/in/jo%C3%A3o-tezolini-sugahara/) | [GitHub](https://github.com/Joao-Tezolini)
-- **José Tales** - Design Gráfico | [Linkedin](https://www.linkedin.com/in/tales-cavalcantii/) | [GitHub](https://github.com/talescavalcanti)
-- **Luisa Couto** - Analista de Design | [Linkedin](www.linkedin.com/in/luísa-couto-5ababa378) | [GitHub](https://github.com/luisasiqcouto)
-- **Maria Vitória** - Desenvolvedora em C | [Linkedin](https://www.linkedin.com/in/mvitoriapereirac) | [GitHub](https://github.com/mvitoriapereirac)
-- **Otávio Leão** - Engeheiro de Software | [Linkedin](https://www.linkedin.com/in/otaviosleao/) | [GitHub](https://github.com/Ovat1o)
-- **Victor Julius** - Desenvolvedor em Haskell | [Linkedin](https://www.linkedin.com/in/victor-julius/) | [GitHub](https://github.com/victorjls21)
+| Foto | Nome | Função | GitHub | LinkedIn |
+|---|---|---|---|---|
+| ![](docs/assets/team/integrante.jpeg) | Beatriz Camara | Scrum Master | [BiaD-Cam](https://github.com/BiaD-Cam) | [Beatriz de Melo Dornelas](https://www.linkedin.com/in/beatriz-de-melo-dornelas-c%C3%A2mara-578421214/) |
+| ![](docs/assets/team/integrante.jpeg) | Carlos Eduardo | Lógica Matemática | [cadumelo20](https://github.com/cadumelo20) | [Carlos Eduardo Melo](https://www.linkedin.com/in/carlos-eduardomelo/) |
+| ![](docs/assets/team/integrante.jpeg) | João Tezolini | Desenvolvedor em C | [Joao-Tezolini](https://github.com/Joao-Tezolini) | [João Tezolini Sugahara](https://www.linkedin.com/in/jo%C3%A3o-tezolini-sugahara/) |
+| ![](docs/assets/team/integrante.jpeg) | José Tales | Design Gráfico | [talescavalcanti](https://github.com/talescavalcanti) | [Tales Cavalcanti](https://www.linkedin.com/in/tales-cavalcantii/) |
+| ![](docs/assets/team/integrante.jpeg) | Luísa Couto | Analista de Design | [luisasiqcouto](https://github.com/luisasiqcouto) | [Luísa Couto](https://www.linkedin.com/in/luísa-couto-5ababa378/) |
+| ![](docs/assets/team/integrante.jpeg) | Maria Vitória | Desenvolvedora em C | [mvitoriapereirac](https://github.com/mvitoriapereirac) | [Maria Vitória Pereira](https://www.linkedin.com/in/mvitoriapereirac/) |
+| ![](docs/assets/team/integrante.jpeg) | Otávio Leão | Engenheiro de Software | [Ovat1o](https://github.com/Ovat1o) | [Otávio Leão](https://www.linkedin.com/in/otaviosleao/) |
+| ![](docs/assets/team/integrante.jpeg) | Victor Julius | Desenvolvedor em Haskell | [victorjls21](https://github.com/victorjls21) | [Victor Julius](https://www.linkedin.com/in/victor-julius/) |
