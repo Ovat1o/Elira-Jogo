@@ -1,6 +1,6 @@
 ![ELIRA](docs/artes/banner.png)
 
-### **1. Visão Geral**
+## **1. Visão Geral**
 
 ELIRA é um jogo de ficção científica que aborda o letramento digital e o uso crítico de Inteligência Artificial. A narrativa acompanha Elira, uma jovem que viaja pelas eras do espaço-tempo para desativar a IA tirânica A.R.1.3.L que domina o mundo. Em um futuro distante, a Inteligência Artificial deixou de ser apenas uma ferramenta e passou a mediar praticamente todas as experiências humanas. Filmes, músicas, notícias, lembranças, trabalhos, decisões profissionais e até conversas pessoais são produzidos ou orientados por sistemas de IA. 
 
@@ -12,7 +12,7 @@ O objetivo do jogador é atravessar as eras resolvendo enigmas e tomando decisõ
 
 ***
 
-### **Recompensas da jornada**
+## **Recompensas da jornada**
 
 Na progressão planejada, cada salto temporal revela uma peça da história de A.R.1.3.L. Estes três artefatos marcam a jornada pelas eras:
 
@@ -24,7 +24,7 @@ Na progressão planejada, cada salto temporal revela uma peça da história de A
 
 ***
 
-### **2. Ferramentas utilizadas**
+## **2. Ferramentas utilizadas**
 
 **Jira** - Ferramenta de Gestão de Projeto
 
@@ -38,7 +38,7 @@ Na progressão planejada, cada salto temporal revela uma peça da história de A
 
 ***
 
-### **3. Backlog e Board**
+## **3. Backlog e Board**
 
 **1- Interface e Apresentação**
 
@@ -74,7 +74,7 @@ make run
 
 O Makefile utiliza a instalacao da raylib em `C:/raylib`.
 
-### **8. Integrantes do Grupo**
+## **8. Integrantes do Grupo**
 
 | Foto | Nome | Função | GitHub | LinkedIn |
 |---|---|---|---|---|
