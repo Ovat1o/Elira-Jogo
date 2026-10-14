@@ -18,9 +18,9 @@ Na progressão planejada, cada salto temporal revela uma peça da história de A
 
 | Sprite | Recompensa |
 | :---: | --- |
-| <img src="docs/assets/sprites/disquete.png" alt="Sprite do disquete de 1990" width="100"> | **Disquete da origem - 1990.** Pequeno por fora, decisivo por dentro: guarda os primeiros rastros de A.R.1.3.L., de uma época em que a IA ainda era uma promessa. |
-| <img src="docs/assets/sprites/cd.png" alt="Sprite do CD de memória de 2008" width="100"> | **CD da contestação - 2008.** Recuperado depois que Elira demonstra o erro do reconhecimento facial e impede uma ordem injusta. Lembra que decisões automatizadas também precisam ser questionadas. |
-| <img src="docs/assets/sprites/ssd.png" alt="Sprite do SSD de 2026" width="100"> | **SSD das escolhas - 2026.** Representa os registros de uma sociedade cada vez mais guiada por algoritmos. O que essas memórias revelarão sobre o momento em que a conveniência virou controle? |
+| <img src="docs/assets/sprites/disquete.png" alt="Sprite do disquete de 1990" width="100"> | **Disquete - 1990.** Pequeno por fora, decisivo por dentro: guarda os primeiros rastros de A.R.1.3.L., de uma época em que a IA ainda era uma promessa. |
+| <img src="docs/assets/sprites/cd.png" alt="Sprite do CD de memória de 2008" width="100"> | **CD - 2008.** Recuperado depois que Elira demonstra o erro do reconhecimento facial e impede uma ordem injusta. Lembra que decisões automatizadas também precisam ser questionadas. |
+| <img src="docs/assets/sprites/ssd.png" alt="Sprite do SSD de 2026" width="100"> | **SSD - 2026.** Representa os registros de uma sociedade cada vez mais guiada por algoritmos. O que essas memórias revelarão sobre o momento em que a conveniência virou controle? |
 
 ***
 
