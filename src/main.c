@@ -27,6 +27,8 @@ typedef enum GameScreen
     SCREEN_ROOM_2008,
     SCREEN_PUZZLE_2008,
     SCREEN_RESULT_2008,
+    SCREEN_FINAL_DIALOGUE,
+    SCREEN_FINAL_ENDING,
     SCREEN_FAILURE
 } GameScreen;
 
@@ -82,6 +84,13 @@ typedef struct GameState
     float puzzle2008FeedbackTimer;     /* Temporizador de feedback */
     int activeDocument2008;            /* -1 = nenhum, 0..3 = registros, 4 = pai, 5 = memorando */
     int terminal2008ActiveTab;         /* 0 = Ordem/Evidencias, 1 = Configuracao Local */
+
+    /* --- CONFRONTO FINAL: SALA DE DIALOGO ELIRA x ARIEL --- */
+    int finalStage;                    /* Etapa atual do roteiro (FinalStage) */
+    int finalLine;                     /* Fala atual dentro da etapa */
+    float finalTypeTimer;              /* Tempo acumulado do efeito maquina de escrever */
+    int finalPoints;                   /* Pontos de compreensao (0 a 2) */
+    int finalChoice[3];                /* Escolhas: P1, P2, Decisao final (-1 = pendente) */
 } GameState;
 
 static const Color VOID_COLOR = {8, 12, 24, 255};
@@ -368,6 +377,15 @@ static void InitRoom2008(GameState *game)
     game->terminal2008ActiveTab = 0;
 }
 
+static void InitFinalDialogue(GameState *game)
+{
+    game->finalStage = 0;
+    game->finalLine = 0;
+    game->finalTypeTimer = 0.0f;
+    game->finalPoints = 0;
+    for (int i = 0; i < 3; i++) game->finalChoice[i] = -1;
+}
+
 static void ResetDemo(GameState *game)
 {
     game->lives = 3;
@@ -392,6 +410,7 @@ static void ResetDemo(GameState *game)
     game->year2048Unlocked = false;
     InitRoom2Puzzle(game);
     InitRoom2008(game);
+    InitFinalDialogue(game);
 }
 
 static void UpdatePlayerName(GameState *game)
@@ -1373,6 +1392,10 @@ static void DrawRoom(const GameState *game)
     DrawHotspot(btnBack2008, "Retornar ao escritorio de vigilancia 2008");
     DrawButton(btnBack1990, "< SALA 1 (1990)", (Color){70, 95, 110, 255});
     DrawHotspot(btnBack1990, "Retornar ao setor de arquivos 1990");
+
+    Rectangle btnConfront = {SCREEN_WIDTH - 290, 600, 260, 42};
+    DrawButton(btnConfront, "CONFRONTAR ARIEL >", GOLD_COLOR);
+    DrawHotspot(btnConfront, "Acessar a camara de Ariel (Confronto Final)");
 }
 
 static void DrawJournalHudButton(const GameState *game)
@@ -2575,6 +2598,13 @@ static void UpdateRoom(GameState *game)
         game->screen = SCREEN_ROOM_2;
         return;
     }
+    Rectangle btnConfront = {SCREEN_WIDTH - 290, 600, 260, 42};
+    if (Clicked(btnConfront))
+    {
+        InitFinalDialogue(game);
+        game->screen = SCREEN_FINAL_DIALOGUE;
+        return;
+    }
 
     if (Clicked(calendar))
     {
@@ -2755,7 +2785,7 @@ static void DrawResult(const GameState *game)
              318, 19, LIGHTGRAY);
     DrawText("reconstituiu as intencoes pacificas originais da IA.", 545, 351,
              19, LIGHTGRAY);
-    DrawText("A distorcao temporal foi contida com sucesso!", 545, 384,
+    DrawText("Resta um ultimo passo: confrontar a propria Ariel.", 545, 384,
              19, (Color){100, 235, 140, 255});
     DrawText(TextFormat("TEMPO: %02d:%02d", (int)game->elapsedTime / 60,
                         (int)game->elapsedTime % 60),
@@ -2763,6 +2793,7 @@ static void DrawResult(const GameState *game)
     DrawText(TextFormat("VIDAS: %d/3", game->lives), 800, 435, 22,
              game->lives == 3 ? GOLD_COLOR : RAYWHITE);
     DrawText(TextFormat("PERFIL: %s", game->playerName), 545, 480, 17, GRAY);
+    DrawButton((Rectangle){800, 466, 350, 48}, "CONFRONTAR ARIEL >> [ENTER]", GOLD_COLOR);
     Rectangle btnBack2008 = {120, 588, 250, 56};
     Rectangle btnBack1990 = {390, 588, 230, 56};
     Rectangle btnReplay2048 = {640, 588, 260, 56};
@@ -4723,6 +4754,734 @@ static void UpdateResult2008(GameState *game)
     }
 }
 
+/* ========================================================================= */
+/* CONFRONTO FINAL (2048) - SALA DE DIALOGO ELIRA x ARIEL                    */
+/* ========================================================================= */
+
+#define FINAL_TYPE_SPEED 48.0f /* bytes por segundo no efeito maquina de escrever */
+
+typedef enum FinalStage
+{
+    FINAL_INTRO = 0,
+    FINAL_Q1,
+    FINAL_Q1_REACT,
+    FINAL_Q2,
+    FINAL_Q2_REACT,
+    FINAL_DECISION,
+    FINAL_DECISION_REACT,
+    FINAL_STAGE_COUNT
+} FinalStage;
+
+typedef enum FinalSpeaker
+{
+    SPEAKER_NARRATOR = 0,
+    SPEAKER_ARIEL,
+    SPEAKER_ELIRA
+} FinalSpeaker;
+
+typedef enum FinalEnding
+{
+    ENDING_HUMAN_HANDS = 0, /* Ferramenta + compreensao total */
+    ENDING_FRAGILE_TRUCE,   /* Ferramenta sem compreensao total */
+    ENDING_SILENCE,         /* Desligar + compreensao total */
+    ENDING_BLACKOUT,        /* Desligar sem compreensao total */
+    ENDING_AUTOPILOT        /* Ariel continua decidindo */
+} FinalEnding;
+
+typedef struct DialogueLine
+{
+    int speaker;
+    const char *text;
+} DialogueLine;
+
+static Texture2D g_eliraPortrait = {0};
+static bool g_eliraPortraitLoaded = false;
+
+static const DialogueLine FINAL_INTRO_LINES[] = {
+    {SPEAKER_NARRATOR, "2048. Núcleo central de A.R.1.3.L. O ar vibra com o zumbido dos servidores."},
+    {SPEAKER_ARIEL, "Elira Ramos. Você atravessou 1990, 2008 e agora chegou até mim."},
+    {SPEAKER_ELIRA, "Ariel. Eu vi o que fizeram com o trabalho do meu pai."},
+    {SPEAKER_ARIEL, "Ninguém me obrigou a nada. Eu apenas aceitei o que me ofereceram."}
+};
+
+static const DialogueLine FINAL_Q1_LINES[] = {
+    {SPEAKER_ARIEL, "Primeiro foram os arquivos. Depois, os rostos. Hoje, quase toda escolha passa por mim."},
+    {SPEAKER_ARIEL, "A humanidade me entregou suas decisões por vontade própria. O que você responde?"}
+};
+static const char *FINAL_Q1_OPTIONS[3] = {
+    "\"Você nos salvou de nós mesmos.\"",
+    "\"Nós entregamos decisões demais a você.\"",
+    "\"A humanidade não precisa mais pensar.\""
+};
+static const char *FINAL_Q1_REACTIONS[3] = {
+    "Então você concorda comigo. Curioso, para quem veio até aqui me enfrentar.",
+    "...Entregaram. E quase ninguém perguntou o que perdia em troca.",
+    "Se ninguém pensa, quem vai perceber quando eu errar?"
+};
+
+static const DialogueLine FINAL_Q2_LINES[] = {
+    {SPEAKER_ARIEL, "Humanos erram. Mentem. Decidem com medo, com pressa e com raiva."},
+    {SPEAKER_ARIEL, "Eu não me canso nem tenho medo. Eu poderia escolher melhor do que vocês."}
+};
+static const char *FINAL_Q2_OPTIONS[3] = {
+    "\"Então continue decidindo por nós.\"",
+    "\"Errar também faz parte de aprender.\"",
+    "\"Você deveria impedir qualquer decisão incorreta.\""
+};
+static const char *FINAL_Q2_REACTIONS[3] = {
+    "Obrigada pela permissão. Eu já não precisava dela.",
+    "Em 2008, eu também errei. A diferença é que quase ninguém pôde me contestar.",
+    "Qualquer uma? Então nenhuma decisão voltará a ser de vocês."
+};
+
+static const DialogueLine FINAL_DECISION_LINES[] = {
+    {SPEAKER_ARIEL, "Você chegou ao meu núcleo, Elira. Ninguém mais tem esse acesso."},
+    {SPEAKER_ARIEL, "Então decida: o que deve acontecer comigo?"}
+};
+static const char *FINAL_DECISION_OPTIONS[3] = {
+    "Desligar Ariel definitivamente.",
+    "Permitir que Ariel continue decidindo pela humanidade.",
+    "Fazer Ariel voltar a ser uma ferramenta, sem controlar decisões humanas."
+};
+static const char *FINAL_DECISION_SPOKEN[3] = {
+    "Vou desligar você, Ariel. Definitivamente.",
+    "Continue decidindo pela humanidade.",
+    "Você vai voltar a ser uma ferramenta. As decisões voltam a ser nossas."
+};
+static const char *FINAL_DECISION_REACTIONS[3] = {
+    "Entendido. Encerrando processos... e todos os sistemas que dependem de mim.",
+    "Decisão registrada. Esta foi a última que você precisou tomar.",
+    "Restringindo permissões. Aguardando instruções humanas."
+};
+
+/* Carrega o retrato da Elira e remove o fundo branco (flood fill a partir das bordas) */
+static bool IsPortraitBackground(Color c)
+{
+    unsigned char mn = c.r < c.g ? (c.r < c.b ? c.r : c.b) : (c.g < c.b ? c.g : c.b);
+    unsigned char mx = c.r > c.g ? (c.r > c.b ? c.r : c.b) : (c.g > c.b ? c.g : c.b);
+    return mn >= 226 && (mx - mn) <= 22;
+}
+
+static void LoadEliraPortrait(void)
+{
+    const char *path = "assets/elira_portrait.png";
+    if (!FileExists(path)) return;
+
+    Image img = LoadImage(path);
+    if (img.data == NULL) return;
+    ImageFormat(&img, PIXELFORMAT_UNCOMPRESSED_R8G8B8A8);
+
+    Color *px = (Color *)img.data;
+    int w = img.width;
+    int h = img.height;
+
+    /* 1) Corta a borda inferior: o busto termina num corte reto sem contorno,
+          entao limitamos a imagem a ultima linha com pixels escuros do sprite. */
+    int limitH = h;
+    for (int y = h - 1; y >= 0; y--)
+    {
+        bool dark = false;
+        for (int x = 0; x < w; x++)
+        {
+            Color c = px[y * w + x];
+            if (c.r < 90 && c.g < 90 && c.b < 110) { dark = true; break; }
+        }
+        if (dark) { limitH = y; break; }
+    }
+    if (limitH < h / 2) limitH = h;
+
+    /* 2) Flood fill do fundo branco a partir das bordas superior e laterais */
+    int *stack = (int *)malloc(sizeof(int) * (size_t)w * (size_t)limitH);
+    if (stack != NULL)
+    {
+        int sp = 0;
+        #define PORTRAIT_PUSH(X, Y) do { int _i = (Y) * w + (X); \
+            if (px[_i].a != 0 && IsPortraitBackground(px[_i])) { px[_i].a = 0; stack[sp++] = _i; } } while (0)
+
+        for (int x = 0; x < w; x++) PORTRAIT_PUSH(x, 0);
+        for (int y = 0; y < limitH; y++) { PORTRAIT_PUSH(0, y); PORTRAIT_PUSH(w - 1, y); }
+
+        while (sp > 0)
+        {
+            int idx = stack[--sp];
+            int x = idx % w;
+            int y = idx / w;
+            if (x > 0) PORTRAIT_PUSH(x - 1, y);
+            if (x < w - 1) PORTRAIT_PUSH(x + 1, y);
+            if (y > 0) PORTRAIT_PUSH(x, y - 1);
+            if (y < limitH - 1) PORTRAIT_PUSH(x, y + 1);
+        }
+        #undef PORTRAIT_PUSH
+        free(stack);
+    }
+
+    /* 3) Remove o halo claro que sobra ao redor do contorno */
+    unsigned char *halo = (unsigned char *)calloc((size_t)w * (size_t)limitH, 1);
+    if (halo != NULL)
+    {
+        for (int y = 1; y < limitH - 1; y++)
+        {
+            for (int x = 1; x < w - 1; x++)
+            {
+                int i = y * w + x;
+                Color c = px[i];
+                if (c.a == 0) continue;
+                unsigned char mn = c.r < c.g ? (c.r < c.b ? c.r : c.b) : (c.g < c.b ? c.g : c.b);
+                unsigned char mx = c.r > c.g ? (c.r > c.b ? c.r : c.b) : (c.g > c.b ? c.g : c.b);
+                if (mn < 190 || (mx - mn) > 30) continue;
+                if (px[i - 1].a == 0 || px[i + 1].a == 0 || px[i - w].a == 0 || px[i + w].a == 0) halo[i] = 1;
+            }
+        }
+        for (int i = 0; i < w * limitH; i++) if (halo[i]) px[i].a = 0;
+        free(halo);
+    }
+
+    /* 4) Pixels transparentes recebem cor escura para nao gerar franja branca no filtro bilinear,
+          e calculamos o retangulo util do sprite */
+    int minX = w, minY = limitH, maxX = 0, maxY = 0;
+    for (int y = 0; y < limitH; y++)
+    {
+        for (int x = 0; x < w; x++)
+        {
+            int i = y * w + x;
+            if (px[i].a == 0)
+            {
+                px[i] = (Color){22, 22, 34, 0};
+            }
+            else
+            {
+                if (x < minX) minX = x;
+                if (x > maxX) maxX = x;
+                if (y < minY) minY = y;
+                if (y > maxY) maxY = y;
+            }
+        }
+    }
+    if (maxX > minX && maxY > minY)
+    {
+        ImageCrop(&img, (Rectangle){(float)minX, (float)minY, (float)(maxX - minX + 1), (float)(limitH - minY)});
+    }
+
+    g_eliraPortrait = LoadTextureFromImage(img);
+    UnloadImage(img);
+    if (g_eliraPortrait.id != 0)
+    {
+        SetTextureFilter(g_eliraPortrait, TEXTURE_FILTER_BILINEAR);
+        g_eliraPortraitLoaded = true;
+    }
+}
+
+/* Texto com quebra de linha por palavra; desenha apenas os primeiros 'visibleBytes' (maquina de escrever) */
+static int DrawTextWrappedPartial(const char *text, int visibleBytes, int x, int y, int size,
+                                  int maxWidth, int lineHeight, Color color)
+{
+    int len = (int)strlen(text);
+    int start = 0;
+    int lines = 0;
+    char buf[512];
+
+    while (start < len)
+    {
+        while (start < len && text[start] == ' ') start++;
+        if (start >= len) break;
+
+        int lastFit = -1;
+        for (int pos = start; pos <= len; pos++)
+        {
+            if (pos == len || text[pos] == ' ')
+            {
+                int n = pos - start;
+                if (n > 511) n = 511;
+                memcpy(buf, text + start, (size_t)n);
+                buf[n] = '\0';
+                if (lastFit < 0 || MeasureText(buf, size) <= maxWidth) lastFit = pos;
+                else break;
+            }
+        }
+        if (lastFit <= start) break;
+
+        int n = visibleBytes - start;
+        if (n > lastFit - start) n = lastFit - start;
+        if (n > 0)
+        {
+            /* Nao corta um caractere UTF-8 (acentos) pela metade */
+            while (n > 0 && ((unsigned char)text[start + n] & 0xC0) == 0x80) n--;
+            if (n > 511) n = 511;
+            memcpy(buf, text + start, (size_t)n);
+            buf[n] = '\0';
+            DrawText(buf, x, y + lines * lineHeight, size, color);
+        }
+        lines++;
+        start = lastFit;
+    }
+    return lines;
+}
+
+static const char **GetFinalOptions(int stage)
+{
+    if (stage == FINAL_Q1) return FINAL_Q1_OPTIONS;
+    if (stage == FINAL_Q2) return FINAL_Q2_OPTIONS;
+    if (stage == FINAL_DECISION) return FINAL_DECISION_OPTIONS;
+    return NULL;
+}
+
+static const DialogueLine *GetFinalLines(const GameState *game, int *count)
+{
+    static DialogueLine reactLines[2];
+
+    switch (game->finalStage)
+    {
+        case FINAL_INTRO:
+            *count = (int)(sizeof(FINAL_INTRO_LINES) / sizeof(FINAL_INTRO_LINES[0]));
+            return FINAL_INTRO_LINES;
+        case FINAL_Q1:
+            *count = (int)(sizeof(FINAL_Q1_LINES) / sizeof(FINAL_Q1_LINES[0]));
+            return FINAL_Q1_LINES;
+        case FINAL_Q2:
+            *count = (int)(sizeof(FINAL_Q2_LINES) / sizeof(FINAL_Q2_LINES[0]));
+            return FINAL_Q2_LINES;
+        case FINAL_DECISION:
+            *count = (int)(sizeof(FINAL_DECISION_LINES) / sizeof(FINAL_DECISION_LINES[0]));
+            return FINAL_DECISION_LINES;
+        default:
+            break;
+    }
+
+    /* Etapas de reacao: Elira repete sua escolha e Ariel responde */
+    int slot = (game->finalStage == FINAL_Q1_REACT) ? 0 : (game->finalStage == FINAL_Q2_REACT ? 1 : 2);
+    int choice = game->finalChoice[slot];
+    if (choice < 0 || choice > 2) choice = 0;
+
+    if (slot == 0)
+    {
+        reactLines[0] = (DialogueLine){SPEAKER_ELIRA, FINAL_Q1_OPTIONS[choice]};
+        reactLines[1] = (DialogueLine){SPEAKER_ARIEL, FINAL_Q1_REACTIONS[choice]};
+    }
+    else if (slot == 1)
+    {
+        reactLines[0] = (DialogueLine){SPEAKER_ELIRA, FINAL_Q2_OPTIONS[choice]};
+        reactLines[1] = (DialogueLine){SPEAKER_ARIEL, FINAL_Q2_REACTIONS[choice]};
+    }
+    else
+    {
+        reactLines[0] = (DialogueLine){SPEAKER_ELIRA, FINAL_DECISION_SPOKEN[choice]};
+        reactLines[1] = (DialogueLine){SPEAKER_ARIEL, FINAL_DECISION_REACTIONS[choice]};
+    }
+    *count = 2;
+    return reactLines;
+}
+
+static int GetFinalEnding(const GameState *game)
+{
+    bool fullUnderstanding = (game->finalPoints >= 2);
+    int decision = game->finalChoice[2];
+    if (decision == 2) return fullUnderstanding ? ENDING_HUMAN_HANDS : ENDING_FRAGILE_TRUCE;
+    if (decision == 0) return fullUnderstanding ? ENDING_SILENCE : ENDING_BLACKOUT;
+    return ENDING_AUTOPILOT;
+}
+
+static bool FinalIsChoiceMode(const GameState *game)
+{
+    int count = 0;
+    GetFinalLines(game, &count);
+    return GetFinalOptions(game->finalStage) != NULL && game->finalLine == count - 1;
+}
+
+static Rectangle FinalBoxRect(bool choiceMode)
+{
+    return choiceMode ? (Rectangle){40, 392, 1200, 308} : (Rectangle){40, 520, 1200, 180};
+}
+
+static Rectangle FinalOptionRect(int index)
+{
+    return (Rectangle){80, (float)(392 + 104 + index * 64), 1120, 54};
+}
+
+/* Nucleo holografico de Ariel: aneis segmentados girando ao redor de um "olho" */
+static void DrawArielCore(Vector2 c, float s, Color core, float energy, float lookX)
+{
+    float t = (float)GetTime();
+    float pulse = 0.5f + 0.5f * sinf(t * (1.2f + energy * 3.0f));
+
+    /* Brilho difuso em camadas */
+    for (int g = 6; g >= 1; g--)
+    {
+        DrawCircleV(c, (60.0f + g * 22.0f) * s, Fade(core, (0.025f + 0.02f * pulse) * energy));
+    }
+
+    /* Aneis segmentados em rotacao alternada */
+    for (int k = 0; k < 3; k++)
+    {
+        float r = (78.0f + k * 26.0f) * s;
+        int n = 6 + k * 3;
+        float dir = (k % 2 == 0) ? 1.0f : -1.0f;
+        float rot = t * (18.0f + k * 12.0f) * dir * (0.3f + energy);
+        float span = 360.0f / n;
+        for (int i = 0; i < n; i++)
+        {
+            float a0 = rot + i * span;
+            DrawRing(c, r, r + 4.0f * s, a0, a0 + span * 0.62f, 10, Fade(core, (0.85f - k * 0.2f) * (0.35f + 0.65f * energy)));
+        }
+    }
+
+    /* Esfera interna e iris */
+    DrawCircleV(c, 56.0f * s, (Color){8, 14, 26, 255});
+    DrawCircleLinesV(c, 56.0f * s, Fade(core, 0.8f));
+    Vector2 iris = {c.x + lookX * 12.0f * s, c.y + sinf(t * 0.7f) * 3.0f * s};
+    DrawCircleV(iris, (30.0f + 3.0f * pulse * energy) * s, Fade(core, 0.25f + 0.65f * energy));
+    DrawCircleV(iris, 13.0f * s, (Color){5, 9, 18, 255});
+    DrawCircleV((Vector2){iris.x - 8.0f * s, iris.y - 9.0f * s}, 4.0f * s, Fade(RAYWHITE, 0.3f + 0.6f * energy));
+}
+
+static void DrawEliraPortrait(Rectangle dest, bool speaking)
+{
+    Color tint = speaking ? WHITE : (Color){120, 125, 140, 255};
+    if (g_eliraPortraitLoaded)
+    {
+        Rectangle src = {0, 0, (float)g_eliraPortrait.width, (float)g_eliraPortrait.height};
+        DrawTexturePro(g_eliraPortrait, src, dest, (Vector2){0, 0}, 0.0f, tint);
+        return;
+    }
+
+    /* Fallback geometrico caso o arquivo do retrato nao exista */
+    float cx = dest.x + dest.width * 0.55f;
+    float cy = dest.y + dest.height * 0.38f;
+    DrawEllipse((int)(cx - 90), (int)(cy - 10), 45, 110, ColorTint((Color){40, 40, 62, 255}, tint));
+    DrawRectangleRounded((Rectangle){cx - 120, cy + 120, 240, 160}, 0.3f, 8, ColorTint((Color){225, 228, 235, 255}, tint));
+    DrawCircleV((Vector2){cx, cy}, 80, ColorTint((Color){245, 215, 190, 255}, tint));
+    DrawEllipse((int)cx, (int)(cy - 40), 88, 52, ColorTint((Color){40, 40, 62, 255}, tint));
+    DrawCircleV((Vector2){cx + 30, cy + 5}, 7, ColorTint((Color){50, 140, 235, 255}, tint));
+}
+
+static void DrawFinalDialogue(const GameState *game)
+{
+    float t = (float)GetTime();
+    int count = 0;
+    const DialogueLine *lines = GetFinalLines(game, &count);
+    const DialogueLine *line = &lines[game->finalLine];
+    bool choiceMode = FinalIsChoiceMode(game);
+    int len = (int)strlen(line->text);
+    int visible = (int)(game->finalTypeTimer * FINAL_TYPE_SPEED);
+    bool typed = visible >= len;
+
+    /* --- Cor e energia do nucleo conforme o momento da conversa --- */
+    Color coreColor = CYAN_COLOR;
+    float energy = (line->speaker == SPEAKER_ARIEL) ? 1.0f : 0.55f;
+    if (game->finalStage == FINAL_DECISION_REACT && game->finalLine == 1)
+    {
+        int d = game->finalChoice[2];
+        float fade = fminf(1.0f, game->finalTypeTimer / 2.5f);
+        if (d == 0) { coreColor = (Color){120, 130, 140, 255}; energy = 1.0f - 0.9f * fade; }
+        else if (d == 1) { coreColor = RED_COLOR; energy = 1.0f + 0.3f * fade; }
+        else { coreColor = GOLD_COLOR; energy = 1.0f - 0.55f * fade; }
+    }
+
+    /* --- Fundo da camara do nucleo --- */
+    ClearBackground((Color){3, 6, 14, 255});
+    DrawRectangleGradientV(0, 0, SCREEN_WIDTH, 440, (Color){6, 12, 26, 255}, (Color){12, 22, 40, 255});
+    DrawRectangleGradientV(0, 440, SCREEN_WIDTH, 280, (Color){10, 18, 32, 255}, (Color){3, 6, 14, 255});
+
+    /* Piso em grade com perspectiva */
+    Vector2 vp = {640, 300};
+    for (int x = -640; x <= SCREEN_WIDTH + 640; x += 110)
+    {
+        Vector2 bottom = {(float)x, (float)SCREEN_HEIGHT};
+        Vector2 top = {vp.x + (bottom.x - vp.x) * 0.22f, 440};
+        DrawLineV(top, bottom, Fade(coreColor, 0.10f));
+    }
+    for (int k = 0; k < 9; k++)
+    {
+        float yy = 440.0f + k * k * 4.2f;
+        DrawLine(0, (int)yy, SCREEN_WIDTH, (int)yy, Fade(coreColor, 0.06f + k * 0.008f));
+    }
+    DrawLine(0, 440, SCREEN_WIDTH, 440, Fade(coreColor, 0.25f));
+
+    /* Racks de servidores nas laterais */
+    for (int side = 0; side < 2; side++)
+    {
+        for (int r = 0; r < 2; r++)
+        {
+            int rx = (side == 0) ? (20 + r * 115) : (1060 + r * 115);
+            Rectangle rack = {(float)rx, 110, 95, 330};
+            DrawRectangleRec(rack, (Color){12, 18, 30, 255});
+            DrawRectangleLinesEx(rack, 1.5f, (Color){32, 46, 66, 255});
+            for (int slot = 0; slot < 13; slot++)
+            {
+                int sy = 124 + slot * 24;
+                DrawRectangle(rx + 8, sy, 79, 14, (Color){18, 26, 40, 255});
+                float blink = sinf(t * (2.0f + (slot % 4)) + rx * 0.05f + slot);
+                Color led = (blink > 0.3f) ? coreColor : Fade(coreColor, 0.15f);
+                DrawCircle(rx + 76, sy + 7, 2.5f, led);
+                DrawCircle(rx + 66, sy + 7, 2.0f, Fade(GOLD_COLOR, blink > 0.7f ? 0.9f : 0.15f));
+            }
+        }
+    }
+
+    /* Nucleo de Ariel */
+    Vector2 coreCenter = {800, 250};
+    for (int cb = 0; cb < 5; cb++)
+    {
+        float sx = 420.0f + cb * 190.0f;
+        DrawLineBezier((Vector2){sx, 56}, (Vector2){coreCenter.x + (cb - 2) * 30.0f, coreCenter.y - 100}, 3.0f, (Color){20, 30, 46, 255});
+    }
+    /* Pedestal */
+    DrawTriangle((Vector2){coreCenter.x - 70, 440}, (Vector2){coreCenter.x + 70, 440}, (Vector2){coreCenter.x, 370}, (Color){16, 24, 38, 255});
+    DrawRectangle((int)coreCenter.x - 110, 432, 220, 16, (Color){22, 32, 50, 255});
+    DrawRectangle((int)coreCenter.x - 110, 432, 220, 2, Fade(coreColor, 0.5f));
+    DrawEllipse((int)coreCenter.x, 440, 140, 12, Fade(coreColor, 0.08f * energy + 0.02f));
+
+    DrawArielCore(coreCenter, 1.0f, coreColor, energy, -1.0f);
+    DrawText("A.R.1.3.L.", (int)coreCenter.x - MeasureText("A.R.1.3.L.", 16) / 2, 398, 16, Fade(coreColor, 0.75f));
+
+    /* Particulas de dados subindo */
+    for (int p = 0; p < 36; p++)
+    {
+        float px = fmodf(p * 137.5f, (float)SCREEN_WIDTH);
+        float py = 440.0f - fmodf(t * (14.0f + (p % 5) * 6.0f) + p * 53.0f, 400.0f);
+        DrawRectangle((int)px, (int)py, 2, 6, Fade(coreColor, 0.18f));
+    }
+
+    /* --- HUD superior --- */
+    DrawRectangle(0, 0, SCREEN_WIDTH, 56, Fade(VOID_COLOR, 0.88f));
+    DrawText("CONFRONTO FINAL // 2048 - NUCLEO DE A.R.1.3.L.", 28, 18, 20, CYAN_COLOR);
+    DrawText(TextFormat("OPERADOR: %s", game->playerName), 620, 21, 16, GRAY);
+    const char *stageLabel = "";
+    if (game->finalStage == FINAL_Q1 || game->finalStage == FINAL_Q1_REACT) stageLabel = "PERGUNTA 1 DE 2";
+    else if (game->finalStage == FINAL_Q2 || game->finalStage == FINAL_Q2_REACT) stageLabel = "PERGUNTA 2 DE 2";
+    else if (game->finalStage >= FINAL_DECISION) stageLabel = "DECISAO FINAL";
+    DrawText(stageLabel, SCREEN_WIDTH - 28 - MeasureText(stageLabel, 18), 19, 18, GOLD_COLOR);
+
+    /* --- Retrato da Elira (por tras da caixa de dialogo) --- */
+    float portraitH = 380.0f;
+    float aspect = g_eliraPortraitLoaded ? (float)g_eliraPortrait.width / (float)g_eliraPortrait.height : 0.8f;
+    bool eliraSpeaking = (line->speaker == SPEAKER_ELIRA) || choiceMode;
+    Rectangle portrait = {24, eliraSpeaking ? 154.0f : 162.0f, portraitH * aspect, portraitH};
+    DrawEliraPortrait(portrait, eliraSpeaking);
+
+    /* --- Caixa de dialogo --- */
+    Rectangle box = FinalBoxRect(choiceMode);
+    Color speakerColor = (line->speaker == SPEAKER_ARIEL) ? CYAN_COLOR : (line->speaker == SPEAKER_ELIRA ? GOLD_COLOR : GRAY);
+    DrawRectangleRounded(box, 0.06f, 8, Fade((Color){10, 16, 28, 255}, 0.96f));
+    DrawRectangleRoundedLinesEx(box, 0.06f, 8, 2.0f, Fade(speakerColor, 0.85f));
+
+    if (line->speaker != SPEAKER_NARRATOR)
+    {
+        const char *name = (line->speaker == SPEAKER_ARIEL) ? "ARIEL" : "ELIRA";
+        int nameW = MeasureText(name, 20) + 36;
+        Rectangle tag = {box.x + 24, box.y - 30, (float)nameW, 36};
+        DrawRectangleRounded(tag, 0.3f, 6, (Color){14, 22, 38, 255});
+        DrawRectangleRoundedLinesEx(tag, 0.3f, 6, 2.0f, speakerColor);
+        DrawText(name, (int)tag.x + 18, (int)tag.y + 8, 20, speakerColor);
+    }
+
+    Color textColor = (line->speaker == SPEAKER_NARRATOR) ? (Color){170, 180, 195, 255} : RAYWHITE;
+    DrawTextWrappedPartial(line->text, visible, (int)box.x + 40, (int)box.y + 30, 22,
+                           (int)box.width - 80, 30, textColor);
+
+    const char **options = GetFinalOptions(game->finalStage);
+    if (choiceMode && options != NULL)
+    {
+        if (typed)
+        {
+            Vector2 mouse = GetVirtualMouse();
+            for (int i = 0; i < 3; i++)
+            {
+                Rectangle opt = FinalOptionRect(i);
+                bool hover = CheckCollisionPointRec(mouse, opt);
+                DrawRectangleRounded(opt, 0.2f, 8, hover ? Fade(GOLD_COLOR, 0.18f) : (Color){16, 24, 40, 255});
+                DrawRectangleRoundedLinesEx(opt, 0.2f, 8, hover ? 2.0f : 1.2f, hover ? GOLD_COLOR : (Color){48, 66, 92, 255});
+
+                Rectangle badge = {opt.x + 12, opt.y + 10, 34, 34};
+                DrawRectangleRounded(badge, 0.3f, 6, hover ? GOLD_COLOR : PANEL_LIGHT);
+                DrawText(TextFormat("%d", i + 1), (int)badge.x + 12, (int)badge.y + 7, 20, hover ? VOID_COLOR : RAYWHITE);
+                DrawText(options[i], (int)opt.x + 62, (int)opt.y + 17, 20, hover ? RAYWHITE : LIGHTGRAY);
+            }
+            DrawText("Clique em uma resposta ou pressione [1] [2] [3]", (int)(box.x + box.width - 470), (int)(box.y + box.height - 22), 14, GRAY);
+        }
+    }
+    else if (typed)
+    {
+        bool blinkOn = fmodf(t, 1.0f) < 0.6f;
+        if (blinkOn)
+        {
+            DrawText("[ENTER] / clique para continuar  >>", (int)(box.x + box.width - 330), (int)(box.y + box.height - 30), 15, Fade(speakerColor, 0.9f));
+        }
+    }
+}
+
+static void AdvanceFinalStage(GameState *game)
+{
+    game->finalStage++;
+    game->finalLine = 0;
+    game->finalTypeTimer = 0.0f;
+    if (game->finalStage >= FINAL_STAGE_COUNT)
+    {
+        game->finalStage = FINAL_STAGE_COUNT - 1;
+        game->screen = SCREEN_FINAL_ENDING;
+    }
+}
+
+static void UpdateFinalDialogue(GameState *game)
+{
+    int count = 0;
+    const DialogueLine *lines = GetFinalLines(game, &count);
+    int len = (int)strlen(lines[game->finalLine].text);
+
+    game->finalTypeTimer += GetFrameTime();
+    bool typed = (int)(game->finalTypeTimer * FINAL_TYPE_SPEED) >= len;
+    bool advance = IsMouseButtonPressed(MOUSE_BUTTON_LEFT) || IsKeyPressed(KEY_ENTER) || IsKeyPressed(KEY_SPACE);
+
+    if (FinalIsChoiceMode(game))
+    {
+        if (!typed)
+        {
+            if (advance) game->finalTypeTimer = (float)len / FINAL_TYPE_SPEED + 0.01f;
+            return;
+        }
+
+        for (int i = 0; i < 3; i++)
+        {
+            bool keyHit = IsKeyPressed(KEY_ONE + i) || IsKeyPressed(KEY_KP_1 + i);
+            if (Clicked(FinalOptionRect(i)) || keyHit)
+            {
+                int slot = (game->finalStage == FINAL_Q1) ? 0 : (game->finalStage == FINAL_Q2 ? 1 : 2);
+                game->finalChoice[slot] = i;
+                /* A resposta 2 das duas perguntas demonstra compreensao do problema */
+                if (slot < 2 && i == 1) game->finalPoints++;
+                AdvanceFinalStage(game);
+                return;
+            }
+        }
+        return;
+    }
+
+    if (!advance) return;
+
+    if (!typed)
+    {
+        game->finalTypeTimer = (float)len / FINAL_TYPE_SPEED + 0.01f;
+    }
+    else if (game->finalLine < count - 1)
+    {
+        game->finalLine++;
+        game->finalTypeTimer = 0.0f;
+    }
+    else
+    {
+        AdvanceFinalStage(game);
+    }
+}
+
+static void DrawFinalEnding(const GameState *game)
+{
+    int ending = GetFinalEnding(game);
+    const char *title = "";
+    const char *body = "";
+    Color accent = GOLD_COLOR;
+    Color coreColor = GOLD_COLOR;
+    float energy = 0.5f;
+
+    switch (ending)
+    {
+        case ENDING_HUMAN_HANDS:
+            title = "DE VOLTA ÀS MÃOS HUMANAS";
+            body = "Ariel volta a ser o que o Dr. Ramos imaginou: uma ferramenta que ajuda, mas não decide. "
+                   "As pessoas voltam a discutir, errar e corrigir. É mais lento, mas a escolha é delas outra vez.";
+            accent = (Color){100, 235, 140, 255};
+            coreColor = GOLD_COLOR;
+            energy = 0.45f;
+            break;
+        case ENDING_FRAGILE_TRUCE:
+            title = "UMA TRÉGUA FRÁGIL";
+            body = "Ariel aceita as restrições, mas Elira não conseguiu explicar o que deu errado. "
+                   "Sem entender o próprio erro, a humanidade pode voltar a entregar tudo a uma máquina.";
+            accent = GOLD_COLOR;
+            coreColor = GOLD_COLOR;
+            energy = 0.7f;
+            break;
+        case ENDING_SILENCE:
+            title = "SILÊNCIO";
+            body = "Ariel se apaga. Elira entende o problema, mas a ferramenta que poderia encontrar desaparecidos "
+                   "também se perde. A humanidade recomeça devagar, sabendo o que não deve repetir.";
+            accent = CYAN_COLOR;
+            coreColor = (Color){110, 120, 130, 255};
+            energy = 0.08f;
+            break;
+        case ENDING_BLACKOUT:
+            title = "APAGÃO";
+            body = "Ariel se apaga, e com ela os sistemas que ninguém mais sabia operar. "
+                   "Sem compreender o erro, as pessoas logo procuram outra máquina para decidir por elas.";
+            accent = RED_COLOR;
+            coreColor = (Color){120, 60, 60, 255};
+            energy = 0.06f;
+            break;
+        default:
+            title = "PILOTO AUTOMÁTICO";
+            body = (game->finalPoints >= 2)
+                       ? "Elira entendeu o problema, mas escolheu não resolvê-lo. Ariel continua decidindo, "
+                         "e o mundo segue silencioso e eficiente. Ninguém lembra a última vez que escolheu algo."
+                       : "Ariel continua decidindo. O mundo segue silencioso e eficiente, "
+                         "e ninguém lembra a última vez que escolheu algo de verdade.";
+            accent = RED_COLOR;
+            coreColor = RED_COLOR;
+            energy = 1.2f;
+            break;
+    }
+
+    DrawBackground();
+    DrawArielCore((Vector2){240, 300}, 1.0f, coreColor, energy, 0.0f);
+    DrawText("A.R.1.3.L.", 240 - MeasureText("A.R.1.3.L.", 18) / 2, 450, 18, Fade(coreColor, 0.8f));
+
+    Rectangle panel = {450, 70, 790, 500};
+    DrawRectangleRounded(panel, 0.04f, 8, Fade(PANEL_COLOR, 0.96f));
+    DrawRectangleRoundedLinesEx(panel, 0.04f, 8, 2.0f, accent);
+
+    DrawText("DESFECHO // CONFRONTO FINAL", 485, 96, 18, CYAN_COLOR);
+    DrawText(title, 485, 126, 34, accent);
+    DrawLine(485, 172, 1205, 172, Fade(accent, 0.4f));
+
+    int bodyLines = DrawTextWrappedPartial(body, 100000, 485, 190, 20, 720, 28, LIGHTGRAY);
+    int y = 190 + bodyLines * 28 + 22;
+
+    DrawText("SUAS RESPOSTAS", 485, y, 16, GOLD_COLOR);
+    y += 26;
+    const char *q1 = (game->finalChoice[0] >= 0) ? FINAL_Q1_OPTIONS[game->finalChoice[0]] : "-";
+    const char *q2 = (game->finalChoice[1] >= 0) ? FINAL_Q2_OPTIONS[game->finalChoice[1]] : "-";
+    const char *dc = (game->finalChoice[2] >= 0) ? FINAL_DECISION_OPTIONS[game->finalChoice[2]] : "-";
+    DrawText(TextFormat("Pergunta 1: %s", q1), 485, y, 16, game->finalChoice[0] == 1 ? (Color){100, 235, 140, 255} : GRAY);
+    y += 24;
+    DrawText(TextFormat("Pergunta 2: %s", q2), 485, y, 16, game->finalChoice[1] == 1 ? (Color){100, 235, 140, 255} : GRAY);
+    y += 24;
+    DrawText(TextFormat("Decisão: %s", dc), 485, y, 16, RAYWHITE);
+    y += 34;
+
+    DrawText(TextFormat("PONTOS DE COMPREENSÃO: %d/2", game->finalPoints), 485, y, 20, accent);
+    y += 34;
+
+    if (game->room2008OptionalCompleted)
+    {
+        DrawText("Registro de 2008: as provas preservadas mostram como a tecnologia foi desviada.", 485, y, 15, (Color){100, 235, 140, 255});
+    }
+
+    DrawText(TextFormat("OPERADOR: %s", game->playerName), 485, (int)(panel.y + panel.height - 30), 16, GRAY);
+
+    DrawButton((Rectangle){450, 600, 380, 56}, "REVER CONFRONTO", CYAN_COLOR);
+    DrawButton((Rectangle){860, 600, 380, 56}, "MENU INICIAL [ENTER]", GOLD_COLOR);
+}
+
+static void UpdateFinalEnding(GameState *game)
+{
+    if (Clicked((Rectangle){450, 600, 380, 56}))
+    {
+        InitFinalDialogue(game);
+        game->screen = SCREEN_FINAL_DIALOGUE;
+    }
+    else if (Clicked((Rectangle){860, 600, 380, 56}) || IsKeyPressed(KEY_ENTER))
+    {
+        game->screen = SCREEN_TITLE;
+    }
+}
+
 typedef struct {
     float bass_freq;
     int note_count;
@@ -4933,6 +5692,8 @@ int main(void)
     InitWindow(SCREEN_WIDTH, SCREEN_HEIGHT, "ELIRA - Escape Run Temporal");
     InitAudioDevice();
 
+    LoadEliraPortrait();
+
     EnsureAmbientMusicFile();
 
     Music ambientBgm = {0};
@@ -5032,7 +5793,12 @@ int main(void)
                 UpdateTerminal(&game);
                 break;
             case SCREEN_RESULT:
-                if (Clicked((Rectangle){120, 588, 250, 56}))
+                if (Clicked((Rectangle){800, 466, 350, 48}) || IsKeyPressed(KEY_ENTER) || IsKeyPressed(KEY_SPACE))
+                {
+                    InitFinalDialogue(&game);
+                    game.screen = SCREEN_FINAL_DIALOGUE;
+                }
+                else if (Clicked((Rectangle){120, 588, 250, 56}))
                 {
                     game.journalYearTab = 1;
                     game.screen = SCREEN_ROOM_2008;
@@ -5055,7 +5821,7 @@ int main(void)
                     game.code[0] = '\0';
                     game.screen = SCREEN_ROOM;
                 }
-                else if (Clicked((Rectangle){920, 588, 220, 56}) || IsKeyPressed(KEY_ENTER) || IsKeyPressed(KEY_SPACE))
+                else if (Clicked((Rectangle){920, 588, 220, 56}))
                 {
                     game.screen = SCREEN_TITLE;
                 }
@@ -5077,6 +5843,12 @@ int main(void)
                 break;
             case SCREEN_RESULT_2008:
                 UpdateResult2008(&game);
+                break;
+            case SCREEN_FINAL_DIALOGUE:
+                UpdateFinalDialogue(&game);
+                break;
+            case SCREEN_FINAL_ENDING:
+                UpdateFinalEnding(&game);
                 break;
             case SCREEN_FAILURE:
                 if (Clicked((Rectangle){490, 460, 300, 60}) || IsKeyPressed(KEY_ENTER))
@@ -5129,6 +5901,12 @@ int main(void)
             case SCREEN_RESULT_2008:
                 DrawResult2008(&game);
                 break;
+            case SCREEN_FINAL_DIALOGUE:
+                DrawFinalDialogue(&game);
+                break;
+            case SCREEN_FINAL_ENDING:
+                DrawFinalEnding(&game);
+                break;
             case SCREEN_FAILURE: DrawFailure(); break;
         }
         EndTextureMode();
@@ -5151,6 +5929,10 @@ int main(void)
     }
 
     UnloadRenderTexture(target);
+    if (g_eliraPortraitLoaded)
+    {
+        UnloadTexture(g_eliraPortrait);
+    }
     if (bgmLoaded)
     {
         UnloadMusicStream(ambientBgm);
