@@ -26,7 +26,7 @@ Na progressão planejada, cada salto temporal revela uma peça da história de A
 
 ## **2. Ferramentas utilizadas**
 
-<img align="right" src="assets/elira_sorrindo.png" alt="Elira sorrindo" width="230">
+<img align="right" src="assets/elira_sorrindo.png" alt="Elira sorrindo" width="220">
 
 **Jira** - Ferramenta de Gestão de Projeto
 
