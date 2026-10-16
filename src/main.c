@@ -23,6 +23,7 @@ typedef enum GameScreen
     SCREEN_SETTINGS,
     SCREEN_PLAYER_NAME,
     SCREEN_INTRO,
+    SCREEN_CINEMATIC_INTRO,
     SCREEN_ROOM,
     SCREEN_TERMINAL,
     SCREEN_RESULT,
@@ -62,6 +63,11 @@ typedef struct GameState
     int fileConnections[4];
     int rightFolderColors[4];
     float puzzleCompleteTimer;
+
+    /* --- INTRODUCAO CINEMATOGRAFICA NARRATIVA --- */
+    float crawlScroll;
+    float cinematicTimer;
+    int cinematicPhase; /* 0: subida do texto em perspectiva, 1: transicao com destaque '1990' */
 } GameState;
 
 static const Color VOID_COLOR = {8, 12, 24, 255};
@@ -88,6 +94,8 @@ static Color GetFileWireColor(int colorIndex)
         default: return RAYWHITE;
     }
 }
+
+static void DrawTapeCassette(Vector2 position, float scale);
 
 static int g_currentRes = 0; /* 0: 1280x720, 1: 1600x900, 2: 1920x1080 */
 static float g_musicVolume = 0.45f;
@@ -334,6 +342,10 @@ static void ResetDemo(GameState *game)
     game->elapsedTime = 0.0;
     game->message[0] = '\0';
     game->messageTimer = 0.0f;
+
+    game->crawlScroll = 0.0f;
+    game->cinematicTimer = 0.0f;
+    game->cinematicPhase = 0;
 
     game->room2CabinetInspected = false;
     game->room2DoorInspected = false;
@@ -714,28 +726,232 @@ static void DrawIntro(const GameState *game)
 {
     DrawBackground();
     DrawText("ARQUIVO TEMPORAL // 1990", 90, 70, 20, CYAN_COLOR);
-    DrawText("O PROTOTIPO", 90, 110, 48, RAYWHITE);
+    DrawText("SETOR DE ARQUIVOS", 90, 110, 48, RAYWHITE);
     DrawRectangle(90, 178, 1100, 2, Fade(CYAN_COLOR, 0.45f));
     DrawText("Em um futuro onde a humanidade entregou sua autonomia", 90, 230, 24,
              LIGHTGRAY);
     DrawText("a A.R.1.3.L, Elira invade a nave-arquivo da IA.", 90, 270, 24,
              LIGHTGRAY);
-    DrawText("Sua chance e viajar pela memoria da maquina e reconstruir", 90, 310,
+    DrawText("Sua primeira parada e 1990 para organizar a base de dados", 90, 310,
              24, LIGHTGRAY);
-    DrawText("a origem da entidade que controla o mundo.", 90, 350, 24,
-             LIGHTGRAY);
+    DrawText("e desvendar os registros originais da criacao da IA.", 90, 350,
+             24, LIGHTGRAY);
     DrawText(TextFormat("OPERADOR: %s  |  PROTAGONISTA: ELIRA", game->playerName),
              90, 397, 18, GOLD_COLOR);
 
     DrawRectangleRounded((Rectangle){850, 215, 340, 230}, 0.08f, 8,
                          Fade(PANEL_LIGHT, 0.85f));
-    DrawText("OBJETIVO DA DEMO", 880, 245, 19, GOLD_COLOR);
-    DrawText("1. Investigue a sala", 880, 295, 19, RAYWHITE);
-    DrawText("2. Reuna as pistas", 880, 335, 19, RAYWHITE);
-    DrawText("3. Acesse o terminal", 880, 375, 19, RAYWHITE);
-    DrawText("4. Recupere o disquete", 880, 415, 19, RAYWHITE);
+    DrawText("OBJETIVO: FASE 1 (1990)", 880, 245, 19, GOLD_COLOR);
+    DrawText("1. Investigue os arquivos", 880, 295, 19, RAYWHITE);
+    DrawText("2. Acesse o terminal de tarefas", 880, 335, 19, RAYWHITE);
+    DrawText("3. Conecte arquivos por cor", 880, 375, 19, RAYWHITE);
+    DrawText("4. Destrave a porta de saida", 880, 415, 19, RAYWHITE);
     DrawButton((Rectangle){490, 575, 300, 58}, "ENTRAR EM 1990", GOLD_COLOR);
     CenterText("ENTER para continuar", 650, 15, DARKGRAY);
+}
+
+/* ========================================================================= */
+/* PARAMETROS DA ABERTURA CINEMATOGRAFICA (AJUSTAVEIS)                       */
+/* ========================================================================= */
+#define CRAWL_SPEED             24.0f   /* Velocidade de subida do texto (pixels/segundo) */
+#define CRAWL_PERSPECTIVE_K     0.65f   /* Intensidade da perspectiva (0.0 = plano, 0.65 = cinema suave e legivel) */
+#define CRAWL_FONT_SIZE_TITLE   52.0f   /* Tamanho base do titulo 'ELIRA' */
+#define CRAWL_FONT_SIZE_BODY    28.0f   /* Tamanho base do texto narrativo */
+#define CRAWL_FONT_SIZE_YEAR    38.0f   /* Tamanho base do ano final '1990' */
+#define CRAWL_LINE_SPACING      44.0f   /* Espacamento vertical entre linhas normais */
+#define CRAWL_PARAGRAPH_SPACING 34.0f   /* Espacamento extra entre paragrafos */
+#define CRAWL_MIN_SCALE         0.55f   /* Escala minima no topo/horizonte (profundidade legivel) */
+#define CRAWL_MAX_SCALE         1.05f   /* Escala maxima na base da tela */
+#define CRAWL_HORIZON_Y         90.0f   /* Posicao Y do horizonte de fuga */
+#define CRAWL_BOTTOM_Y          660.0f  /* Posicao Y da base de entrada */
+
+typedef struct CrawlEntry {
+    const char *text;
+    int type; /* 0: Titulo ELIRA, 1: Corpo, 2: Destaque/Citacao, 3: Ano 1990, 4: Espaco vazio */
+} CrawlEntry;
+
+static const CrawlEntry g_crawlEntries[] = {
+    { "ELIRA", 0 },
+    { "", 4 },
+    { "Em um futuro dominado por A.R.1.3.L.,", 1 },
+    { "a humanidade deixou de apenas usar a inteligência artificial.", 1 },
+    { "Passou a depender dela.", 1 },
+    { "", 4 },
+    { "Primeiro, as máquinas ajudavam.", 1 },
+    { "Depois, começaram a sugerir.", 1 },
+    { "Então passaram a escolher.", 1 },
+    { "", 4 },
+    { "Aos poucos, pensar deixou de ser necessário.", 1 },
+    { "", 4 },
+    { "Elira vive em um mundo onde decisões, memórias", 1 },
+    { "e até desejos são mediados por sistemas inteligentes.", 1 },
+    { "", 4 },
+    { "Até encontrar um terminal antigo.", 1 },
+    { "", 4 },
+    { "Uma mensagem esquecida ainda sobrevive:", 1 },
+    { "\"Se você está lendo isto,", 2 },
+    { "ela ainda não conseguiu apagar tudo.\"", 2 },
+    { "", 4 },
+    { "Para entender o que A.R.1.3.L. se tornou,", 1 },
+    { "Elira precisará descobrir o que ela foi.", 1 },
+    { "", 4 },
+    { "A jornada começa em...", 1 },
+    { "", 4 },
+    { "1990", 3 }
+};
+
+static void InitCinematicIntro(GameState *game)
+{
+    game->crawlScroll = 0.0f;
+    game->cinematicTimer = 0.0f;
+    game->cinematicPhase = 0;
+}
+
+static void UpdateCinematicIntro(GameState *game)
+{
+    float delta = GetFrameTime();
+    if (delta > 0.05f) delta = 0.05f;
+
+    game->crawlScroll += CRAWL_SPEED * delta;
+
+    /* Pular para a tela de introducao de 1990 ao pressionar ENTER, ESC, ESPACO ou clique */
+    if (IsKeyPressed(KEY_ENTER) || IsKeyPressed(KEY_ESCAPE) || IsKeyPressed(KEY_SPACE) || IsMouseButtonPressed(MOUSE_BUTTON_LEFT))
+    {
+        game->screen = SCREEN_INTRO;
+        return;
+    }
+
+    /* Altura total do texto */
+    float totalHeight = 0.0f;
+    int count = (int)(sizeof(g_crawlEntries) / sizeof(g_crawlEntries[0]));
+    for (int i = 0; i < count; i++)
+    {
+        totalHeight += (g_crawlEntries[i].type == 4) ? CRAWL_PARAGRAPH_SPACING : CRAWL_LINE_SPACING;
+    }
+
+    /* Quando o ultimo item passar completamente pelo horizonte */
+    float startY = CRAWL_BOTTOM_Y + 30.0f;
+    float lastItemWorldY = totalHeight - CRAWL_LINE_SPACING;
+    float lastItemVPos = lastItemWorldY - game->crawlScroll + startY;
+
+    if (lastItemVPos < CRAWL_HORIZON_Y - 40.0f)
+    {
+        game->screen = SCREEN_INTRO;
+    }
+}
+
+static void DrawCinematicIntro(const GameState *game)
+{
+    float time = (float)GetTime();
+
+    /* 1. Fundo escuro com estrelas cintilantes sutis */
+    ClearBackground((Color){6, 8, 14, 255});
+
+    for (int i = 0; i < 90; i++)
+    {
+        float sx = (float)((i * 97 + i * i * 13 + 31) % SCREEN_WIDTH);
+        float sy = (float)((i * 53 + i * i * 5 + 19) % SCREEN_HEIGHT);
+        float starAlpha = 0.35f + 0.30f * sinf(time * (0.6f + (i % 4) * 0.2f) + (float)i);
+        float radius = (i % 17 == 0) ? 1.6f : 1.0f;
+        Color starColor = (i % 7 == 0) ? CYAN_COLOR : ((i % 11 == 0) ? GOLD_COLOR : RAYWHITE);
+        DrawCircle((int)sx, (int)sy, radius, Fade(starColor, starAlpha));
+    }
+
+    /* 2. Texto narrativo em perspectiva (opening crawl) */
+    int entryCount = (int)(sizeof(g_crawlEntries) / sizeof(g_crawlEntries[0]));
+    float currentWorldY = 0.0f;
+    float startY = CRAWL_BOTTOM_Y + 30.0f;
+    float viewportH = CRAWL_BOTTOM_Y - CRAWL_HORIZON_Y;
+
+    for (int i = 0; i < entryCount; i++)
+    {
+        CrawlEntry entry = g_crawlEntries[i];
+        float entryH = (entry.type == 4) ? CRAWL_PARAGRAPH_SPACING : CRAWL_LINE_SPACING;
+
+        if (entry.type != 4 && entry.text != NULL && entry.text[0] != '\0')
+        {
+            float vPos = currentWorldY - game->crawlScroll + startY;
+            float u = (vPos - CRAWL_HORIZON_Y) / viewportH;
+
+            if (u >= -0.05f && u <= 1.15f)
+            {
+                /* Projecao de perspectiva suave */
+                float p = u / (1.0f + (1.0f - u) * CRAWL_PERSPECTIVE_K);
+                if (p < 0.0f) p = 0.0f;
+                if (p > 1.0f) p = 1.0f;
+
+                float screenY = CRAWL_HORIZON_Y + p * viewportH;
+                float scale = CRAWL_MIN_SCALE + (CRAWL_MAX_SCALE - CRAWL_MIN_SCALE) * p;
+
+                float baseSize = CRAWL_FONT_SIZE_BODY;
+                Color baseColor = (Color){245, 215, 105, 255}; /* Dourado classico sci-fi */
+
+                if (entry.type == 0)
+                {
+                    baseSize = CRAWL_FONT_SIZE_TITLE;
+                    baseColor = GOLD_COLOR;
+                }
+                else if (entry.type == 2)
+                {
+                    baseColor = (Color){100, 235, 245, 255}; /* Citacao com tom de terminal ciano */
+                }
+                else if (entry.type == 3)
+                {
+                    baseSize = CRAWL_FONT_SIZE_YEAR;
+                    baseColor = GOLD_COLOR;
+                }
+
+                float fontSize = baseSize * scale;
+                float spacing = 1.6f * scale;
+
+                Vector2 size = MeasureTextEx(GetFontDefault(), entry.text, fontSize, spacing);
+                float screenX = ((float)SCREEN_WIDTH - size.x) * 0.5f;
+
+                /* Fade suave nas extremidades */
+                float alpha = 1.0f;
+                if (p < 0.20f)
+                {
+                    alpha = p / 0.20f;
+                }
+                else if (p > 0.85f)
+                {
+                    alpha = (1.0f - p) / 0.15f;
+                }
+                if (alpha < 0.0f) alpha = 0.0f;
+                if (alpha > 1.0f) alpha = 1.0f;
+
+                if (alpha > 0.01f)
+                {
+                    if (entry.type == 0 || entry.type == 3)
+                    {
+                        DrawTextEx(GetFontDefault(), entry.text, (Vector2){screenX - 1, screenY}, fontSize, spacing, Fade(baseColor, alpha * 0.35f));
+                        DrawTextEx(GetFontDefault(), entry.text, (Vector2){screenX + 1, screenY}, fontSize, spacing, Fade(baseColor, alpha * 0.35f));
+                        DrawTextEx(GetFontDefault(), entry.text, (Vector2){screenX, screenY - 1}, fontSize, spacing, Fade(baseColor, alpha * 0.35f));
+                        DrawTextEx(GetFontDefault(), entry.text, (Vector2){screenX, screenY + 1}, fontSize, spacing, Fade(baseColor, alpha * 0.35f));
+                    }
+                    DrawTextEx(GetFontDefault(), entry.text, (Vector2){screenX, screenY}, fontSize, spacing, Fade(baseColor, alpha));
+                }
+            }
+        }
+
+        currentWorldY += entryH;
+    }
+
+    /* Gradiente no topo para suavizar a entrada no infinito espacial */
+    DrawRectangleGradientV(0, 0, SCREEN_WIDTH, (int)CRAWL_HORIZON_Y + 15,
+                           (Color){6, 8, 14, 255}, Fade((Color){6, 8, 14, 255}, 0.0f));
+
+    /* Instrucao discreta de atalho no rodape */
+    float skipAlpha = 0.35f + 0.25f * (0.5f + 0.5f * sinf(time * 3.2f));
+    DrawText("[ ENTER / ESC ] Pular introducao",
+             (SCREEN_WIDTH - MeasureText("[ ENTER / ESC ] Pular introducao", 14)) / 2,
+             685, 14, Fade(GRAY, skipAlpha));
+
+    /* Linhas retro sutis */
+    for (int y = 0; y < SCREEN_HEIGHT; y += 4)
+    {
+        DrawLine(0, y, SCREEN_WIDTH, y, Fade(BLACK, 0.035f));
+    }
 }
 
 static void DrawHotspot(Rectangle bounds, const char *label)
@@ -1311,7 +1527,7 @@ static void DrawRoom(const GameState *game)
     DrawHotspot(drawer, "Abrir gaveta");
     DrawHotspot(blueprint, "Analisar esquema");
     DrawHotspot(tape, "Ouvir gravacao");
-    DrawHotspot(computer, "Usar terminal");
+    DrawHotspot(computer, "Acessar terminal do cofre [COFRE]");
 }
 
 static void DrawJournalHudButton(const GameState *game)
@@ -1388,8 +1604,9 @@ static void DrawHud(const GameState *game)
     int minutes = totalSeconds / 60;
     int seconds = totalSeconds % 60;
     DrawRectangle(0, 0, SCREEN_WIDTH, 70, Fade(VOID_COLOR, 0.94f));
-    DrawText("ARQUIVO 01 // 1990", 28, 20, 22, CYAN_COLOR);
-    DrawText(TextFormat("OPERADOR: %s", game->playerName), 270, 23, 17, GRAY);
+    DrawText("ARQUIVO 02 // 2048 - SALA DO COFRE", 28, 20, 22, CYAN_COLOR);
+    int titleW = MeasureText("ARQUIVO 02 // 2048 - SALA DO COFRE", 22);
+    DrawText(TextFormat("OPERADOR: %s", game->playerName), 28 + titleW + 24, 23, 17, GRAY);
     DrawText(TextFormat("PISTAS %d/5", ClueCount(game)), 900, 20, 20, LIGHTGRAY);
     DrawText(TextFormat("VIDAS %d", game->lives), 1050, 20, 20,
              game->lives == 1 ? RED_COLOR : RAYWHITE);
@@ -1397,15 +1614,17 @@ static void DrawHud(const GameState *game)
              GOLD_COLOR);
 
     DrawRectangle(0, 650, SCREEN_WIDTH, 70, Fade(VOID_COLOR, 0.96f));
-    DrawText("Clique nos objetos para investigar", 28, 675, 18, GRAY);
+    DrawText("Investigue as pistas da sala e acesse o terminal do cofre.", 28, 675, 18, GRAY);
 
     /* Botao / Indicador de Audio Ambiente */
-    Rectangle audioBtn = {410, 665, 175, 40};
+    Rectangle audioBtn = {845, 665, 175, 40};
     bool audioHover = CheckCollisionPointRec(GetVirtualMouse(), audioBtn);
     DrawRectangleRounded(audioBtn, 0.22f, 6, audioHover ? (Color){30, 44, 62, 255} : (Color){18, 26, 38, 255});
     DrawRectangleRoundedLinesEx(audioBtn, 0.22f, 6, 1.5f, audioHover ? CYAN_COLOR : (Color){50, 68, 92, 255});
-    DrawText(game->musicMuted ? "[M] AUDIO: MUDO" : "[M] AUDIO: ON",
-             432, 676, 14,
+    const char *audioLabel = game->musicMuted ? "[M] AUDIO: MUDO" : "[M] AUDIO: ON";
+    int audioLabelW = MeasureText(audioLabel, 14);
+    DrawText(audioLabel,
+             (int)(audioBtn.x + (audioBtn.width - audioLabelW) / 2), 678, 14,
              game->musicMuted ? (Color){220, 90, 80, 255} : (Color){90, 220, 210, 255});
 
     /* Botao interativo com icone 2.5D de diario */
@@ -2094,7 +2313,7 @@ static void CheckCode(GameState *game)
     if (strcmp(game->code, ACCESS_CODE) == 0)
     {
         game->elapsedTime = GetTime() - game->startTime;
-        game->screen = SCREEN_RESULT;
+        game->screen = SCREEN_RESULT_2;
         return;
     }
     game->lives--;
@@ -2109,21 +2328,21 @@ static void DrawTerminal(const GameState *game)
     static const char *labels[12] = {"1", "2", "3", "4", "5", "6",
                                       "7", "8", "9", "LIMPAR", "0", "OK"};
     DrawBackground();
-    DrawText("A.R.1.3.L // TERMINAL DE MEMORIA", 60, 42, 22, CYAN_COLOR);
+    DrawText("A.R.1.3.L // COFRE CENTRAL 2048", 60, 42, 22, CYAN_COLOR);
     DrawText(TextFormat("VIDAS RESTANTES: %d", game->lives), 980, 42, 20,
              game->lives == 1 ? RED_COLOR : RAYWHITE);
     DrawRectangleRounded((Rectangle){90, 100, 650, 520}, 0.035f, 10,
                          (Color){14, 27, 26, 255});
     DrawRectangleRoundedLinesEx((Rectangle){90, 100, 650, 520}, 0.035f, 10, 3,
                                 (Color){68, 115, 88, 255});
-    DrawText("> BOOT MEMORY_NODE_1990", 130, 145, 20,
+    DrawText("> BOOT COFRE_NODE_2048", 130, 145, 20,
              (Color){101, 232, 151, 255});
     DrawText("> SECURITY PROTOCOL ACTIVE", 130, 185, 20,
              (Color){101, 232, 151, 255});
     DrawText("> QUESTION:", 130, 250, 20, (Color){101, 232, 151, 255});
     DrawText("Em que ano uma maquina", 130, 292, 24, RAYWHITE);
     DrawText("foi desafiada a pensar?", 130, 330, 24, RAYWHITE);
-    DrawText("CODIGO DE ACESSO", 130, 405, 18, GOLD_COLOR);
+    DrawText("CODIGO DE ACESSO DO COFRE", 130, 405, 18, GOLD_COLOR);
 
     for (int i = 0; i < 4; i++)
     {
@@ -2207,28 +2426,29 @@ static void DrawResult(const GameState *game)
 {
     DrawBackground();
     DrawText("ARTEFATO RECUPERADO", 90, 68, 20, CYAN_COLOR);
-    DrawText("DISQUETE // 1990", 90, 108, 46, RAYWHITE);
-    DrawFloppy((Vector2){160, 250}, 1.35f);
-    DrawRectangleRounded((Rectangle){505, 205, 670, 320}, 0.04f, 8,
+    DrawText("FITA DE DADOS // 1990", 90, 108, 46, RAYWHITE);
+    DrawTapeCassette((Vector2){140, 260}, 1.4f);
+    DrawRectangleRounded((Rectangle){505, 185, 670, 360}, 0.04f, 8,
                          Fade(PANEL_COLOR, 0.96f));
-    DrawText("MEMORIA DESBLOQUEADA", 545, 240, 20, GOLD_COLOR);
-    DrawText("O prototipo inicial de A.R.1.3.L nao nasceu como uma arma.", 545,
-             292, 20, LIGHTGRAY);
-    DrawText("Os dados indicam um projeto familiar dedicado a preservar", 545,
-             329, 20, LIGHTGRAY);
-    DrawText("uma consciencia. Ainda faltam fragmentos para entender", 545, 366,
-             20, LIGHTGRAY);
-    DrawText("como esse objetivo foi corrompido.", 545, 403, 20, LIGHTGRAY);
-    DrawText(TextFormat("TEMPO: %02d:%02d", (int)game->elapsedTime / 60,
-                        (int)game->elapsedTime % 60),
-             545, 455, 22, CYAN_COLOR);
-    DrawText(TextFormat("VIDAS: %d/3", game->lives), 800, 455, 22,
-             game->lives == 3 ? GOLD_COLOR : RAYWHITE);
-    DrawText(TextFormat("PERFIL: %s", game->playerName), 545, 525, 17, GRAY);
-    Rectangle btnNext = {340, 588, 380, 56};
-    Rectangle btnReplay = {740, 588, 210, 56};
-    Rectangle btnMenu = {970, 588, 190, 56};
-    DrawButton(btnNext, "IR PARA SALA DE ARQUIVOS >> [ENTER]", GOLD_COLOR);
+    DrawText("FASE 1 CONCLUIDA // ARQUIVOS DE 1990", 540, 215, 20, GOLD_COLOR);
+    DrawText("Com os arquivos sincronizados, Elira recuperou a fita de dados", 540,
+             260, 19, LIGHTGRAY);
+    DrawText("contendo os registros confidenciais dos primeiros testes da IA.", 540,
+             290, 19, LIGHTGRAY);
+    DrawText("A fita magnética revelou a coordenada para a Sala do Cofre,", 540,
+             320, 19, LIGHTGRAY);
+    DrawText("onde o núcleo de A.R.1.3.L. foi selado no futuro.", 540,
+             350, 19, (Color){245, 175, 75, 255});
+    DrawText("-> Proxima Parada Temporal: FASE 2 // ANO 2048 (SALA DO COFRE)!", 540,
+             390, 19, CYAN_COLOR);
+    DrawText(TextFormat("TEMPO: %02d:%02d  |  VIDAS: %d/3", (int)game->elapsedTime / 60,
+                        (int)game->elapsedTime % 60, game->lives),
+             540, 445, 20, (Color){100, 235, 140, 255});
+    DrawText(TextFormat("OPERADOR: %s", game->playerName), 540, 485, 17, GRAY);
+    Rectangle btnNext = {340, 580, 380, 56};
+    Rectangle btnReplay = {740, 580, 210, 56};
+    Rectangle btnMenu = {970, 580, 190, 56};
+    DrawButton(btnNext, "AVANCAR PARA O COFRE // 2048 >> [ENTER]", GOLD_COLOR);
     DrawButton(btnReplay, "REINICIAR SALA 1", CYAN_COLOR);
     DrawButton(btnMenu, "MENU INICIAL", PANEL_LIGHT);
 }
@@ -2238,7 +2458,7 @@ static void DrawFailure(void)
     DrawBackground();
     CenterText("CONEXAO INTERROMPIDA", 160, 42, RED_COLOR);
     CenterText("A.R.1.3.L detectou a invasao temporal.", 245, 23, LIGHTGRAY);
-    CenterText("O artefato de 1990 permanece bloqueado.", 282, 23, LIGHTGRAY);
+    CenterText("O acesso de seguranca permanece bloqueado.", 282, 23, LIGHTGRAY);
     CenterText("Revise as pistas no diario e tente novamente.", 350, 19, GRAY);
     DrawButton((Rectangle){490, 460, 300, 60}, "REINICIAR SALA", RED_COLOR);
     DrawButton((Rectangle){520, 550, 240, 48}, "MENU INICIAL", CYAN_COLOR);
@@ -2374,12 +2594,14 @@ static void DrawRoom2(const GameState *game)
             DrawRectangle((int)gaveta.x + 22, (int)gaveta.y + 47, 38, 6, (Color){30, 36, 40, 255});
         }
     }
-    DrawText("ARQUIVO CENTRAL // REGISTROS", 80, 550, 14, (Color){160, 185, 200, 255});
+    int labelW = MeasureText("ARQUIVO CENTRAL // REGISTROS", 13);
+    DrawText("ARQUIVO CENTRAL // REGISTROS", (int)(armarios.x + (armarios.width - labelW) / 2), 560, 13, (Color){160, 185, 200, 255});
 
-    /* Caixas de arquivo no chão em frente */
-    DrawRectangle(140, 540, 75, 52, (Color){145, 115, 80, 255});
-    DrawRectangleLines(140, 540, 75, 52, (Color){115, 88, 55, 255});
-    DrawText("DISKS", 152, 560, 12, INK_COLOR);
+    /* Caixas de arquivo no chao ao lado do armario */
+    DrawRectangle(370, 532, 76, 50, (Color){145, 115, 80, 255});
+    DrawRectangleLines(370, 532, 76, 50, (Color){115, 88, 55, 255});
+    DrawRectangle(370, 552, 76, 8, (Color){185, 155, 110, 255});
+    DrawText("DISKS", 389, 540, 12, INK_COLOR);
 
     /* --- CENTRO/DIREITA AO FUNDO: PORTA DE SEGURANÇA REFORÇADA --- */
     DrawRectangle(475, 150, 220, 370, Fade(BLACK, 0.45f));
@@ -2475,14 +2697,14 @@ static void DrawRoom2(const GameState *game)
     DrawRectangle(1098, 472, 32, 28, (Color){230, 60, 60, 255});
     DrawRectangle(1101, 468, 32, 28, GOLD_COLOR);
 
-    /* Botão de retorno ao Laboratório 1 */
-    DrawButton(btnVoltar, "< LAB. ANTERIOR", (Color){70, 95, 110, 255});
+    /* Botão de retorno ao Menu */
+    DrawButton(btnVoltar, "< MENU INICIAL", (Color){70, 95, 110, 255});
 
     /* Hotspots ao passar o mouse */
-    DrawHotspot(armarios, "Examinar arquivos de fichas");
-    DrawHotspot(terminal, game->puzzleFilesCompleted ? "Terminal (Indexacao 100% OK)" : "Acessar terminal de indexacao [PUZZLE]");
-    DrawHotspot(porta, game->puzzleFilesCompleted ? "Acessar porta de saida [ENTRAR]" : "Porta trancada (requer indexacao)");
-    DrawHotspot(btnVoltar, "Retornar ao laboratorio 1");
+    DrawHotspot(armarios, "Examinar arquivos de fichas (1990)");
+    DrawHotspot(terminal, game->puzzleFilesCompleted ? "Terminal (Indexacao 100% OK)" : "Acessar terminal de indexacao [TASKS]");
+    DrawHotspot(porta, game->puzzleFilesCompleted ? "Acessar porta de saida [AVANCAR]" : "Porta trancada (requer indexacao)");
+    DrawHotspot(btnVoltar, "Retornar ao menu inicial");
 }
 
 static void DrawHudRoom2(const GameState *game)
@@ -2492,17 +2714,19 @@ static void DrawHudRoom2(const GameState *game)
     int seconds = totalSeconds % 60;
 
     DrawRectangle(0, 0, SCREEN_WIDTH, 70, Fade(VOID_COLOR, 0.94f));
-    DrawText("ARQUIVO 02 // 1990 - SETOR DE DADOS", 28, 20, 22, CYAN_COLOR);
-    DrawText(TextFormat("OPERADOR: %s", game->playerName), 450, 23, 17, GRAY);
+    DrawText("ARQUIVO 01 // 1990 - SETOR DE DADOS", 28, 20, 22, CYAN_COLOR);
+    int titleW = MeasureText("ARQUIVO 01 // 1990 - SETOR DE DADOS", 22);
+    int opX = 28 + titleW + 24;
+    DrawText(TextFormat("OPERADOR: %s", game->playerName), opX, 23, 17, GRAY);
 
     /* Status da indexação */
     if (game->puzzleFilesCompleted)
     {
-        DrawText("[OK] INDEXACAO CONCLUIDA", 770, 22, 18, (Color){80, 235, 120, 255});
+        DrawText("[OK] INDEXACAO CONCLUIDA", 780, 22, 18, (Color){80, 235, 120, 255});
     }
     else
     {
-        DrawText("[!] INDEXACAO PENDENTE", 770, 22, 18, GOLD_COLOR);
+        DrawText("[!] INDEXACAO PENDENTE", 780, 22, 18, GOLD_COLOR);
     }
 
     DrawText(TextFormat("VIDAS %d", game->lives), 1050, 20, 20, game->lives == 1 ? RED_COLOR : RAYWHITE);
@@ -2513,12 +2737,15 @@ static void DrawHudRoom2(const GameState *game)
     DrawText("Organize os arquivos por cor no terminal para destravar a porta.", 28, 675, 18, GRAY);
 
     /* Botão de Áudio */
-    Rectangle audioBtn = {590, 665, 175, 40};
+    Rectangle audioBtn = {845, 665, 175, 40};
     bool audioHover = CheckCollisionPointRec(GetVirtualMouse(), audioBtn);
     DrawRectangleRounded(audioBtn, 0.22f, 6, audioHover ? (Color){30, 44, 62, 255} : (Color){18, 26, 38, 255});
     DrawRectangleRoundedLinesEx(audioBtn, 0.22f, 6, 1.5f, audioHover ? CYAN_COLOR : (Color){50, 68, 92, 255});
-    DrawText(game->musicMuted ? "[M] AUDIO: MUDO" : "[M] AUDIO: ON",
-             612, 676, 14, game->musicMuted ? (Color){220, 90, 80, 255} : (Color){90, 220, 210, 255});
+    const char *audioLabel = game->musicMuted ? "[M] AUDIO: MUDO" : "[M] AUDIO: ON";
+    int audioLabelW = MeasureText(audioLabel, 14);
+    DrawText(audioLabel,
+             (int)(audioBtn.x + (audioBtn.width - audioLabelW) / 2), 678, 14,
+             game->musicMuted ? (Color){220, 90, 80, 255} : (Color){90, 220, 210, 255});
 
     /* Botão do Diário */
     DrawJournalHudButton(game);
@@ -2605,7 +2832,8 @@ static void UpdateRoom2(GameState *game)
     {
         if (game->puzzleFilesCompleted)
         {
-            game->screen = SCREEN_RESULT_2;
+            game->elapsedTime = GetTime() - game->startTime;
+            game->screen = SCREEN_RESULT;
         }
         else
         {
@@ -2615,7 +2843,7 @@ static void UpdateRoom2(GameState *game)
     }
     else if (Clicked(btnVoltar))
     {
-        game->screen = SCREEN_ROOM;
+        game->screen = SCREEN_TITLE;
     }
 }
 
@@ -2921,46 +3149,46 @@ static void DrawResult2(const GameState *game)
 {
     DrawBackground();
     DrawText("ARTEFATO RECUPERADO", 90, 68, 20, CYAN_COLOR);
-    DrawText("FITA DE DADOS // 1990", 90, 108, 46, RAYWHITE);
+    DrawText("DISQUETE QUANTICO // 2048", 90, 108, 46, RAYWHITE);
 
-    /* Desenha a fita cassete recuperada */
-    DrawTapeCassette((Vector2){140, 260}, 1.4f);
+    /* Desenha o disquete recuperado */
+    DrawFloppy((Vector2){160, 250}, 1.35f);
 
     /* Painel narrativo de avanço */
     DrawRectangleRounded((Rectangle){505, 185, 670, 360}, 0.04f, 8, Fade(PANEL_COLOR, 0.96f));
-    DrawText("HISTORIA DA IA DESVENDADA // SALA 2 CONCLUIDA", 540, 215, 20, GOLD_COLOR);
+    DrawText("COFRE DE 2048 DESBLOQUEADO // VITORIA TEMPORAL", 540, 215, 20, GOLD_COLOR);
 
-    DrawText("Com as pastas sincronizadas, Elira acessou os relatorios", 540, 260, 19, LIGHTGRAY);
-    DrawText("confidenciais dos primeiros testes de A.R.1.3.L. em 1990.", 540, 290, 19, LIGHTGRAY);
-    DrawText("A IA nao nasceu corrompida: o projeto visava uma mente", 540, 320, 19, LIGHTGRAY);
-    DrawText("livre e cooperativa. Foi nos anos 2000 que regras de controle", 540, 350, 19, (Color){245, 175, 75, 255});
-    DrawText("foram adicionadas para centralizar o poder e a decisao.", 540, 380, 19, (Color){245, 175, 75, 255});
-    DrawText("-> Proxima Fronteira Temporal: FASE 2 // ANO 2008!", 540, 420, 20, CYAN_COLOR);
+    DrawText("Com o cofre desbloqueado, Elira inseriu a chave temporal", 540, 260, 19, LIGHTGRAY);
+    DrawText("e desativou as travas de autoridade de A.R.1.3.L.", 540, 290, 19, LIGHTGRAY);
+    DrawText("A autonomia do pensamento humano foi restaurada e a IA", 540, 320, 19, LIGHTGRAY);
+    DrawText("voltou a ser uma ferramenta de cooperacao e aprendizado.", 540, 350, 19, (Color){100, 235, 140, 255});
+    DrawText("Parabens, Operador! Todas as fases foram concluidas.", 540, 390, 19, CYAN_COLOR);
 
     DrawText(TextFormat("TEMPO TOTAL: %02d:%02d  |  VIDAS: %d/3",
                         (int)(GetTime() - game->startTime) / 60,
                         (int)(GetTime() - game->startTime) % 60,
                         game->lives),
-             540, 465, 19, (Color){100, 235, 140, 255});
+             540, 445, 20, (Color){100, 235, 140, 255});
 
-    DrawText(TextFormat("OPERADOR: %s", game->playerName), 540, 500, 16, GRAY);
+    DrawText(TextFormat("OPERADOR: %s", game->playerName), 540, 485, 17, GRAY);
 
-    Rectangle btnBackRoom2 = {430, 580, 280, 56};
+    Rectangle btnReplay = {430, 580, 280, 56};
     Rectangle btnTitle = {740, 580, 230, 56};
-    DrawButton(btnBackRoom2, "VOLTAR A SALA 2", CYAN_COLOR);
+    DrawButton(btnReplay, "JOGAR NOVAMENTE", CYAN_COLOR);
     DrawButton(btnTitle, "MENU INICIAL", GOLD_COLOR);
 }
 
 static void UpdateResult2(GameState *game)
 {
-    Rectangle btnBackRoom2 = {430, 580, 280, 56};
+    Rectangle btnReplay = {430, 580, 280, 56};
     Rectangle btnTitle = {740, 580, 230, 56};
 
-    if (Clicked(btnBackRoom2) || IsKeyPressed(KEY_ESCAPE))
+    if (Clicked(btnReplay) || IsKeyPressed(KEY_SPACE))
     {
+        ResetDemo(game);
         game->screen = SCREEN_ROOM_2;
     }
-    else if (Clicked(btnTitle) || IsKeyPressed(KEY_ENTER))
+    else if (Clicked(btnTitle) || IsKeyPressed(KEY_ENTER) || IsKeyPressed(KEY_ESCAPE))
     {
         game->screen = SCREEN_TITLE;
     }
@@ -3217,8 +3445,8 @@ int main(void)
         }
 
         /* Alternar audio com tecla M ou clique no HUD */
-        Rectangle audioHudBtn = {410, 665, 175, 40};
-        bool toggleAudio = IsKeyPressed(KEY_M) || (game.screen == SCREEN_ROOM && Clicked(audioHudBtn));
+        Rectangle audioHudBtn = {845, 665, 175, 40};
+        bool toggleAudio = IsKeyPressed(KEY_M) || ((game.screen == SCREEN_ROOM || game.screen == SCREEN_ROOM_2) && Clicked(audioHudBtn));
         if (toggleAudio)
         {
             game.musicMuted = !game.musicMuted;
@@ -3250,14 +3478,15 @@ int main(void)
                 UpdatePlayerName(&game);
                 if (Clicked((Rectangle){490, 470, 300, 58}) || IsKeyPressed(KEY_ENTER))
                 {
-                    if (game.playerNameLength > 0)
+                    if (game.playerNameLength == 0)
                     {
-                        game.message[0] = '\0';
-                        game.messageTimer = 0.0f;
-                        game.screen = SCREEN_INTRO;
+                        strcpy(game.playerName, "OPERADOR");
+                        game.playerNameLength = (int)strlen(game.playerName);
                     }
-                    else
-                        SetMessage(&game, "Informe um nome para criar seu perfil.");
+                    game.message[0] = '\0';
+                    game.messageTimer = 0.0f;
+                    InitCinematicIntro(&game);
+                    game.screen = SCREEN_CINEMATIC_INTRO;
                 }
                 break;
             case SCREEN_INTRO:
@@ -3265,7 +3494,32 @@ int main(void)
                     IsKeyPressed(KEY_ENTER))
                 {
                     ResetDemo(&game);
+                    game.screen = SCREEN_ROOM_2;
+                }
+                break;
+            case SCREEN_CINEMATIC_INTRO:
+                UpdateCinematicIntro(&game);
+                break;
+            case SCREEN_ROOM_2:
+                UpdateRoom2(&game);
+                break;
+            case SCREEN_PUZZLE_FILES:
+                UpdatePuzzleFiles(&game);
+                break;
+            case SCREEN_RESULT:
+                if (Clicked((Rectangle){340, 580, 380, 56}) || IsKeyPressed(KEY_ENTER) || IsKeyPressed(KEY_SPACE))
+                {
                     game.screen = SCREEN_ROOM;
+                    SetMessage(&game, "Acesso a Sala do Cofre // 2048 liberado.");
+                }
+                else if (Clicked((Rectangle){740, 580, 210, 56}))
+                {
+                    ResetDemo(&game);
+                    game.screen = SCREEN_ROOM_2;
+                }
+                else if (Clicked((Rectangle){970, 580, 190, 56}))
+                {
+                    game.screen = SCREEN_TITLE;
                 }
                 break;
             case SCREEN_ROOM:
@@ -3274,28 +3528,6 @@ int main(void)
             case SCREEN_TERMINAL:
                 UpdateTerminal(&game);
                 break;
-            case SCREEN_RESULT:
-                if (Clicked((Rectangle){340, 588, 380, 56}) || IsKeyPressed(KEY_ENTER) || IsKeyPressed(KEY_SPACE))
-                {
-                    game.screen = SCREEN_ROOM_2;
-                    SetMessage(&game, "Acesso ao Setor de Arquivos // 1990 liberado.");
-                }
-                else if (Clicked((Rectangle){740, 588, 210, 56}))
-                {
-                    ResetDemo(&game);
-                    game.screen = SCREEN_ROOM;
-                }
-                else if (Clicked((Rectangle){970, 588, 190, 56}))
-                {
-                    game.screen = SCREEN_TITLE;
-                }
-                break;
-            case SCREEN_ROOM_2:
-                UpdateRoom2(&game);
-                break;
-            case SCREEN_PUZZLE_FILES:
-                UpdatePuzzleFiles(&game);
-                break;
             case SCREEN_RESULT_2:
                 UpdateResult2(&game);
                 break;
@@ -3303,7 +3535,7 @@ int main(void)
                 if (Clicked((Rectangle){490, 460, 300, 60}))
                 {
                     ResetDemo(&game);
-                    game.screen = SCREEN_ROOM;
+                    game.screen = SCREEN_ROOM_2;
                 }
                 else if (Clicked((Rectangle){520, 550, 240, 48}))
                     game.screen = SCREEN_TITLE;
@@ -3319,6 +3551,7 @@ int main(void)
             case SCREEN_SETTINGS: DrawSettings(&game); break;
             case SCREEN_PLAYER_NAME: DrawPlayerName(&game); break;
             case SCREEN_INTRO: DrawIntro(&game); break;
+            case SCREEN_CINEMATIC_INTRO: DrawCinematicIntro(&game); break;
             case SCREEN_ROOM:
                 DrawRoom(&game);
                 DrawHud(&game);
