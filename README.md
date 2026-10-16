@@ -74,7 +74,8 @@ make
 make run
 ```
 
-O Makefile utiliza a instalacao da raylib em `C:/raylib`.
+Por padrão, o Makefile utiliza a instalação padrão da raylib em `C:/raylib`. Se você tiver instalado a Raylib em outra pasta ou outro sistema operacional, consulte o guia detalhado em [INSTRUCOES_COMPILACAO.md](INSTRUCOES_COMPILACAO.md).
+
 
 ## **8. Integrantes do Grupo**
 
