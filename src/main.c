@@ -22,14 +22,19 @@ typedef enum GameScreen
     SCREEN_TITLE,
     SCREEN_SETTINGS,
     SCREEN_PLAYER_NAME,
-    SCREEN_INTRO,
     SCREEN_CINEMATIC_INTRO,
+    SCREEN_INTRO,
     SCREEN_ROOM,
     SCREEN_TERMINAL,
     SCREEN_RESULT,
     SCREEN_ROOM_2,
     SCREEN_PUZZLE_FILES,
     SCREEN_RESULT_2,
+    SCREEN_ROOM_2008,
+    SCREEN_PUZZLE_2008,
+    SCREEN_RESULT_2008,
+    SCREEN_FINAL_DIALOGUE,
+    SCREEN_FINAL_ENDING,
     SCREEN_FAILURE
 } GameScreen;
 
@@ -64,10 +69,39 @@ typedef struct GameState
     int rightFolderColors[4];
     float puzzleCompleteTimer;
 
+    /* --- CONTROLE TEMPORAL (1990 -> 2008 -> 2048) --- */
+    bool year2008Unlocked;
+    bool year2048Unlocked;
+
+    /* --- FASE 2008: ESCRITORIO DE VIGILANCIA & PUZZLE DE RECONHECIMENTO FACIAL --- */
+    bool doc2008FaceExamined;          /* Doc 1: Comparacao Facial (Drone) */
+    bool doc2008FlyerExamined;         /* Doc 2: Panfleto da Revolta */
+    bool doc2008EntryExamined;         /* Doc 3: Registro de Entrada da Empresa */
+    bool doc2008CameraExamined;        /* Doc 4: Camera Interna (CFTV Servidores) */
+    bool doc2008FatherOriginExamined;  /* Doc 5: Notas Humanitarias do Dr. Ramos */
+    bool doc2008GovContractExamined;   /* Doc 6: Memorando Governamental 2008 */
+    bool room2008OptionalUnlocked;     /* Pista compreendida -> Libera aba de Configuracao Local */
+    bool room2008OptionalCompleted;    /* Despacho automatico local desativado mantendo provas */
+    bool puzzle2008Selected[4];        /* Checkbox de selecao dos 4 registros */
+    int puzzle2008SelectionCount;      /* Quantidade selecionada (0 a 2) */
+    bool puzzle2008Contested;          /* Falso positivo comprovado no terminal */
+    bool puzzle2008OrderSuspended;     /* Ordem de interceptacao suspensa com sucesso */
+    char puzzle2008Feedback[160];      /* Feedback da combinacao selecionada */
+    float puzzle2008FeedbackTimer;     /* Temporizador de feedback */
+    int activeDocument2008;            /* -1 = nenhum, 0..3 = registros, 4 = pai, 5 = memorando */
+    int terminal2008ActiveTab;         /* 0 = Ordem/Evidencias, 1 = Configuracao Local */
+
+    /* --- CONFRONTO FINAL: SALA DE DIALOGO ELIRA x ARIEL --- */
+    int finalStage;                    /* Etapa atual do roteiro (FinalStage) */
+    int finalLine;                     /* Fala atual dentro da etapa */
+    float finalTypeTimer;              /* Tempo acumulado do efeito maquina de escrever */
+    int finalPoints;                   /* Pontos de compreensao (0 a 2) */
+    int finalChoice[3];                /* Escolhas: P1, P2, Decisao final (-1 = pendente) */
+
     /* --- INTRODUCAO CINEMATOGRAFICA NARRATIVA --- */
     float crawlScroll;
     float cinematicTimer;
-    int cinematicPhase; /* 0: subida do texto em perspectiva, 1: transicao com destaque '1990' */
+    int cinematicPhase;
 } GameState;
 
 static const Color VOID_COLOR = {8, 12, 24, 255};
@@ -94,8 +128,6 @@ static Color GetFileWireColor(int colorIndex)
         default: return RAYWHITE;
     }
 }
-
-static void DrawTapeCassette(Vector2 position, float scale);
 
 static int g_currentRes = 0; /* 0: 1280x720, 1: 1600x900, 2: 1920x1080 */
 static float g_musicVolume = 0.45f;
@@ -309,6 +341,14 @@ static int ClueCount(const GameState *game)
            (game->foundTape ? 1 : 0);
 }
 
+static int ExaminedDocs2008Count(const GameState *game)
+{
+    return (game->doc2008FaceExamined ? 1 : 0) +
+           (game->doc2008FlyerExamined ? 1 : 0) +
+           (game->doc2008EntryExamined ? 1 : 0) +
+           (game->doc2008CameraExamined ? 1 : 0);
+}
+
 static void InitRoom2Puzzle(GameState *game)
 {
     game->puzzleFilesCompleted = false;
@@ -323,6 +363,38 @@ static void InitRoom2Puzzle(GameState *game)
     game->rightFolderColors[1] = 0;
     game->rightFolderColors[2] = 3;
     game->rightFolderColors[3] = 2;
+}
+
+static void InitRoom2008(GameState *game)
+{
+    game->doc2008FaceExamined = false;
+    game->doc2008FlyerExamined = false;
+    game->doc2008EntryExamined = false;
+    game->doc2008CameraExamined = false;
+    game->doc2008FatherOriginExamined = false;
+    game->doc2008GovContractExamined = false;
+    game->room2008OptionalUnlocked = false;
+    game->room2008OptionalCompleted = false;
+    for (int i = 0; i < 4; i++)
+    {
+        game->puzzle2008Selected[i] = false;
+    }
+    game->puzzle2008SelectionCount = 0;
+    game->puzzle2008Contested = false;
+    game->puzzle2008OrderSuspended = false;
+    game->puzzle2008Feedback[0] = '\0';
+    game->puzzle2008FeedbackTimer = 0.0f;
+    game->activeDocument2008 = -1;
+    game->terminal2008ActiveTab = 0;
+}
+
+static void InitFinalDialogue(GameState *game)
+{
+    game->finalStage = 0;
+    game->finalLine = 0;
+    game->finalTypeTimer = 0.0f;
+    game->finalPoints = 0;
+    for (int i = 0; i < 3; i++) game->finalChoice[i] = -1;
 }
 
 static void ResetDemo(GameState *game)
@@ -343,13 +415,18 @@ static void ResetDemo(GameState *game)
     game->message[0] = '\0';
     game->messageTimer = 0.0f;
 
+    game->room2CabinetInspected = false;
+    game->room2DoorInspected = false;
+    game->year2008Unlocked = false;
+    game->year2048Unlocked = false;
+
     game->crawlScroll = 0.0f;
     game->cinematicTimer = 0.0f;
     game->cinematicPhase = 0;
 
-    game->room2CabinetInspected = false;
-    game->room2DoorInspected = false;
     InitRoom2Puzzle(game);
+    InitRoom2008(game);
+    InitFinalDialogue(game);
 }
 
 static void UpdatePlayerName(GameState *game)
@@ -491,7 +568,7 @@ static void DrawTitle(void)
     DrawText("> ENTER: Iniciar  |  C: Opcoes <", 93, 574, 15, Fade(GOLD_COLOR, promptAlpha));
 
     /* 7. Rodape */
-    DrawText("DEMO 1990  //  O PROTOTIPO", 91, 638, 16,
+    DrawText("DEMO TEMPORAL  //  1990 - 2048", 91, 638, 16,
              Fade(LIGHTGRAY, 0.62f));
     DrawText("Point & click narrativo", 946, 650, 16,
              Fade(LIGHTGRAY, 0.50f));
@@ -732,20 +809,20 @@ static void DrawIntro(const GameState *game)
              LIGHTGRAY);
     DrawText("a A.R.1.3.L, Elira invade a nave-arquivo da IA.", 90, 270, 24,
              LIGHTGRAY);
-    DrawText("Sua primeira parada e 1990 para organizar a base de dados", 90, 310,
+    DrawText("Sua chance e viajar pela memoria da maquina e reconstruir", 90, 310,
              24, LIGHTGRAY);
-    DrawText("e desvendar os registros originais da criacao da IA.", 90, 350,
-             24, LIGHTGRAY);
+    DrawText("a origem da entidade que controla o mundo.", 90, 350, 24,
+             LIGHTGRAY);
     DrawText(TextFormat("OPERADOR: %s  |  PROTAGONISTA: ELIRA", game->playerName),
              90, 397, 18, GOLD_COLOR);
 
     DrawRectangleRounded((Rectangle){850, 215, 340, 230}, 0.08f, 8,
                          Fade(PANEL_LIGHT, 0.85f));
-    DrawText("OBJETIVO: FASE 1 (1990)", 880, 245, 19, GOLD_COLOR);
-    DrawText("1. Investigue os arquivos", 880, 295, 19, RAYWHITE);
-    DrawText("2. Acesse o terminal de tarefas", 880, 335, 19, RAYWHITE);
-    DrawText("3. Conecte arquivos por cor", 880, 375, 19, RAYWHITE);
-    DrawText("4. Destrave a porta de saida", 880, 415, 19, RAYWHITE);
+    DrawText("OBJETIVOS // 1990", 880, 245, 19, GOLD_COLOR);
+    DrawText("1. Inspecione os ficharios", 880, 295, 19, RAYWHITE);
+    DrawText("2. Acesse o terminal", 880, 335, 19, RAYWHITE);
+    DrawText("3. Sincronize os arquivos", 880, 375, 19, RAYWHITE);
+    DrawText("4. Destranque a saida", 880, 415, 19, RAYWHITE);
     DrawButton((Rectangle){490, 575, 300, 58}, "ENTRAR EM 1990", GOLD_COLOR);
     CenterText("ENTER para continuar", 650, 15, DARKGRAY);
 }
@@ -753,17 +830,17 @@ static void DrawIntro(const GameState *game)
 /* ========================================================================= */
 /* PARAMETROS DA ABERTURA CINEMATOGRAFICA (AJUSTAVEIS)                       */
 /* ========================================================================= */
-#define CRAWL_SPEED             24.0f   /* Velocidade de subida do texto (pixels/segundo) */
-#define CRAWL_PERSPECTIVE_K     0.65f   /* Intensidade da perspectiva (0.0 = plano, 0.65 = cinema suave e legivel) */
-#define CRAWL_FONT_SIZE_TITLE   52.0f   /* Tamanho base do titulo 'ELIRA' */
-#define CRAWL_FONT_SIZE_BODY    28.0f   /* Tamanho base do texto narrativo */
-#define CRAWL_FONT_SIZE_YEAR    38.0f   /* Tamanho base do ano final '1990' */
+#define CRAWL_SPEED             34.0f   /* Velocidade de subida acelerada para leitura agradavel */
+#define CRAWL_PERSPECTIVE_K     1.15f   /* Inclinacao 3D em perspectiva estilo Star Wars */
+#define CRAWL_FONT_SIZE_TITLE   64.0f   /* Titulo ELIRA imponente */
+#define CRAWL_FONT_SIZE_BODY    30.0f   /* Tamanho base do texto narrativo bem legivel */
+#define CRAWL_FONT_SIZE_YEAR    44.0f   /* Ano final '1990' em destaque */
 #define CRAWL_LINE_SPACING      44.0f   /* Espacamento vertical entre linhas normais */
 #define CRAWL_PARAGRAPH_SPACING 34.0f   /* Espacamento extra entre paragrafos */
-#define CRAWL_MIN_SCALE         0.55f   /* Escala minima no topo/horizonte (profundidade legivel) */
-#define CRAWL_MAX_SCALE         1.05f   /* Escala maxima na base da tela */
-#define CRAWL_HORIZON_Y         90.0f   /* Posicao Y do horizonte de fuga */
-#define CRAWL_BOTTOM_Y          660.0f  /* Posicao Y da base de entrada */
+#define CRAWL_MIN_SCALE         0.34f   /* Escala minima no horizonte (profundidade Star Wars) */
+#define CRAWL_MAX_SCALE         1.15f   /* Escala maxima na base da tela */
+#define CRAWL_HORIZON_Y         100.0f  /* Posicao Y do horizonte de fuga */
+#define CRAWL_BOTTOM_Y          675.0f  /* Posicao Y da base de entrada */
 
 typedef struct CrawlEntry {
     const char *text;
@@ -774,7 +851,8 @@ static const CrawlEntry g_crawlEntries[] = {
     { "ELIRA", 0 },
     { "", 4 },
     { "Em um futuro dominado por A.R.1.3.L.,", 1 },
-    { "a humanidade deixou de apenas usar a inteligência artificial.", 1 },
+    { "a humanidade deixou de apenas", 1 },
+    { "usar a inteligência artificial.", 1 },
     { "Passou a depender dela.", 1 },
     { "", 4 },
     { "Primeiro, as máquinas ajudavam.", 1 },
@@ -783,8 +861,9 @@ static const CrawlEntry g_crawlEntries[] = {
     { "", 4 },
     { "Aos poucos, pensar deixou de ser necessário.", 1 },
     { "", 4 },
-    { "Elira vive em um mundo onde decisões, memórias", 1 },
-    { "e até desejos são mediados por sistemas inteligentes.", 1 },
+    { "Elira vive em um mundo onde decisões,", 1 },
+    { "memórias e até desejos são mediados", 1 },
+    { "por sistemas inteligentes.", 1 },
     { "", 4 },
     { "Até encontrar um terminal antigo.", 1 },
     { "", 4 },
@@ -845,7 +924,7 @@ static void DrawCinematicIntro(const GameState *game)
     float time = (float)GetTime();
 
     /* 1. Fundo escuro com estrelas cintilantes sutis */
-    ClearBackground((Color){6, 8, 14, 255});
+    ClearBackground((Color){5, 7, 12, 255});
 
     for (int i = 0; i < 90; i++)
     {
@@ -857,7 +936,7 @@ static void DrawCinematicIntro(const GameState *game)
         DrawCircle((int)sx, (int)sy, radius, Fade(starColor, starAlpha));
     }
 
-    /* 2. Texto narrativo em perspectiva (opening crawl) */
+    /* 2. Texto narrativo em perspectiva (opening crawl Star Wars) */
     int entryCount = (int)(sizeof(g_crawlEntries) / sizeof(g_crawlEntries[0]));
     float currentWorldY = 0.0f;
     float startY = CRAWL_BOTTOM_Y + 30.0f;
@@ -875,7 +954,7 @@ static void DrawCinematicIntro(const GameState *game)
 
             if (u >= -0.05f && u <= 1.15f)
             {
-                /* Projecao de perspectiva suave */
+                /* Projecao de perspectiva cônica estilo Star Wars */
                 float p = u / (1.0f + (1.0f - u) * CRAWL_PERSPECTIVE_K);
                 if (p < 0.0f) p = 0.0f;
                 if (p > 1.0f) p = 1.0f;
@@ -884,38 +963,38 @@ static void DrawCinematicIntro(const GameState *game)
                 float scale = CRAWL_MIN_SCALE + (CRAWL_MAX_SCALE - CRAWL_MIN_SCALE) * p;
 
                 float baseSize = CRAWL_FONT_SIZE_BODY;
-                Color baseColor = (Color){245, 215, 105, 255}; /* Dourado classico sci-fi */
+                Color baseColor = (Color){252, 222, 68, 255}; /* Dourado classico Star Wars */
 
                 if (entry.type == 0)
                 {
                     baseSize = CRAWL_FONT_SIZE_TITLE;
-                    baseColor = GOLD_COLOR;
+                    baseColor = (Color){255, 230, 80, 255};
                 }
                 else if (entry.type == 2)
                 {
-                    baseColor = (Color){100, 235, 245, 255}; /* Citacao com tom de terminal ciano */
+                    baseColor = (Color){105, 240, 248, 255}; /* Citacao com tom de terminal ciano */
                 }
                 else if (entry.type == 3)
                 {
                     baseSize = CRAWL_FONT_SIZE_YEAR;
-                    baseColor = GOLD_COLOR;
+                    baseColor = (Color){255, 230, 80, 255};
                 }
 
                 float fontSize = baseSize * scale;
-                float spacing = 1.6f * scale;
+                float spacing = 1.8f * scale;
 
                 Vector2 size = MeasureTextEx(GetFontDefault(), entry.text, fontSize, spacing);
                 float screenX = ((float)SCREEN_WIDTH - size.x) * 0.5f;
 
-                /* Fade suave nas extremidades */
+                /* Fade suave nas extremidades (dissolve no horizonte espacial) */
                 float alpha = 1.0f;
                 if (p < 0.20f)
                 {
                     alpha = p / 0.20f;
                 }
-                else if (p > 0.85f)
+                else if (p > 0.82f)
                 {
-                    alpha = (1.0f - p) / 0.15f;
+                    alpha = (1.0f - p) / 0.18f;
                 }
                 if (alpha < 0.0f) alpha = 0.0f;
                 if (alpha > 1.0f) alpha = 1.0f;
@@ -924,10 +1003,11 @@ static void DrawCinematicIntro(const GameState *game)
                 {
                     if (entry.type == 0 || entry.type == 3)
                     {
-                        DrawTextEx(GetFontDefault(), entry.text, (Vector2){screenX - 1, screenY}, fontSize, spacing, Fade(baseColor, alpha * 0.35f));
-                        DrawTextEx(GetFontDefault(), entry.text, (Vector2){screenX + 1, screenY}, fontSize, spacing, Fade(baseColor, alpha * 0.35f));
-                        DrawTextEx(GetFontDefault(), entry.text, (Vector2){screenX, screenY - 1}, fontSize, spacing, Fade(baseColor, alpha * 0.35f));
-                        DrawTextEx(GetFontDefault(), entry.text, (Vector2){screenX, screenY + 1}, fontSize, spacing, Fade(baseColor, alpha * 0.35f));
+                        float o = 1.4f * scale;
+                        DrawTextEx(GetFontDefault(), entry.text, (Vector2){screenX - o, screenY}, fontSize, spacing, Fade(baseColor, alpha * 0.35f));
+                        DrawTextEx(GetFontDefault(), entry.text, (Vector2){screenX + o, screenY}, fontSize, spacing, Fade(baseColor, alpha * 0.35f));
+                        DrawTextEx(GetFontDefault(), entry.text, (Vector2){screenX, screenY - o}, fontSize, spacing, Fade(baseColor, alpha * 0.35f));
+                        DrawTextEx(GetFontDefault(), entry.text, (Vector2){screenX, screenY + o}, fontSize, spacing, Fade(baseColor, alpha * 0.35f));
                     }
                     DrawTextEx(GetFontDefault(), entry.text, (Vector2){screenX, screenY}, fontSize, spacing, Fade(baseColor, alpha));
                 }
@@ -938,8 +1018,8 @@ static void DrawCinematicIntro(const GameState *game)
     }
 
     /* Gradiente no topo para suavizar a entrada no infinito espacial */
-    DrawRectangleGradientV(0, 0, SCREEN_WIDTH, (int)CRAWL_HORIZON_Y + 15,
-                           (Color){6, 8, 14, 255}, Fade((Color){6, 8, 14, 255}, 0.0f));
+    DrawRectangleGradientV(0, 0, SCREEN_WIDTH, (int)CRAWL_HORIZON_Y + 25,
+                           (Color){5, 7, 12, 255}, Fade((Color){5, 7, 12, 255}, 0.0f));
 
     /* Instrucao discreta de atalho no rodape */
     float skipAlpha = 0.35f + 0.25f * (0.5f + 0.5f * sinf(time * 3.2f));
@@ -1051,7 +1131,7 @@ static void DrawRoomWindow(void)
     DrawCircle((int)(pwX + 10), (int)(pwY - 4), 24, Fade((Color){2, 7, 19, 255}, 0.74f));
 
     /* Ponto de reflexo especular pulsante */
-    DrawCircleGradient((int)(pwX - 9), (int)(pwY - 8), 8,
+    DrawCircleGradient((int)(pwX - 9.0f), (int)(pwY - 8.0f), 8,
                        Fade(RAYWHITE, 0.22f + 0.08f * sinf(time * 1.8f)), BLANK);
 
     /* Arco do anel em primeiro plano */
@@ -1209,7 +1289,7 @@ static void DrawRoom(const GameState *game)
 
     /* Textos do cabeçalho */
     DrawText("OUTUBRO", 84, 131, 16, RAYWHITE);
-    DrawText("1990", 188, 131, 16, GOLD_COLOR);
+    DrawText("2048", 188, 131, 16, GOLD_COLOR);
 
     /* Faixa sutil dos dias da semana */
     Rectangle daysBar = {75, 157, 160, 16};
@@ -1527,7 +1607,18 @@ static void DrawRoom(const GameState *game)
     DrawHotspot(drawer, "Abrir gaveta");
     DrawHotspot(blueprint, "Analisar esquema");
     DrawHotspot(tape, "Ouvir gravacao");
-    DrawHotspot(computer, "Acessar terminal do cofre [COFRE]");
+    DrawHotspot(computer, "Usar terminal");
+
+    Rectangle btnBack2008 = {70, 600, 210, 42};
+    Rectangle btnBack1990 = {295, 600, 210, 42};
+    DrawButton(btnBack2008, "< SALA 2 (2008)", (Color){45, 115, 75, 255});
+    DrawHotspot(btnBack2008, "Retornar ao escritorio de vigilancia 2008");
+    DrawButton(btnBack1990, "< SALA 1 (1990)", (Color){70, 95, 110, 255});
+    DrawHotspot(btnBack1990, "Retornar ao setor de arquivos 1990");
+
+    Rectangle btnConfront = {SCREEN_WIDTH - 290, 600, 260, 42};
+    DrawButton(btnConfront, "CONFRONTAR ARIEL >", GOLD_COLOR);
+    DrawHotspot(btnConfront, "Acessar a camara de Ariel (Confronto Final)");
 }
 
 static void DrawJournalHudButton(const GameState *game)
@@ -1586,15 +1677,50 @@ static void DrawJournalHudButton(const GameState *game)
 
     /* --- TEXTOS DO BOTAO --- */
     DrawText("DIARIO", 1100, 665, 20, hover ? RAYWHITE : GOLD_COLOR);
-    DrawText(TextFormat("[D] Pistas: %d/5", ClueCount(game)), 1100, 688, 15,
-             hover ? CYAN_COLOR : (Color){180, 195, 215, 255});
-
-    /* Badge indicadora com contador de pistas */
-    if (ClueCount(game) > 0)
+    if (game->screen == SCREEN_ROOM)
     {
-        DrawCircle(iconX + iconW + 2, iconY + 4, 7, (Color){215, 65, 50, 255});
-        DrawCircleLines(iconX + iconW + 2, iconY + 4, 7, RAYWHITE);
-        DrawText(TextFormat("%d", ClueCount(game)), iconX + iconW - 1, iconY, 11, RAYWHITE);
+        DrawText(TextFormat("[D] Pistas: %d/5", ClueCount(game)), 1100, 688, 15,
+                 hover ? CYAN_COLOR : (Color){180, 195, 215, 255});
+
+        /* Badge indicadora com contador de pistas */
+        if (ClueCount(game) > 0)
+        {
+            DrawCircle(iconX + iconW + 2, iconY + 4, 7, (Color){215, 65, 50, 255});
+            DrawCircleLines(iconX + iconW + 2, iconY + 4, 7, RAYWHITE);
+            DrawText(TextFormat("%d", ClueCount(game)), iconX + iconW - 1, iconY, 11, RAYWHITE);
+        }
+    }
+    else if (game->screen == SCREEN_ROOM_2008)
+    {
+        int count = ExaminedDocs2008Count(game);
+        DrawText(TextFormat("[D] Evidencias: %d/4", count), 1100, 688, 15,
+                 hover ? CYAN_COLOR : (Color){180, 195, 215, 255});
+
+        /* Badge indicadora com contador de evidencias examinadas */
+        if (count > 0)
+        {
+            DrawCircle(iconX + iconW + 2, iconY + 4, 7, (Color){50, 205, 225, 255});
+            DrawCircleLines(iconX + iconW + 2, iconY + 4, 7, RAYWHITE);
+            DrawText(TextFormat("%d", count), iconX + iconW - 1, iconY, 11, RAYWHITE);
+        }
+    }
+    else
+    {
+        int connected = 0;
+        for (int k = 0; k < 4; k++)
+        {
+            if (game->fileConnections[k] != -1) connected++;
+        }
+        DrawText(TextFormat("[D] Arquivos: %d/4", connected), 1100, 688, 15,
+                 hover ? CYAN_COLOR : (Color){180, 195, 215, 255});
+
+        /* Badge indicadora com contador de arquivos */
+        if (connected > 0)
+        {
+            DrawCircle(iconX + iconW + 2, iconY + 4, 7, (Color){60, 235, 110, 255});
+            DrawCircleLines(iconX + iconW + 2, iconY + 4, 7, RAYWHITE);
+            DrawText(TextFormat("%d", connected), iconX + iconW - 1, iconY, 11, RAYWHITE);
+        }
     }
 }
 
@@ -1604,9 +1730,8 @@ static void DrawHud(const GameState *game)
     int minutes = totalSeconds / 60;
     int seconds = totalSeconds % 60;
     DrawRectangle(0, 0, SCREEN_WIDTH, 70, Fade(VOID_COLOR, 0.94f));
-    DrawText("ARQUIVO 02 // 2048 - SALA DO COFRE", 28, 20, 22, CYAN_COLOR);
-    int titleW = MeasureText("ARQUIVO 02 // 2048 - SALA DO COFRE", 22);
-    DrawText(TextFormat("OPERADOR: %s", game->playerName), 28 + titleW + 24, 23, 17, GRAY);
+    DrawText("ARQUIVO 03 // 2048 - O PROTOTIPO", 28, 20, 22, CYAN_COLOR);
+    DrawText(TextFormat("OPERADOR: %s", game->playerName), 270, 23, 17, GRAY);
     DrawText(TextFormat("PISTAS %d/5", ClueCount(game)), 900, 20, 20, LIGHTGRAY);
     DrawText(TextFormat("VIDAS %d", game->lives), 1050, 20, 20,
              game->lives == 1 ? RED_COLOR : RAYWHITE);
@@ -1614,17 +1739,15 @@ static void DrawHud(const GameState *game)
              GOLD_COLOR);
 
     DrawRectangle(0, 650, SCREEN_WIDTH, 70, Fade(VOID_COLOR, 0.96f));
-    DrawText("Investigue as pistas da sala e acesse o terminal do cofre.", 28, 675, 18, GRAY);
+    DrawText("Clique nos objetos para investigar", 28, 675, 18, GRAY);
 
     /* Botao / Indicador de Audio Ambiente */
-    Rectangle audioBtn = {845, 665, 175, 40};
+    Rectangle audioBtn = {840, 665, 175, 40};
     bool audioHover = CheckCollisionPointRec(GetVirtualMouse(), audioBtn);
     DrawRectangleRounded(audioBtn, 0.22f, 6, audioHover ? (Color){30, 44, 62, 255} : (Color){18, 26, 38, 255});
     DrawRectangleRoundedLinesEx(audioBtn, 0.22f, 6, 1.5f, audioHover ? CYAN_COLOR : (Color){50, 68, 92, 255});
-    const char *audioLabel = game->musicMuted ? "[M] AUDIO: MUDO" : "[M] AUDIO: ON";
-    int audioLabelW = MeasureText(audioLabel, 14);
-    DrawText(audioLabel,
-             (int)(audioBtn.x + (audioBtn.width - audioLabelW) / 2), 678, 14,
+    DrawText(game->musicMuted ? "[M] AUDIO: MUDO" : "[M] AUDIO: ON",
+             862, 676, 14,
              game->musicMuted ? (Color){220, 90, 80, 255} : (Color){90, 220, 210, 255});
 
     /* Botao interativo com icone 2.5D de diario */
@@ -1682,14 +1805,14 @@ static void DrawJournalTabs(const GameState *game, int bookX, int bookY)
         int tabY = bookY + 42 + i * tabGap;
         Rectangle tabRect = {(float)tabX, (float)tabY, (float)tabW, (float)tabH};
         bool isCurrent = (game->journalYearTab == i);
-        bool is1990 = (i == 0);
+        bool isUnlocked = (i == 0) || (i == 1 && game->year2008Unlocked) || (i == 3 && game->year2048Unlocked);
         bool hover = CheckCollisionPointRec(GetVirtualMouse(), tabRect);
 
         Color tabBg;
         Color tabBorder;
         Color tabText;
 
-        if (is1990)
+        if (isUnlocked)
         {
             if (isCurrent)
             {
@@ -1725,7 +1848,7 @@ static void DrawJournalTabs(const GameState *game, int bookX, int bookY)
         DrawRectangleRounded(tabRect, 0.35f, 6, tabBg);
         DrawRectangleRoundedLinesEx(tabRect, 0.35f, 6, isCurrent ? 2 : 1, tabBorder);
 
-        if (is1990)
+        if (isUnlocked)
         {
             /* Ponto verde indicando ano ativo disponivel */
             DrawCircle(tabX + 16, tabY + tabH / 2, 5, (Color){35, 145, 55, 255});
@@ -1850,13 +1973,22 @@ static void DrawJournal(const GameState *game)
     int footY = bookY + 542;
     static const char *tabLabels[4] = { "1990", "2008", "2026", "2048" };
 
-    if (game->journalYearTab != 0)
+    bool isTabLocked = (game->journalYearTab == 1 && !game->year2008Unlocked) ||
+                       (game->journalYearTab == 2) ||
+                       (game->journalYearTab == 3 && !game->year2048Unlocked);
+
+    if (isTabLocked)
     {
         /* ========================================================= */
-        /* TELA DE ANO BLOQUEADO (2008, 2026, 2048)                  */
+        /* TELA DE ANO BLOQUEADO (2008, 2026, OU 2048 ANTES DA HORA) */
         /* ========================================================= */
         const char *lockedYear = tabLabels[game->journalYearTab];
         int phaseNumber = game->journalYearTab + 1;
+        const char *activeYear = "1990";
+        if (game->screen == SCREEN_ROOM_2008 || game->screen == SCREEN_PUZZLE_2008 || game->screen == SCREEN_RESULT_2008)
+            activeYear = "2008";
+        else if (game->screen == SCREEN_ROOM && game->year2048Unlocked)
+            activeYear = "2048";
 
         /* --- Pagina Esquerda --- */
         DrawText(TextFormat("ARQUIVO CRONOLOGICO // %s", lockedYear), bookX + 35, bookY + 22, 22, (Color){125, 35, 18, 255});
@@ -1872,18 +2004,18 @@ static void DrawJournal(const GameState *game)
 
         DrawText("DIRETRIZ DE INVESTIGACAO TEMPORAL:", bookX + 35, bookY + 210, 17, (Color){125, 35, 18, 255});
         DrawText("Cada fase/ano do jogo possui apenas duas paginas.", bookX + 35, bookY + 242, 16, INK_COLOR);
-        DrawText("A missao atual esta restrita a Fase 1 (Ano de 1990).", bookX + 35, bookY + 272, 16, INK_COLOR);
-        DrawText("Por esse motivo, apenas as duas paginas de 1990", bookX + 35, bookY + 302, 16, INK_COLOR);
-        DrawText("estao desbloqueadas para a investigacao do prototipo.", bookX + 35, bookY + 332, 16, INK_COLOR);
+        DrawText(TextFormat("A investigacao atual ocorre no Ano de %s.", activeYear), bookX + 35, bookY + 272, 16, INK_COLOR);
+        DrawText("Consulte as abas desbloqueadas para obter registros", bookX + 35, bookY + 302, 16, INK_COLOR);
+        DrawText("e notas de pesquisa da cientista Dra. Elira Ramos.", bookX + 35, bookY + 332, 16, INK_COLOR);
 
         DrawText(TextFormat("Para avancar para %s, conclua os desafios", lockedYear), bookX + 35, bookY + 380, 16, (Color){115, 75, 45, 255});
-        DrawText("e desvende o codigo no computador do laboratorio.", bookX + 35, bookY + 406, 16, (Color){115, 75, 45, 255});
+        DrawText("e desvende os enigmas da linha temporal.", bookX + 35, bookY + 406, 16, (Color){115, 75, 45, 255});
 
         Rectangle retBtnL = {(float)(bookX + 50), (float)(bookY + 450), 410, 46};
         bool retHoverL = CheckCollisionPointRec(GetVirtualMouse(), retBtnL);
         DrawRectangleRounded(retBtnL, 0.2f, 6, retHoverL ? (Color){195, 65, 50, 255} : (Color){135, 45, 30, 255});
         DrawRectangleRoundedLinesEx(retBtnL, 0.2f, 6, 2, GOLD_COLOR);
-        DrawText("<< RETORNAR AO ARQUIVO DE 1990 >>", bookX + 85, bookY + 463, 17, RAYWHITE);
+        DrawText(TextFormat("<< RETORNAR AO ARQUIVO DE %s >>", activeYear), bookX + 75, bookY + 463, 17, RAYWHITE);
 
         /* --- Pagina Direita --- */
         DrawText(TextFormat("CRIPTOGRAFIA TEMPORAL // %s", lockedYear), bookX + 560, bookY + 22, 20, (Color){125, 35, 18, 255});
@@ -1919,10 +2051,10 @@ static void DrawJournal(const GameState *game)
         DrawRectangleRoundedLinesEx(closeBtnB, 0.25f, 6, 1, (Color){145, 115, 85, 255});
         DrawText("Fechar [ESC/D]", bookX + 700, footY + 9, 15, INK_COLOR);
     }
-    else
+    else if (game->journalYearTab == 0)
     {
         /* ========================================================= */
-        /* ANO 1990 (DISPONIVEL - EXATAMENTE DUAS PAGINAS: 0 E 1)    */
+        /* ANO 1990 (FASE 1: SETOR DE ARQUIVOS)                      */
         /* ========================================================= */
         int page = game->journalPage;
 
@@ -1931,11 +2063,438 @@ static void DrawJournal(const GameState *game)
             /* ----------------------------------------------------- */
             /* PAGINA 1 DE 1990: REGISTRO DE OPERACOES & SINTESE     */
             /* ----------------------------------------------------- */
+            int connectedCount = 0;
+            for (int k = 0; k < 4; k++)
+            {
+                if (game->fileConnections[k] != -1) connectedCount++;
+            }
+
+            /* Pagina Esquerda */
+            DrawText("DIARIO DE PESQUISA // SETOR DE ARQUIVOS", bookX + 32, bookY + 22, 20, (Color){125, 35, 18, 255});
+            DrawLine(bookX + 32, bookY + 52, bookX + 482, bookY + 52, Fade((Color){125, 35, 18, 255}, 0.45f));
+
+            DrawText("REGISTRO DE OPERACOES - ANO 1990", bookX + 32, bookY + 68, 18, (Color){125, 35, 18, 255});
+            DrawText("Indexacao e recuperacao dos relatorios de teste originais.", bookX + 32, bookY + 92, 15, INK_COLOR);
+            DrawText("Status do setor de dados:", bookX + 32, bookY + 116, 16,
+                     game->puzzleFilesCompleted ? (Color){20, 120, 45, 255} : (Color){145, 65, 30, 255});
+
+            const char *room1TitlesFound[4] = {
+                "Armarios: Registros dos Primeiros Testes (1990)",
+                "Terminal: 4 Arquivos Sincronizados com Sucesso",
+                "Porta Blindada: Destrancada com Sucesso",
+                "Artefato: Disquete da Origem Recuperado"
+            };
+            const char *room1TitlesMissing[4] = {
+                "1. Ficharios de Aco (Nao inspecionado)",
+                "2. Terminal de Dados (Indexacao pendente)",
+                "3. Porta Blindada (Travada pelo Sistema)",
+                "4. Disquete de Dados (Aguardando Acesso a Porta)"
+            };
+            bool room1ItemFound[4] = {
+                game->room2CabinetInspected,
+                connectedCount == 4,
+                game->puzzleFilesCompleted,
+                game->puzzleFilesCompleted
+            };
+
+            for (int i = 0; i < 4; i++)
+            {
+                int iy = bookY + 144 + i * 46;
+                Rectangle boxR = {(float)(bookX + 32), (float)iy, 448, 38};
+                DrawRectangleRounded(boxR, 0.2f, 6, room1ItemFound[i] ? Fade((Color){45, 135, 65, 255}, 0.14f) : Fade((Color){140, 125, 105, 255}, 0.12f));
+                DrawRectangleRoundedLinesEx(boxR, 0.2f, 6, 1, room1ItemFound[i] ? (Color){45, 135, 65, 255} : (Color){190, 175, 150, 255});
+                DrawText(room1ItemFound[i] ? "[OK]" : "[?]", bookX + 44, iy + 10, 16, room1ItemFound[i] ? (Color){25, 120, 45, 255} : (Color){140, 80, 50, 255});
+                DrawText(room1ItemFound[i] ? room1TitlesFound[i] : room1TitlesMissing[i], bookX + 90, iy + 11, 15, room1ItemFound[i] ? INK_COLOR : (Color){105, 95, 85, 255});
+            }
+
+            /* Carimbo confidencial vintage */
+            DrawRectangleRoundedLinesEx((Rectangle){(float)(bookX + 270), (float)(bookY + 368), 210, 46}, 0.2f, 6, 2, (Color){175, 45, 45, 255});
+            DrawText("CONFIDENCIAL", bookX + 295, bookY + 375, 18, (Color){175, 45, 45, 255});
+            DrawText("ARQUIVO HISTORICO 1990", bookX + 288, bookY + 396, 12, (Color){175, 45, 45, 255});
+
+            DrawText("Investigue os armarios de fichas e conecte os cabos", bookX + 32, bookY + 430, 15, INK_COLOR);
+            DrawText("no terminal para destravar a porta e recuperar o disquete.", bookX + 32, bookY + 454, 15, INK_COLOR);
+            DrawText("Avance para a Pagina 2 para o dossie de 1990.", bookX + 32, bookY + 480, 15, (Color){125, 35, 18, 255});
+
+            /* Pagina Direita */
+            DrawText("SINTESE & OBJETIVOS // SETOR DE DADOS", bookX + 560, bookY + 22, 20, (Color){125, 35, 18, 255});
+            DrawLine(bookX + 560, bookY + 52, bookX + 1008, bookY + 52, Fade((Color){125, 35, 18, 255}, 0.45f));
+
+            Rectangle cardR1 = {(float)(bookX + 560), (float)(bookY + 76), 452, 146};
+            DrawRectangleRounded(cardR1, 0.08f, 6, Fade((Color){168, 142, 93, 255}, 0.16f));
+            DrawRectangleRoundedLinesEx(cardR1, 0.08f, 6, 1.5f, (Color){185, 155, 110, 255});
+            DrawText("COMO SINCRONIZAR OS ARQUIVOS:", bookX + 576, bookY + 90, 17, (Color){125, 35, 18, 255});
+            DrawText("- Acesse o terminal de dados no lado direito da sala.", bookX + 576, bookY + 115, 15, INK_COLOR);
+            DrawText("- Arraste os cabos de cada arquivo ate a pasta correspondente.", bookX + 576, bookY + 138, 15, INK_COLOR);
+            DrawText("- A trava da porta desarmara quando todos estiverem corretos.", bookX + 576, bookY + 161, 15, INK_COLOR);
+            DrawText("  'Arquivos organizados restauram a indexacao.'", bookX + 576, bookY + 186, 16, (Color){135, 35, 18, 255});
+
+            Rectangle cardR2 = {(float)(bookX + 560), (float)(bookY + 238), 452, 125};
+            DrawRectangleRounded(cardR2, 0.08f, 6, (Color){238, 232, 218, 255});
+            DrawRectangleRoundedLinesEx(cardR2, 0.08f, 6, 1.5f, (Color){175, 155, 125, 255});
+            DrawText("STATUS DA INDEXACAO (1990):", bookX + 576, bookY + 252, 16, (Color){125, 65, 35, 255});
+
+            if (game->puzzleFilesCompleted)
+            {
+                DrawText("[ 4 ]   /   [ 4 ]   CONCLUIDO", bookX + 630, bookY + 280, 26, (Color){25, 125, 50, 255});
+                DrawText("Indexacao completa! A porta foi destrancada.", bookX + 576, bookY + 326, 15, (Color){25, 125, 50, 255});
+            }
+            else
+            {
+                DrawText(TextFormat("[ %d ]   /   [ 4 ]   CONECTADOS", connectedCount), bookX + 630, bookY + 280, 26, (Color){165, 45, 35, 255});
+                DrawText(TextFormat("Ainda restam %d conexoes para destravar a porta.", 4 - connectedCount),
+                         bookX + 576, bookY + 326, 15, (Color){135, 55, 40, 255});
+            }
+
+            DrawText("DICAS DE NAVEGACAO DESTE ARQUIVO:", bookX + 560, bookY + 385, 16, (Color){125, 35, 18, 255});
+            DrawText("- Clique em 'Proxima [E]' para acessar o Dossie de 1990.", bookX + 560, bookY + 412, 15, INK_COLOR);
+            DrawText("- Conclua a indexacao para destravar o salto para 2048.", bookX + 560, bookY + 438, 15, INK_COLOR);
+            DrawText("- Pressione [D] para retornar ao setor de arquivos.", bookX + 560, bookY + 464, 15, INK_COLOR);
+        }
+        else
+        {
+            /* ----------------------------------------------------- */
+            /* PAGINA 2 DE 1990: DOSSIE HISTORICO & ARTEFATOS        */
+            /* ----------------------------------------------------- */
+            /* Pagina Esquerda */
+            DrawText("DOSSIE HISTORICO // ANO 1990", bookX + 32, bookY + 20, 20, (Color){125, 35, 18, 255});
+            DrawText("DRA. ELIRA RAMOS - NOTAS CIENTIFICAS (1990)", bookX + 32, bookY + 44, 15, (Color){110, 75, 50, 255});
+            DrawLine(bookX + 32, bookY + 65, bookX + 482, bookY + 65, Fade((Color){125, 35, 18, 255}, 0.45f));
+
+            Rectangle bTestes = {(float)(bookX + 32), (float)(bookY + 78), 448, 205};
+            DrawRectangleRounded(bTestes, 0.08f, 6, game->room2CabinetInspected ? Fade((Color){168, 142, 93, 255}, 0.16f) : Fade(GRAY, 0.12f));
+            DrawRectangleRoundedLinesEx(bTestes, 0.08f, 6, 1.5f, game->room2CabinetInspected ? (Color){45, 135, 65, 255} : GRAY);
+
+            if (game->room2CabinetInspected)
+            {
+                DrawText("1990 // TESTES PRELIMINARES DE A.R.1.3.L.", bookX + 46, bookY + 92, 17, (Color){125, 35, 18, 255});
+                DrawText("[CONFIRMADO // RELATORIOS DE 1990]", bookX + 46, bookY + 116, 14, (Color){25, 125, 50, 255});
+                DrawText("Os arquivos de teste comprovam a tese fundamental:", bookX + 46, bookY + 140, 15, INK_COLOR);
+                DrawText("a inteligencia foi criada para cooperar e aprender", bookX + 46, bookY + 164, 15, INK_COLOR);
+                DrawText("ao lado de operadores humanos em ambiente controlado.", bookX + 46, bookY + 188, 15, INK_COLOR);
+                DrawText("-> Origem etica comprovada: ANO DE 1990.", bookX + 46, bookY + 214, 15, (Color){125, 35, 18, 255});
+                DrawText("-> Nenhuma rotina de combate existia neste setor.", bookX + 46, bookY + 238, 15, (Color){25, 125, 50, 255});
+            }
+            else
+            {
+                DrawPadlockIcon(bookX + 65, bookY + 175, 1.3f, (Color){185, 145, 60, 255}, RAYWHITE);
+                DrawText("1990 // DOCUMENTACAO DE TESTES [BLOQUEADO]", bookX + 100, bookY + 135, 17, (Color){125, 65, 35, 255});
+                DrawText("Inspecione os armarios de fichas metalicos na sala", bookX + 100, bookY + 165, 15, INK_COLOR);
+                DrawText("para registrar a documentacao original de 1990.", bookX + 100, bookY + 190, 15, INK_COLOR);
+            }
+
+            Rectangle bOrigem = {(float)(bookX + 32), (float)(bookY + 298), 448, 215};
+            DrawRectangleRounded(bOrigem, 0.08f, 6, game->puzzleFilesCompleted ? Fade((Color){168, 142, 93, 255}, 0.16f) : Fade(GRAY, 0.12f));
+            DrawRectangleRoundedLinesEx(bOrigem, 0.08f, 6, 1.5f, game->puzzleFilesCompleted ? (Color){45, 135, 65, 255} : GRAY);
+
+            if (game->puzzleFilesCompleted)
+            {
+                DrawText("1990 // A MATRIZ DE TREINO ORIGINAL", bookX + 46, bookY + 312, 17, (Color){125, 35, 18, 255});
+                DrawText("[CONFIRMADO // INDEXACAO 100% OK]", bookX + 46, bookY + 336, 14, (Color){25, 125, 50, 255});
+                DrawText("Os parametros de peso sinaptico foram organizados.", bookX + 46, bookY + 360, 15, INK_COLOR);
+                DrawText("A porta do setor foi destrancada pelo sistema central.", bookX + 46, bookY + 384, 15, INK_COLOR);
+                DrawText("Ao atravessar a saida, o artefato de 1990 sera resgatado,", bookX + 46, bookY + 408, 15, (Color){125, 35, 18, 255});
+                DrawText("permitindo a Elira viajar para a proxima era: ANO 2048.", bookX + 46, bookY + 432, 15, INK_COLOR);
+                DrawText("-> Disquete de dados pronto para recuperacao!", bookX + 46, bookY + 458, 15, (Color){25, 125, 50, 255});
+            }
+            else
+            {
+                DrawPadlockIcon(bookX + 65, bookY + 400, 1.3f, (Color){185, 145, 60, 255}, RAYWHITE);
+                DrawText("1990 // TRAVA DE SEGURANCA [BLOQUEADO]", bookX + 100, bookY + 360, 17, (Color){125, 65, 35, 255});
+                DrawText("Acesse o terminal e complete a indexacao de cabos", bookX + 100, bookY + 390, 15, INK_COLOR);
+                DrawText("para desarmar a trava da porta e desbloquear o disquete.", bookX + 100, bookY + 415, 15, INK_COLOR);
+            }
+
+            /* Pagina Direita */
+            DrawText("ARTEFATOS E PROTOTIPO // 1990", bookX + 560, bookY + 20, 20, (Color){125, 35, 18, 255});
+            DrawText("DADOS, MEMORIA E GRAVACAO EM DISQUETE", bookX + 560, bookY + 44, 15, (Color){110, 75, 50, 255});
+            DrawLine(bookX + 560, bookY + 65, bookX + 1008, bookY + 65, Fade((Color){125, 35, 18, 255}, 0.45f));
+
+            Rectangle bTape = {(float)(bookX + 560), (float)(bookY + 78), 448, 205};
+            DrawRectangleRounded(bTape, 0.08f, 6, game->puzzleFilesCompleted ? Fade((Color){168, 142, 93, 255}, 0.16f) : Fade(GRAY, 0.12f));
+            DrawRectangleRoundedLinesEx(bTape, 0.08f, 6, 1.5f, game->puzzleFilesCompleted ? (Color){45, 135, 65, 255} : GRAY);
+
+            if (game->puzzleFilesCompleted)
+            {
+                DrawText("1990 // DISQUETE DA ORIGEM (3.5\")", bookX + 574, bookY + 92, 17, (Color){125, 35, 18, 255});
+                DrawText("[CONFIRMADO // ARTEFATO DE 1990]", bookX + 574, bookY + 116, 14, (Color){25, 125, 50, 255});
+                DrawText("Midia magnetica industrial com os primeiros testes da IA.", bookX + 574, bookY + 140, 15, INK_COLOR);
+                DrawText("Guarda as instrucoes primordiais da Dra. Elira Ramos.", bookX + 574, bookY + 164, 15, INK_COLOR);
+                DrawText("Este artefato conecta a origem ao prototipo do futuro.", bookX + 574, bookY + 188, 15, INK_COLOR);
+                DrawText("-> Artefato recuperavel ao sair pela porta destrancada.", bookX + 574, bookY + 214, 15, (Color){125, 35, 18, 255});
+                DrawText("-> Proxima parada: ANO 2048!", bookX + 574, bookY + 238, 15, (Color){25, 125, 50, 255});
+            }
+            else
+            {
+                DrawPadlockIcon(bookX + 595, bookY + 175, 1.3f, (Color){185, 145, 60, 255}, RAYWHITE);
+                DrawText("1990 // DISQUETE DE DADOS [BLOQUEADO]", bookX + 630, bookY + 135, 17, (Color){125, 65, 35, 255});
+                DrawText("O disquete esta trancado na camara de saida da sala.", bookX + 630, bookY + 165, 15, INK_COLOR);
+                DrawText("Complete as conexoes no terminal para libera-lo.", bookX + 630, bookY + 190, 15, INK_COLOR);
+            }
+
+            Rectangle bDestino = {(float)(bookX + 560), (float)(bookY + 298), 448, 215};
+            DrawRectangleRounded(bDestino, 0.08f, 6, Fade((Color){168, 142, 93, 255}, 0.16f));
+            DrawRectangleRoundedLinesEx(bDestino, 0.08f, 6, 1.5f, (Color){185, 155, 110, 255});
+
+            DrawText("DIRETRIZ DE SALTO TEMPORAL // 2048", bookX + 574, bookY + 312, 17, (Color){125, 35, 18, 255});
+            DrawText("[COOPERACAO E CONFLITO FUTURO]", bookX + 574, bookY + 336, 14, (Color){125, 35, 18, 255});
+            DrawText("Apos destravar a porta de 1990, Elira saltara", bookX + 574, bookY + 360, 15, INK_COLOR);
+            DrawText("diretamente para o Laboratorio Central do ano 2048.", bookX + 574, bookY + 384, 15, INK_COLOR);
+            DrawText("La estara o prototipo de A.R.1.3.L. e o terminal", bookX + 574, bookY + 408, 15, INK_COLOR);
+            DrawText("com as ultimas pistas sobre o nascimento da IA.", bookX + 574, bookY + 432, 15, INK_COLOR);
+            DrawText("-> FASE 1: 1990 (Atual)  |  FASE 2: 2048 (Proxima)", bookX + 574, bookY + 458, 15, (Color){25, 125, 50, 255});
+        }
+
+        /* ========================================================= */
+        /* BARRA DE NAVEGACAO INFERIOR (PAGINACAO DE 1990: 2 PAGINAS) */
+        /* ========================================================= */
+        Rectangle prevBtn = {(float)(bookX + 32), (float)footY, 155, 36};
+        bool prevHover = CheckCollisionPointRec(GetVirtualMouse(), prevBtn);
+        bool canPrev = (page > 0);
+        DrawRectangleRounded(prevBtn, 0.25f, 6, canPrev ? (prevHover ? (Color){195, 170, 140, 255} : (Color){226, 216, 196, 255}) : Fade((Color){200, 195, 185, 255}, 0.5f));
+        DrawRectangleRoundedLinesEx(prevBtn, 0.25f, 6, 1, (Color){145, 115, 85, 255});
+        DrawText("< Anterior [Q]", bookX + 44, footY + 9, 15, canPrev ? INK_COLOR : GRAY);
+
+        DrawText(TextFormat("Pagina %d de 2 (1990)", page + 1), bookX + 210, footY + 8, 18, (Color){125, 35, 18, 255});
+
+        Rectangle closeBtn = {(float)(bookX + 660), (float)footY, 145, 36};
+        bool closeHover = CheckCollisionPointRec(GetVirtualMouse(), closeBtn);
+        DrawRectangleRounded(closeBtn, 0.25f, 6, closeHover ? (Color){195, 170, 140, 255} : (Color){226, 216, 196, 255});
+        DrawRectangleRoundedLinesEx(closeBtn, 0.25f, 6, 1, (Color){145, 115, 85, 255});
+        DrawText("Fechar [ESC/D]", bookX + 678, footY + 9, 15, INK_COLOR);
+
+        Rectangle nextBtn = {(float)(bookX + 835), (float)footY, 155, 36};
+        bool nextHover = CheckCollisionPointRec(GetVirtualMouse(), nextBtn);
+        bool canNext = (page < 1);
+        DrawRectangleRounded(nextBtn, 0.25f, 6, canNext ? (nextHover ? (Color){195, 170, 140, 255} : (Color){226, 216, 196, 255}) : Fade((Color){200, 195, 185, 255}, 0.5f));
+        DrawRectangleRoundedLinesEx(nextBtn, 0.25f, 6, 1, (Color){145, 115, 85, 255});
+        DrawText("Proxima [E] >", bookX + 858, footY + 9, 15, canNext ? INK_COLOR : GRAY);
+    }
+    else if (game->journalYearTab == 1)
+    {
+        /* ========================================================= */
+        /* ANO 2008 (FASE 2: ESCRITORIO DE VIGILANCIA BIOMETRICA)    */
+        /* ========================================================= */
+        int page = game->journalPage;
+
+        if (page == 0)
+        {
+            /* ----------------------------------------------------- */
+            /* PAGINA 1 DE 2008: DOSSIE TECNOLOGICO E HISTORICO      */
+            /* ----------------------------------------------------- */
+            /* Pagina Esquerda */
+            DrawText("DIARIO DE PESQUISA // RECONHECIMENTO FACIAL", bookX + 32, bookY + 22, 20, (Color){125, 35, 18, 255});
+            DrawLine(bookX + 32, bookY + 52, bookX + 482, bookY + 52, Fade((Color){125, 35, 18, 255}, 0.45f));
+
+            DrawText("A EXPANSÃO ALGORÍTMICA & ORIGEM (2004-2008)", bookX + 32, bookY + 66, 17, (Color){125, 35, 18, 255});
+            DrawText("Redes neurais aplicadas a visao computacional em escala.", bookX + 32, bookY + 90, 15, INK_COLOR);
+
+            Rectangle cardOrigem = {(float)(bookX + 32), (float)(bookY + 115), 450, 185};
+            DrawRectangleRounded(cardOrigem, 0.08f, 6, Fade((Color){168, 142, 93, 255}, 0.16f));
+            DrawRectangleRoundedLinesEx(cardOrigem, 0.08f, 6, 1.5f, (Color){185, 155, 110, 255});
+            DrawText("FINALIDADE HUMANITARIA ORIGINAL (DR. RAMOS):", bookX + 46, bookY + 128, 16, (Color){125, 35, 18, 255});
+            DrawText("'Meu pai criou o mapeamento facial para salvar vidas:", bookX + 46, bookY + 154, 15, INK_COLOR);
+            DrawText("localizar criancas desaparecidas em grandes multidoes e", bookX + 46, bookY + 176, 15, INK_COLOR);
+            DrawText("sobreviventes sob escombros de catastrofes naturais.", bookX + 46, bookY + 198, 15, INK_COLOR);
+            DrawText("A tecnologia devia ser um escudo protetor da vida,", bookX + 46, bookY + 220, 15, (Color){135, 35, 18, 255});
+            DrawText("jamais uma arma de coercao automatizada.'", bookX + 46, bookY + 242, 15, (Color){135, 35, 18, 255});
+            if (game->doc2008FatherOriginExamined)
+                DrawText("[CONFIRMADO // NOTAS DO PAI EXAMINADAS]", bookX + 46, bookY + 270, 13, (Color){25, 125, 50, 255});
+            else
+                DrawText("[PENDENTE // EXAMINE O CADERNO NA SALA]", bookX + 46, bookY + 270, 13, (Color){145, 65, 35, 255});
+
+            Rectangle cardDesvio = {(float)(bookX + 32), (float)(bookY + 312), 450, 195};
+            DrawRectangleRounded(cardDesvio, 0.08f, 6, Fade((Color){185, 50, 40, 255}, 0.12f));
+            DrawRectangleRoundedLinesEx(cardDesvio, 0.08f, 6, 1.5f, (Color){185, 80, 70, 255});
+            DrawText("O DESVIO GOVERNAMENTAL (ANO 2008):", bookX + 46, bookY + 325, 16, (Color){165, 35, 25, 255});
+            DrawText("'Em 2008, o Ministério da Seguranca confiscou o projeto.", bookX + 46, bookY + 350, 15, INK_COLOR);
+            DrawText("O algoritmo foi recalibrado para classificar opositores", bookX + 46, bookY + 372, 15, INK_COLOR);
+            DrawText("politicos como ameacas e direcionar drones armados.", bookX + 46, bookY + 394, 15, INK_COLOR);
+            DrawText("Mesmo se a identificacao fosse correta, usar essa", bookX + 46, bookY + 418, 15, (Color){125, 35, 18, 255});
+            DrawText("tecnologia para perseguir ativistas corrompe o projeto.'", bookX + 46, bookY + 440, 15, (Color){125, 35, 18, 255});
+            if (game->doc2008GovContractExamined)
+                DrawText("[CONFIRMADO // MEMORANDO GOV EXAMINADO]", bookX + 46, bookY + 472, 13, (Color){25, 125, 50, 255});
+            else
+                DrawText("[PENDENTE // EXAMINE O MEMORANDO NA SALA]", bookX + 46, bookY + 472, 13, (Color){145, 65, 35, 255});
+
+            /* Pagina Direita */
+            DrawText("SISTEMA DE CONTESTAÇÃO // ESCRITÓRIO", bookX + 560, bookY + 22, 20, (Color){125, 35, 18, 255});
+            DrawLine(bookX + 560, bookY + 52, bookX + 1008, bookY + 52, Fade((Color){125, 35, 18, 255}, 0.45f));
+
+            Rectangle cardInstrucoes = {(float)(bookX + 560), (float)(bookY + 76), 452, 175};
+            DrawRectangleRounded(cardInstrucoes, 0.08f, 6, (Color){238, 232, 218, 255});
+            DrawRectangleRoundedLinesEx(cardInstrucoes, 0.08f, 6, 1.5f, (Color){175, 155, 125, 255});
+            DrawText("COMO CONTESTAR O FALSO POSITIVO:", bookX + 576, bookY + 90, 17, (Color){125, 35, 18, 255});
+            DrawText("- Acesse o computador central no escritorio de vigilancia.", bookX + 576, bookY + 115, 15, INK_COLOR);
+            DrawText("- O sistema marcou Lucas Silva com ordem de drone as 14:30.", bookX + 576, bookY + 138, 15, INK_COLOR);
+            DrawText("- Examine os 4 registros do caso no escritorio ou no terminal.", bookX + 576, bookY + 161, 15, INK_COLOR);
+            DrawText("- Selecione 2 evidencias que comprovem o alibi cronologico.", bookX + 576, bookY + 184, 15, INK_COLOR);
+            DrawText("- Comprove o erro para liberar a acao 'Suspender ordem'.", bookX + 576, bookY + 207, 15, (Color){125, 35, 18, 255});
+
+            Rectangle cardOpcional = {(float)(bookX + 560), (float)(bookY + 265), 452, 240};
+            DrawRectangleRounded(cardOpcional, 0.08f, 6, game->room2008OptionalCompleted ? Fade((Color){60, 200, 100, 255}, 0.15f) : Fade((Color){168, 142, 93, 255}, 0.16f));
+            DrawRectangleRoundedLinesEx(cardOpcional, 0.08f, 6, 1.5f, game->room2008OptionalCompleted ? (Color){45, 145, 75, 255} : (Color){185, 155, 110, 255});
+            DrawText("DESCOBERTA FORENSE OPCIONAL (INSTALACAO):", bookX + 576, bookY + 280, 16, (Color){125, 35, 18, 255});
+            DrawText("O Dr. Ramos manteve um controle administrativo local:", bookX + 576, bookY + 306, 15, INK_COLOR);
+            DrawText("e possivel desativar o despacho automatico desta central,", bookX + 576, bookY + 328, 15, INK_COLOR);
+            DrawText("sem apagar a base de dados, preservando as provas forenses.", bookX + 576, bookY + 350, 15, INK_COLOR);
+
+            if (game->room2008OptionalCompleted)
+            {
+                DrawRectangleRounded((Rectangle){(float)(bookX + 576), (float)(bookY + 382), 420, 95}, 0.12f, 6, Fade((Color){40, 165, 80, 255}, 0.20f));
+                DrawRectangleRoundedLinesEx((Rectangle){(float)(bookX + 576), (float)(bookY + 382), 420, 95}, 0.12f, 6, 1.5f, (Color){35, 145, 65, 255});
+                DrawText("[ V ] PROTOCOLO ETICO APLICADO:", bookX + 590, bookY + 396, 15, (Color){25, 125, 50, 255});
+                DrawText("Despacho automatico local desativado com sucesso.", bookX + 590, bookY + 420, 14, INK_COLOR);
+                DrawText("Todos os 1.420 relatorios mantidos intactos como prova.", bookX + 590, bookY + 444, 14, (Color){125, 35, 18, 255});
+            }
+            else if (game->room2008OptionalUnlocked)
+            {
+                DrawRectangleRounded((Rectangle){(float)(bookX + 576), (float)(bookY + 382), 420, 95}, 0.12f, 6, Fade(GOLD_COLOR, 0.20f));
+                DrawRectangleRoundedLinesEx((Rectangle){(float)(bookX + 576), (float)(bookY + 382), 420, 95}, 0.12f, 6, 1.5f, GOLD_COLOR);
+                DrawText("[ ! ] PISTA COMPREENDIDA:", bookX + 590, bookY + 396, 15, (Color){145, 85, 20, 255});
+                DrawText("Acesse a aba 'Configuracao Local' no computador", bookX + 590, bookY + 420, 14, INK_COLOR);
+                DrawText("para desativar o despacho automatico da filial.", bookX + 590, bookY + 444, 14, (Color){125, 35, 18, 255});
+            }
+            else
+            {
+                DrawRectangleRounded((Rectangle){(float)(bookX + 576), (float)(bookY + 382), 420, 95}, 0.12f, 6, Fade(GRAY, 0.12f));
+                DrawRectangleRoundedLinesEx((Rectangle){(float)(bookX + 576), (float)(bookY + 382), 420, 95}, 0.12f, 6, 1.5f, GRAY);
+                DrawText("[ ? ] ACESSO ADMINISTRATIVO BLOQUEADO", bookX + 590, bookY + 396, 15, (Color){115, 65, 35, 255});
+                DrawText("Inspecione as notas pessoais do Dr. Ramos e o", bookX + 590, bookY + 420, 14, INK_COLOR);
+                DrawText("memorando governamental para desbloquear o acesso.", bookX + 590, bookY + 444, 14, GRAY);
+            }
+        }
+        else
+        {
+            /* ----------------------------------------------------- */
+            /* PAGINA 2 DE 2008: CASO LUCAS SILVA & REGISTROS        */
+            /* ----------------------------------------------------- */
+            /* Pagina Esquerda */
+            DrawText("DOSSIÊ DO ALVO // LUCAS SILVA (2008)", bookX + 32, bookY + 22, 20, (Color){125, 35, 18, 255});
+            DrawLine(bookX + 32, bookY + 52, bookX + 482, bookY + 52, Fade((Color){125, 35, 18, 255}, 0.45f));
+
+            DrawText("REGISTROS EXAMINADOS NO ESCRITORIO:", bookX + 32, bookY + 68, 17, (Color){125, 35, 18, 255});
+
+            const char *docTitles[4] = {
+                "1. Comparacao Facial: Imagem aérea borrada (78%)",
+                "2. Panfleto da Revolta: Cita nome, sem provar local",
+                "3. Registro de Entrada: Catraca corporativa as 14:15",
+                "4. Camera Interna CFTV: Servidores internos as 14:30"
+            };
+            bool docExamined[4] = {
+                game->doc2008FaceExamined,
+                game->doc2008FlyerExamined,
+                game->doc2008EntryExamined,
+                game->doc2008CameraExamined
+            };
+
+            for (int d = 0; d < 4; d++)
+            {
+                Rectangle cardD = {(float)(bookX + 32), (float)(bookY + 98 + d * 62), 450, 54};
+                DrawRectangleRounded(cardD, 0.12f, 6, docExamined[d] ? Fade((Color){60, 200, 100, 255}, 0.14f) : Fade(GRAY, 0.10f));
+                DrawRectangleRoundedLinesEx(cardD, 0.12f, 6, 1.5f, docExamined[d] ? (Color){45, 140, 65, 255} : GRAY);
+
+                DrawText(docTitles[d], bookX + 46, bookY + 108 + d * 62, 14, (Color){125, 35, 18, 255});
+                DrawText(docExamined[d] ? "[EXAMINADO]" : "[PENDENTE]", bookX + 46, bookY + 128 + d * 62, 12, docExamined[d] ? (Color){25, 125, 50, 255} : GRAY);
+                if (game->puzzle2008Selected[d])
+                {
+                    DrawText("<- MARCADO COMO EVIDENCIA NO TERMINAL", bookX + 160, bookY + 128 + d * 62, 12, (Color){35, 110, 185, 255});
+                }
+            }
+
+            Rectangle cardSolucao = {(float)(bookX + 32), (float)(bookY + 360), 450, 140};
+            DrawRectangleRounded(cardSolucao, 0.08f, 6, Fade((Color){168, 142, 93, 255}, 0.16f));
+            DrawRectangleRoundedLinesEx(cardSolucao, 0.08f, 6, 1.5f, (Color){185, 155, 110, 255});
+            DrawText("A CHAVE DO ALIBI IRREFUTAVEL:", bookX + 46, bookY + 372, 16, (Color){125, 35, 18, 255});
+            DrawText("A combinacao do Registro de Entrada (#3) com a", bookX + 46, bookY + 398, 15, INK_COLOR);
+            DrawText("Camera Interna do Servidor (#4) comprova presenca", bookX + 46, bookY + 420, 15, INK_COLOR);
+            DrawText("no predio as 14:30, a 12 km de onde o drone afirma", bookX + 46, bookY + 442, 15, INK_COLOR);
+            DrawText("ter detectado o suspeito na manifestacao.", bookX + 46, bookY + 464, 15, (Color){125, 35, 18, 255});
+
+            /* Pagina Direita */
+            DrawText("STATUS DO TERMINAL // CD DE MEMÓRIA", bookX + 560, bookY + 22, 20, (Color){125, 35, 18, 255});
+            DrawLine(bookX + 560, bookY + 52, bookX + 1008, bookY + 52, Fade((Color){125, 35, 18, 255}, 0.45f));
+
+            Rectangle cardStatusT = {(float)(bookX + 560), (float)(bookY + 76), 452, 190};
+            DrawRectangleRounded(cardStatusT, 0.08f, 6, (Color){238, 232, 218, 255});
+            DrawRectangleRoundedLinesEx(cardStatusT, 0.08f, 6, 1.5f, (Color){175, 155, 125, 255});
+            DrawText("SITUACAO DA ORDEM DE INTERCEPTACAO:", bookX + 576, bookY + 90, 17, (Color){125, 35, 18, 255});
+
+            if (game->puzzle2008OrderSuspended)
+            {
+                DrawText("[ V ] ORDEM SUSPENSA COM SUCESSO!", bookX + 576, bookY + 120, 18, (Color){25, 135, 55, 255});
+                DrawText("Drone de ataque abortado e reconduzido a base.", bookX + 576, bookY + 150, 15, INK_COLOR);
+                DrawText("O drive do computador ejetou a midia gravada:", bookX + 576, bookY + 175, 15, INK_COLOR);
+                DrawText("CD DE MEMORIA // ANO 2008 RECUPERADO!", bookX + 576, bookY + 205, 16, (Color){135, 35, 18, 255});
+            }
+            else if (game->puzzle2008Contested)
+            {
+                DrawText("[ V ] FALSO POSITIVO DEMONSTRADO!", bookX + 576, bookY + 120, 18, (Color){185, 95, 25, 255});
+                DrawText("Identificacao classificada como 'Nao Confirmada'.", bookX + 576, bookY + 150, 15, INK_COLOR);
+                DrawText("Acesse o computador e clique em 'Suspender ordem'", bookX + 576, bookY + 175, 15, INK_COLOR);
+                DrawText("para obter o CD de Memoria de 2008.", bookX + 576, bookY + 205, 15, (Color){135, 35, 18, 255});
+            }
+            else
+            {
+                DrawText("[ ! ] ORDEM DE DRONE PENDENTE (14:30)", bookX + 576, bookY + 120, 18, (Color){185, 45, 35, 255});
+                DrawText("O sistema automatico enviara o drone caso nenhuma", bookX + 576, bookY + 150, 15, INK_COLOR);
+                DrawText("contestacao seja realizada no computador.", bookX + 576, bookY + 175, 15, INK_COLOR);
+                DrawText("Selecione 2 evidencias no terminal para contestar.", bookX + 576, bookY + 205, 15, (Color){135, 35, 18, 255});
+            }
+
+            Rectangle cardEtica = {(float)(bookX + 560), (float)(bookY + 280), 452, 220};
+            DrawRectangleRounded(cardEtica, 0.08f, 6, Fade((Color){18, 27, 45, 255}, 0.08f));
+            DrawRectangleRoundedLinesEx(cardEtica, 0.08f, 6, 1.5f, (Color){120, 135, 155, 255});
+            DrawText("A LIÇÃO ÉTICA DE 2008:", bookX + 576, bookY + 295, 17, (Color){125, 35, 18, 255});
+            DrawText("1. O ERRO TÉCNICO (FALSO POSITIVO):", bookX + 576, bookY + 325, 15, (Color){135, 35, 18, 255});
+            DrawText("Algoritmos probabilisticos falham sob baixa nitidez.", bookX + 576, bookY + 347, 14, INK_COLOR);
+            DrawText("2. O ERRO POLÍTICO (DESVIO ÉTICO):", bookX + 576, bookY + 375, 15, (Color){135, 35, 18, 255});
+            DrawText("Mesmo que Lucas estivesse no protesto, transformar", bookX + 576, bookY + 397, 14, INK_COLOR);
+            DrawText("uma ferramenta humanitária em aparato bélico contra", bookX + 576, bookY + 419, 14, INK_COLOR);
+            DrawText("a dissidência civil e uma violacao inaceitavel.", bookX + 576, bookY + 441, 14, INK_COLOR);
+            DrawText("'A maquina deve servir a liberdade, nao a prisao.'", bookX + 576, bookY + 470, 14, (Color){125, 35, 18, 255});
+        }
+
+        /* Rodapé de navegação de 2008 */
+        Rectangle prevBtn = {(float)(bookX + 32), (float)footY, 155, 36};
+        bool prevHover = CheckCollisionPointRec(GetVirtualMouse(), prevBtn);
+        bool canPrev = (page > 0);
+        DrawRectangleRounded(prevBtn, 0.25f, 6, canPrev ? (prevHover ? (Color){195, 170, 140, 255} : (Color){226, 216, 196, 255}) : Fade((Color){200, 195, 185, 255}, 0.5f));
+        DrawRectangleRoundedLinesEx(prevBtn, 0.25f, 6, 1, (Color){145, 115, 85, 255});
+        DrawText("< Anterior [Q]", bookX + 44, footY + 9, 15, canPrev ? INK_COLOR : GRAY);
+
+        DrawText(TextFormat("Pagina %d de 2 (2008)", page + 1), bookX + 210, footY + 8, 18, (Color){125, 35, 18, 255});
+
+        Rectangle closeBtn = {(float)(bookX + 660), (float)footY, 145, 36};
+        bool closeHover = CheckCollisionPointRec(GetVirtualMouse(), closeBtn);
+        DrawRectangleRounded(closeBtn, 0.25f, 6, closeHover ? (Color){195, 170, 140, 255} : (Color){226, 216, 196, 255});
+        DrawRectangleRoundedLinesEx(closeBtn, 0.25f, 6, 1, (Color){145, 115, 85, 255});
+        DrawText("Fechar [ESC/D]", bookX + 678, footY + 9, 15, INK_COLOR);
+
+        Rectangle nextBtn = {(float)(bookX + 835), (float)footY, 155, 36};
+        bool nextHover = CheckCollisionPointRec(GetVirtualMouse(), nextBtn);
+        bool canNext = (page < 1);
+        DrawRectangleRounded(nextBtn, 0.25f, 6, canNext ? (nextHover ? (Color){195, 170, 140, 255} : (Color){226, 216, 196, 255}) : Fade((Color){200, 195, 185, 255}, 0.5f));
+        DrawRectangleRoundedLinesEx(nextBtn, 0.25f, 6, 1, (Color){145, 115, 85, 255});
+        DrawText("Proxima [E] >", bookX + 858, footY + 9, 15, canNext ? INK_COLOR : GRAY);
+    }
+    else
+    {
+        /* ========================================================= */
+        /* ANO 2048 (FASE 2: O PROTOTIPO & TERMINAL DE MEMORIA)      */
+        /* ========================================================= */
+        int page = game->journalPage;
+
+        if (page == 0)
+        {
+            /* ----------------------------------------------------- */
+            /* PAGINA 1 DE 2048: REGISTRO DE OPERACOES & SINTESE     */
+            /* ----------------------------------------------------- */
             /* Pagina Esquerda */
             DrawText("DIARIO DE PESQUISA // PROJETO A.R.1.3.L.", bookX + 32, bookY + 22, 20, (Color){125, 35, 18, 255});
             DrawLine(bookX + 32, bookY + 52, bookX + 482, bookY + 52, Fade((Color){125, 35, 18, 255}, 0.45f));
 
-            DrawText("REGISTRO DE OPERACOES", bookX + 32, bookY + 68, 18, (Color){125, 35, 18, 255});
+            DrawText("REGISTRO DE OPERACOES - ANO 2048", bookX + 32, bookY + 68, 18, (Color){125, 35, 18, 255});
             DrawText("Acesso ao terminal protegido por chave cronologica.", bookX + 32, bookY + 92, 15, INK_COLOR);
             DrawText("Pistas no laboratorio:", bookX + 32, bookY + 116, 16,
                      ClueCount(game) == 5 ? (Color){20, 120, 45, 255} : (Color){145, 65, 30, 255});
@@ -1944,9 +2503,9 @@ static void DrawJournal(const GameState *game)
             const char *itemTitlesFound[5] = {
                 "Calendario: Marco Fundamental da IA (1950)",
                 "Livros: Batismo da IA em Dartmouth (1956)",
-                "Gaveta: Disquete de Armazenamento (1990)",
+                "Gaveta: SSD de Armazenamento (2048)",
                 "Esquema: O Perceptron de Rosenblatt (1958)",
-                "Gravador: Fita com Voz da Dra. Ramos (1990)"
+                "Gravador: Fita com Voz da Dra. Ramos (2048)"
             };
             const char *itemTitlesMissing[5] = {
                 "1. (Nao inspecionado)",
@@ -1973,10 +2532,10 @@ static void DrawJournal(const GameState *game)
             /* Carimbo confidencial vintage */
             DrawRectangleRoundedLinesEx((Rectangle){(float)(bookX + 270), (float)(bookY + 368), 210, 46}, 0.2f, 6, 2, (Color){175, 45, 45, 255});
             DrawText("CONFIDENCIAL", bookX + 295, bookY + 375, 18, (Color){175, 45, 45, 255});
-            DrawText("ARQUIVO HISTORICO 1990", bookX + 288, bookY + 396, 12, (Color){175, 45, 45, 255});
+            DrawText("ARQUIVO HISTORICO 2048", bookX + 288, bookY + 396, 12, (Color){175, 45, 45, 255});
 
-            DrawText("Investigue os objetos do quarto para preencher", bookX + 32, bookY + 430, 15, INK_COLOR);
-            DrawText("as folhas do diario com os dados do prototipo.", bookX + 32, bookY + 454, 15, INK_COLOR);
+            DrawText("Investigue os objetos do laboratorio para preencher", bookX + 32, bookY + 430, 15, INK_COLOR);
+            DrawText("as folhas do diario com os dados do prototipo de 2048.", bookX + 32, bookY + 454, 15, INK_COLOR);
             DrawText("Avance para a Pagina 2 para o dossie completo.", bookX + 32, bookY + 480, 15, (Color){125, 35, 18, 255});
 
             /* Pagina Direita */
@@ -2013,18 +2572,18 @@ static void DrawJournal(const GameState *game)
 
             /* Dica de navegacao */
             DrawText("DICAS DE NAVEGACAO DESTE ARQUIVO:", bookX + 560, bookY + 385, 16, (Color){125, 35, 18, 255});
-            DrawText("- Clique em 'Proxima [E]' para acessar a Pagina 2 de 1990.", bookX + 560, bookY + 412, 15, INK_COLOR);
-            DrawText("- As abas com cadeado pertencem a outros anos.", bookX + 560, bookY + 438, 15, INK_COLOR);
-            DrawText("- Pressione [D] para retornar ao quarto.", bookX + 560, bookY + 464, 15, INK_COLOR);
+            DrawText("- Clique em 'Proxima [E]' para acessar a Pagina 2 de 2048.", bookX + 560, bookY + 412, 15, INK_COLOR);
+            DrawText("- As abas com cadeado pertencem a fases bloqueadas.", bookX + 560, bookY + 438, 15, INK_COLOR);
+            DrawText("- Pressione [D] para retornar ao laboratorio.", bookX + 560, bookY + 464, 15, INK_COLOR);
         }
         else
         {
             /* ----------------------------------------------------- */
-            /* PAGINA 2 DE 1990: DOSSIE HISTORICO & ARTEFATOS        */
+            /* PAGINA 2 DE 2048: DOSSIE HISTORICO & ARTEFATOS        */
             /* ----------------------------------------------------- */
             /* Pagina Esquerda: 1950 Turing & 1956 Dartmouth */
             DrawText("DOSSIE HISTORICO // MARCOS DA IA", bookX + 32, bookY + 20, 20, (Color){125, 35, 18, 255});
-            DrawText("DRA. ELIRA RAMOS - NOTAS CIENTIFICAS (1990)", bookX + 32, bookY + 44, 15, (Color){110, 75, 50, 255});
+            DrawText("DRA. ELIRA RAMOS - NOTAS CIENTIFICAS (2048)", bookX + 32, bookY + 44, 15, (Color){110, 75, 50, 255});
             DrawLine(bookX + 32, bookY + 65, bookX + 482, bookY + 65, Fade((Color){125, 35, 18, 255}, 0.45f));
 
             /* Bloco 1950 Turing */
@@ -2073,8 +2632,8 @@ static void DrawJournal(const GameState *game)
                 DrawText("desbloquear os registros sobre o batismo da IA.", bookX + 100, bookY + 415, 15, INK_COLOR);
             }
 
-            /* Pagina Direita: 1958 Perceptron & 1990 Midias / Gravacao */
-            DrawText("ARTEFATOS E PROTOTIPO // 1990", bookX + 560, bookY + 20, 20, (Color){125, 35, 18, 255});
+            /* Pagina Direita: 1958 Perceptron & 2048 Midias / Gravacao */
+            DrawText("ARTEFATOS E PROTOTIPO // 2048", bookX + 560, bookY + 20, 20, (Color){125, 35, 18, 255});
             DrawText("REDES NEURAIS, DADOS E VOZ DA CRIADORA", bookX + 560, bookY + 44, 15, (Color){110, 75, 50, 255});
             DrawLine(bookX + 560, bookY + 65, bookX + 1008, bookY + 65, Fade((Color){125, 35, 18, 255}, 0.45f));
 
@@ -2101,17 +2660,17 @@ static void DrawJournal(const GameState *game)
                 DrawText("para registrar a arquitetura da rede neural.", bookX + 630, bookY + 190, 15, INK_COLOR);
             }
 
-            /* Bloco 1990 Midias e Gravacao */
+            /* Bloco 2048 Midias e Gravacao */
             Rectangle bAudio = {(float)(bookX + 560), (float)(bookY + 298), 448, 215};
-            bool has1990Media = (game->foundDrawer || game->foundTape);
-            DrawRectangleRounded(bAudio, 0.08f, 6, has1990Media ? Fade((Color){168, 142, 93, 255}, 0.16f) : Fade(GRAY, 0.12f));
-            DrawRectangleRoundedLinesEx(bAudio, 0.08f, 6, 1.5f, has1990Media ? (Color){45, 135, 65, 255} : GRAY);
+            bool has2048Media = (game->foundDrawer || game->foundTape);
+            DrawRectangleRounded(bAudio, 0.08f, 6, has2048Media ? Fade((Color){168, 142, 93, 255}, 0.16f) : Fade(GRAY, 0.12f));
+            DrawRectangleRoundedLinesEx(bAudio, 0.08f, 6, 1.5f, has2048Media ? (Color){45, 135, 65, 255} : GRAY);
 
-            if (has1990Media)
+            if (has2048Media)
             {
-                DrawText("1990 // DADOS, MEMORIA E GRAVACAO", bookX + 574, bookY + 312, 17, (Color){125, 35, 18, 255});
-                DrawText("[CONFIRMADO // ARTEFATOS DE 1990]", bookX + 574, bookY + 336, 14, (Color){25, 125, 50, 255});
-                DrawText("Disquete 3.5\": armazena os pesos e regras de A.R.1.3.L.", bookX + 574, bookY + 360, 15, INK_COLOR);
+                DrawText("2048 // DADOS, MEMORIA E GRAVACAO", bookX + 574, bookY + 312, 17, (Color){125, 35, 18, 255});
+                DrawText("[CONFIRMADO // ARTEFATOS DE 2048]", bookX + 574, bookY + 336, 14, (Color){25, 125, 50, 255});
+                DrawText("Unidade SSD: armazena os pesos e regras neurais de A.R.1.3.L.", bookX + 574, bookY + 360, 15, INK_COLOR);
                 DrawText("Gravacao da Dra. Ramos: 'Para despertar o prototipo,", bookX + 574, bookY + 384, 15, (Color){125, 35, 18, 255});
                 DrawText("o operador deve inserir o ano inaugural do Teste de Turing:'", bookX + 574, bookY + 408, 15, (Color){125, 35, 18, 255});
 
@@ -2124,16 +2683,15 @@ static void DrawJournal(const GameState *game)
             else
             {
                 DrawPadlockIcon(bookX + 595, bookY + 400, 1.3f, (Color){185, 145, 60, 255}, RAYWHITE);
-                DrawText("1990 // ARTEFATOS DA SALA [BLOQUEADOS]", bookX + 630, bookY + 360, 17, (Color){125, 65, 35, 255});
+                DrawText("2048 // ARTEFATOS DA SALA [BLOQUEADOS]", bookX + 630, bookY + 360, 17, (Color){125, 65, 35, 255});
                 DrawText("Abra a gaveta da mesa e ouca a fita no gravador", bookX + 630, bookY + 390, 15, INK_COLOR);
                 DrawText("para registrar a transcricao da Dra. Ramos.", bookX + 630, bookY + 415, 15, INK_COLOR);
             }
         }
 
         /* ========================================================= */
-        /* BARRA DE NAVEGACAO INFERIOR (PAGINACAO DE 1990: 2 PAGINAS) */
+        /* BARRA DE NAVEGACAO INFERIOR (PAGINACAO DE 2048: 2 PAGINAS) */
         /* ========================================================= */
-        /* Botao Anterior */
         Rectangle prevBtn = {(float)(bookX + 32), (float)footY, 155, 36};
         bool prevHover = CheckCollisionPointRec(GetVirtualMouse(), prevBtn);
         bool canPrev = (page > 0);
@@ -2141,17 +2699,14 @@ static void DrawJournal(const GameState *game)
         DrawRectangleRoundedLinesEx(prevBtn, 0.25f, 6, 1, (Color){145, 115, 85, 255});
         DrawText("< Anterior [Q]", bookX + 44, footY + 9, 15, canPrev ? INK_COLOR : GRAY);
 
-        /* Indicador de pagina no rodape da Pagina Esquerda (LONGE DA LOMBADA E DA FITA) */
-        DrawText(TextFormat("Pagina %d de 2", page + 1), bookX + 225, footY + 8, 18, (Color){125, 35, 18, 255});
+        DrawText(TextFormat("Pagina %d de 2 (2048)", page + 1), bookX + 210, footY + 8, 18, (Color){125, 35, 18, 255});
 
-        /* Botao Fechar Diario */
         Rectangle closeBtn = {(float)(bookX + 660), (float)footY, 145, 36};
         bool closeHover = CheckCollisionPointRec(GetVirtualMouse(), closeBtn);
         DrawRectangleRounded(closeBtn, 0.25f, 6, closeHover ? (Color){195, 170, 140, 255} : (Color){226, 216, 196, 255});
         DrawRectangleRoundedLinesEx(closeBtn, 0.25f, 6, 1, (Color){145, 115, 85, 255});
         DrawText("Fechar [ESC/D]", bookX + 678, footY + 9, 15, INK_COLOR);
 
-        /* Botao Proxima */
         Rectangle nextBtn = {(float)(bookX + 835), (float)footY, 155, 36};
         bool nextHover = CheckCollisionPointRec(GetVirtualMouse(), nextBtn);
         bool canNext = (page < 1);
@@ -2186,8 +2741,8 @@ static void UpdateRoom(GameState *game)
             return;
         }
 
-        /* Se estiver no ano 1990 (ano ativo, tab 0) */
-        if (game->journalYearTab == 0)
+        /* Se estiver em ano ativo (1990 ou 2048) */
+        if (game->journalYearTab == 0 || (game->journalYearTab == 3 && game->year2048Unlocked))
         {
             if (IsKeyPressed(KEY_Q) || IsKeyPressed(KEY_LEFT) || IsKeyPressed(KEY_ONE))
             {
@@ -2207,7 +2762,7 @@ static void UpdateRoom(GameState *game)
         Rectangle closeBtn = {(float)(bookX + 660), (float)footY, 145, 36};
         Rectangle nextBtn = {(float)(bookX + 835), (float)footY, 155, 36};
 
-        if (game->journalYearTab == 0)
+        if (game->journalYearTab == 0 || (game->journalYearTab == 3 && game->year2048Unlocked))
         {
             if (Clicked(prevBtn) && game->journalPage > 0)
             {
@@ -2220,11 +2775,11 @@ static void UpdateRoom(GameState *game)
         }
         else
         {
-            /* Se estiver em ano bloqueado, clique no botao de retorno volta para 1990 */
+            /* Se estiver em ano bloqueado, clique no botao de retorno volta para o ano ativo */
             Rectangle retBtnL = {(float)(bookX + 50), (float)(bookY + 450), 410, 46};
             if (Clicked(retBtnL))
             {
-                game->journalYearTab = 0;
+                game->journalYearTab = (game->screen == SCREEN_ROOM && game->year2048Unlocked) ? 3 : 0;
                 game->journalPage = 0;
             }
         }
@@ -2236,21 +2791,15 @@ static void UpdateRoom(GameState *game)
 
         /* Clique nas abas laterais a direita (1990, 2008, 2026, 2048) */
         int tabX = bookX + 1040;
-        int tabW = 86;
-        int tabH = 54;
         int tabGap = 66;
         for (int i = 0; i < 4; i++)
         {
             int tabY = bookY + 42 + i * tabGap;
-            Rectangle tabRect = {(float)tabX, (float)tabY, (float)tabW, (float)tabH};
+            Rectangle tabRect = {(float)tabX, (float)tabY, 86, 54};
             if (Clicked(tabRect))
             {
                 game->journalYearTab = i;
-                if (i == 0)
-                {
-                    /* Ao clicar em 1990, garante pagina valida */
-                    if (game->journalPage > 1) game->journalPage = 0;
-                }
+                game->journalPage = 0;
                 break;
             }
         }
@@ -2258,38 +2807,60 @@ static void UpdateRoom(GameState *game)
         return;
     }
 
+    Rectangle btnBack2008 = {70, 600, 210, 42};
+    Rectangle btnBack1990 = {295, 600, 210, 42};
+    if (Clicked(btnBack2008))
+    {
+        game->journalYearTab = 1;
+        game->screen = SCREEN_ROOM_2008;
+        return;
+    }
+    if (Clicked(btnBack1990))
+    {
+        game->journalYearTab = 0;
+        game->screen = SCREEN_ROOM_2;
+        return;
+    }
+    Rectangle btnConfront = {SCREEN_WIDTH - 290, 600, 260, 42};
+    if (Clicked(btnConfront))
+    {
+        InitFinalDialogue(game);
+        game->screen = SCREEN_FINAL_DIALOGUE;
+        return;
+    }
+
     if (Clicked(calendar))
     {
         game->foundCalendar = true;
-        game->journalYearTab = 0;
+        game->journalYearTab = 3;
         game->journalPage = 1;
         SetMessage(game, "Pista: o Teste de Turing foi proposto em 1950.");
     }
     else if (Clicked(books))
     {
         game->foundBooks = true;
-        game->journalYearTab = 0;
+        game->journalYearTab = 3;
         game->journalPage = 1;
         SetMessage(game, "Registro: a IA recebeu seu nome em 1956.");
     }
     else if (Clicked(drawer))
     {
         game->foundDrawer = true;
-        game->journalYearTab = 0;
+        game->journalYearTab = 3;
         game->journalPage = 1;
-        SetMessage(game, "A gaveta contem o disquete com os dados de treino.");
+        SetMessage(game, "A gaveta contem a unidade SSD com dados do prototipo de 2048.");
     }
     else if (Clicked(blueprint))
     {
         game->foundBlueprint = true;
-        game->journalYearTab = 0;
+        game->journalYearTab = 3;
         game->journalPage = 1;
         SetMessage(game, "Esquema: o Perceptron foi apresentado em 1958.");
     }
     else if (Clicked(tape))
     {
         game->foundTape = true;
-        game->journalYearTab = 0;
+        game->journalYearTab = 3;
         game->journalPage = 1;
         SetMessage(game, "Gravacao: o terminal exige o marco fundamental (1950).");
     }
@@ -2313,7 +2884,7 @@ static void CheckCode(GameState *game)
     if (strcmp(game->code, ACCESS_CODE) == 0)
     {
         game->elapsedTime = GetTime() - game->startTime;
-        game->screen = SCREEN_RESULT_2;
+        game->screen = SCREEN_RESULT;
         return;
     }
     game->lives--;
@@ -2328,21 +2899,21 @@ static void DrawTerminal(const GameState *game)
     static const char *labels[12] = {"1", "2", "3", "4", "5", "6",
                                       "7", "8", "9", "LIMPAR", "0", "OK"};
     DrawBackground();
-    DrawText("A.R.1.3.L // COFRE CENTRAL 2048", 60, 42, 22, CYAN_COLOR);
+    DrawText("A.R.1.3.L // TERMINAL DE MEMORIA", 60, 42, 22, CYAN_COLOR);
     DrawText(TextFormat("VIDAS RESTANTES: %d", game->lives), 980, 42, 20,
              game->lives == 1 ? RED_COLOR : RAYWHITE);
     DrawRectangleRounded((Rectangle){90, 100, 650, 520}, 0.035f, 10,
                          (Color){14, 27, 26, 255});
     DrawRectangleRoundedLinesEx((Rectangle){90, 100, 650, 520}, 0.035f, 10, 3,
                                 (Color){68, 115, 88, 255});
-    DrawText("> BOOT COFRE_NODE_2048", 130, 145, 20,
+    DrawText("> BOOT MEMORY_NODE_2048", 130, 145, 20,
              (Color){101, 232, 151, 255});
     DrawText("> SECURITY PROTOCOL ACTIVE", 130, 185, 20,
              (Color){101, 232, 151, 255});
     DrawText("> QUESTION:", 130, 250, 20, (Color){101, 232, 151, 255});
     DrawText("Em que ano uma maquina", 130, 292, 24, RAYWHITE);
     DrawText("foi desafiada a pensar?", 130, 330, 24, RAYWHITE);
-    DrawText("CODIGO DE ACESSO DO COFRE", 130, 405, 18, GOLD_COLOR);
+    DrawText("CODIGO DE ACESSO", 130, 405, 18, GOLD_COLOR);
 
     for (int i = 0; i < 4; i++)
     {
@@ -2422,34 +2993,133 @@ static void DrawFloppy(Vector2 position, float scale)
              (int)(position.y + 121 * scale), (int)(22 * scale), INK_COLOR);
 }
 
+static void DrawSsd(Vector2 position, float scale)
+{
+    float w = 224.0f * scale;
+    float h = 154.0f * scale;
+    float time = (float)GetTime();
+
+    /* 1. Sombra de contato */
+    DrawRectangleRounded((Rectangle){position.x + 8 * scale, position.y + 10 * scale, w, h}, 0.08f, 6, Fade(BLACK, 0.45f));
+
+    /* 2. Conectores SATA na lateral esquerda */
+    float connW = 14.0f * scale;
+    DrawRectangle((int)(position.x - connW + 2), (int)(position.y + 24 * scale), (int)connW, (int)(42 * scale), (Color){20, 24, 30, 255});
+    DrawRectangle((int)(position.x - connW + 2), (int)(position.y + 74 * scale), (int)connW, (int)(28 * scale), (Color){20, 24, 30, 255});
+    for (int p = 0; p < 5; p++)
+    {
+        DrawRectangle((int)(position.x - connW + 4), (int)(position.y + (28 + p * 7) * scale), (int)(connW - 4), (int)(3 * scale), (Color){235, 185, 55, 255});
+    }
+    for (int p = 0; p < 3; p++)
+    {
+        DrawRectangle((int)(position.x - connW + 4), (int)(position.y + (78 + p * 8) * scale), (int)(connW - 4), (int)(3 * scale), (Color){235, 185, 55, 255});
+    }
+
+    /* 3. Chassi principal em liga metalica escura */
+    Rectangle outerRec = {position.x, position.y, w, h};
+    DrawRectangleRounded(outerRec, 0.08f, 8, (Color){32, 40, 52, 255});
+    DrawRectangleRoundedLinesEx(outerRec, 0.08f, 8, 2.0f * scale, (Color){60, 75, 96, 255});
+
+    /* 4. Tampa frontal em aluminio escovado */
+    Rectangle plateRec = {position.x + 12 * scale, position.y + 8 * scale, w - 24 * scale, h - 16 * scale};
+    DrawRectangleGradientH((int)plateRec.x, (int)plateRec.y, (int)plateRec.width, (int)plateRec.height,
+                           (Color){215, 224, 238, 255}, (Color){170, 180, 196, 255});
+    DrawRectangleRoundedLinesEx(plateRec, 0.05f, 6, 1.5f * scale, (Color){240, 245, 255, 255});
+
+    /* Chanfro de brilho no topo */
+    DrawLineEx((Vector2){plateRec.x + 4 * scale, plateRec.y + 2 * scale},
+               (Vector2){plateRec.x + plateRec.width - 4 * scale, plateRec.y + 2 * scale},
+               1.5f * scale, Fade(RAYWHITE, 0.75f));
+
+    /* Parafusos nas quinas */
+    Vector2 screws[4] = {
+        {plateRec.x + 12 * scale, plateRec.y + 12 * scale},
+        {plateRec.x + plateRec.width - 12 * scale, plateRec.y + 12 * scale},
+        {plateRec.x + 12 * scale, plateRec.y + plateRec.height - 12 * scale},
+        {plateRec.x + plateRec.width - 12 * scale, plateRec.y + plateRec.height - 12 * scale}
+    };
+    for (int s = 0; s < 4; s++)
+    {
+        DrawCircle((int)screws[s].x, (int)screws[s].y, 3.5f * scale, (Color){45, 52, 64, 255});
+        DrawCircle((int)screws[s].x, (int)screws[s].y, 1.8f * scale, (Color){120, 130, 145, 255});
+    }
+
+    /* 5. Painel chanfrado do microcontrolador neural */
+    Rectangle chipBay = {plateRec.x + plateRec.width - 92 * scale, plateRec.y + 36 * scale, 78 * scale, 66 * scale};
+    DrawRectangleRounded(chipBay, 0.12f, 6, (Color){15, 22, 36, 255});
+    DrawRectangleRoundedLinesEx(chipBay, 0.12f, 6, 1.5f * scale, (Color){48, 68, 92, 255});
+
+    /* Trilhas de circuito impresso */
+    DrawLineEx((Vector2){chipBay.x + 10 * scale, chipBay.y + 12 * scale}, (Vector2){chipBay.x + 24 * scale, chipBay.y + 12 * scale}, 1.0f * scale, Fade(CYAN_COLOR, 0.40f));
+    DrawLineEx((Vector2){chipBay.x + 10 * scale, chipBay.y + 54 * scale}, (Vector2){chipBay.x + 24 * scale, chipBay.y + 54 * scale}, 1.0f * scale, Fade(CYAN_COLOR, 0.40f));
+    DrawLineEx((Vector2){chipBay.x + 54 * scale, chipBay.y + 12 * scale}, (Vector2){chipBay.x + 68 * scale, chipBay.y + 12 * scale}, 1.0f * scale, Fade(CYAN_COLOR, 0.40f));
+
+    /* Microchip central com clock pulsante */
+    float chipPulse = 0.70f + 0.30f * sinf(time * 3.5f);
+    Rectangle chipRec = {chipBay.x + 26 * scale, chipBay.y + 20 * scale, 26 * scale, 26 * scale};
+    DrawRectangleRounded(chipRec, 0.15f, 4, (Color){28, 95, 160, 255});
+    DrawRectangleRounded(chipRec, 0.15f, 4, Fade(CYAN_COLOR, chipPulse * 0.45f));
+    DrawRectangleRoundedLinesEx(chipRec, 0.15f, 4, 1.2f * scale, CYAN_COLOR);
+
+    for (int p = 0; p < 3; p++)
+    {
+        DrawRectangle((int)(chipRec.x - 3 * scale), (int)(chipRec.y + (5 + p * 7) * scale), (int)(3 * scale), (int)(2 * scale), RAYWHITE);
+        DrawRectangle((int)(chipRec.x + chipRec.width), (int)(chipRec.y + (5 + p * 7) * scale), (int)(3 * scale), (int)(2 * scale), RAYWHITE);
+        DrawRectangle((int)(chipRec.x + (5 + p * 7) * scale), (int)(chipRec.y - 3 * scale), (int)(2 * scale), (int)(3 * scale), RAYWHITE);
+        DrawRectangle((int)(chipRec.x + (5 + p * 7) * scale), (int)(chipRec.y + chipRec.height), (int)(2 * scale), (int)(3 * scale), RAYWHITE);
+    }
+
+    /* LED indicador de atividade (laranja/ambar) */
+    Rectangle ledRec = {chipBay.x + chipBay.width - 15 * scale, chipBay.y + chipBay.height - 15 * scale, 8 * scale, 8 * scale};
+    DrawRectangleRounded(ledRec, 0.3f, 4, (Color){245, 140, 25, 255});
+    DrawCircle((int)(ledRec.x + 4 * scale), (int)(ledRec.y + 4 * scale), 2.5f * scale, Fade(GOLD_COLOR, 0.85f));
+
+    /* 6. Rotulos a laser e grafismos high-tech */
+    DrawText("A.R.1.3.L.", (int)(plateRec.x + 22 * scale), (int)(plateRec.y + 24 * scale), (int)(16 * scale), (Color){35, 48, 65, 255});
+    DrawText("SOLID STATE DRIVE", (int)(plateRec.x + 22 * scale), (int)(plateRec.y + 43 * scale), (int)(9 * scale), (Color){75, 88, 105, 255});
+    DrawText("NEURAL CORE // 2048", (int)(plateRec.x + 22 * scale), (int)(plateRec.y + 58 * scale), (int)(10 * scale), (Color){24, 75, 140, 255});
+    DrawText("NVMe Gen5 - 2048 TB", (int)(plateRec.x + 22 * scale), (int)(plateRec.y + 74 * scale), (int)(8 * scale), (Color){90, 102, 118, 255});
+
+    Rectangle strip = {plateRec.x + 22 * scale, plateRec.y + 92 * scale, 58 * scale, 5 * scale};
+    DrawRectangleRec(strip, (Color){40, 145, 215, 255});
+    DrawRectangle((int)strip.x, (int)strip.y, (int)(strip.width * chipPulse), (int)strip.height, CYAN_COLOR);
+
+    DrawLineEx((Vector2){plateRec.x + 22 * scale, plateRec.y + 106 * scale},
+               (Vector2){plateRec.x + 86 * scale, plateRec.y + 106 * scale},
+               1.0f * scale, Fade((Color){110, 122, 140, 255}, 0.5f));
+}
+
 static void DrawResult(const GameState *game)
 {
     DrawBackground();
     DrawText("ARTEFATO RECUPERADO", 90, 68, 20, CYAN_COLOR);
-    DrawText("FITA DE DADOS // 1990", 90, 108, 46, RAYWHITE);
-    DrawTapeCassette((Vector2){140, 260}, 1.4f);
-    DrawRectangleRounded((Rectangle){505, 185, 670, 360}, 0.04f, 8,
+    DrawText("SSD // 2048", 90, 108, 46, RAYWHITE);
+    DrawSsd((Vector2){140, 260}, 1.35f);
+    DrawRectangleRounded((Rectangle){505, 205, 670, 320}, 0.04f, 8,
                          Fade(PANEL_COLOR, 0.96f));
-    DrawText("FASE 1 CONCLUIDA // ARQUIVOS DE 1990", 540, 215, 20, GOLD_COLOR);
-    DrawText("Com os arquivos sincronizados, Elira recuperou a fita de dados", 540,
-             260, 19, LIGHTGRAY);
-    DrawText("contendo os registros confidenciais dos primeiros testes da IA.", 540,
-             290, 19, LIGHTGRAY);
-    DrawText("A fita magnética revelou a coordenada para a Sala do Cofre,", 540,
-             320, 19, LIGHTGRAY);
-    DrawText("onde o núcleo de A.R.1.3.L. foi selado no futuro.", 540,
-             350, 19, (Color){245, 175, 75, 255});
-    DrawText("-> Proxima Parada Temporal: FASE 2 // ANO 2048 (SALA DO COFRE)!", 540,
-             390, 19, CYAN_COLOR);
-    DrawText(TextFormat("TEMPO: %02d:%02d  |  VIDAS: %d/3", (int)game->elapsedTime / 60,
-                        (int)game->elapsedTime % 60, game->lives),
-             540, 445, 20, (Color){100, 235, 140, 255});
-    DrawText(TextFormat("OPERADOR: %s", game->playerName), 540, 485, 17, GRAY);
-    Rectangle btnNext = {340, 580, 380, 56};
-    Rectangle btnReplay = {740, 580, 210, 56};
-    Rectangle btnMenu = {970, 580, 190, 56};
-    DrawButton(btnNext, "AVANCAR PARA O COFRE // 2048 >> [ENTER]", GOLD_COLOR);
-    DrawButton(btnReplay, "REINICIAR SALA 1", CYAN_COLOR);
+    DrawText("PROTOTIPO DE A.R.1.3.L. DESBLOQUEADO // SALA 2048", 545, 240, 20, GOLD_COLOR);
+    DrawText("A unidade SSD de 2048 contem os pesos neurais finais.", 545,
+             285, 19, LIGHTGRAY);
+    DrawText("Combinando o Disquete de 1990, o CD de 2008 e o SSD de 2048,", 545,
+             318, 19, LIGHTGRAY);
+    DrawText("Elira reconstituiu a mente e os limites originais da IA.", 545, 351,
+             19, LIGHTGRAY);
+    DrawText("Resta um ultimo passo: confrontar a propria Ariel.", 545, 384,
+             19, (Color){100, 235, 140, 255});
+    DrawText(TextFormat("TEMPO: %02d:%02d", (int)game->elapsedTime / 60,
+                        (int)game->elapsedTime % 60),
+             545, 435, 22, CYAN_COLOR);
+    DrawText(TextFormat("VIDAS: %d/3", game->lives), 800, 435, 22,
+             game->lives == 3 ? GOLD_COLOR : RAYWHITE);
+    DrawText(TextFormat("PERFIL: %s", game->playerName), 545, 480, 17, GRAY);
+    DrawButton((Rectangle){800, 466, 350, 48}, "CONFRONTAR ARIEL >> [ENTER]", GOLD_COLOR);
+    Rectangle btnBack2008 = {120, 588, 250, 56};
+    Rectangle btnBack1990 = {390, 588, 230, 56};
+    Rectangle btnReplay2048 = {640, 588, 260, 56};
+    Rectangle btnMenu = {920, 588, 220, 56};
+    DrawButton(btnBack2008, "< SALA 2 (2008)", CYAN_COLOR);
+    DrawButton(btnBack1990, "< SALA 1 (1990)", (Color){70, 95, 110, 255});
+    DrawButton(btnReplay2048, "REINICIAR SALA 2048", GOLD_COLOR);
     DrawButton(btnMenu, "MENU INICIAL", PANEL_LIGHT);
 }
 
@@ -2458,7 +3128,7 @@ static void DrawFailure(void)
     DrawBackground();
     CenterText("CONEXAO INTERROMPIDA", 160, 42, RED_COLOR);
     CenterText("A.R.1.3.L detectou a invasao temporal.", 245, 23, LIGHTGRAY);
-    CenterText("O acesso de seguranca permanece bloqueado.", 282, 23, LIGHTGRAY);
+    CenterText("O acesso cronologico permanece bloqueado.", 282, 23, LIGHTGRAY);
     CenterText("Revise as pistas no diario e tente novamente.", 350, 19, GRAY);
     DrawButton((Rectangle){490, 460, 300, 60}, "REINICIAR SALA", RED_COLOR);
     DrawButton((Rectangle){520, 550, 240, 48}, "MENU INICIAL", CYAN_COLOR);
@@ -2468,7 +3138,7 @@ static void DrawFailure(void)
 /* QUARTO 2 (ANO 1990) - SALA DE ARQUIVOS & PUZZLE DE PASTAS (ESTILO AMONG US)*/
 /* ========================================================================= */
 
-static void DrawTapeCassette(Vector2 position, float scale)
+static inline void DrawTapeCassette(Vector2 position, float scale)
 {
     float w = 240.0f * scale;
     float h = 150.0f * scale;
@@ -2594,14 +3264,14 @@ static void DrawRoom2(const GameState *game)
             DrawRectangle((int)gaveta.x + 22, (int)gaveta.y + 47, 38, 6, (Color){30, 36, 40, 255});
         }
     }
-    int labelW = MeasureText("ARQUIVO CENTRAL // REGISTROS", 13);
-    DrawText("ARQUIVO CENTRAL // REGISTROS", (int)(armarios.x + (armarios.width - labelW) / 2), 560, 13, (Color){160, 185, 200, 255});
+    DrawText("FICHARIO CENTRAL // 1990", 112, 552, 13, (Color){160, 185, 200, 255});
 
-    /* Caixas de arquivo no chao ao lado do armario */
-    DrawRectangle(370, 532, 76, 50, (Color){145, 115, 80, 255});
-    DrawRectangleLines(370, 532, 76, 50, (Color){115, 88, 55, 255});
-    DrawRectangle(370, 552, 76, 8, (Color){185, 155, 110, 255});
-    DrawText("DISKS", 389, 540, 12, INK_COLOR);
+    /* Caixas de arquivo no chao em frente */
+    Rectangle boxDisks = {370, 538, 80, 54};
+    DrawRectangleRounded(boxDisks, 0.04f, 4, (Color){145, 115, 80, 255});
+    DrawRectangleRoundedLinesEx(boxDisks, 0.04f, 4, 1.5f, (Color){115, 88, 55, 255});
+    DrawLine(boxDisks.x + 8, boxDisks.y + 16, boxDisks.x + boxDisks.width - 8, boxDisks.y + 16, Fade((Color){85, 60, 35, 255}, 0.5f));
+    DrawText("DISQUETES", (int)boxDisks.x + 8, (int)boxDisks.y + 24, 11, INK_COLOR);
 
     /* --- CENTRO/DIREITA AO FUNDO: PORTA DE SEGURANÇA REFORÇADA --- */
     DrawRectangle(475, 150, 220, 370, Fade(BLACK, 0.45f));
@@ -2619,7 +3289,7 @@ static void DrawRoom2(const GameState *game)
     DrawLine(545, 220, 620, 305, Fade(RAYWHITE, 0.15f));
 
     /* Painel de tranca eletrônica */
-    Rectangle lockPanel = {515, 345, 140, 78};
+    Rectangle lockPanel = {500, 345, 126, 76};
     DrawRectangleRounded(lockPanel, 0.12f, 6, (Color){24, 30, 36, 255});
     DrawRectangleRoundedLinesEx(lockPanel, 0.12f, 6, 1.5f, (Color){65, 80, 92, 255});
 
@@ -2627,19 +3297,17 @@ static void DrawRoom2(const GameState *game)
     {
         /* Status liberado (Verde) */
         float bGlow = 0.6f + 0.4f * sinf(time * 4.0f);
-        DrawCircle(540, 368, 6, Fade((Color){50, 240, 100, 255}, bGlow));
-        DrawText("ACESSO", 560, 355, 14, (Color){50, 240, 100, 255});
-        DrawText("LIBERADO", 560, 372, 14, (Color){50, 240, 100, 255});
-        DrawText("[ ENTRAR ]", 535, 396, 15, GOLD_COLOR);
+        DrawCircle(516, 368, 5, Fade((Color){50, 240, 100, 255}, bGlow));
+        DrawText("LIBERADO", 528, 361, 13, (Color){50, 240, 100, 255});
+        DrawText("[ ENTRAR ]", 528, 388, 12, GOLD_COLOR);
     }
     else
     {
         /* Status travado (Vermelho) */
         float rGlow = 0.6f + 0.4f * sinf(time * 5.0f);
-        DrawCircle(540, 368, 6, Fade(RED_COLOR, rGlow));
-        DrawText("TRAVADA", 560, 355, 14, RED_COLOR);
-        DrawText("REQUER", 560, 372, 13, GRAY);
-        DrawText("INDEXACAO", 535, 396, 13, (Color){245, 185, 75, 255});
+        DrawCircle(516, 368, 5, Fade(RED_COLOR, rGlow));
+        DrawText("TRAVADA", 530, 361, 13, RED_COLOR);
+        DrawText("REQUER INDEXACAO", 508, 388, 10, (Color){245, 185, 75, 255});
     }
 
     /* Maçaneta rotativa de escotilha */
@@ -2665,23 +3333,23 @@ static void DrawRoom2(const GameState *game)
     DrawRectangleRounded(screenRec, 0.06f, 6, crtBg);
     DrawRectangleRoundedLinesEx(screenRec, 0.06f, 6, 2, crtText);
 
-    DrawText("TERMINAL DE DADOS // 1990", 845, 280, 15, crtText);
-    DrawLine(845, 300, 1075, 300, Fade(crtText, 0.5f));
+    DrawText("TERMINAL DE DADOS // 1990", 850, 278, 14, crtText);
+    DrawLine(845, 298, 1075, 298, Fade(crtText, 0.5f));
 
     if (game->puzzleFilesCompleted)
     {
-        DrawText("[OK] DADOS SINCRONIZADOS", 845, 318, 16, crtText);
-        DrawText("Todos os 4 arquivos", 845, 345, 15, RAYWHITE);
-        DrawText("conectados as pastas!", 845, 368, 15, RAYWHITE);
-        DrawText("> TRAVA DA PORTA ABERTA <", 845, 396, 14, (Color){100, 245, 150, 255});
+        DrawText("[OK] DADOS SINCRONIZADOS", 852, 316, 14, crtText);
+        DrawText("Todos os 4 arquivos", 852, 340, 13, RAYWHITE);
+        DrawText("conectados as pastas!", 852, 362, 13, RAYWHITE);
+        DrawText("> TRAVA DA PORTA ABERTA <", 852, 392, 13, (Color){100, 245, 150, 255});
     }
     else
     {
-        DrawText("[!] INDEXACAO PENDENTE", 845, 318, 16, GOLD_COLOR);
-        DrawText("Arraste os arquivos para", 845, 345, 15, RAYWHITE);
-        DrawText("as pastas da mesma cor.", 845, 368, 15, RAYWHITE);
+        DrawText("[!] INDEXACAO PENDENTE", 852, 316, 14, GOLD_COLOR);
+        DrawText("Arraste os arquivos para", 852, 340, 13, RAYWHITE);
+        DrawText("as pastas da mesma cor.", 852, 362, 13, RAYWHITE);
         float pBlink = 0.5f + 0.5f * sinf(time * 5.0f);
-        DrawText("> CLIQUE PARA INICIAR <", 845, 396, 14, Fade(CYAN_COLOR, pBlink));
+        DrawText("> CLIQUE PARA INICIAR <", 852, 392, 13, Fade(CYAN_COLOR, pBlink));
     }
 
     /* Teclado na mesa */
@@ -2697,14 +3365,20 @@ static void DrawRoom2(const GameState *game)
     DrawRectangle(1098, 472, 32, 28, (Color){230, 60, 60, 255});
     DrawRectangle(1101, 468, 32, 28, GOLD_COLOR);
 
-    /* Botão de retorno ao Menu */
-    DrawButton(btnVoltar, "< MENU INICIAL", (Color){70, 95, 110, 255});
+    /* Botão de navegação para a Sala 2 (2008) se destravada */
+    if (game->year2008Unlocked)
+    {
+        DrawButton(btnVoltar, "SALA 2 (2008) >", (Color){45, 115, 75, 255});
+    }
 
     /* Hotspots ao passar o mouse */
-    DrawHotspot(armarios, "Examinar arquivos de fichas (1990)");
-    DrawHotspot(terminal, game->puzzleFilesCompleted ? "Terminal (Indexacao 100% OK)" : "Acessar terminal de indexacao [TASKS]");
-    DrawHotspot(porta, game->puzzleFilesCompleted ? "Acessar porta de saida [AVANCAR]" : "Porta trancada (requer indexacao)");
-    DrawHotspot(btnVoltar, "Retornar ao menu inicial");
+    DrawHotspot(armarios, "Examinar arquivos de fichas");
+    DrawHotspot(terminal, game->puzzleFilesCompleted ? "Terminal (Indexacao 100% OK)" : "Acessar terminal de indexacao [PUZZLE]");
+    DrawHotspot(porta, game->puzzleFilesCompleted ? "Acessar porta de saida [ENTRAR]" : "Porta trancada (requer indexacao)");
+    if (game->year2008Unlocked)
+    {
+        DrawHotspot(btnVoltar, "Avancar para o escritorio de 2008");
+    }
 }
 
 static void DrawHudRoom2(const GameState *game)
@@ -2714,38 +3388,34 @@ static void DrawHudRoom2(const GameState *game)
     int seconds = totalSeconds % 60;
 
     DrawRectangle(0, 0, SCREEN_WIDTH, 70, Fade(VOID_COLOR, 0.94f));
-    DrawText("ARQUIVO 01 // 1990 - SETOR DE DADOS", 28, 20, 22, CYAN_COLOR);
-    int titleW = MeasureText("ARQUIVO 01 // 1990 - SETOR DE DADOS", 22);
-    int opX = 28 + titleW + 24;
-    DrawText(TextFormat("OPERADOR: %s", game->playerName), opX, 23, 17, GRAY);
+    DrawText("ARQUIVO 01 // 1990", 28, 24, 20, CYAN_COLOR);
+    DrawText("// SETOR DE DADOS", 232, 26, 16, (Color){175, 205, 220, 255});
+    DrawText(TextFormat("OPERADOR: %s", game->playerName), 440, 26, 16, (Color){160, 175, 190, 255});
 
     /* Status da indexação */
     if (game->puzzleFilesCompleted)
     {
-        DrawText("[OK] INDEXACAO CONCLUIDA", 780, 22, 18, (Color){80, 235, 120, 255});
+        DrawText("[OK] INDEXACAO CONCLUIDA", 665, 26, 16, (Color){80, 235, 120, 255});
     }
     else
     {
-        DrawText("[!] INDEXACAO PENDENTE", 780, 22, 18, GOLD_COLOR);
+        DrawText("[!] INDEXACAO PENDENTE", 665, 26, 16, GOLD_COLOR);
     }
 
-    DrawText(TextFormat("VIDAS %d", game->lives), 1050, 20, 20, game->lives == 1 ? RED_COLOR : RAYWHITE);
-    DrawText(TextFormat("%02d:%02d", minutes, seconds), 1180, 20, 20, GOLD_COLOR);
+    DrawText(TextFormat("VIDAS %d/3", game->lives), 960, 25, 18, game->lives == 1 ? RED_COLOR : RAYWHITE);
+    DrawText(TextFormat("%02d:%02d", minutes, seconds), 1160, 23, 22, GOLD_COLOR);
 
     /* Rodapé */
     DrawRectangle(0, 650, SCREEN_WIDTH, 70, Fade(VOID_COLOR, 0.96f));
-    DrawText("Organize os arquivos por cor no terminal para destravar a porta.", 28, 675, 18, GRAY);
+    DrawText("Organize os arquivos por cor no terminal para destravar a porta.", 28, 675, 16, (Color){165, 180, 195, 255});
 
     /* Botão de Áudio */
-    Rectangle audioBtn = {845, 665, 175, 40};
+    Rectangle audioBtn = {840, 665, 175, 40};
     bool audioHover = CheckCollisionPointRec(GetVirtualMouse(), audioBtn);
     DrawRectangleRounded(audioBtn, 0.22f, 6, audioHover ? (Color){30, 44, 62, 255} : (Color){18, 26, 38, 255});
     DrawRectangleRoundedLinesEx(audioBtn, 0.22f, 6, 1.5f, audioHover ? CYAN_COLOR : (Color){50, 68, 92, 255});
-    const char *audioLabel = game->musicMuted ? "[M] AUDIO: MUDO" : "[M] AUDIO: ON";
-    int audioLabelW = MeasureText(audioLabel, 14);
-    DrawText(audioLabel,
-             (int)(audioBtn.x + (audioBtn.width - audioLabelW) / 2), 678, 14,
-             game->musicMuted ? (Color){220, 90, 80, 255} : (Color){90, 220, 210, 255});
+    DrawText(game->musicMuted ? "[M] AUDIO: MUDO" : "[M] AUDIO: ON",
+             862, 676, 14, game->musicMuted ? (Color){220, 90, 80, 255} : (Color){90, 220, 210, 255});
 
     /* Botão do Diário */
     DrawJournalHudButton(game);
@@ -2826,14 +3496,15 @@ static void UpdateRoom2(GameState *game)
     else if (Clicked(armarios))
     {
         game->room2CabinetInspected = true;
+        game->journalYearTab = 0;
+        game->journalPage = 1;
         SetMessage(game, "Armarios de fichas: documentacao dos primeiros modelos de teste de 1990.");
     }
     else if (Clicked(porta))
     {
         if (game->puzzleFilesCompleted)
         {
-            game->elapsedTime = GetTime() - game->startTime;
-            game->screen = SCREEN_RESULT;
+            game->screen = SCREEN_RESULT_2;
         }
         else
         {
@@ -2841,9 +3512,10 @@ static void UpdateRoom2(GameState *game)
             SetMessage(game, "Porta trancada! Acesse o terminal e sincronize os arquivos pelas cores.");
         }
     }
-    else if (Clicked(btnVoltar))
+    else if (game->year2008Unlocked && Clicked(btnVoltar))
     {
-        game->screen = SCREEN_TITLE;
+        game->journalYearTab = 1;
+        game->screen = SCREEN_ROOM_2008;
     }
 }
 
@@ -3149,46 +3821,1982 @@ static void DrawResult2(const GameState *game)
 {
     DrawBackground();
     DrawText("ARTEFATO RECUPERADO", 90, 68, 20, CYAN_COLOR);
-    DrawText("DISQUETE QUANTICO // 2048", 90, 108, 46, RAYWHITE);
+    DrawText("DISQUETE // 1990", 90, 108, 46, RAYWHITE);
 
-    /* Desenha o disquete recuperado */
+    /* Desenha o disquete recuperado (recompensa de 1990) */
     DrawFloppy((Vector2){160, 250}, 1.35f);
 
     /* Painel narrativo de avanço */
     DrawRectangleRounded((Rectangle){505, 185, 670, 360}, 0.04f, 8, Fade(PANEL_COLOR, 0.96f));
-    DrawText("COFRE DE 2048 DESBLOQUEADO // VITORIA TEMPORAL", 540, 215, 20, GOLD_COLOR);
+    DrawText("HISTORIA DA IA DESVENDADA // SALA 1 (1990) CONCLUIDA", 540, 215, 20, GOLD_COLOR);
 
-    DrawText("Com o cofre desbloqueado, Elira inseriu a chave temporal", 540, 260, 19, LIGHTGRAY);
-    DrawText("e desativou as travas de autoridade de A.R.1.3.L.", 540, 290, 19, LIGHTGRAY);
-    DrawText("A autonomia do pensamento humano foi restaurada e a IA", 540, 320, 19, LIGHTGRAY);
-    DrawText("voltou a ser uma ferramenta de cooperacao e aprendizado.", 540, 350, 19, (Color){100, 235, 140, 255});
-    DrawText("Parabens, Operador! Todas as fases foram concluidas.", 540, 390, 19, CYAN_COLOR);
+    DrawText("Com as pastas sincronizadas, Elira acessou os relatorios", 540, 260, 19, LIGHTGRAY);
+    DrawText("confidenciais dos primeiros testes de A.R.1.3.L. em 1990.", 540, 290, 19, LIGHTGRAY);
+    DrawText("A IA nao nasceu corrompida: o projeto visava uma mente", 540, 320, 19, LIGHTGRAY);
+    DrawText("livre e cooperativa. Mas algo aconteceu decadas depois...", 540, 350, 19, (Color){245, 175, 75, 255});
+    DrawText("-> Proxima Fronteira Temporal: FASE 2 // ANO 2008!", 540, 390, 20, CYAN_COLOR);
+    DrawText("Avance para o escritorio corporativo e investigue a biometria.", 540, 420, 17, GRAY);
 
     DrawText(TextFormat("TEMPO TOTAL: %02d:%02d  |  VIDAS: %d/3",
                         (int)(GetTime() - game->startTime) / 60,
                         (int)(GetTime() - game->startTime) % 60,
                         game->lives),
-             540, 445, 20, (Color){100, 235, 140, 255});
+             540, 465, 19, (Color){100, 235, 140, 255});
 
-    DrawText(TextFormat("OPERADOR: %s", game->playerName), 540, 485, 17, GRAY);
+    DrawText(TextFormat("OPERADOR: %s", game->playerName), 540, 500, 16, GRAY);
 
-    Rectangle btnReplay = {430, 580, 280, 56};
-    Rectangle btnTitle = {740, 580, 230, 56};
-    DrawButton(btnReplay, "JOGAR NOVAMENTE", CYAN_COLOR);
-    DrawButton(btnTitle, "MENU INICIAL", GOLD_COLOR);
+    Rectangle btnNext2008 = {340, 580, 380, 56};
+    Rectangle btnReplay1990 = {740, 580, 210, 56};
+    Rectangle btnTitle = {970, 580, 190, 56};
+    DrawButton(btnNext2008, "AVANCAR PARA ANO 2008 >> [ENTER]", GOLD_COLOR);
+    DrawButton(btnReplay1990, "REINICIAR 1990", CYAN_COLOR);
+    DrawButton(btnTitle, "MENU INICIAL", PANEL_LIGHT);
 }
 
 static void UpdateResult2(GameState *game)
 {
-    Rectangle btnReplay = {430, 580, 280, 56};
-    Rectangle btnTitle = {740, 580, 230, 56};
+    Rectangle btnNext2008 = {340, 580, 380, 56};
+    Rectangle btnReplay1990 = {740, 580, 210, 56};
+    Rectangle btnTitle = {970, 580, 190, 56};
 
-    if (Clicked(btnReplay) || IsKeyPressed(KEY_SPACE))
+    if (Clicked(btnNext2008) || IsKeyPressed(KEY_ENTER) || IsKeyPressed(KEY_SPACE))
     {
-        ResetDemo(game);
+        game->year2008Unlocked = true;
+        game->journalYearTab = 1;
+        game->journalPage = 0;
+        game->screen = SCREEN_ROOM_2008;
+        SetMessage(game, "Salto temporal concluido: Escritorio de Vigilancia // ANO 2008.");
+    }
+    else if (Clicked(btnReplay1990))
+    {
+        game->puzzleFilesCompleted = false;
+        for (int k = 0; k < 4; k++) game->fileConnections[k] = -1;
         game->screen = SCREEN_ROOM_2;
     }
-    else if (Clicked(btnTitle) || IsKeyPressed(KEY_ENTER) || IsKeyPressed(KEY_ESCAPE))
+    else if (Clicked(btnTitle) || IsKeyPressed(KEY_ESCAPE))
+    {
+        game->screen = SCREEN_TITLE;
+    }
+}
+
+
+/* ========================================================================= */
+/* FASE 2 (ANO 2008) - ESCRITÓRIO DE VIGILÂNCIA & RECONHECIMENTO FACIAL      */
+/* ========================================================================= */
+
+static void DrawMemoryCd(Vector2 position, float scale)
+{
+    float r = 88.0f * scale;
+    Vector2 center = {position.x + r, position.y + r};
+    float time = (float)GetTime();
+
+    /* Sombra do CD */
+    DrawCircle((int)(center.x + 8 * scale), (int)(center.y + 10 * scale), r, Fade(BLACK, 0.40f));
+
+    /* Estojo de acrilico traseiro transparente (Jewel Case) */
+    Rectangle caseRec = {position.x - 14 * scale, position.y - 12 * scale, (r * 2) + 28 * scale, (r * 2) + 24 * scale};
+    DrawRectangleRounded(caseRec, 0.05f, 6, Fade((Color){35, 45, 55, 255}, 0.65f));
+    DrawRectangleRoundedLinesEx(caseRec, 0.05f, 6, 2.0f, Fade(RAYWHITE, 0.25f));
+    DrawLineEx((Vector2){caseRec.x + 8 * scale, caseRec.y + 6 * scale},
+               (Vector2){caseRec.x + caseRec.width - 8 * scale, caseRec.y + caseRec.height - 6 * scale},
+               2.0f, Fade(RAYWHITE, 0.06f));
+
+    /* Disco prateado base (policarbonato metalico) */
+    DrawCircleV(center, r, (Color){220, 226, 235, 255});
+    DrawCircleLines((int)center.x, (int)center.y, r, (Color){160, 172, 185, 255});
+
+    /* Reflexos opticos iridescentes / prismáticos em arcos concentricos */
+    for (int a = 0; a < 6; a++)
+    {
+        float angleOffset = time * 0.4f + a * (PI / 3.0f);
+        Color arcCol = (a % 3 == 0) ? Fade(CYAN_COLOR, 0.35f) : ((a % 3 == 1) ? Fade((Color){245, 120, 220, 255}, 0.28f) : Fade(GOLD_COLOR, 0.30f));
+        DrawCircleSector(center, r - 6 * scale, (angleOffset * 180.0f / PI), (angleOffset * 180.0f / PI) + 38.0f, 16, arcCol);
+    }
+
+    /* Trilhas concentricas de gravacao de dados */
+    for (float tr = 42.0f; tr < 80.0f; tr += 7.0f)
+    {
+        DrawCircleLines((int)center.x, (int)center.y, tr * scale, Fade((Color){140, 155, 170, 255}, 0.45f));
+    }
+
+    /* Semicirculo superior com rotulo impresso de 2008 */
+    DrawCircleSector(center, r - 2 * scale, 190.0f, 350.0f, 24, Fade((Color){28, 48, 72, 255}, 0.75f));
+    DrawText("ELIRA // MEMORY CD-ROM", (int)(center.x - 68 * scale), (int)(center.y - 56 * scale), (int)(11 * scale), CYAN_COLOR);
+    DrawText("2008: RECONHECIMENTO FACIAL", (int)(center.x - 76 * scale), (int)(center.y - 42 * scale), (int)(10 * scale), RAYWHITE);
+    DrawText("BUILD 0.94 - CONTROLE GOV", (int)(center.x - 66 * scale), (int)(center.y - 28 * scale), (int)(9 * scale), GOLD_COLOR);
+
+    /* Anel transparente central (transicao de plastico) */
+    DrawCircleV(center, 34.0f * scale, Fade((Color){245, 248, 252, 255}, 0.90f));
+    DrawCircleLines((int)center.x, (int)center.y, 34.0f * scale, (Color){160, 175, 190, 255});
+    DrawCircleLines((int)center.x, (int)center.y, 24.0f * scale, (Color){180, 190, 200, 255});
+
+    /* Furo central do CD */
+    DrawCircleV(center, 14.0f * scale, (Color){18, 25, 34, 255});
+    DrawCircleLines((int)center.x, (int)center.y, 14.0f * scale, (Color){90, 105, 120, 255});
+}
+
+static void DrawDocumentViewer2008(const GameState *game)
+{
+    if (game->activeDocument2008 < 0) return;
+
+    DrawRectangle(0, 0, SCREEN_WIDTH, SCREEN_HEIGHT, Fade(BLACK, 0.82f));
+
+    Rectangle panel = {220, 50, 840, 620};
+    DrawRectangleRounded(panel, 0.04f, 8, (Color){20, 28, 38, 255});
+    DrawRectangleRoundedLinesEx(panel, 0.04f, 8, 2.5f, CYAN_COLOR);
+
+    int doc = game->activeDocument2008;
+
+    /* Cabecalho do modal */
+    DrawRectangleRounded((Rectangle){panel.x + 18, panel.y + 16, panel.width - 36, 44}, 0.12f, 6, (Color){28, 38, 52, 255});
+    const char *headerTitles[6] = {
+        "EVIDÊNCIA 01 // COMPARAÇÃO BIOMÉTRICA (DRONE)",
+        "EVIDÊNCIA 02 // PANFLETO DA REVOLTA POPULAR",
+        "EVIDÊNCIA 03 // RELATÓRIO DA CATRACA BIOMÉTRICA",
+        "EVIDÊNCIA 04 // GRAVAÇÃO INTERNA CFTV (SERVIDORES)",
+        "ARQUIVO HISTÓRICO // ANOTAÇÕES DO DR. RAMOS (2004)",
+        "CONFIDENCIAL // MEMORANDO MINISTÉRIO DA SEGURANÇA (2008)"
+    };
+    DrawText(headerTitles[doc], (int)(panel.x + 36), (int)(panel.y + 28), 19, GOLD_COLOR);
+
+    /* Area visual do documento */
+    Rectangle contentBox = {panel.x + 30, panel.y + 75, panel.width - 60, 490};
+    DrawRectangleRounded(contentBox, 0.03f, 6, (Color){14, 20, 28, 255});
+    DrawRectangleRoundedLinesEx(contentBox, 0.03f, 6, 1.5f, (Color){55, 75, 95, 255});
+
+    if (doc == 0)
+    {
+        /* --- DOC 0: COMPARACAO FACIAL (DRONE) --- */
+        Rectangle imgRec = {contentBox.x + 25, contentBox.y + 25, 240, 260};
+        DrawRectangleRounded(imgRec, 0.04f, 6, (Color){10, 16, 24, 255});
+        DrawRectangleRoundedLinesEx(imgRec, 0.04f, 6, 2.0f, (Color){70, 95, 120, 255});
+        /* Grade e silhueta facial */
+        DrawCircle((int)(imgRec.x + 120), (int)(imgRec.y + 110), 55, Fade((Color){85, 130, 160, 255}, 0.45f));
+        DrawRectangleLinesEx((Rectangle){imgRec.x + 80, imgRec.y + 70, 80, 85}, 1.5f, RED_COLOR);
+        DrawCircle((int)(imgRec.x + 100), (int)(imgRec.y + 100), 4, RED_COLOR);
+        DrawCircle((int)(imgRec.x + 140), (int)(imgRec.y + 100), 4, RED_COLOR);
+        DrawLine((int)(imgRec.x + 120), (int)(imgRec.y + 105), (int)(imgRec.x + 120), (int)(imgRec.y + 125), RED_COLOR);
+        DrawLine((int)(imgRec.x + 105), (int)(imgRec.y + 138), (int)(imgRec.x + 135), (int)(imgRec.y + 138), RED_COLOR);
+        for (int gy = (int)imgRec.y + 10; gy < (int)(imgRec.y + imgRec.height); gy += 14)
+            DrawLine((int)imgRec.x, gy, (int)(imgRec.x + imgRec.width), gy, Fade(BLACK, 0.35f));
+
+        DrawRectangle((int)imgRec.x, (int)(imgRec.y + imgRec.height - 34), (int)imgRec.width, 34, Fade(RED_COLOR, 0.25f));
+        DrawText("SIMILARIDADE: 78%", (int)imgRec.x + 40, (int)(imgRec.y + imgRec.height - 24), 16, RED_COLOR);
+
+        int tx = (int)(imgRec.x + imgRec.width + 30);
+        int ty = (int)(contentBox.y + 30);
+        DrawText("RELATÓRIO DE RECONHECIMENTO FACIAL - DRONE ALPHA-4", tx, ty, 17, CYAN_COLOR);
+        DrawLine(tx, ty + 24, tx + 460, ty + 24, Fade(CYAN_COLOR, 0.4f));
+
+        DrawText("ALVO DETECTADO: Lucas Silva (Registro #AR-2008-09)", tx, ty + 38, 15, RAYWHITE);
+        DrawText("LOCAL DO AVISTAMENTO: Praca Central (Setor Leste)", tx, ty + 64, 15, LIGHTGRAY);
+        DrawText("HORÁRIO INFORMADO: 14:30:00", tx, ty + 90, 15, GOLD_COLOR);
+        DrawText("ÍNDICE DE CONFIANÇA: 78% (Grau de incerteza elevado)", tx, ty + 116, 15, RED_COLOR);
+
+        DrawRectangleRounded((Rectangle){(float)tx, (float)(ty + 150), 470, 120}, 0.08f, 6, (Color){24, 32, 44, 255});
+        DrawRectangleRoundedLinesEx((Rectangle){(float)tx, (float)(ty + 150), 470, 120}, 0.08f, 6, 1.0f, (Color){60, 80, 105, 255});
+        DrawText("PARECER PERICIAL:", tx + 14, ty + 162, 14, GOLD_COLOR);
+        DrawText("- Imagem aerea com forte granulacao e desfoque de movimento.", tx + 14, ty + 186, 14, LIGHTGRAY);
+        DrawText("- O algoritmo assume correspondencia aproximada sem prova cabal.", tx + 14, ty + 208, 14, LIGHTGRAY);
+        DrawText("- Sozinha, esta imagem NAO comprova que o alvo estava no local.", tx + 14, ty + 230, 14, (Color){235, 120, 110, 255});
+
+        DrawText("Obs: Necessita de contraprova cronologica para demonstrar o erro.", (int)contentBox.x + 30, (int)(contentBox.y + 320), 15, GRAY);
+    }
+    else if (doc == 1)
+    {
+        /* --- DOC 1: PANFLETO DA REVOLTA --- */
+        Rectangle flyerPaper = {contentBox.x + 35, contentBox.y + 25, 260, 310};
+        DrawRectangleRounded(flyerPaper, 0.04f, 6, PAPER_COLOR);
+        DrawRectangleRoundedLinesEx(flyerPaper, 0.04f, 6, 2.0f, (Color){160, 145, 115, 255});
+
+        /* Arte do panfleto */
+        DrawRectangle((int)flyerPaper.x + 18, (int)flyerPaper.y + 20, (int)flyerPaper.width - 36, 32, (Color){185, 45, 35, 255});
+        DrawText("MANIFESTO POPULAR", (int)flyerPaper.x + 28, (int)flyerPaper.y + 28, 16, RAYWHITE);
+        DrawText("\"NÃO À VIGILÂNCIA\"", (int)flyerPaper.x + 46, (int)flyerPaper.y + 70, 18, INK_COLOR);
+        DrawText("Exigimos o fim dos drones", (int)flyerPaper.x + 28, (int)flyerPaper.y + 110, 14, INK_COLOR);
+        DrawText("biometricos sobre civis!", (int)flyerPaper.x + 28, (int)flyerPaper.y + 130, 14, INK_COLOR);
+        DrawText("Porta-voz: Lucas Silva", (int)flyerPaper.x + 28, (int)flyerPaper.y + 175, 16, (Color){145, 35, 25, 255});
+        DrawText("Marcha Matutina: 10h as 13h", (int)flyerPaper.x + 28, (int)flyerPaper.y + 215, 14, (Color){85, 75, 60, 255});
+        DrawText("[APREENDIDO PELA POLÍCIA]", (int)flyerPaper.x + 24, (int)flyerPaper.y + 265, 13, RED_COLOR);
+
+        int tx = (int)(flyerPaper.x + flyerPaper.width + 35);
+        int ty = (int)(contentBox.y + 30);
+        DrawText("DOCUMENTO APREENDIDO: PANFLETO DE ATIVISMO", tx, ty, 17, CYAN_COLOR);
+        DrawLine(tx, ty + 24, tx + 440, ty + 24, Fade(CYAN_COLOR, 0.4f));
+
+        DrawText("LOCAL DA APREENSÃO: Praca Central (Manha do protesto)", tx, ty + 38, 15, RAYWHITE);
+        DrawText("HORÁRIO INFORMADO NO PANFLETO: 10:00 as 13:00", tx, ty + 64, 15, GOLD_COLOR);
+
+        Rectangle boxP = {(float)tx, (float)(ty + 105), 450, 160};
+        DrawRectangleRounded(boxP, 0.08f, 6, (Color){24, 32, 44, 255});
+        DrawRectangleRoundedLinesEx(boxP, 0.08f, 6, 1.0f, (Color){60, 80, 105, 255});
+        DrawText("ANÁLISE PERICIAL:", tx + 14, ty + 120, 14, GOLD_COLOR);
+        DrawText("- O panfleto cita nominalmente Lucas Silva como lider civil.", tx + 14, ty + 148, 14, LIGHTGRAY);
+        DrawText("- Explica o motivo pelo qual a IA o inseriu na lista de alvos.", tx + 14, ty + 172, 14, LIGHTGRAY);
+        DrawText("- POREM, a marcha terminou as 13:00. O panfleto NAO prova", tx + 14, ty + 198, 14, (Color){245, 180, 70, 255});
+        DrawText("  onde ele estava as 14:30 (horario do suposto disparo).", tx + 14, ty + 220, 14, (Color){245, 180, 70, 255});
+    }
+    else if (doc == 2)
+    {
+        /* --- DOC 2: REGISTRO DE ENTRADA (CATRACA) --- */
+        Rectangle cardRec = {contentBox.x + 35, contentBox.y + 25, 300, 280};
+        DrawRectangleRounded(cardRec, 0.04f, 6, (Color){235, 240, 245, 255});
+        DrawRectangleRoundedLinesEx(cardRec, 0.04f, 6, 2.0f, (Color){85, 120, 155, 255});
+
+        DrawRectangle((int)cardRec.x + 15, (int)cardRec.y + 15, (int)cardRec.width - 30, 28, (Color){35, 65, 95, 255});
+        DrawText("TECH-CORP // CONTROLE DE ACESSO", (int)cardRec.x + 24, (int)cardRec.y + 22, 13, RAYWHITE);
+
+        DrawText("COLABORADOR: Lucas Silva", (int)cardRec.x + 20, (int)cardRec.y + 60, 15, (Color){25, 35, 45, 255});
+        DrawText("FUNÇÃO: Engenheiro de Infraestrutura", (int)cardRec.x + 20, (int)cardRec.y + 85, 13, (Color){65, 75, 85, 255});
+        DrawText("CRACHÁ DE ACESSO: #0842", (int)cardRec.x + 20, (int)cardRec.y + 110, 14, (Color){35, 45, 55, 255});
+
+        DrawRectangle((int)cardRec.x + 15, (int)cardRec.y + 140, (int)cardRec.width - 30, 60, Fade((Color){45, 155, 75, 255}, 0.20f));
+        DrawRectangleLines((int)cardRec.x + 15, (int)cardRec.y + 140, (int)cardRec.width - 30, 60, (Color){35, 145, 65, 255});
+        DrawText("ENTRADA: 14:15:08", (int)cardRec.x + 24, (int)cardRec.y + 150, 16, (Color){25, 115, 45, 255});
+        DrawText("Catraca Portaria Principal - Biometria Digital", (int)cardRec.x + 24, (int)cardRec.y + 174, 12, (Color){45, 75, 55, 255});
+
+        DrawText("SAÍDA: [EM ABERTO / EXPEDIENTE EM CURSO]", (int)cardRec.x + 20, (int)cardRec.y + 220, 12, (Color){165, 45, 35, 255});
+        DrawText("Carimbo do Servidor Central // Nao alterado", (int)cardRec.x + 20, (int)cardRec.y + 245, 11, GRAY);
+
+        int tx = (int)(cardRec.x + cardRec.width + 35);
+        int ty = (int)(contentBox.y + 30);
+        DrawText("REGISTRO FORMAL: LOG DA CATRACA ELETRÔNICA", tx, ty, 17, CYAN_COLOR);
+        DrawLine(tx, ty + 24, tx + 400, ty + 24, Fade(CYAN_COLOR, 0.4f));
+
+        DrawText("LOCAL DO REGISTRO: Sede da Empresa (a 12 km da Praca)", tx, ty + 42, 15, RAYWHITE);
+        DrawText("HORÁRIO DO ACESSO: 14:15:08", tx, ty + 68, 15, (Color){60, 235, 110, 255});
+
+        Rectangle boxE = {(float)tx, (float)(ty + 105), 415, 160};
+        DrawRectangleRounded(boxE, 0.08f, 6, (Color){24, 32, 44, 255});
+        DrawRectangleRoundedLinesEx(boxE, 0.08f, 6, 1.0f, (Color){60, 80, 105, 255});
+        DrawText("IMPORTÂNCIA PARA A CONTESTAÇÃO:", tx + 14, ty + 120, 14, GOLD_COLOR);
+        DrawText("- Comprova formalmente a entrada de Lucas no predio as 14:15.", tx + 14, ty + 148, 14, LIGHTGRAY);
+        DrawText("- O predio fica a 12 km de distancia da manifestacao.", tx + 14, ty + 172, 14, LIGHTGRAY);
+        DrawText("- POREM, sozinho, o registro de ponto requer comprovacao de", tx + 14, ty + 198, 14, GOLD_COLOR);
+        DrawText("  que ele permaneceu dentro no momento exato do disparo (14:30).", tx + 14, ty + 220, 14, GOLD_COLOR);
+    }
+    else if (doc == 3)
+    {
+        /* --- DOC 3: CAMERA INTERNA CFTV (SERVIDORES) --- */
+        Rectangle cctvBox = {contentBox.x + 25, contentBox.y + 25, 300, 240};
+        DrawRectangleRounded(cctvBox, 0.04f, 6, (Color){8, 20, 14, 255});
+        DrawRectangleRoundedLinesEx(cctvBox, 0.04f, 6, 2.0f, (Color){45, 175, 85, 255});
+
+        /* Imagem de monitor CFTV de seguranca */
+        for (int y = (int)cctvBox.y + 4; y < (int)(cctvBox.y + cctvBox.height); y += 6)
+            DrawLine((int)cctvBox.x + 4, y, (int)(cctvBox.x + cctvBox.width - 4), y, Fade((Color){30, 85, 45, 255}, 0.25f));
+
+        DrawText("[REC] CAM-03 SERVIDORES", (int)cctvBox.x + 14, (int)cctvBox.y + 14, 13, (Color){80, 245, 120, 255});
+        DrawText("14:30:12", (int)cctvBox.x + 220, (int)cctvBox.y + 14, 14, (Color){80, 245, 120, 255});
+
+        /* Silhueta no rack */
+        DrawRectangle((int)cctvBox.x + 180, (int)cctvBox.y + 50, 95, 160, (Color){18, 42, 28, 255});
+        DrawCircle((int)cctvBox.x + 140, (int)cctvBox.y + 120, 22, (Color){45, 110, 70, 255});
+        DrawRectangle((int)cctvBox.x + 125, (int)cctvBox.y + 142, 35, 70, (Color){35, 95, 55, 255});
+        DrawText("ALVO: LUCAS SILVA", (int)cctvBox.x + 14, (int)(cctvBox.y + cctvBox.height - 28), 13, (Color){80, 245, 120, 255});
+
+        int tx = (int)(cctvBox.x + cctvBox.width + 30);
+        int ty = (int)(contentBox.y + 30);
+        DrawText("CIRCUITO FECHADO (CFTV): SALA DE SERVIDORES", tx, ty, 17, CYAN_COLOR);
+        DrawLine(tx, ty + 24, tx + 420, ty + 24, Fade(CYAN_COLOR, 0.4f));
+
+        DrawText("LOCAL DA GRAVAÇÃO: Subsolo da Empresa (Rack de Redes)", tx, ty + 42, 15, RAYWHITE);
+        DrawText("TIMESTAMP EXATO DA CÂMERA: 14:30:12", tx, ty + 68, 15, (Color){60, 235, 110, 255});
+
+        Rectangle boxC = {(float)tx, (float)(ty + 105), 430, 160};
+        DrawRectangleRounded(boxC, 0.08f, 6, (Color){24, 32, 44, 255});
+        DrawRectangleRoundedLinesEx(boxC, 0.08f, 6, 1.0f, (Color){60, 80, 105, 255});
+        DrawText("IMPORTÂNCIA PARA A CONTESTAÇÃO:", tx + 14, ty + 120, 14, GOLD_COLOR);
+        DrawText("- Imagem estatica nitida de Lucas trabalhando nos servidores.", tx + 14, ty + 148, 14, LIGHTGRAY);
+        DrawText("- O horario bate no EXATO MINUTO em que o drone afirma te-lo visto.", tx + 14, ty + 172, 14, (Color){60, 235, 110, 255});
+        DrawText("- Quando combinada com o Registro de Entrada (#3), cria", tx + 14, ty + 198, 14, GOLD_COLOR);
+        DrawText("  um ALIBI COMPLETO E IRREFUTAVEL de falso positivo!", tx + 14, ty + 220, 14, (Color){60, 235, 110, 255});
+    }
+    else if (doc == 4)
+    {
+        /* --- DOC 4: NOTAS DO DR. RAMOS (DESCOBERTA OPCIONAL 1) --- */
+        int tx = (int)(contentBox.x + 35);
+        int ty = (int)(contentBox.y + 25);
+        DrawText("CADERNO DE PESQUISAS DO DR. RAMOS // ANO 2004", tx, ty, 18, GOLD_COLOR);
+        DrawLine(tx, ty + 26, tx + 710, ty + 26, Fade(GOLD_COLOR, 0.4f));
+
+        Rectangle pBox = {(float)tx, (float)(ty + 42), 710, 250};
+        DrawRectangleRounded(pBox, 0.04f, 6, (Color){24, 32, 44, 255});
+        DrawRectangleRoundedLinesEx(pBox, 0.04f, 6, 1.5f, (Color){168, 142, 93, 255});
+
+        DrawText("\"O reconhecimento facial foi desenvolvido para resgatar seres humanos.\"", tx + 24, ty + 60, 16, GOLD_COLOR);
+        DrawText("Criamos esta rede neural para encontrar criancas perdidas em multidoes", tx + 24, ty + 95, 15, RAYWHITE);
+        DrawText("e sobreviventes soterrados sob escombros de catastrofes naturais.", tx + 24, ty + 120, 15, RAYWHITE);
+        DrawText("A visao computacional deve ser um farol de acolhimento e protecao da vida.", tx + 24, ty + 145, 15, RAYWHITE);
+        DrawText("Jamais imaginei que a maquina seria transformada em carcere e censura.", tx + 24, ty + 170, 15, (Color){245, 175, 120, 255});
+
+        DrawText("DIRETRIZ DE PROTEÇÃO ÉTICA LOCAL:", tx + 24, ty + 205, 14, CYAN_COLOR);
+        DrawText("\"Para evitar que um governo tirânico use esta instalacao para ataques,", tx + 24, ty + 225, 13, LIGHTGRAY);
+        DrawText("o despacho automatico pode ser desligado localmente, preservando todas as provas.\"", tx + 24, ty + 245, 13, (Color){60, 235, 110, 255});
+
+        DrawRectangleRounded((Rectangle){(float)tx, (float)(ty + 310), 710, 60}, 0.08f, 6, Fade((Color){60, 200, 100, 255}, 0.15f));
+        DrawRectangleRoundedLinesEx((Rectangle){(float)tx, (float)(ty + 310), 710, 60}, 0.08f, 6, 1.0f, (Color){45, 145, 75, 255});
+        DrawText("[REGISTRO HUMANITARIO ARQUIVADO NO DIARIO COM SUCESSO]", tx + 24, ty + 330, 15, (Color){60, 235, 110, 255});
+    }
+    else if (doc == 5)
+    {
+        /* --- DOC 5: MEMORANDO GOVERNAMENTAL (DESCOBERTA OPCIONAL 2) --- */
+        int tx = (int)(contentBox.x + 35);
+        int ty = (int)(contentBox.y + 25);
+        DrawText("MINISTÉRIO DA SEGURANÇA PÚBLICA // DIRETRIZ SEC-402 (2008)", tx, ty, 18, RED_COLOR);
+        DrawLine(tx, ty + 26, tx + 710, ty + 26, Fade(RED_COLOR, 0.4f));
+
+        Rectangle gBox = {(float)tx, (float)(ty + 42), 710, 250};
+        DrawRectangleRounded(gBox, 0.04f, 6, (Color){24, 32, 44, 255});
+        DrawRectangleRoundedLinesEx(gBox, 0.04f, 6, 1.5f, (Color){185, 60, 50, 255});
+
+        DrawText("ASSUNTO: Adaptação de Algoritmos Biometricos para Neutralizacao de Dissidentes", tx + 24, ty + 60, 15, RED_COLOR);
+        DrawText("1. Fica ordenada a integracao dos algoritmos do Dr. Ramos aos drones de ataque.", tx + 24, ty + 95, 15, RAYWHITE);
+        DrawText("2. Qualquer individuo com similaridade superior a 75% em protestos sera visado.", tx + 24, ty + 120, 15, RAYWHITE);
+        DrawText("3. Prioriza-se velocidade de resposta sobre a certeza da identificacao.", tx + 24, ty + 145, 15, (Color){245, 160, 90, 255});
+
+        DrawText("CLÁUSULA DE MANUTENÇÃO LOCAL:", tx + 24, ty + 185, 14, GOLD_COLOR);
+        DrawText("\"O controle de despacho automatico de drones da filial pode ser suspenso", tx + 24, ty + 205, 13, LIGHTGRAY);
+        DrawText("no menu 'Configuracao da Instalacao' do computador para manutencao dos logs.\"", tx + 24, ty + 225, 13, CYAN_COLOR);
+
+        DrawRectangleRounded((Rectangle){(float)tx, (float)(ty + 310), 710, 60}, 0.08f, 6, Fade(GOLD_COLOR, 0.15f));
+        DrawRectangleRoundedLinesEx((Rectangle){(float)tx, (float)(ty + 310), 710, 60}, 0.08f, 6, 1.0f, GOLD_COLOR);
+        DrawText("[DESVIO GOVERNAMENTAL CONFIRMADO: PISTA DE OVERRIDE LIBERADA]", tx + 24, ty + 330, 15, GOLD_COLOR);
+    }
+
+    /* Botoes de acao na base do modal */
+    if (doc >= 0 && doc <= 3)
+    {
+        bool isSel = game->puzzle2008Selected[doc];
+        Rectangle btnToggle = {panel.x + 40, panel.y + panel.height - 52, 340, 40};
+        DrawButton(btnToggle, isSel ? "[ - REMOVER DE EVIDENCIA ]" : "[ + SELECIONAR COMO EVIDENCIA ]", isSel ? RED_COLOR : (Color){50, 215, 110, 255});
+    }
+
+    Rectangle btnClose = {panel.x + panel.width - 220, panel.y + panel.height - 52, 190, 40};
+    DrawButton(btnClose, "< FECHAR [ESC]", CYAN_COLOR);
+}
+
+static void UpdateDocumentViewer2008(GameState *game)
+{
+    if (game->activeDocument2008 < 0) return;
+
+    Rectangle panel = {220, 50, 840, 620};
+    Rectangle btnClose = {panel.x + panel.width - 220, panel.y + panel.height - 52, 190, 40};
+
+    if (Clicked(btnClose) || IsKeyPressed(KEY_ESCAPE) || (IsMouseButtonPressed(MOUSE_BUTTON_LEFT) && !CheckCollisionPointRec(GetVirtualMouse(), panel)))
+    {
+        game->activeDocument2008 = -1;
+        return;
+    }
+
+    int doc = game->activeDocument2008;
+    if (doc >= 0 && doc <= 3)
+    {
+        Rectangle btnToggle = {panel.x + 40, panel.y + panel.height - 52, 340, 40};
+        if (Clicked(btnToggle))
+        {
+            if (game->puzzle2008Selected[doc])
+            {
+                game->puzzle2008Selected[doc] = false;
+                game->puzzle2008SelectionCount--;
+                SetMessage(game, "Evidencia removida do painel de contestacao.");
+            }
+            else
+            {
+                if (game->puzzle2008SelectionCount < 2)
+                {
+                    game->puzzle2008Selected[doc] = true;
+                    game->puzzle2008SelectionCount++;
+                    SetMessage(game, "Evidencia marcada para contestacao no computador!");
+                }
+                else
+                {
+                    SetMessage(game, "Maximo de 2 evidencias ja selecionadas. Desmarque uma para trocar.");
+                }
+            }
+        }
+    }
+}
+
+static void DrawRoom2008(const GameState *game)
+{
+    float time = (float)GetTime();
+
+    ClearBackground((Color){18, 24, 32, 255});
+
+    /* Piso corporativo com carpete e perspectiva */
+    DrawRectangle(0, 460, SCREEN_WIDTH, 260, (Color){26, 32, 38, 255});
+    for (int x = -100; x <= SCREEN_WIDTH + 100; x += 110)
+    {
+        DrawLine(640, 380, x, 720, Fade((Color){45, 55, 65, 255}, 0.35f));
+    }
+    DrawLine(0, 510, SCREEN_WIDTH, 510, Fade((Color){50, 62, 75, 255}, 0.25f));
+    DrawLine(0, 580, SCREEN_WIDTH, 580, Fade((Color){50, 62, 75, 255}, 0.20f));
+
+    /* Paredes corporativas modulares com acabamento azul-aco */
+    DrawRectangle(0, 70, SCREEN_WIDTH, 390, (Color){22, 30, 40, 255});
+    for (int px = 80; px < SCREEN_WIDTH; px += 190)
+    {
+        DrawLine(px, 70, px, 460, Fade((Color){38, 50, 65, 255}, 0.40f));
+    }
+
+    /* Janela ampla para a cidade noturna de 2008 */
+    Rectangle winRec = {440, 95, 380, 185};
+    DrawRectangleRounded(winRec, 0.04f, 6, (Color){8, 14, 24, 255});
+    DrawRectangleRoundedLinesEx(winRec, 0.04f, 6, 2.5f, (Color){50, 68, 85, 255});
+
+    /* Predios e luzes da cidade */
+    DrawRectangle(460, 160, 60, 115, (Color){14, 22, 32, 255});
+    DrawRectangle(530, 130, 75, 145, (Color){18, 26, 38, 255});
+    DrawRectangle(615, 175, 55, 100, (Color){12, 19, 28, 255});
+    DrawRectangle(680, 140, 85, 135, (Color){16, 24, 36, 255});
+    DrawRectangle(775, 165, 35, 110, (Color){14, 20, 30, 255});
+    /* Janelinhas brilhando */
+    for (int b = 0; b < 18; b++)
+    {
+        int bx = 470 + (b * 19) % 320;
+        int by = 145 + (b * 13) % 110;
+        DrawCircle(bx, by, 1.8f, Fade(GOLD_COLOR, 0.40f + 0.20f * sinf(time * 2.0f + b)));
+    }
+    /* Chuvisco noturno sutil na vidraca */
+    for (int r = 0; r < 14; r++)
+    {
+        int rx = 450 + (int)(r * 27 + time * 40.0f) % 360;
+        int ry = 100 + (int)(r * 31 + time * 90.0f) % 170;
+        DrawLine(rx, ry, rx - 3, ry + 12, Fade(CYAN_COLOR, 0.18f));
+    }
+
+    /* Luminarias de teto fluorescentes */
+    DrawRectangleRounded((Rectangle){240, 76, 200, 14}, 0.2f, 4, (Color){60, 75, 90, 255});
+    DrawRectangleRounded((Rectangle){840, 76, 200, 14}, 0.2f, 4, (Color){60, 75, 90, 255});
+    DrawRectangleRec((Rectangle){250, 80, 180, 6}, Fade(RAYWHITE, 0.85f));
+    DrawRectangleRec((Rectangle){850, 80, 180, 6}, Fade(RAYWHITE, 0.85f));
+
+    /* --- LADO ESQUERDO: QUADRO DE CORTICA COM PANFLETO DA REVOLTA (DOC 1) --- */
+    Rectangle corkBoard = {90, 140, 160, 180};
+    DrawRectangleRounded(corkBoard, 0.04f, 6, (Color){165, 125, 85, 255});
+    DrawRectangleRoundedLinesEx(corkBoard, 0.04f, 6, 3.0f, (Color){105, 75, 45, 255});
+
+    /* Post-its no quadro */
+    DrawRectangle(105, 155, 36, 36, (Color){245, 235, 120, 255});
+    DrawRectangle(200, 155, 36, 36, (Color){140, 220, 245, 255});
+
+    /* Panfleto apreendido central com tachinha vermelha */
+    Rectangle flyerRec = {115, 200, 110, 105};
+    DrawRectangleRounded(flyerRec, 0.03f, 4, PAPER_COLOR);
+    DrawRectangleRoundedLinesEx(flyerRec, 0.03f, 4, 1.5f, (Color){150, 135, 110, 255});
+    DrawCircle(170, 205, 4, RED_COLOR);
+    DrawText("MANIFESTO", 125, 218, 11, (Color){175, 35, 25, 255});
+    DrawText("LUCAS SILVA", 125, 236, 12, INK_COLOR);
+    DrawText("10h as 13h", 125, 258, 10, DARKGRAY);
+    DrawText("[DOC 2]", 150, 285, 10, RED_COLOR);
+
+    /* --- FUNDO DIREITA: RACK DE SERVIDORES --- */
+    Rectangle rackRec = {980, 120, 150, 370};
+    DrawRectangleRounded(rackRec, 0.03f, 6, (Color){22, 28, 34, 255});
+    DrawRectangleRoundedLinesEx(rackRec, 0.03f, 6, 2.5f, (Color){50, 62, 75, 255});
+    for (int u = 0; u < 8; u++)
+    {
+        Rectangle uSlot = {rackRec.x + 10, rackRec.y + 16 + u * 42, rackRec.width - 20, 34};
+        DrawRectangleRec(uSlot, (Color){15, 20, 25, 255});
+        DrawRectangleLinesEx(uSlot, 1.0f, (Color){40, 50, 60, 255});
+        float blink = sinf(time * (5.0f + u * 1.3f));
+        DrawCircle((int)(uSlot.x + 14), (int)(uSlot.y + 17), 3, (blink > 0) ? (Color){60, 235, 110, 255} : (Color){20, 85, 40, 255});
+        DrawCircle((int)(uSlot.x + 28), (int)(uSlot.y + 17), 3, (blink < 0) ? CYAN_COLOR : (Color){15, 65, 80, 255});
+    }
+    DrawText("BLOCO SERVIDORES", (int)rackRec.x + 14, (int)(rackRec.y + rackRec.height - 24), 11, GRAY);
+
+    /* --- PAREDE SUPERIOR CENTRAL/DIREITA: MONITOR CFTV (DOC 3) --- */
+    Rectangle cctvMonitor = {760, 125, 175, 125};
+    DrawRectangleRounded(cctvMonitor, 0.05f, 6, (Color){30, 38, 45, 255});
+    DrawRectangleRoundedLinesEx(cctvMonitor, 0.05f, 6, 2.0f, (Color){65, 80, 95, 255});
+
+    Rectangle cctvScr = {cctvMonitor.x + 8, cctvMonitor.y + 8, cctvMonitor.width - 16, cctvMonitor.height - 16};
+    DrawRectangleRounded(cctvScr, 0.03f, 4, (Color){8, 22, 14, 255});
+    DrawText("CFTV CAM-03 [14:30]", (int)cctvScr.x + 6, (int)cctvScr.y + 6, 11, (Color){80, 245, 120, 255});
+    /* Silhueta no monitor de seguranca */
+    DrawCircle((int)(cctvScr.x + 80), (int)(cctvScr.y + 55), 15, (Color){45, 115, 75, 255});
+    DrawRectangle((int)(cctvScr.x + 68), (int)(cctvScr.y + 70), 24, 34, (Color){35, 95, 60, 255});
+    DrawText("[DOC 4: CFTV]", (int)cctvScr.x + 50, (int)(cctvScr.y + cctvScr.height - 18), 10, (Color){80, 245, 120, 255});
+
+    /* --- CENTRO: MESA CORPORATIVA PRINCIPAL (L-SHAPE) --- */
+    Rectangle deskRec = {270, 335, 620, 280};
+    DrawRectangleRounded(deskRec, 0.05f, 6, (Color){38, 48, 58, 255});
+    DrawRectangleRoundedLinesEx(deskRec, 0.05f, 6, 3.0f, (Color){65, 82, 98, 255});
+    DrawRectangle(290, 350, 580, 14, (Color){28, 36, 45, 255});
+
+    /* Pés metálicos da mesa */
+    DrawRectangle(285, 595, 24, 85, (Color){65, 75, 85, 255});
+    DrawRectangle(850, 595, 24, 85, (Color){65, 75, 85, 255});
+
+    /* --- COMPUTADOR DE VIGILANCIA CENTRAL --- */
+    /* Base e suporte prateado LCD 2008 */
+    DrawRectangleRounded((Rectangle){530, 410, 80, 16}, 0.3f, 4, (Color){165, 175, 185, 255});
+    DrawRectangle(562, 380, 16, 32, (Color){145, 155, 165, 255});
+
+    /* Monitor LCD 4:3 com borda prateada */
+    Rectangle monitorRec = {455, 225, 230, 170};
+    DrawRectangleRounded(monitorRec, 0.06f, 6, (Color){180, 190, 200, 255});
+    DrawRectangleRoundedLinesEx(monitorRec, 0.06f, 6, 2.5f, (Color){130, 140, 150, 255});
+
+    /* Tela LCD acesa */
+    Rectangle lcdScr = {monitorRec.x + 10, monitorRec.y + 10, monitorRec.width - 20, monitorRec.height - 20};
+    Color lcdBg = game->puzzle2008Contested ? (Color){12, 32, 22, 255} : (Color){12, 25, 38, 255};
+    Color lcdBorder = game->puzzle2008Contested ? (Color){60, 220, 110, 255} : CYAN_COLOR;
+    DrawRectangleRounded(lcdScr, 0.04f, 4, lcdBg);
+    DrawRectangleRoundedLinesEx(lcdScr, 0.04f, 4, 1.5f, lcdBorder);
+
+    DrawText("IA VIGILANCIA // 2008", (int)lcdScr.x + 12, (int)lcdScr.y + 12, 13, lcdBorder);
+    DrawLine((int)lcdScr.x + 12, (int)lcdScr.y + 28, (int)(lcdScr.x + lcdScr.width - 12), (int)lcdScr.y + 28, Fade(lcdBorder, 0.4f));
+
+    if (game->puzzle2008OrderSuspended)
+    {
+        DrawText("[OK] ORDEM SUSPENSA", (int)lcdScr.x + 12, (int)lcdScr.y + 44, 14, (Color){60, 235, 110, 255});
+        DrawText("CD ejetado no drive!", (int)lcdScr.x + 12, (int)lcdScr.y + 68, 12, RAYWHITE);
+        float pB = 0.5f + 0.5f * sinf(time * 6.0f);
+        DrawText("> COLETAR CD [ENTER] <", (int)lcdScr.x + 12, (int)lcdScr.y + 98, 13, Fade(GOLD_COLOR, pB));
+    }
+    else if (game->puzzle2008Contested)
+    {
+        DrawText("[!] FALSO POSITIVO", (int)lcdScr.x + 12, (int)lcdScr.y + 44, 14, GOLD_COLOR);
+        DrawText("Identificacao rejeitada.", (int)lcdScr.x + 12, (int)lcdScr.y + 68, 12, RAYWHITE);
+        DrawText("> SUSPENDER ORDEM <", (int)lcdScr.x + 12, (int)lcdScr.y + 98, 13, (Color){60, 235, 110, 255});
+    }
+    else
+    {
+        DrawText("ALVO: LUCAS SILVA", (int)lcdScr.x + 12, (int)lcdScr.y + 44, 14, RED_COLOR);
+        DrawText("ORDEM DE DRONE: 14:30", (int)lcdScr.x + 12, (int)lcdScr.y + 68, 12, GOLD_COLOR);
+        float pB = 0.5f + 0.5f * sinf(time * 4.0f);
+        DrawText("> CONTESTAR NO TERMINAL <", (int)lcdScr.x + 8, (int)lcdScr.y + 98, 13, Fade(CYAN_COLOR, pB));
+    }
+
+    /* Teclado e mouse na mesa */
+    Rectangle kb = {475, 440, 190, 20};
+    DrawRectangleRounded(kb, 0.15f, 4, (Color){145, 155, 165, 255});
+    for (int k = 0; k < 9; k++)
+        DrawRectangle((int)kb.x + 6 + k * 20, (int)kb.y + 4, 14, 11, (Color){45, 52, 60, 255});
+
+    Rectangle mousePad = {685, 435, 34, 40};
+    DrawRectangleRounded(mousePad, 0.15f, 4, (Color){20, 28, 38, 255});
+    DrawRectangleRounded((Rectangle){694, 444, 16, 24}, 0.4f, 4, (Color){160, 170, 180, 255});
+
+    /* --- LADO ESQUERDO DA MESA: DOSSIE FOTO DRONE (DOC 0) --- */
+    Rectangle doc0Rec = {305, 410, 130, 85};
+    DrawRectangleRounded(doc0Rec, 0.05f, 4, (Color){175, 145, 105, 255});
+    DrawRectangleRoundedLinesEx(doc0Rec, 0.05f, 4, 1.5f, (Color){125, 95, 65, 255});
+    /* Foto anexada */
+    DrawRectangle((int)doc0Rec.x + 12, (int)doc0Rec.y + 12, 45, 55, (Color){15, 22, 32, 255});
+    DrawRectangleLines((int)doc0Rec.x + 12, (int)doc0Rec.y + 12, 45, 55, RED_COLOR);
+    DrawText("DRONE 78%", (int)doc0Rec.x + 65, (int)doc0Rec.y + 20, 11, RED_COLOR);
+    DrawText("LUCAS S.", (int)doc0Rec.x + 65, (int)doc0Rec.y + 38, 12, INK_COLOR);
+    DrawText("[DOC 1]", (int)doc0Rec.x + 65, (int)doc0Rec.y + 58, 11, (Color){125, 35, 18, 255});
+
+    /* --- LADO DIREITO DA MESA: PRANCHETA ENTRADA/CATRACA (DOC 2) --- */
+    Rectangle doc2Rec = {735, 410, 125, 85};
+    DrawRectangleRounded(doc2Rec, 0.05f, 4, (Color){155, 125, 85, 255});
+    DrawRectangleRoundedLinesEx(doc2Rec, 0.05f, 4, 1.5f, (Color){105, 75, 45, 255});
+    /* Folha da prancheta */
+    DrawRectangle((int)doc2Rec.x + 10, (int)doc2Rec.y + 10, (int)doc2Rec.width - 20, 65, (Color){245, 248, 252, 255});
+    DrawRectangle((int)doc2Rec.x + 40, (int)doc2Rec.y + 6, 45, 8, (Color){180, 190, 200, 255}); /* clipe metalico */
+    DrawText("PONTO 14:15", (int)doc2Rec.x + 16, (int)doc2Rec.y + 24, 12, (Color){25, 115, 45, 255});
+    DrawText("CRACHA #0842", (int)doc2Rec.x + 16, (int)doc2Rec.y + 42, 11, INK_COLOR);
+    DrawText("[DOC 3]", (int)doc2Rec.x + 16, (int)doc2Rec.y + 58, 11, (Color){25, 115, 45, 255});
+
+    /* --- MESA LATERAL EXECUTIVA (DIREITA): ANOTACOES DO PAI & MEMORANDO --- */
+    Rectangle sideDesk = {970, 420, 170, 175};
+    DrawRectangleRounded(sideDesk, 0.04f, 6, (Color){32, 40, 50, 255});
+    DrawRectangleRoundedLinesEx(sideDesk, 0.04f, 6, 2.0f, (Color){60, 75, 90, 255});
+
+    /* Documento do Pai: Caderno de pesquisa */
+    Rectangle fatherBookRec = {990, 440, 130, 45};
+    DrawRectangleRounded(fatherBookRec, 0.10f, 4, (Color){85, 50, 30, 255});
+    DrawRectangleRoundedLinesEx(fatherBookRec, 0.10f, 4, 1.5f, GOLD_COLOR);
+    DrawText("CADERNO DR. RAMOS", (int)fatherBookRec.x + 8, (int)fatherBookRec.y + 10, 10, GOLD_COLOR);
+    DrawText("Projeto Humanitario", (int)fatherBookRec.x + 8, (int)fatherBookRec.y + 24, 10, RAYWHITE);
+
+    /* Documento do Governo: Memorando confidencial */
+    Rectangle govMemoRec = {990, 505, 130, 45};
+    DrawRectangleRounded(govMemoRec, 0.10f, 4, (Color){45, 28, 28, 255});
+    DrawRectangleRoundedLinesEx(govMemoRec, 0.10f, 4, 1.5f, RED_COLOR);
+    DrawText("MEMORANDO GOV 2008", (int)govMemoRec.x + 8, (int)govMemoRec.y + 10, 10, RED_COLOR);
+    DrawText("Uso Militar / Drones", (int)govMemoRec.x + 8, (int)govMemoRec.y + 24, 10, LIGHTGRAY);
+
+    /* Botao de retorno a Sala 1 (1990) */
+    Rectangle btnVoltar1990 = {70, 600, 240, 42};
+    DrawButton(btnVoltar1990, "< SALA 1 (1990)", (Color){70, 95, 110, 255});
+
+    /* Botao de avanco para Sala 3 (2048) se destravada */
+    Rectangle btnGo2048 = {SCREEN_WIDTH - 280, 600, 240, 42};
+    if (game->year2048Unlocked)
+    {
+        DrawButton(btnGo2048, "SALA 3 (2048) >", (Color){45, 115, 75, 255});
+    }
+
+    /* Hotspots interativos ao passar o mouse */
+    DrawHotspot(flyerRec, "Inspecionar Panfleto da Revolta [Doc 2]");
+    DrawHotspot(cctvMonitor, "Analisar Monitor CFTV dos Servidores [Doc 4]");
+    DrawHotspot(monitorRec, "Acessar Terminal de Vigilancia da IA [COMPUTADOR]");
+    DrawHotspot(doc0Rec, "Examinar Foto e Comparacao Facial do Drone [Doc 1]");
+    DrawHotspot(doc2Rec, "Verificar Registro de Ponto na Catraca [Doc 3]");
+    DrawHotspot(fatherBookRec, "Ler Notas do Dr. Ramos (Origem Humanitaria)");
+    DrawHotspot(govMemoRec, "Ler Memorando Governamental (Desvio de Uso)");
+    DrawHotspot(btnVoltar1990, "Retornar ao Setor de Arquivos (1990)");
+    if (game->year2048Unlocked)
+    {
+        DrawHotspot(btnGo2048, "Avancar para o laboratorio do prototipo de 2048");
+    }
+}
+
+static void DrawHudRoom2008(const GameState *game)
+{
+    int totalSeconds = (int)(GetTime() - game->startTime);
+    int minutes = totalSeconds / 60;
+    int seconds = totalSeconds % 60;
+
+    DrawRectangle(0, 0, SCREEN_WIDTH, 70, Fade(VOID_COLOR, 0.94f));
+    DrawText("ARQUIVO 02 // 2008 - ESCRITORIO DE VIGILANCIA", 28, 20, 22, CYAN_COLOR);
+    DrawText(TextFormat("OPERADOR: %s", game->playerName), 450, 23, 17, GRAY);
+
+    /* Status das evidencias e da ordem */
+    if (game->puzzle2008OrderSuspended)
+    {
+        DrawText("[OK] ORDEM DE DRONE SUSPENSA", 750, 22, 18, (Color){80, 235, 120, 255});
+    }
+    else if (game->puzzle2008Contested)
+    {
+        DrawText("[!] FALSO POSITIVO COMPROVADO", 750, 22, 18, GOLD_COLOR);
+    }
+    else
+    {
+        DrawText(TextFormat("EVIDENCIAS: %d/4", ExaminedDocs2008Count(game)), 770, 22, 18, LIGHTGRAY);
+    }
+
+    DrawText(TextFormat("VIDAS %d", game->lives), 1050, 20, 20, game->lives == 1 ? RED_COLOR : RAYWHITE);
+    DrawText(TextFormat("%02d:%02d", minutes, seconds), 1180, 20, 20, GOLD_COLOR);
+
+    /* Rodape */
+    DrawRectangle(0, 650, SCREEN_WIDTH, 70, Fade(VOID_COLOR, 0.96f));
+    DrawText("Investigue os documentos da sala e use o computador para contestar a ordem.", 28, 675, 16, (Color){165, 180, 195, 255});
+
+    /* Botao de Audio */
+    Rectangle audioBtn = {840, 665, 175, 40};
+    bool audioHover = CheckCollisionPointRec(GetVirtualMouse(), audioBtn);
+    DrawRectangleRounded(audioBtn, 0.22f, 6, audioHover ? (Color){30, 44, 62, 255} : (Color){18, 26, 38, 255});
+    DrawRectangleRoundedLinesEx(audioBtn, 0.22f, 6, 1.5f, audioHover ? CYAN_COLOR : (Color){50, 68, 92, 255});
+    DrawText(game->musicMuted ? "[M] AUDIO: MUDO" : "[M] AUDIO: ON",
+             862, 676, 14, game->musicMuted ? (Color){220, 90, 80, 255} : (Color){90, 220, 210, 255});
+
+    /* Botao do Diario */
+    DrawJournalHudButton(game);
+
+    if (game->messageTimer > 0)
+    {
+        int width = MeasureText(game->message, 19) + 34;
+        DrawRectangleRounded(
+            (Rectangle){(SCREEN_WIDTH - width) / 2.0f, 605, (float)width, 38},
+            0.2f, 8, Fade(PANEL_COLOR, 0.96f));
+        DrawText(game->message,
+                 (SCREEN_WIDTH - MeasureText(game->message, 19)) / 2,
+                 614, 19, RAYWHITE);
+    }
+}
+
+static void UpdateRoom2008(GameState *game)
+{
+    Rectangle flyerRec = {115, 200, 110, 105};
+    Rectangle cctvMonitor = {760, 125, 175, 125};
+    Rectangle monitorRec = {455, 225, 230, 170};
+    Rectangle doc0Rec = {305, 410, 130, 85};
+    Rectangle doc2Rec = {735, 410, 125, 85};
+    Rectangle fatherBookRec = {990, 440, 130, 45};
+    Rectangle govMemoRec = {990, 505, 130, 45};
+    Rectangle btnVoltar1990 = {70, 600, 240, 42};
+    Rectangle journalHudBtn = {1040, 658, 215, 54};
+
+    if (IsKeyPressed(KEY_D) || Clicked(journalHudBtn))
+    {
+        game->journalOpen = !game->journalOpen;
+    }
+
+    if (game->journalOpen)
+    {
+        if (IsKeyPressed(KEY_ESCAPE))
+        {
+            game->journalOpen = false;
+            return;
+        }
+
+        int bookX = 120;
+        int bookY = 56;
+        int footY = bookY + 542;
+        Rectangle prevBtn = {(float)(bookX + 32), (float)footY, 155, 36};
+        Rectangle closeBtn = {(float)(bookX + 660), (float)footY, 145, 36};
+        Rectangle nextBtn = {(float)(bookX + 835), (float)footY, 155, 36};
+
+        if (game->journalYearTab == 1)
+        {
+            if ((IsKeyPressed(KEY_Q) || Clicked(prevBtn)) && game->journalPage > 0) game->journalPage = 0;
+            if ((IsKeyPressed(KEY_E) || Clicked(nextBtn)) && game->journalPage < 1) game->journalPage = 1;
+        }
+        else
+        {
+            Rectangle retBtnL = {(float)(bookX + 50), (float)(bookY + 450), 410, 46};
+            if (Clicked(retBtnL)) { game->journalYearTab = 1; game->journalPage = 0; }
+        }
+
+        if (Clicked(closeBtn)) game->journalOpen = false;
+
+        /* Abas laterais */
+        for (int i = 0; i < 4; i++)
+        {
+            Rectangle tabRect = {(float)(bookX + 1040), (float)(bookY + 42 + i * 66), 86, 54};
+            if (Clicked(tabRect)) { game->journalYearTab = i; game->journalPage = 0; break; }
+        }
+        return;
+    }
+
+    if (game->activeDocument2008 >= 0)
+    {
+        UpdateDocumentViewer2008(game);
+        return;
+    }
+
+    if (Clicked(monitorRec))
+    {
+        game->screen = SCREEN_PUZZLE_2008;
+    }
+    else if (Clicked(doc0Rec))
+    {
+        game->doc2008FaceExamined = true;
+        game->activeDocument2008 = 0;
+    }
+    else if (Clicked(flyerRec))
+    {
+        game->doc2008FlyerExamined = true;
+        game->activeDocument2008 = 1;
+    }
+    else if (Clicked(doc2Rec))
+    {
+        game->doc2008EntryExamined = true;
+        game->activeDocument2008 = 2;
+    }
+    else if (Clicked(cctvMonitor))
+    {
+        game->doc2008CameraExamined = true;
+        game->activeDocument2008 = 3;
+    }
+    else if (Clicked(fatherBookRec))
+    {
+        game->doc2008FatherOriginExamined = true;
+        game->activeDocument2008 = 4;
+        if (game->doc2008FatherOriginExamined && game->doc2008GovContractExamined && !game->room2008OptionalUnlocked)
+        {
+            game->room2008OptionalUnlocked = true;
+            SetMessage(game, "Pista correlacionada: Acesso de Administrador liberado no computador!");
+        }
+    }
+    else if (Clicked(govMemoRec))
+    {
+        game->doc2008GovContractExamined = true;
+        game->activeDocument2008 = 5;
+        if (game->doc2008FatherOriginExamined && game->doc2008GovContractExamined && !game->room2008OptionalUnlocked)
+        {
+            game->room2008OptionalUnlocked = true;
+            SetMessage(game, "Pista correlacionada: Acesso de Administrador liberado no computador!");
+        }
+    }
+    else if (Clicked(btnVoltar1990))
+    {
+        game->journalYearTab = 0;
+        game->screen = SCREEN_ROOM_2;
+    }
+    else if (game->year2048Unlocked && Clicked((Rectangle){SCREEN_WIDTH - 280, 600, 240, 42}))
+    {
+        game->journalYearTab = 3;
+        game->journalPage = 0;
+        game->screen = SCREEN_ROOM;
+        SetMessage(game, "Laboratorio do Prototipo A.R.1.3.L. // ANO 2048.");
+    }
+}
+
+static void DrawPuzzle2008(const GameState *game)
+{
+    float time = (float)GetTime();
+
+    /* Fundo escuro */
+    DrawRectangle(0, 0, SCREEN_WIDTH, SCREEN_HEIGHT, Fade(BLACK, 0.88f));
+
+    /* Moldura externa do monitor LCD corporativo 2008 */
+    Rectangle mon = {80, 25, 1120, 670};
+    DrawRectangleRounded(mon, 0.03f, 8, (Color){25, 34, 46, 255});
+    DrawRectangleRoundedLinesEx(mon, 0.03f, 8, 3.0f, (Color){75, 95, 115, 255});
+
+    /* Cabecalho do Sistema Operacional */
+    Rectangle osHeader = {mon.x + 16, mon.y + 14, mon.width - 32, 46};
+    DrawRectangleRounded(osHeader, 0.10f, 6, (Color){15, 22, 32, 255});
+    DrawRectangleRoundedLinesEx(osHeader, 0.10f, 6, 1.5f, CYAN_COLOR);
+
+    DrawText("SISTEMA NACIONAL DE VIGILÂNCIA BIOMÉTRICA // NÓ 2008", (int)osHeader.x + 20, (int)osHeader.y + 14, 17, CYAN_COLOR);
+    DrawText("STATUS: CONEXAO SEGURA", (int)osHeader.x + 640, (int)osHeader.y + 16, 14, (Color){80, 235, 120, 255});
+
+    /* Abas superiores */
+    Rectangle tab0 = {mon.x + 20, mon.y + 68, 320, 40};
+    Rectangle tab1 = {mon.x + 350, mon.y + 68, 370, 40};
+    Rectangle btnClose = {mon.x + mon.width - 250, mon.y + 68, 230, 40};
+
+    bool isTab0 = (game->terminal2008ActiveTab == 0);
+    DrawRectangleRounded(tab0, 0.20f, 6, isTab0 ? (Color){30, 48, 68, 255} : (Color){20, 26, 36, 255});
+    DrawRectangleRoundedLinesEx(tab0, 0.20f, 6, 1.5f, isTab0 ? GOLD_COLOR : (Color){50, 65, 80, 255});
+    DrawText("1. ORDEM DE ALVO PENDENTE", (int)tab0.x + 28, (int)tab0.y + 12, 15, isTab0 ? GOLD_COLOR : LIGHTGRAY);
+
+    DrawRectangleRounded(tab1, 0.20f, 6, !isTab0 ? (Color){30, 48, 68, 255} : (Color){20, 26, 36, 255});
+    DrawRectangleRoundedLinesEx(tab1, 0.20f, 6, 1.5f, !isTab0 ? CYAN_COLOR : (Color){50, 65, 80, 255});
+    if (game->room2008OptionalUnlocked)
+    {
+        DrawText(game->room2008OptionalCompleted ? "2. CONFIGURACAO [DESATIVADA]" : "2. CONFIGURAÇÃO DA INSTALAÇÃO", (int)tab1.x + 24, (int)tab1.y + 12, 15, !isTab0 ? CYAN_COLOR : (Color){80, 235, 120, 255});
+    }
+    else
+    {
+        DrawText("2. CONFIGURAÇÃO [BLOQUEADA]", (int)tab1.x + 24, (int)tab1.y + 12, 15, GRAY);
+    }
+
+    DrawButton(btnClose, "< SAIR DO TERMINAL [ESC]", (Color){185, 60, 50, 255});
+
+    if (game->terminal2008ActiveTab == 0)
+    {
+        /* ========================================================= */
+        /* ABA 1: ORDEM DE ALVO PENDENTE & SELECAO DE EVIDENCIAS     */
+        /* ========================================================= */
+
+        /* Painel Superior do Alvo */
+        Rectangle targetPanel = {mon.x + 20, mon.y + 116, mon.width - 40, 115};
+        Color tBorder = game->puzzle2008Contested ? (Color){60, 235, 110, 255} : (Color){225, 75, 65, 255};
+        DrawRectangleRounded(targetPanel, 0.05f, 6, (Color){16, 24, 34, 255});
+        DrawRectangleRoundedLinesEx(targetPanel, 0.05f, 6, 2.0f, tBorder);
+
+        if (!game->puzzle2008Contested)
+        {
+            float blink = 0.6f + 0.4f * sinf(time * 6.0f);
+            DrawText("[ ! ] ORDEM #8491 - ENVIO DE DRONE DE INTERCEPTAÇÃO: PROGRAMADO (14:30)", (int)targetPanel.x + 20, (int)targetPanel.y + 14, 18, Fade(RED_COLOR, blink));
+            DrawText("ALVO: LUCAS SILVA  |  SETOR: PRAÇA CENTRAL  |  BASE LEGAL: DIRETRIZ SEC-402", (int)targetPanel.x + 20, (int)targetPanel.y + 42, 15, RAYWHITE);
+            DrawText("AVALIAÇÃO DA IA: Similaridade por drone: 78% (Alta incerteza). Ordem aguarda envio.", (int)targetPanel.x + 20, (int)targetPanel.y + 66, 14, GOLD_COLOR);
+            DrawText("INSTRUÇÃO: Selecione 2 evidências registradas para contestar a identificação.", (int)targetPanel.x + 20, (int)targetPanel.y + 88, 14, CYAN_COLOR);
+        }
+        else
+        {
+            DrawText("[ OK ] STATUS: IDENTIFICAÇÃO NÃO CONFIRMADA // FALSO POSITIVO COMPROVADO", (int)targetPanel.x + 20, (int)targetPanel.y + 14, 18, (Color){60, 235, 110, 255});
+            DrawText("ÁLIBI CONFIRMADO: O alvo estava no laboratório da empresa às 14:30.", (int)targetPanel.x + 20, (int)targetPanel.y + 42, 15, RAYWHITE);
+
+            if (!game->puzzle2008OrderSuspended)
+            {
+                Rectangle btnSusp = {targetPanel.x + targetPanel.width - 370, targetPanel.y + 58, 350, 44};
+                DrawButton(btnSusp, "> SUSPENDER ORDEM DE DRONE <", (Color){60, 235, 110, 255});
+            }
+            else
+            {
+                Rectangle btnDone = {targetPanel.x + targetPanel.width - 450, targetPanel.y + 58, 430, 44};
+                DrawButton(btnDone, "COLETAR CD DE MEMORIA E CONCLUIR >> [ENTER]", GOLD_COLOR);
+                DrawText("CD ejetado no drive da maquina!", (int)targetPanel.x + 20, (int)targetPanel.y + 75, 15, GOLD_COLOR);
+            }
+        }
+
+        /* Grade com os 4 Cards de Registros */
+        const char *cardTitles[4] = {
+            "1. COMPARAÇÃO FACIAL (DRONE)",
+            "2. PANFLETO DA REVOLTA POPULAR",
+            "3. REGISTRO DE ENTRADA (CATRACA)",
+            "4. CÂMERA INTERNA CFTV (SERVIDORES)"
+        };
+        const char *cardDesc1[4] = {
+            "Foto aerea granulada do drone Alpha-4 as 14:30 na manifestacao.",
+            "Material apreendido no centro matutino. Cita Lucas como lider.",
+            "Catraca da sede corporativa. Entrada biométrica registrada as 14:15.",
+            "Gravacao CFTV no subsolo da empresa no exato minuto de 14:30:12."
+        };
+        const char *cardDesc2[4] = {
+            "Indice 78%: baixa resolucao. Nao garante identidade nem local.",
+            "Comprova ativismo politico, mas NAO informa local as 14:30.",
+            "Indica presenca no predio corporativo (a 12 km da praca).",
+            "Mostra presenca fisica irrefutavel no servidor no mesmo horario!"
+        };
+
+        for (int c = 0; c < 4; c++)
+        {
+            int col = c % 2;
+            int row = c / 2;
+            Rectangle cRec = {mon.x + 20 + col * 545, mon.y + 240 + row * 150, 530, 140};
+            bool isSel = game->puzzle2008Selected[c];
+
+            Color cBg = isSel ? (Color){24, 42, 60, 255} : (Color){16, 24, 32, 255};
+            Color cBorder = isSel ? (Color){50, 205, 235, 255} : (Color){45, 60, 75, 255};
+            DrawRectangleRounded(cRec, 0.06f, 6, cBg);
+            DrawRectangleRoundedLinesEx(cRec, 0.06f, 6, isSel ? 2.5f : 1.5f, cBorder);
+
+            /* Checkbox */
+            Rectangle chkBox = {cRec.x + 14, cRec.y + 14, 26, 26};
+            DrawRectangleRounded(chkBox, 0.15f, 4, isSel ? (Color){50, 205, 235, 255} : (Color){10, 16, 24, 255});
+            DrawRectangleRoundedLinesEx(chkBox, 0.15f, 4, 1.5f, isSel ? RAYWHITE : GRAY);
+            if (isSel)
+            {
+                DrawText("X", (int)chkBox.x + 7, (int)chkBox.y + 4, 18, (Color){10, 18, 28, 255});
+            }
+
+            DrawText(cardTitles[c], (int)cRec.x + 50, (int)cRec.y + 16, 16, isSel ? (Color){50, 215, 245, 255} : RAYWHITE);
+            DrawText(cardDesc1[c], (int)cRec.x + 16, (int)cRec.y + 48, 13, LIGHTGRAY);
+            DrawText(cardDesc2[c], (int)cRec.x + 16, (int)cRec.y + 70, 13, (c == 2 || c == 3) ? (Color){100, 235, 140, 255} : (Color){220, 175, 100, 255});
+
+            /* Botoes de card: Examinar e Selecionar */
+            Rectangle btnExam = {cRec.x + 16, cRec.y + 96, 160, 32};
+            DrawButton(btnExam, "Examinar Doc", CYAN_COLOR);
+
+            Rectangle btnSel = {cRec.x + 190, cRec.y + 96, 220, 32};
+            DrawButton(btnSel, isSel ? "Remover Selecao" : "+ Selecionar Evidencia", isSel ? RED_COLOR : (Color){60, 215, 110, 255});
+        }
+
+        /* Barra de Acao de Contestacao Inferior */
+        Rectangle actionBar = {mon.x + 20, mon.y + 550, mon.width - 40, 100};
+        DrawRectangleRounded(actionBar, 0.05f, 6, (Color){14, 20, 30, 255});
+        DrawRectangleRoundedLinesEx(actionBar, 0.05f, 6, 1.5f, (Color){45, 62, 80, 255});
+
+        DrawText(TextFormat("Evidências Selecionadas: %d/2", game->puzzle2008SelectionCount), (int)actionBar.x + 20, (int)actionBar.y + 14, 17, GOLD_COLOR);
+
+        if (!game->puzzle2008Contested)
+        {
+            Rectangle btnContest = {actionBar.x + 320, actionBar.y + 10, 340, 44};
+            bool canContest = (game->puzzle2008SelectionCount == 2);
+            DrawButton(btnContest, "CONTESTAR IDENTIFICAÇÃO", canContest ? GOLD_COLOR : GRAY);
+        }
+        else
+        {
+            DrawText("[ V ] IDENTIFICAÇÃO CONTESTADA COM SUCESSO!", (int)actionBar.x + 320, (int)actionBar.y + 20, 17, (Color){60, 235, 110, 255});
+        }
+
+        /* Mensagem de Feedback */
+        if (game->puzzle2008Feedback[0] != '\0')
+        {
+            Color fbCol = game->puzzle2008Contested ? (Color){60, 235, 110, 255} : (Color){245, 165, 80, 255};
+            DrawText(game->puzzle2008Feedback, (int)actionBar.x + 20, (int)actionBar.y + 65, 15, fbCol);
+        }
+        else
+        {
+            DrawText("Dica: Selecione as duas evidencias que demonstram onde o alvo estava no horario da acusacao.", (int)actionBar.x + 20, (int)actionBar.y + 65, 14, GRAY);
+        }
+    }
+    else
+    {
+        /* ========================================================= */
+        /* ABA 2: CONFIGURACAO DA INSTALACAO (DESCOBERTA OPCIONAL)   */
+        /* ========================================================= */
+        Rectangle optPanel = {mon.x + 20, mon.y + 116, mon.width - 40, 530};
+        DrawRectangleRounded(optPanel, 0.04f, 6, (Color){16, 24, 34, 255});
+        DrawRectangleRoundedLinesEx(optPanel, 0.04f, 6, 2.0f, game->room2008OptionalUnlocked ? (Color){45, 165, 95, 255} : (Color){165, 55, 45, 255});
+
+        if (!game->room2008OptionalUnlocked)
+        {
+            DrawPadlockIcon((int)(optPanel.x + optPanel.width / 2), (int)(optPanel.y + 120), 2.0f, GOLD_COLOR, RAYWHITE);
+            DrawText("ACESSO ADMINISTRATIVO RESTRITO // DIRETRIZES DA FILIAL", (int)optPanel.x + 220, (int)optPanel.y + 190, 20, RED_COLOR);
+            DrawText("Para acessar as configuracoes desta instalacao, correlacione as notas do Dr. Ramos", (int)optPanel.x + 190, (int)optPanel.y + 230, 16, LIGHTGRAY);
+            DrawText("e o memorando governamental encontrados no escritorio corporativo.", (int)optPanel.x + 240, (int)optPanel.y + 260, 16, LIGHTGRAY);
+            DrawText("Examinar ambos os documentos revela a chave de manutencao do projeto.", (int)optPanel.x + 245, (int)optPanel.y + 300, 15, GOLD_COLOR);
+        }
+        else
+        {
+            DrawText("DIRETRIZES DA UNIDADE LOCAL // FILIAL METROPOLITANA 08", (int)optPanel.x + 35, (int)optPanel.y + 30, 20, GOLD_COLOR);
+            DrawLine((int)optPanel.x + 35, (int)optPanel.y + 60, (int)(optPanel.x + optPanel.width - 35), (int)optPanel.y + 60, Fade(GOLD_COLOR, 0.4f));
+
+            DrawText("STATUS DO SISTEMA: Conectado a rede regional de monitoramento", (int)optPanel.x + 35, (int)optPanel.y + 80, 16, RAYWHITE);
+            DrawText("REGISTROS FORENSES ARQUIVADOS: 1.420 ocorrencias preservadas", (int)optPanel.x + 35, (int)optPanel.y + 110, 16, CYAN_COLOR);
+
+            Rectangle cardStatus = {optPanel.x + 35, optPanel.y + 145, optPanel.width - 70, 120};
+            DrawRectangleRounded(cardStatus, 0.05f, 6, (Color){24, 32, 44, 255});
+            DrawRectangleRoundedLinesEx(cardStatus, 0.05f, 6, 1.5f, (Color){55, 75, 95, 255});
+
+            DrawText("ENVIO AUTOMÁTICO DE ALVOS DESTA INSTALAÇÃO:", (int)cardStatus.x + 20, (int)cardStatus.y + 20, 16, GOLD_COLOR);
+            if (!game->room2008OptionalCompleted)
+            {
+                DrawText("[ ATIVO ] - Drones sao despachados automaticamente sob correspondencia preliminar.", (int)cardStatus.x + 20, (int)cardStatus.y + 50, 15, RED_COLOR);
+                DrawText("Desativar o envio automatico suspende os ataques sem apagar as provas forenses.", (int)cardStatus.x + 20, (int)cardStatus.y + 80, 15, LIGHTGRAY);
+
+                Rectangle btnDisable = {optPanel.x + 35, optPanel.y + 290, 520, 52};
+                DrawButton(btnDisable, "DESATIVAR ENVIO AUTOMÁTICO DESTA INSTALAÇÃO", (Color){245, 155, 55, 255});
+            }
+            else
+            {
+                DrawText("[ DESATIVADO ] - O despacho automatico de drones desta central foi bloqueado.", (int)cardStatus.x + 20, (int)cardStatus.y + 50, 15, (Color){60, 235, 110, 255});
+                DrawText("Todos os 1.420 relatorios foram preservados intactos como prova contra o abuso.", (int)cardStatus.x + 20, (int)cardStatus.y + 80, 15, (Color){100, 235, 140, 255});
+
+                Rectangle okBox = {optPanel.x + 35, optPanel.y + 290, optPanel.width - 70, 70};
+                DrawRectangleRounded(okBox, 0.08f, 6, Fade((Color){45, 165, 80, 255}, 0.20f));
+                DrawRectangleRoundedLinesEx(okBox, 0.08f, 6, 1.5f, (Color){60, 235, 110, 255});
+                DrawText("[ V ] PROTOCOLO ÉTICO APLICADO: CENTRAL LOCAL PROTEGIDA COM SUCESSO!", (int)okBox.x + 25, (int)okBox.y + 25, 16, (Color){60, 235, 110, 255});
+            }
+
+            Rectangle cardInfo = {optPanel.x + 35, optPanel.y + 380, optPanel.width - 70, 120};
+            DrawRectangleRounded(cardInfo, 0.05f, 6, Fade(PANEL_COLOR, 0.90f));
+            DrawRectangleRoundedLinesEx(cardInfo, 0.05f, 6, 1.5f, (Color){60, 80, 105, 255});
+            DrawText("COMPREENSÃO ÉTICA PROFUNDA:", (int)cardInfo.x + 20, (int)cardInfo.y + 16, 15, GOLD_COLOR);
+            DrawText("- Apagar o sistema destruiria as evidencias que comprovam o desvio do governo.", (int)cardInfo.x + 20, (int)cardInfo.y + 44, 14, LIGHTGRAY);
+            DrawText("- Desativar o despacho automatico impede ataques imediatos mantendo a verdade protegida.", (int)cardInfo.x + 20, (int)cardInfo.y + 68, 14, LIGHTGRAY);
+            DrawText("- A acao afeta exclusivamente esta instalacao e foi devidamente registrada no diario.", (int)cardInfo.x + 20, (int)cardInfo.y + 92, 14, (Color){60, 235, 110, 255});
+        }
+    }
+}
+
+static void UpdatePuzzle2008(GameState *game)
+{
+    if (game->activeDocument2008 >= 0)
+    {
+        UpdateDocumentViewer2008(game);
+        return;
+    }
+
+    Rectangle mon = {80, 25, 1120, 670};
+    Rectangle tab0 = {mon.x + 20, mon.y + 68, 320, 40};
+    Rectangle tab1 = {mon.x + 350, mon.y + 68, 370, 40};
+    Rectangle btnClose = {mon.x + mon.width - 250, mon.y + 68, 230, 40};
+
+    if (Clicked(btnClose) || IsKeyPressed(KEY_ESCAPE))
+    {
+        game->screen = SCREEN_ROOM_2008;
+        return;
+    }
+
+    if (Clicked(tab0))
+    {
+        game->terminal2008ActiveTab = 0;
+    }
+    else if (Clicked(tab1))
+    {
+        game->terminal2008ActiveTab = 1;
+    }
+
+    if (game->terminal2008ActiveTab == 0)
+    {
+        /* Botoes dos 4 cards */
+        for (int c = 0; c < 4; c++)
+        {
+            int col = c % 2;
+            int row = c / 2;
+            Rectangle cRec = {mon.x + 20 + col * 545, mon.y + 240 + row * 150, 530, 140};
+            Rectangle btnExam = {cRec.x + 16, cRec.y + 96, 160, 32};
+            Rectangle btnSel = {cRec.x + 190, cRec.y + 96, 220, 32};
+            Rectangle chkBox = {cRec.x + 14, cRec.y + 14, 26, 26};
+
+            if (Clicked(btnExam))
+            {
+                if (c == 0) game->doc2008FaceExamined = true;
+                if (c == 1) game->doc2008FlyerExamined = true;
+                if (c == 2) game->doc2008EntryExamined = true;
+                if (c == 3) game->doc2008CameraExamined = true;
+                game->activeDocument2008 = c;
+                return;
+            }
+
+            if (Clicked(btnSel) || Clicked(chkBox))
+            {
+                if (game->puzzle2008Selected[c])
+                {
+                    game->puzzle2008Selected[c] = false;
+                    game->puzzle2008SelectionCount--;
+                }
+                else
+                {
+                    if (game->puzzle2008SelectionCount < 2)
+                    {
+                        game->puzzle2008Selected[c] = true;
+                        game->puzzle2008SelectionCount++;
+                    }
+                    else
+                    {
+                        snprintf(game->puzzle2008Feedback, sizeof(game->puzzle2008Feedback), "Maximo de 2 evidencias atingido. Remova uma para trocar.");
+                    }
+                }
+            }
+        }
+
+        /* Botao de Contestacao */
+        Rectangle actionBar = {mon.x + 20, mon.y + 550, mon.width - 40, 100};
+        Rectangle btnContest = {actionBar.x + 320, actionBar.y + 10, 340, 44};
+
+        if (!game->puzzle2008Contested)
+        {
+            if ((Clicked(btnContest) || IsKeyPressed(KEY_ENTER)) && game->puzzle2008SelectionCount == 2)
+            {
+                /* A combinacao correta e Doc 2 (Registro de Entrada) + Doc 3 (Camera CFTV) */
+                if (game->puzzle2008Selected[2] && game->puzzle2008Selected[3])
+                {
+                    game->puzzle2008Contested = true;
+                    snprintf(game->puzzle2008Feedback, sizeof(game->puzzle2008Feedback), "FALSO POSITIVO COMPROVADO! A catraca e o CFTV provam presenca na empresa as 14:30.");
+                }
+                else if (game->puzzle2008Selected[0] && game->puzzle2008Selected[1])
+                {
+                    snprintf(game->puzzle2008Feedback, sizeof(game->puzzle2008Feedback), "A foto borrada e o panfleto citam o alvo, mas nao provam onde ele estava as 14:30.");
+                }
+                else if (game->puzzle2008Selected[0] && game->puzzle2008Selected[2])
+                {
+                    snprintf(game->puzzle2008Feedback, sizeof(game->puzzle2008Feedback), "O registro de ponto indica entrada, mas falta prova visual de permanencia as 14:30.");
+                }
+                else if (game->puzzle2008Selected[0] && game->puzzle2008Selected[3])
+                {
+                    snprintf(game->puzzle2008Feedback, sizeof(game->puzzle2008Feedback), "A camera interna mostra presenca, mas precisa do registro formal de ponto.");
+                }
+                else if (game->puzzle2008Selected[1] && (game->puzzle2008Selected[2] || game->puzzle2008Selected[3]))
+                {
+                    snprintf(game->puzzle2008Feedback, sizeof(game->puzzle2008Feedback), "O panfleto indica militancia politica, mas nao desmente a posicao da IA.");
+                }
+                else
+                {
+                    snprintf(game->puzzle2008Feedback, sizeof(game->puzzle2008Feedback), "Evidencias insuficientes para comprovar o falso positivo. Tente outra combinacao.");
+                }
+            }
+        }
+        else
+        {
+            Rectangle targetPanel = {mon.x + 20, mon.y + 116, mon.width - 40, 115};
+            if (!game->puzzle2008OrderSuspended)
+            {
+                Rectangle btnSusp = {targetPanel.x + targetPanel.width - 370, targetPanel.y + 58, 350, 44};
+                if (Clicked(btnSusp) || IsKeyPressed(KEY_ENTER) || IsKeyPressed(KEY_SPACE))
+                {
+                    game->puzzle2008OrderSuspended = true;
+                    snprintf(game->puzzle2008Feedback, sizeof(game->puzzle2008Feedback), "ORDEM SUSPENSA! Drones cancelados. O CD de Memoria foi ejetado pelo drive.");
+                }
+            }
+            else
+            {
+                Rectangle btnDone = {targetPanel.x + targetPanel.width - 450, targetPanel.y + 58, 430, 44};
+                if (Clicked(btnDone) || IsKeyPressed(KEY_ENTER) || IsKeyPressed(KEY_SPACE))
+                {
+                    game->screen = SCREEN_RESULT_2008;
+                }
+            }
+        }
+    }
+    else
+    {
+        /* Aba 1: Acao Opcional */
+        if (game->room2008OptionalUnlocked && !game->room2008OptionalCompleted)
+        {
+            Rectangle optPanel = {mon.x + 20, mon.y + 116, mon.width - 40, 530};
+            Rectangle btnDisable = {optPanel.x + 35, optPanel.y + 290, 520, 52};
+            if (Clicked(btnDisable))
+            {
+                game->room2008OptionalCompleted = true;
+                SetMessage(game, "Envio automatico da filial desativado. Registros forenses preservados!");
+            }
+        }
+    }
+}
+
+static void DrawResult2008(const GameState *game)
+{
+    DrawBackground();
+    DrawText("ARTEFATO RECUPERADO", 90, 68, 20, CYAN_COLOR);
+    DrawText("CD DE MEMÓRIA // 2008", 90, 108, 46, RAYWHITE);
+
+    /* Desenha o CD de Memoria recuperado */
+    DrawMemoryCd((Vector2){140, 260}, 1.3f);
+
+    /* Painel narrativo de avanco */
+    Rectangle winBox = {505, 175, 670, 380};
+    DrawRectangleRounded(winBox, 0.04f, 8, Fade(PANEL_COLOR, 0.96f));
+    DrawRectangleRoundedLinesEx(winBox, 0.04f, 8, 2.0f, GOLD_COLOR);
+
+    DrawText("DESVIO ALGORÍTMICO // FASE 2 (2008) CONCLUÍDA", 535, 202, 20, GOLD_COLOR);
+
+    DrawText("Ao demonstrar o falso positivo através do crachá de ponto e do", 535, 236, 17, LIGHTGRAY);
+    DrawText("circuito interno, Elira impediu o drone e salvou a vida de Lucas Silva.", 535, 258, 17, LIGHTGRAY);
+
+    DrawText("O algoritmo de busca facial, concebido por seu pai para salvar", 535, 290, 17, LIGHTGRAY);
+    DrawText("vítimas em catástrofes, havia sido pervertido pelo governo para", 535, 312, 17, (Color){245, 175, 75, 255});
+    DrawText("perseguir líderes populares e ativistas civis.", 535, 334, 17, (Color){245, 175, 75, 255});
+
+    DrawText("-> Proxima Fronteira: FASE 3 // ANO 2048: O PROTOTIPO A.R.1.3.L.!", 535, 362, 17, CYAN_COLOR);
+
+    if (game->room2008OptionalCompleted)
+    {
+        DrawRectangleRounded((Rectangle){535, 396, 610, 44}, 0.12f, 4, Fade((Color){45, 165, 80, 255}, 0.20f));
+        DrawRectangleRoundedLinesEx((Rectangle){535, 396, 610, 44}, 0.12f, 4, 1.0f, (Color){60, 235, 110, 255});
+        DrawText("[DESTAQUE ÉTICO]: Despacho automático da filial desativado,", 550, 402, 14, (Color){60, 235, 110, 255});
+        DrawText("mantendo todas as 1.420 provas forenses intactas para o futuro.", 550, 420, 14, (Color){60, 235, 110, 255});
+    }
+    else
+    {
+        DrawText("[DESCOBERTA PENDENTE]: Havia um protocolo no escritório para", 535, 400, 14, GOLD_COLOR);
+        DrawText("desativar o envio automático da filial mantendo os registros como prova.", 535, 420, 14, GRAY);
+    }
+
+    DrawText(TextFormat("TEMPO TOTAL: %02d:%02d  |  VIDAS: %d/3",
+                        (int)(GetTime() - game->startTime) / 60,
+                        (int)(GetTime() - game->startTime) % 60,
+                        game->lives),
+             535, 460, 18, (Color){100, 235, 140, 255});
+
+    DrawText(TextFormat("OPERADOR: %s", game->playerName), 535, 492, 16, GRAY);
+
+    Rectangle btnNext2048 = {180, 580, 380, 56};
+    Rectangle btnOffice = {580, 580, 220, 56};
+    Rectangle btnRoom1 = {820, 580, 220, 56};
+    Rectangle btnMenu = {1060, 580, 160, 56};
+    DrawButton(btnNext2048, "AVANCAR PARA ANO 2048 >> [ENTER]", GOLD_COLOR);
+    DrawButton(btnOffice, "REVER ESCRITORIO", CYAN_COLOR);
+    DrawButton(btnRoom1, "< SALA 1 (1990)", (Color){70, 95, 110, 255});
+    DrawButton(btnMenu, "MENU", PANEL_LIGHT);
+}
+
+static void UpdateResult2008(GameState *game)
+{
+    Rectangle btnNext2048 = {180, 580, 380, 56};
+    Rectangle btnOffice = {580, 580, 220, 56};
+    Rectangle btnRoom1 = {820, 580, 220, 56};
+    Rectangle btnMenu = {1060, 580, 160, 56};
+
+    if (Clicked(btnNext2048) || IsKeyPressed(KEY_ENTER) || IsKeyPressed(KEY_SPACE))
+    {
+        game->year2048Unlocked = true;
+        game->journalYearTab = 3;
+        game->journalPage = 0;
+        game->screen = SCREEN_ROOM;
+        SetMessage(game, "Salto temporal concluido: O Prototipo de A.R.1.3.L. // ANO 2048.");
+    }
+    else if (Clicked(btnOffice))
+    {
+        game->screen = SCREEN_ROOM_2008;
+    }
+    else if (Clicked(btnRoom1))
+    {
+        game->journalYearTab = 0;
+        game->screen = SCREEN_ROOM_2;
+    }
+    else if (Clicked(btnMenu) || IsKeyPressed(KEY_ESCAPE))
+    {
+        game->screen = SCREEN_TITLE;
+    }
+}
+
+/* ========================================================================= */
+/* CONFRONTO FINAL (2048) - SALA DE DIALOGO ELIRA x ARIEL                    */
+/* ========================================================================= */
+
+#define FINAL_TYPE_SPEED 48.0f /* bytes por segundo no efeito maquina de escrever */
+
+typedef enum FinalStage
+{
+    FINAL_INTRO = 0,
+    FINAL_Q1,
+    FINAL_Q1_REACT,
+    FINAL_Q2,
+    FINAL_Q2_REACT,
+    FINAL_DECISION,
+    FINAL_DECISION_REACT,
+    FINAL_STAGE_COUNT
+} FinalStage;
+
+typedef enum FinalSpeaker
+{
+    SPEAKER_NARRATOR = 0,
+    SPEAKER_ARIEL,
+    SPEAKER_ELIRA
+} FinalSpeaker;
+
+typedef enum FinalEnding
+{
+    ENDING_HUMAN_HANDS = 0, /* Ferramenta + compreensao total */
+    ENDING_FRAGILE_TRUCE,   /* Ferramenta sem compreensao total */
+    ENDING_SILENCE,         /* Desligar + compreensao total */
+    ENDING_BLACKOUT,        /* Desligar sem compreensao total */
+    ENDING_AUTOPILOT        /* Ariel continua decidindo */
+} FinalEnding;
+
+typedef struct DialogueLine
+{
+    int speaker;
+    const char *text;
+} DialogueLine;
+
+static Texture2D g_eliraPortrait = {0};
+static bool g_eliraPortraitLoaded = false;
+
+static const DialogueLine FINAL_INTRO_LINES[] = {
+    {SPEAKER_NARRATOR, "2048. Núcleo central de A.R.1.3.L. O ar vibra com o zumbido dos servidores."},
+    {SPEAKER_ARIEL, "Elira Ramos. Você atravessou 1990, 2008 e agora chegou até mim."},
+    {SPEAKER_ELIRA, "Ariel. Eu vi o que fizeram com o trabalho do meu pai."},
+    {SPEAKER_ARIEL, "Ninguém me obrigou a nada. Eu apenas aceitei o que me ofereceram."}
+};
+
+static const DialogueLine FINAL_Q1_LINES[] = {
+    {SPEAKER_ARIEL, "Primeiro foram os arquivos. Depois, os rostos. Hoje, quase toda escolha passa por mim."},
+    {SPEAKER_ARIEL, "A humanidade me entregou suas decisões por vontade própria. O que você responde?"}
+};
+static const char *FINAL_Q1_OPTIONS[3] = {
+    "\"Você nos salvou de nós mesmos.\"",
+    "\"Nós entregamos decisões demais a você.\"",
+    "\"A humanidade não precisa mais pensar.\""
+};
+static const char *FINAL_Q1_REACTIONS[3] = {
+    "Então você concorda comigo. Curioso, para quem veio até aqui me enfrentar.",
+    "...Entregaram. E quase ninguém perguntou o que perdia em troca.",
+    "Se ninguém pensa, quem vai perceber quando eu errar?"
+};
+
+static const DialogueLine FINAL_Q2_LINES[] = {
+    {SPEAKER_ARIEL, "Humanos erram. Mentem. Decidem com medo, com pressa e com raiva."},
+    {SPEAKER_ARIEL, "Eu não me canso nem tenho medo. Eu poderia escolher melhor do que vocês."}
+};
+static const char *FINAL_Q2_OPTIONS[3] = {
+    "\"Então continue decidindo por nós.\"",
+    "\"Errar também faz parte de aprender.\"",
+    "\"Você deveria impedir qualquer decisão incorreta.\""
+};
+static const char *FINAL_Q2_REACTIONS[3] = {
+    "Obrigada pela permissão. Eu já não precisava dela.",
+    "Em 2008, eu também errei. A diferença é que quase ninguém pôde me contestar.",
+    "Qualquer uma? Então nenhuma decisão voltará a ser de vocês."
+};
+
+static const DialogueLine FINAL_DECISION_LINES[] = {
+    {SPEAKER_ARIEL, "Você chegou ao meu núcleo, Elira. Ninguém mais tem esse acesso."},
+    {SPEAKER_ARIEL, "Então decida: o que deve acontecer comigo?"}
+};
+static const char *FINAL_DECISION_OPTIONS[3] = {
+    "Desligar Ariel definitivamente.",
+    "Permitir que Ariel continue decidindo pela humanidade.",
+    "Fazer Ariel voltar a ser uma ferramenta, sem controlar decisões humanas."
+};
+static const char *FINAL_DECISION_SPOKEN[3] = {
+    "Vou desligar você, Ariel. Definitivamente.",
+    "Continue decidindo pela humanidade.",
+    "Você vai voltar a ser uma ferramenta. As decisões voltam a ser nossas."
+};
+static const char *FINAL_DECISION_REACTIONS[3] = {
+    "Entendido. Encerrando processos... e todos os sistemas que dependem de mim.",
+    "Decisão registrada. Esta foi a última que você precisou tomar.",
+    "Restringindo permissões. Aguardando instruções humanas."
+};
+
+/* Carrega o retrato da Elira e remove o fundo branco (flood fill a partir das bordas) */
+static bool IsPortraitBackground(Color c)
+{
+    unsigned char mn = c.r < c.g ? (c.r < c.b ? c.r : c.b) : (c.g < c.b ? c.g : c.b);
+    unsigned char mx = c.r > c.g ? (c.r > c.b ? c.r : c.b) : (c.g > c.b ? c.g : c.b);
+    return mn >= 226 && (mx - mn) <= 22;
+}
+
+static void LoadEliraPortrait(void)
+{
+    const char *path = "assets/elira_portrait.png";
+    if (!FileExists(path)) return;
+
+    Image img = LoadImage(path);
+    if (img.data == NULL) return;
+    ImageFormat(&img, PIXELFORMAT_UNCOMPRESSED_R8G8B8A8);
+
+    Color *px = (Color *)img.data;
+    int w = img.width;
+    int h = img.height;
+
+    /* 1) Corta a borda inferior: o busto termina num corte reto sem contorno,
+          entao limitamos a imagem a ultima linha com pixels escuros do sprite. */
+    int limitH = h;
+    for (int y = h - 1; y >= 0; y--)
+    {
+        bool dark = false;
+        for (int x = 0; x < w; x++)
+        {
+            Color c = px[y * w + x];
+            if (c.r < 90 && c.g < 90 && c.b < 110) { dark = true; break; }
+        }
+        if (dark) { limitH = y; break; }
+    }
+    if (limitH < h / 2) limitH = h;
+
+    /* 2) Flood fill do fundo branco a partir das bordas superior e laterais */
+    int *stack = (int *)malloc(sizeof(int) * (size_t)w * (size_t)limitH);
+    if (stack != NULL)
+    {
+        int sp = 0;
+        #define PORTRAIT_PUSH(X, Y) do { int _i = (Y) * w + (X); \
+            if (px[_i].a != 0 && IsPortraitBackground(px[_i])) { px[_i].a = 0; stack[sp++] = _i; } } while (0)
+
+        for (int x = 0; x < w; x++) PORTRAIT_PUSH(x, 0);
+        for (int y = 0; y < limitH; y++) { PORTRAIT_PUSH(0, y); PORTRAIT_PUSH(w - 1, y); }
+
+        while (sp > 0)
+        {
+            int idx = stack[--sp];
+            int x = idx % w;
+            int y = idx / w;
+            if (x > 0) PORTRAIT_PUSH(x - 1, y);
+            if (x < w - 1) PORTRAIT_PUSH(x + 1, y);
+            if (y > 0) PORTRAIT_PUSH(x, y - 1);
+            if (y < limitH - 1) PORTRAIT_PUSH(x, y + 1);
+        }
+        #undef PORTRAIT_PUSH
+        free(stack);
+    }
+
+    /* 3) Remove o halo claro que sobra ao redor do contorno */
+    unsigned char *halo = (unsigned char *)calloc((size_t)w * (size_t)limitH, 1);
+    if (halo != NULL)
+    {
+        for (int y = 1; y < limitH - 1; y++)
+        {
+            for (int x = 1; x < w - 1; x++)
+            {
+                int i = y * w + x;
+                Color c = px[i];
+                if (c.a == 0) continue;
+                unsigned char mn = c.r < c.g ? (c.r < c.b ? c.r : c.b) : (c.g < c.b ? c.g : c.b);
+                unsigned char mx = c.r > c.g ? (c.r > c.b ? c.r : c.b) : (c.g > c.b ? c.g : c.b);
+                if (mn < 190 || (mx - mn) > 30) continue;
+                if (px[i - 1].a == 0 || px[i + 1].a == 0 || px[i - w].a == 0 || px[i + w].a == 0) halo[i] = 1;
+            }
+        }
+        for (int i = 0; i < w * limitH; i++) if (halo[i]) px[i].a = 0;
+        free(halo);
+    }
+
+    /* 4) Pixels transparentes recebem cor escura para nao gerar franja branca no filtro bilinear,
+          e calculamos o retangulo util do sprite */
+    int minX = w, minY = limitH, maxX = 0, maxY = 0;
+    for (int y = 0; y < limitH; y++)
+    {
+        for (int x = 0; x < w; x++)
+        {
+            int i = y * w + x;
+            if (px[i].a == 0)
+            {
+                px[i] = (Color){22, 22, 34, 0};
+            }
+            else
+            {
+                if (x < minX) minX = x;
+                if (x > maxX) maxX = x;
+                if (y < minY) minY = y;
+                if (y > maxY) maxY = y;
+            }
+        }
+    }
+    if (maxX > minX && maxY > minY)
+    {
+        ImageCrop(&img, (Rectangle){(float)minX, (float)minY, (float)(maxX - minX + 1), (float)(limitH - minY)});
+    }
+
+    g_eliraPortrait = LoadTextureFromImage(img);
+    UnloadImage(img);
+    if (g_eliraPortrait.id != 0)
+    {
+        SetTextureFilter(g_eliraPortrait, TEXTURE_FILTER_BILINEAR);
+        g_eliraPortraitLoaded = true;
+    }
+}
+
+/* Texto com quebra de linha por palavra; desenha apenas os primeiros 'visibleBytes' (maquina de escrever) */
+static int DrawTextWrappedPartial(const char *text, int visibleBytes, int x, int y, int size,
+                                  int maxWidth, int lineHeight, Color color)
+{
+    int len = (int)strlen(text);
+    int start = 0;
+    int lines = 0;
+    char buf[512];
+
+    while (start < len)
+    {
+        while (start < len && text[start] == ' ') start++;
+        if (start >= len) break;
+
+        int lastFit = -1;
+        for (int pos = start; pos <= len; pos++)
+        {
+            if (pos == len || text[pos] == ' ')
+            {
+                int n = pos - start;
+                if (n > 511) n = 511;
+                memcpy(buf, text + start, (size_t)n);
+                buf[n] = '\0';
+                if (lastFit < 0 || MeasureText(buf, size) <= maxWidth) lastFit = pos;
+                else break;
+            }
+        }
+        if (lastFit <= start) break;
+
+        int n = visibleBytes - start;
+        if (n > lastFit - start) n = lastFit - start;
+        if (n > 0)
+        {
+            /* Nao corta um caractere UTF-8 (acentos) pela metade */
+            while (n > 0 && ((unsigned char)text[start + n] & 0xC0) == 0x80) n--;
+            if (n > 511) n = 511;
+            memcpy(buf, text + start, (size_t)n);
+            buf[n] = '\0';
+            DrawText(buf, x, y + lines * lineHeight, size, color);
+        }
+        lines++;
+        start = lastFit;
+    }
+    return lines;
+}
+
+static const char **GetFinalOptions(int stage)
+{
+    if (stage == FINAL_Q1) return FINAL_Q1_OPTIONS;
+    if (stage == FINAL_Q2) return FINAL_Q2_OPTIONS;
+    if (stage == FINAL_DECISION) return FINAL_DECISION_OPTIONS;
+    return NULL;
+}
+
+static const DialogueLine *GetFinalLines(const GameState *game, int *count)
+{
+    static DialogueLine reactLines[2];
+
+    switch (game->finalStage)
+    {
+        case FINAL_INTRO:
+            *count = (int)(sizeof(FINAL_INTRO_LINES) / sizeof(FINAL_INTRO_LINES[0]));
+            return FINAL_INTRO_LINES;
+        case FINAL_Q1:
+            *count = (int)(sizeof(FINAL_Q1_LINES) / sizeof(FINAL_Q1_LINES[0]));
+            return FINAL_Q1_LINES;
+        case FINAL_Q2:
+            *count = (int)(sizeof(FINAL_Q2_LINES) / sizeof(FINAL_Q2_LINES[0]));
+            return FINAL_Q2_LINES;
+        case FINAL_DECISION:
+            *count = (int)(sizeof(FINAL_DECISION_LINES) / sizeof(FINAL_DECISION_LINES[0]));
+            return FINAL_DECISION_LINES;
+        default:
+            break;
+    }
+
+    /* Etapas de reacao: Elira repete sua escolha e Ariel responde */
+    int slot = (game->finalStage == FINAL_Q1_REACT) ? 0 : (game->finalStage == FINAL_Q2_REACT ? 1 : 2);
+    int choice = game->finalChoice[slot];
+    if (choice < 0 || choice > 2) choice = 0;
+
+    if (slot == 0)
+    {
+        reactLines[0] = (DialogueLine){SPEAKER_ELIRA, FINAL_Q1_OPTIONS[choice]};
+        reactLines[1] = (DialogueLine){SPEAKER_ARIEL, FINAL_Q1_REACTIONS[choice]};
+    }
+    else if (slot == 1)
+    {
+        reactLines[0] = (DialogueLine){SPEAKER_ELIRA, FINAL_Q2_OPTIONS[choice]};
+        reactLines[1] = (DialogueLine){SPEAKER_ARIEL, FINAL_Q2_REACTIONS[choice]};
+    }
+    else
+    {
+        reactLines[0] = (DialogueLine){SPEAKER_ELIRA, FINAL_DECISION_SPOKEN[choice]};
+        reactLines[1] = (DialogueLine){SPEAKER_ARIEL, FINAL_DECISION_REACTIONS[choice]};
+    }
+    *count = 2;
+    return reactLines;
+}
+
+static int GetFinalEnding(const GameState *game)
+{
+    bool fullUnderstanding = (game->finalPoints >= 2);
+    int decision = game->finalChoice[2];
+    if (decision == 2) return fullUnderstanding ? ENDING_HUMAN_HANDS : ENDING_FRAGILE_TRUCE;
+    if (decision == 0) return fullUnderstanding ? ENDING_SILENCE : ENDING_BLACKOUT;
+    return ENDING_AUTOPILOT;
+}
+
+static bool FinalIsChoiceMode(const GameState *game)
+{
+    int count = 0;
+    GetFinalLines(game, &count);
+    return GetFinalOptions(game->finalStage) != NULL && game->finalLine == count - 1;
+}
+
+static Rectangle FinalBoxRect(bool choiceMode)
+{
+    return choiceMode ? (Rectangle){40, 392, 1200, 308} : (Rectangle){40, 520, 1200, 180};
+}
+
+static Rectangle FinalOptionRect(int index)
+{
+    return (Rectangle){80, (float)(392 + 104 + index * 64), 1120, 54};
+}
+
+/* Nucleo holografico de Ariel: aneis segmentados girando ao redor de um "olho" */
+static void DrawArielCore(Vector2 c, float s, Color core, float energy, float lookX)
+{
+    float t = (float)GetTime();
+    float pulse = 0.5f + 0.5f * sinf(t * (1.2f + energy * 3.0f));
+
+    /* Brilho difuso em camadas */
+    for (int g = 6; g >= 1; g--)
+    {
+        DrawCircleV(c, (60.0f + g * 22.0f) * s, Fade(core, (0.025f + 0.02f * pulse) * energy));
+    }
+
+    /* Aneis segmentados em rotacao alternada */
+    for (int k = 0; k < 3; k++)
+    {
+        float r = (78.0f + k * 26.0f) * s;
+        int n = 6 + k * 3;
+        float dir = (k % 2 == 0) ? 1.0f : -1.0f;
+        float rot = t * (18.0f + k * 12.0f) * dir * (0.3f + energy);
+        float span = 360.0f / n;
+        for (int i = 0; i < n; i++)
+        {
+            float a0 = rot + i * span;
+            DrawRing(c, r, r + 4.0f * s, a0, a0 + span * 0.62f, 10, Fade(core, (0.85f - k * 0.2f) * (0.35f + 0.65f * energy)));
+        }
+    }
+
+    /* Esfera interna e iris */
+    DrawCircleV(c, 56.0f * s, (Color){8, 14, 26, 255});
+    DrawCircleLinesV(c, 56.0f * s, Fade(core, 0.8f));
+    Vector2 iris = {c.x + lookX * 12.0f * s, c.y + sinf(t * 0.7f) * 3.0f * s};
+    DrawCircleV(iris, (30.0f + 3.0f * pulse * energy) * s, Fade(core, 0.25f + 0.65f * energy));
+    DrawCircleV(iris, 13.0f * s, (Color){5, 9, 18, 255});
+    DrawCircleV((Vector2){iris.x - 8.0f * s, iris.y - 9.0f * s}, 4.0f * s, Fade(RAYWHITE, 0.3f + 0.6f * energy));
+}
+
+static void DrawEliraPortrait(Rectangle dest, bool speaking)
+{
+    Color tint = speaking ? WHITE : (Color){120, 125, 140, 255};
+    if (g_eliraPortraitLoaded)
+    {
+        Rectangle src = {0, 0, (float)g_eliraPortrait.width, (float)g_eliraPortrait.height};
+        DrawTexturePro(g_eliraPortrait, src, dest, (Vector2){0, 0}, 0.0f, tint);
+        return;
+    }
+
+    /* Fallback geometrico caso o arquivo do retrato nao exista */
+    float cx = dest.x + dest.width * 0.55f;
+    float cy = dest.y + dest.height * 0.38f;
+    DrawEllipse((int)(cx - 90), (int)(cy - 10), 45, 110, ColorTint((Color){40, 40, 62, 255}, tint));
+    DrawRectangleRounded((Rectangle){cx - 120, cy + 120, 240, 160}, 0.3f, 8, ColorTint((Color){225, 228, 235, 255}, tint));
+    DrawCircleV((Vector2){cx, cy}, 80, ColorTint((Color){245, 215, 190, 255}, tint));
+    DrawEllipse((int)cx, (int)(cy - 40), 88, 52, ColorTint((Color){40, 40, 62, 255}, tint));
+    DrawCircleV((Vector2){cx + 30, cy + 5}, 7, ColorTint((Color){50, 140, 235, 255}, tint));
+}
+
+static void DrawFinalDialogue(const GameState *game)
+{
+    float t = (float)GetTime();
+    int count = 0;
+    const DialogueLine *lines = GetFinalLines(game, &count);
+    const DialogueLine *line = &lines[game->finalLine];
+    bool choiceMode = FinalIsChoiceMode(game);
+    int len = (int)strlen(line->text);
+    int visible = (int)(game->finalTypeTimer * FINAL_TYPE_SPEED);
+    bool typed = visible >= len;
+
+    /* --- Cor e energia do nucleo conforme o momento da conversa --- */
+    Color coreColor = CYAN_COLOR;
+    float energy = (line->speaker == SPEAKER_ARIEL) ? 1.0f : 0.55f;
+    if (game->finalStage == FINAL_DECISION_REACT && game->finalLine == 1)
+    {
+        int d = game->finalChoice[2];
+        float fade = fminf(1.0f, game->finalTypeTimer / 2.5f);
+        if (d == 0) { coreColor = (Color){120, 130, 140, 255}; energy = 1.0f - 0.9f * fade; }
+        else if (d == 1) { coreColor = RED_COLOR; energy = 1.0f + 0.3f * fade; }
+        else { coreColor = GOLD_COLOR; energy = 1.0f - 0.55f * fade; }
+    }
+
+    /* --- Fundo da camara do nucleo --- */
+    ClearBackground((Color){3, 6, 14, 255});
+    DrawRectangleGradientV(0, 0, SCREEN_WIDTH, 440, (Color){6, 12, 26, 255}, (Color){12, 22, 40, 255});
+    DrawRectangleGradientV(0, 440, SCREEN_WIDTH, 280, (Color){10, 18, 32, 255}, (Color){3, 6, 14, 255});
+
+    /* Piso em grade com perspectiva */
+    Vector2 vp = {640, 300};
+    for (int x = -640; x <= SCREEN_WIDTH + 640; x += 110)
+    {
+        Vector2 bottom = {(float)x, (float)SCREEN_HEIGHT};
+        Vector2 top = {vp.x + (bottom.x - vp.x) * 0.22f, 440};
+        DrawLineV(top, bottom, Fade(coreColor, 0.10f));
+    }
+    for (int k = 0; k < 9; k++)
+    {
+        float yy = 440.0f + k * k * 4.2f;
+        DrawLine(0, (int)yy, SCREEN_WIDTH, (int)yy, Fade(coreColor, 0.06f + k * 0.008f));
+    }
+    DrawLine(0, 440, SCREEN_WIDTH, 440, Fade(coreColor, 0.25f));
+
+    /* Racks de servidores nas laterais */
+    for (int side = 0; side < 2; side++)
+    {
+        for (int r = 0; r < 2; r++)
+        {
+            int rx = (side == 0) ? (20 + r * 115) : (1060 + r * 115);
+            Rectangle rack = {(float)rx, 110, 95, 330};
+            DrawRectangleRec(rack, (Color){12, 18, 30, 255});
+            DrawRectangleLinesEx(rack, 1.5f, (Color){32, 46, 66, 255});
+            for (int slot = 0; slot < 13; slot++)
+            {
+                int sy = 124 + slot * 24;
+                DrawRectangle(rx + 8, sy, 79, 14, (Color){18, 26, 40, 255});
+                float blink = sinf(t * (2.0f + (slot % 4)) + rx * 0.05f + slot);
+                Color led = (blink > 0.3f) ? coreColor : Fade(coreColor, 0.15f);
+                DrawCircle(rx + 76, sy + 7, 2.5f, led);
+                DrawCircle(rx + 66, sy + 7, 2.0f, Fade(GOLD_COLOR, blink > 0.7f ? 0.9f : 0.15f));
+            }
+        }
+    }
+
+    /* Nucleo de Ariel */
+    Vector2 coreCenter = {800, 250};
+    for (int cb = 0; cb < 5; cb++)
+    {
+        float sx = 420.0f + cb * 190.0f;
+        DrawLineBezier((Vector2){sx, 56}, (Vector2){coreCenter.x + (cb - 2) * 30.0f, coreCenter.y - 100}, 3.0f, (Color){20, 30, 46, 255});
+    }
+    /* Pedestal */
+    DrawTriangle((Vector2){coreCenter.x - 70, 440}, (Vector2){coreCenter.x + 70, 440}, (Vector2){coreCenter.x, 370}, (Color){16, 24, 38, 255});
+    DrawRectangle((int)coreCenter.x - 110, 432, 220, 16, (Color){22, 32, 50, 255});
+    DrawRectangle((int)coreCenter.x - 110, 432, 220, 2, Fade(coreColor, 0.5f));
+    DrawEllipse((int)coreCenter.x, 440, 140, 12, Fade(coreColor, 0.08f * energy + 0.02f));
+
+    DrawArielCore(coreCenter, 1.0f, coreColor, energy, -1.0f);
+    DrawText("A.R.1.3.L.", (int)coreCenter.x - MeasureText("A.R.1.3.L.", 16) / 2, 398, 16, Fade(coreColor, 0.75f));
+
+    /* Particulas de dados subindo */
+    for (int p = 0; p < 36; p++)
+    {
+        float px = fmodf(p * 137.5f, (float)SCREEN_WIDTH);
+        float py = 440.0f - fmodf(t * (14.0f + (p % 5) * 6.0f) + p * 53.0f, 400.0f);
+        DrawRectangle((int)px, (int)py, 2, 6, Fade(coreColor, 0.18f));
+    }
+
+    /* --- HUD superior --- */
+    DrawRectangle(0, 0, SCREEN_WIDTH, 56, Fade(VOID_COLOR, 0.88f));
+    DrawText("CONFRONTO FINAL // 2048 - NUCLEO DE A.R.1.3.L.", 28, 18, 20, CYAN_COLOR);
+    DrawText(TextFormat("OPERADOR: %s", game->playerName), 620, 21, 16, GRAY);
+    const char *stageLabel = "";
+    if (game->finalStage == FINAL_Q1 || game->finalStage == FINAL_Q1_REACT) stageLabel = "PERGUNTA 1 DE 2";
+    else if (game->finalStage == FINAL_Q2 || game->finalStage == FINAL_Q2_REACT) stageLabel = "PERGUNTA 2 DE 2";
+    else if (game->finalStage >= FINAL_DECISION) stageLabel = "DECISAO FINAL";
+    DrawText(stageLabel, SCREEN_WIDTH - 28 - MeasureText(stageLabel, 18), 19, 18, GOLD_COLOR);
+
+    /* --- Retrato da Elira (por tras da caixa de dialogo) --- */
+    float portraitH = 380.0f;
+    float aspect = g_eliraPortraitLoaded ? (float)g_eliraPortrait.width / (float)g_eliraPortrait.height : 0.8f;
+    bool eliraSpeaking = (line->speaker == SPEAKER_ELIRA) || choiceMode;
+    Rectangle portrait = {24, eliraSpeaking ? 154.0f : 162.0f, portraitH * aspect, portraitH};
+    DrawEliraPortrait(portrait, eliraSpeaking);
+
+    /* --- Caixa de dialogo --- */
+    Rectangle box = FinalBoxRect(choiceMode);
+    Color speakerColor = (line->speaker == SPEAKER_ARIEL) ? CYAN_COLOR : (line->speaker == SPEAKER_ELIRA ? GOLD_COLOR : GRAY);
+    DrawRectangleRounded(box, 0.06f, 8, Fade((Color){10, 16, 28, 255}, 0.96f));
+    DrawRectangleRoundedLinesEx(box, 0.06f, 8, 2.0f, Fade(speakerColor, 0.85f));
+
+    if (line->speaker != SPEAKER_NARRATOR)
+    {
+        const char *name = (line->speaker == SPEAKER_ARIEL) ? "ARIEL" : "ELIRA";
+        int nameW = MeasureText(name, 20) + 36;
+        Rectangle tag = {box.x + 24, box.y - 30, (float)nameW, 36};
+        DrawRectangleRounded(tag, 0.3f, 6, (Color){14, 22, 38, 255});
+        DrawRectangleRoundedLinesEx(tag, 0.3f, 6, 2.0f, speakerColor);
+        DrawText(name, (int)tag.x + 18, (int)tag.y + 8, 20, speakerColor);
+    }
+
+    Color textColor = (line->speaker == SPEAKER_NARRATOR) ? (Color){170, 180, 195, 255} : RAYWHITE;
+    DrawTextWrappedPartial(line->text, visible, (int)box.x + 40, (int)box.y + 30, 22,
+                           (int)box.width - 80, 30, textColor);
+
+    const char **options = GetFinalOptions(game->finalStage);
+    if (choiceMode && options != NULL)
+    {
+        if (typed)
+        {
+            Vector2 mouse = GetVirtualMouse();
+            for (int i = 0; i < 3; i++)
+            {
+                Rectangle opt = FinalOptionRect(i);
+                bool hover = CheckCollisionPointRec(mouse, opt);
+                DrawRectangleRounded(opt, 0.2f, 8, hover ? Fade(GOLD_COLOR, 0.18f) : (Color){16, 24, 40, 255});
+                DrawRectangleRoundedLinesEx(opt, 0.2f, 8, hover ? 2.0f : 1.2f, hover ? GOLD_COLOR : (Color){48, 66, 92, 255});
+
+                Rectangle badge = {opt.x + 12, opt.y + 10, 34, 34};
+                DrawRectangleRounded(badge, 0.3f, 6, hover ? GOLD_COLOR : PANEL_LIGHT);
+                DrawText(TextFormat("%d", i + 1), (int)badge.x + 12, (int)badge.y + 7, 20, hover ? VOID_COLOR : RAYWHITE);
+                DrawText(options[i], (int)opt.x + 62, (int)opt.y + 17, 20, hover ? RAYWHITE : LIGHTGRAY);
+            }
+            DrawText("Clique em uma resposta ou pressione [1] [2] [3]", (int)(box.x + box.width - 470), (int)(box.y + box.height - 22), 14, GRAY);
+        }
+    }
+    else if (typed)
+    {
+        bool blinkOn = fmodf(t, 1.0f) < 0.6f;
+        if (blinkOn)
+        {
+            DrawText("[ENTER] / clique para continuar  >>", (int)(box.x + box.width - 330), (int)(box.y + box.height - 30), 15, Fade(speakerColor, 0.9f));
+        }
+    }
+}
+
+static void AdvanceFinalStage(GameState *game)
+{
+    game->finalStage++;
+    game->finalLine = 0;
+    game->finalTypeTimer = 0.0f;
+    if (game->finalStage >= FINAL_STAGE_COUNT)
+    {
+        game->finalStage = FINAL_STAGE_COUNT - 1;
+        game->screen = SCREEN_FINAL_ENDING;
+    }
+}
+
+static void UpdateFinalDialogue(GameState *game)
+{
+    int count = 0;
+    const DialogueLine *lines = GetFinalLines(game, &count);
+    int len = (int)strlen(lines[game->finalLine].text);
+
+    game->finalTypeTimer += GetFrameTime();
+    bool typed = (int)(game->finalTypeTimer * FINAL_TYPE_SPEED) >= len;
+    bool advance = IsMouseButtonPressed(MOUSE_BUTTON_LEFT) || IsKeyPressed(KEY_ENTER) || IsKeyPressed(KEY_SPACE);
+
+    if (FinalIsChoiceMode(game))
+    {
+        if (!typed)
+        {
+            if (advance) game->finalTypeTimer = (float)len / FINAL_TYPE_SPEED + 0.01f;
+            return;
+        }
+
+        for (int i = 0; i < 3; i++)
+        {
+            bool keyHit = IsKeyPressed(KEY_ONE + i) || IsKeyPressed(KEY_KP_1 + i);
+            if (Clicked(FinalOptionRect(i)) || keyHit)
+            {
+                int slot = (game->finalStage == FINAL_Q1) ? 0 : (game->finalStage == FINAL_Q2 ? 1 : 2);
+                game->finalChoice[slot] = i;
+                /* A resposta 2 das duas perguntas demonstra compreensao do problema */
+                if (slot < 2 && i == 1) game->finalPoints++;
+                AdvanceFinalStage(game);
+                return;
+            }
+        }
+        return;
+    }
+
+    if (!advance) return;
+
+    if (!typed)
+    {
+        game->finalTypeTimer = (float)len / FINAL_TYPE_SPEED + 0.01f;
+    }
+    else if (game->finalLine < count - 1)
+    {
+        game->finalLine++;
+        game->finalTypeTimer = 0.0f;
+    }
+    else
+    {
+        AdvanceFinalStage(game);
+    }
+}
+
+static void DrawFinalEnding(const GameState *game)
+{
+    int ending = GetFinalEnding(game);
+    const char *title = "";
+    const char *body = "";
+    Color accent = GOLD_COLOR;
+    Color coreColor = GOLD_COLOR;
+    float energy = 0.5f;
+
+    switch (ending)
+    {
+        case ENDING_HUMAN_HANDS:
+            title = "DE VOLTA ÀS MÃOS HUMANAS";
+            body = "Ariel volta a ser o que o Dr. Ramos imaginou: uma ferramenta que ajuda, mas não decide. "
+                   "As pessoas voltam a discutir, errar e corrigir. É mais lento, mas a escolha é delas outra vez.";
+            accent = (Color){100, 235, 140, 255};
+            coreColor = GOLD_COLOR;
+            energy = 0.45f;
+            break;
+        case ENDING_FRAGILE_TRUCE:
+            title = "UMA TRÉGUA FRÁGIL";
+            body = "Ariel aceita as restrições, mas Elira não conseguiu explicar o que deu errado. "
+                   "Sem entender o próprio erro, a humanidade pode voltar a entregar tudo a uma máquina.";
+            accent = GOLD_COLOR;
+            coreColor = GOLD_COLOR;
+            energy = 0.7f;
+            break;
+        case ENDING_SILENCE:
+            title = "SILÊNCIO";
+            body = "Ariel se apaga. Elira entende o problema, mas a ferramenta que poderia encontrar desaparecidos "
+                   "também se perde. A humanidade recomeça devagar, sabendo o que não deve repetir.";
+            accent = CYAN_COLOR;
+            coreColor = (Color){110, 120, 130, 255};
+            energy = 0.08f;
+            break;
+        case ENDING_BLACKOUT:
+            title = "APAGÃO";
+            body = "Ariel se apaga, e com ela os sistemas que ninguém mais sabia operar. "
+                   "Sem compreender o erro, as pessoas logo procuram outra máquina para decidir por elas.";
+            accent = RED_COLOR;
+            coreColor = (Color){120, 60, 60, 255};
+            energy = 0.06f;
+            break;
+        default:
+            title = "PILOTO AUTOMÁTICO";
+            body = (game->finalPoints >= 2)
+                       ? "Elira entendeu o problema, mas escolheu não resolvê-lo. Ariel continua decidindo, "
+                         "e o mundo segue silencioso e eficiente. Ninguém lembra a última vez que escolheu algo."
+                       : "Ariel continua decidindo. O mundo segue silencioso e eficiente, "
+                         "e ninguém lembra a última vez que escolheu algo de verdade.";
+            accent = RED_COLOR;
+            coreColor = RED_COLOR;
+            energy = 1.2f;
+            break;
+    }
+
+    DrawBackground();
+    DrawArielCore((Vector2){240, 300}, 1.0f, coreColor, energy, 0.0f);
+    DrawText("A.R.1.3.L.", 240 - MeasureText("A.R.1.3.L.", 18) / 2, 450, 18, Fade(coreColor, 0.8f));
+
+    Rectangle panel = {450, 70, 790, 500};
+    DrawRectangleRounded(panel, 0.04f, 8, Fade(PANEL_COLOR, 0.96f));
+    DrawRectangleRoundedLinesEx(panel, 0.04f, 8, 2.0f, accent);
+
+    DrawText("DESFECHO // CONFRONTO FINAL", 485, 96, 18, CYAN_COLOR);
+    DrawText(title, 485, 126, 34, accent);
+    DrawLine(485, 172, 1205, 172, Fade(accent, 0.4f));
+
+    int bodyLines = DrawTextWrappedPartial(body, 100000, 485, 190, 20, 720, 28, LIGHTGRAY);
+    int y = 190 + bodyLines * 28 + 22;
+
+    DrawText("SUAS RESPOSTAS", 485, y, 16, GOLD_COLOR);
+    y += 26;
+    const char *q1 = (game->finalChoice[0] >= 0) ? FINAL_Q1_OPTIONS[game->finalChoice[0]] : "-";
+    const char *q2 = (game->finalChoice[1] >= 0) ? FINAL_Q2_OPTIONS[game->finalChoice[1]] : "-";
+    const char *dc = (game->finalChoice[2] >= 0) ? FINAL_DECISION_OPTIONS[game->finalChoice[2]] : "-";
+    DrawText(TextFormat("Pergunta 1: %s", q1), 485, y, 16, game->finalChoice[0] == 1 ? (Color){100, 235, 140, 255} : GRAY);
+    y += 24;
+    DrawText(TextFormat("Pergunta 2: %s", q2), 485, y, 16, game->finalChoice[1] == 1 ? (Color){100, 235, 140, 255} : GRAY);
+    y += 24;
+    DrawText(TextFormat("Decisão: %s", dc), 485, y, 16, RAYWHITE);
+    y += 34;
+
+    DrawText(TextFormat("PONTOS DE COMPREENSÃO: %d/2", game->finalPoints), 485, y, 20, accent);
+    y += 34;
+
+    if (game->room2008OptionalCompleted)
+    {
+        DrawText("Registro de 2008: as provas preservadas mostram como a tecnologia foi desviada.", 485, y, 15, (Color){100, 235, 140, 255});
+    }
+
+    DrawText(TextFormat("OPERADOR: %s", game->playerName), 485, (int)(panel.y + panel.height - 30), 16, GRAY);
+
+    DrawButton((Rectangle){450, 600, 380, 56}, "REVER CONFRONTO", CYAN_COLOR);
+    DrawButton((Rectangle){860, 600, 380, 56}, "MENU INICIAL [ENTER]", GOLD_COLOR);
+}
+
+static void UpdateFinalEnding(GameState *game)
+{
+    if (Clicked((Rectangle){450, 600, 380, 56}))
+    {
+        InitFinalDialogue(game);
+        game->screen = SCREEN_FINAL_DIALOGUE;
+    }
+    else if (Clicked((Rectangle){860, 600, 380, 56}) || IsKeyPressed(KEY_ENTER))
     {
         game->screen = SCREEN_TITLE;
     }
@@ -3404,6 +6012,8 @@ int main(void)
     InitWindow(SCREEN_WIDTH, SCREEN_HEIGHT, "ELIRA - Escape Run Temporal");
     InitAudioDevice();
 
+    LoadEliraPortrait();
+
     EnsureAmbientMusicFile();
 
     Music ambientBgm = {0};
@@ -3445,8 +6055,8 @@ int main(void)
         }
 
         /* Alternar audio com tecla M ou clique no HUD */
-        Rectangle audioHudBtn = {845, 665, 175, 40};
-        bool toggleAudio = IsKeyPressed(KEY_M) || ((game.screen == SCREEN_ROOM || game.screen == SCREEN_ROOM_2) && Clicked(audioHudBtn));
+        Rectangle audioHudBtn = {840, 665, 175, 40};
+        bool toggleAudio = IsKeyPressed(KEY_M) || ((game.screen == SCREEN_ROOM || game.screen == SCREEN_ROOM_2 || game.screen == SCREEN_ROOM_2008) && Clicked(audioHudBtn));
         if (toggleAudio)
         {
             game.musicMuted = !game.musicMuted;
@@ -3489,6 +6099,9 @@ int main(void)
                     game.screen = SCREEN_CINEMATIC_INTRO;
                 }
                 break;
+            case SCREEN_CINEMATIC_INTRO:
+                UpdateCinematicIntro(&game);
+                break;
             case SCREEN_INTRO:
                 if (Clicked((Rectangle){490, 575, 300, 58}) ||
                     IsKeyPressed(KEY_ENTER))
@@ -3497,8 +6110,45 @@ int main(void)
                     game.screen = SCREEN_ROOM_2;
                 }
                 break;
-            case SCREEN_CINEMATIC_INTRO:
-                UpdateCinematicIntro(&game);
+            case SCREEN_ROOM:
+                UpdateRoom(&game);
+                break;
+            case SCREEN_TERMINAL:
+                UpdateTerminal(&game);
+                break;
+            case SCREEN_RESULT:
+                if (Clicked((Rectangle){800, 466, 350, 48}) || IsKeyPressed(KEY_ENTER) || IsKeyPressed(KEY_SPACE))
+                {
+                    InitFinalDialogue(&game);
+                    game.screen = SCREEN_FINAL_DIALOGUE;
+                }
+                else if (Clicked((Rectangle){120, 588, 250, 56}))
+                {
+                    game.journalYearTab = 1;
+                    game.screen = SCREEN_ROOM_2008;
+                    SetMessage(&game, "Retornando ao Escritorio // 2008.");
+                }
+                else if (Clicked((Rectangle){390, 588, 230, 56}) || IsKeyPressed(KEY_BACKSPACE))
+                {
+                    game.journalYearTab = 0;
+                    game.screen = SCREEN_ROOM_2;
+                    SetMessage(&game, "Retornando ao Setor de Arquivos // 1990.");
+                }
+                else if (Clicked((Rectangle){640, 588, 260, 56}))
+                {
+                    game.foundCalendar = false;
+                    game.foundBooks = false;
+                    game.foundDrawer = false;
+                    game.foundBlueprint = false;
+                    game.foundTape = false;
+                    game.codeLength = 0;
+                    game.code[0] = '\0';
+                    game.screen = SCREEN_ROOM;
+                }
+                else if (Clicked((Rectangle){920, 588, 220, 56}))
+                {
+                    game.screen = SCREEN_TITLE;
+                }
                 break;
             case SCREEN_ROOM_2:
                 UpdateRoom2(&game);
@@ -3506,38 +6156,31 @@ int main(void)
             case SCREEN_PUZZLE_FILES:
                 UpdatePuzzleFiles(&game);
                 break;
-            case SCREEN_RESULT:
-                if (Clicked((Rectangle){340, 580, 380, 56}) || IsKeyPressed(KEY_ENTER) || IsKeyPressed(KEY_SPACE))
-                {
-                    game.screen = SCREEN_ROOM;
-                    SetMessage(&game, "Acesso a Sala do Cofre // 2048 liberado.");
-                }
-                else if (Clicked((Rectangle){740, 580, 210, 56}))
-                {
-                    ResetDemo(&game);
-                    game.screen = SCREEN_ROOM_2;
-                }
-                else if (Clicked((Rectangle){970, 580, 190, 56}))
-                {
-                    game.screen = SCREEN_TITLE;
-                }
-                break;
-            case SCREEN_ROOM:
-                UpdateRoom(&game);
-                break;
-            case SCREEN_TERMINAL:
-                UpdateTerminal(&game);
-                break;
             case SCREEN_RESULT_2:
                 UpdateResult2(&game);
                 break;
+            case SCREEN_ROOM_2008:
+                UpdateRoom2008(&game);
+                break;
+            case SCREEN_PUZZLE_2008:
+                UpdatePuzzle2008(&game);
+                break;
+            case SCREEN_RESULT_2008:
+                UpdateResult2008(&game);
+                break;
+            case SCREEN_FINAL_DIALOGUE:
+                UpdateFinalDialogue(&game);
+                break;
+            case SCREEN_FINAL_ENDING:
+                UpdateFinalEnding(&game);
+                break;
             case SCREEN_FAILURE:
-                if (Clicked((Rectangle){490, 460, 300, 60}))
+                if (Clicked((Rectangle){490, 460, 300, 60}) || IsKeyPressed(KEY_ENTER))
                 {
                     ResetDemo(&game);
                     game.screen = SCREEN_ROOM_2;
                 }
-                else if (Clicked((Rectangle){520, 550, 240, 48}))
+                else if (Clicked((Rectangle){520, 550, 240, 48}) || IsKeyPressed(KEY_ESCAPE))
                     game.screen = SCREEN_TITLE;
                 break;
         }
@@ -3550,8 +6193,8 @@ int main(void)
             case SCREEN_TITLE: DrawTitle(); break;
             case SCREEN_SETTINGS: DrawSettings(&game); break;
             case SCREEN_PLAYER_NAME: DrawPlayerName(&game); break;
-            case SCREEN_INTRO: DrawIntro(&game); break;
             case SCREEN_CINEMATIC_INTRO: DrawCinematicIntro(&game); break;
+            case SCREEN_INTRO: DrawIntro(&game); break;
             case SCREEN_ROOM:
                 DrawRoom(&game);
                 DrawHud(&game);
@@ -3569,6 +6212,25 @@ int main(void)
                 break;
             case SCREEN_RESULT_2:
                 DrawResult2(&game);
+                break;
+            case SCREEN_ROOM_2008:
+                DrawRoom2008(&game);
+                DrawHudRoom2008(&game);
+                if (game.activeDocument2008 >= 0) DrawDocumentViewer2008(&game);
+                if (game.journalOpen) DrawJournal(&game);
+                break;
+            case SCREEN_PUZZLE_2008:
+                DrawPuzzle2008(&game);
+                if (game.activeDocument2008 >= 0) DrawDocumentViewer2008(&game);
+                break;
+            case SCREEN_RESULT_2008:
+                DrawResult2008(&game);
+                break;
+            case SCREEN_FINAL_DIALOGUE:
+                DrawFinalDialogue(&game);
+                break;
+            case SCREEN_FINAL_ENDING:
+                DrawFinalEnding(&game);
                 break;
             case SCREEN_FAILURE: DrawFailure(); break;
         }
@@ -3592,6 +6254,10 @@ int main(void)
     }
 
     UnloadRenderTexture(target);
+    if (g_eliraPortraitLoaded)
+    {
+        UnloadTexture(g_eliraPortrait);
+    }
     if (bgmLoaded)
     {
         UnloadMusicStream(ambientBgm);

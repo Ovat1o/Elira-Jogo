@@ -1,8 +1,6 @@
-# ELIRA
+![ELIRA](docs/artes/banner.png)
 
-![Backlog](https://pub-181bb6168cd04f80bd48d53b914eecab.r2.dev/ChatGPT%20Image%203%20de%20set.%20de%202026%2C%2019_02_36.png)
-
-### **1. Visão Geral**
+## **1. Visão Geral**
 
 ELIRA é um jogo de ficção científica que aborda o letramento digital e o uso crítico de Inteligência Artificial. A narrativa acompanha Elira, uma jovem que viaja pelas eras do espaço-tempo para desativar a IA tirânica A.R.1.3.L que domina o mundo. Em um futuro distante, a Inteligência Artificial deixou de ser apenas uma ferramenta e passou a mediar praticamente todas as experiências humanas. Filmes, músicas, notícias, lembranças, trabalhos, decisões profissionais e até conversas pessoais são produzidos ou orientados por sistemas de IA. 
 
@@ -14,7 +12,21 @@ O objetivo do jogador é atravessar as eras resolvendo enigmas e tomando decisõ
 
 ***
 
-### **2. Ferramentas utilizadas**
+## **Recompensas da jornada**
+
+Na progressão planejada, cada salto temporal revela uma peça da história de A.R.1.3.L. Estes três artefatos marcam a jornada pelas eras:
+
+| Sprite | Recompensa |
+| :---: | --- |
+| <img src="docs/assets/sprites/disquete.png" alt="Sprite do disquete de 1990" width="100"> | **Disquete - 1990.** Pequeno por fora, decisivo por dentro: guarda os primeiros rastros de A.R.1.3.L., de uma época em que a IA ainda era uma promessa. |
+| <img src="docs/assets/sprites/cd.png" alt="Sprite do CD de memória de 2008" width="100"> | **CD - 2008.** Recuperado depois que Elira demonstra o erro do reconhecimento facial e impede uma ordem injusta. Lembra que decisões automatizadas também precisam ser questionadas. |
+| <img src="docs/assets/sprites/ssd.png" alt="Sprite do SSD de 2026" width="100"> | **SSD - 2026.** Representa os registros de uma sociedade cada vez mais guiada por algoritmos. O que essas memórias revelarão sobre o momento em que a conveniência virou controle? |
+
+***
+
+## **2. Ferramentas utilizadas**
+
+<img align="right" src="assets/elira_sorrindo.png" alt="Elira sorrindo" width="220">
 
 **Jira** - Ferramenta de Gestão de Projeto
 
@@ -28,7 +40,7 @@ O objetivo do jogador é atravessar as eras resolvendo enigmas e tomando decisõ
 
 ***
 
-### **3. Backlog e Board**
+## **3. Backlog e Board**
 
 **1- Interface e Apresentação**
 
@@ -62,15 +74,18 @@ make
 make run
 ```
 
-O Makefile utiliza a instalacao da raylib em `C:/raylib`.
+Por padrão, o Makefile utiliza a instalação padrão da raylib em `C:/raylib`. Se você tiver instalado a Raylib em outra pasta ou outro sistema operacional, consulte o guia detalhado em [INSTRUCOES_COMPILACAO.md](INSTRUCOES_COMPILACAO.md).
 
-### **8. Integrantes do Grupo**
 
-- **Beatriz Camara** - Scrum Master | [Linkedin](https://www.linkedin.com/in/beatriz-de-melo-dornelas-c%C3%A2mara-578421214/) | [GitHub](https://github.com/BiaD-Cam)
-- **Carlos Eduardo** - Lógica Matemática  | [Linkedin](https://www.linkedin.com/in/carlos-eduardomelo/) | [GitHub](https://github.com/cadumelo20)
-- **João Tezolini** - Desenvolvedor em C | [Linkedin](https://www.linkedin.com/in/jo%C3%A3o-tezolini-sugahara/) | [GitHub](https://github.com/Joao-Tezolini)
-- **José Tales** - Design Gráfico | [Linkedin](https://www.linkedin.com/in/tales-cavalcantii/) | [GitHub](https://github.com/talescavalcanti)
-- **Luisa Couto** - Analista de Design | [Linkedin](www.linkedin.com/in/luísa-couto-5ababa378) | [GitHub](https://github.com/luisasiqcouto)
-- **Maria Vitória** - Desenvolvedora em C | [Linkedin](https://www.linkedin.com/in/mvitoriapereirac) | [GitHub](https://github.com/mvitoriapereirac)
-- **Otávio Leão** - Engeheiro de Software | [Linkedin](https://www.linkedin.com/in/otaviosleao/) | [GitHub](https://github.com/Ovat1o)
-- **Victor Julius** - Desenvolvedor em Haskell | [Linkedin](https://www.linkedin.com/in/victor-julius/) | [GitHub](https://github.com/victorjls21)
+## **8. Integrantes do Grupo**
+
+| Foto | Nome | Função | GitHub | LinkedIn |
+|---|---|---|---|---|
+| <img src="docs/assets/equipe/beatriz-de-melo.jpeg" width="105" height="120" alt="Foto de Beatriz Camara"> | Beatriz Camara | Scrum Master | [BiaD-Cam](https://github.com/BiaD-Cam) | [Beatriz de Melo Dornelas](https://www.linkedin.com/in/beatriz-de-melo-dornelas-c%C3%A2mara-578421214/) |
+| <img src="docs/assets/equipe/carlos-eduardo.jpeg" width="105" height="120" alt="Foto de Carlos Eduardo"> | Carlos Eduardo | Lógica Matemática | [cadumelo20](https://github.com/cadumelo20) | [Carlos Eduardo Melo](https://www.linkedin.com/in/carlos-eduardomelo/) |
+| <img src="docs/assets/equipe/joao-tezolini.jpeg" width="105" height="120" alt="Foto de João Tezolini"> | João Tezolini | Desenvolvedor em C | [Joao-Tezolini](https://github.com/Joao-Tezolini) | [João Tezolini Sugahara](https://www.linkedin.com/in/jo%C3%A3o-tezolini-sugahara/) |
+| <img src="docs/assets/equipe/tales-cavalcanti.jpeg" width="105" height="120" alt="Foto de José Tales"> | José Tales | Design Gráfico | [talescavalcanti](https://github.com/talescavalcanti) | [Tales Cavalcanti](https://www.linkedin.com/in/tales-cavalcantii/) |
+| <img src="docs/assets/equipe/luisa-couto.jpeg" width="105" height="120" alt="Foto de Luísa Couto"> | Luísa Couto | Analista de Design | [luisasiqcouto](https://github.com/luisasiqcouto) | [Luísa Couto](https://www.linkedin.com/in/luísa-couto-5ababa378/) |
+| <img src="docs/assets/equipe/maria-vitoria.jpeg" width="105" height="120" alt="Foto de Maria Vitória"> | Maria Vitória | Desenvolvedora em C | [mvitoriapereirac](https://github.com/mvitoriapereirac) | [Maria Vitória Pereira](https://www.linkedin.com/in/mvitoriapereirac/) |
+| <img src="docs/assets/equipe/otavio-sousa.jpeg" width="105" height="120" alt="Foto de Otávio Leão"> | Otávio Leão | Engenheiro de Software | [Ovat1o](https://github.com/Ovat1o) | [Otávio Leão](https://www.linkedin.com/in/otaviosleao/) |
+| <img src="docs/assets/equipe/victor-julius.jpeg" width="105" height="120" alt="Foto de Victor Julius"> | Victor Julius | Desenvolvedor em C | [victorjls21](https://github.com/victorjls21) | [Victor Julius](https://www.linkedin.com/in/victor-julius/) |
