@@ -20,8 +20,14 @@ CFLAGS   ?= -std=c99 -Wall -Wextra
 ifeq ($(OS),Windows_NT)
     LDLIBS ?= -L$(RAYLIB_DIR)/raylib/src -lraylib -lopengl32 -lgdi32 -lwinmm
     OUT := ELIRA.exe
+else ifeq ($(shell uname -s),Darwin)
+    # Suporte para macOS (raylib via Homebrew: brew install raylib), linkada estaticamente
+    RAYLIB_PREFIX ?= $(shell brew --prefix raylib 2>/dev/null)
+    CPPFLAGS += -I$(RAYLIB_PREFIX)/include
+    LDLIBS ?= $(RAYLIB_PREFIX)/lib/libraylib.a -framework Cocoa -framework IOKit -framework OpenGL -framework CoreVideo
+    OUT := ELIRA
 else
-    # Suporte para Linux / macOS
+    # Suporte para Linux
     LDLIBS ?= -lraylib -lGL -lm -lpthread -ldl -lrt -lX11
     OUT := ELIRA
 endif
