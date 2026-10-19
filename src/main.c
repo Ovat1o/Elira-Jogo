@@ -12,9 +12,21 @@
 #define ACCESS_CODE "1950"
 #define PLAYER_NAME_MAX 20
 
+/* Compatibilidade entre versoes da raylib (5.0 no Windows, 5.5/6.0 no macOS/Linux) */
+#if RAYLIB_VERSION_MAJOR < 5 || (RAYLIB_VERSION_MAJOR == 5 && RAYLIB_VERSION_MINOR < 5)
 static inline void DrawRectangleRoundedLinesEx(Rectangle rec, float roundness, int segments, float lineThick, Color color)
 {
     DrawRectangleRoundedLines(rec, roundness, segments, lineThick, color);
+}
+#endif
+
+static inline void DrawCircleGradientCompat(int centerX, int centerY, float radius, Color inner, Color outer)
+{
+#if RAYLIB_VERSION_MAJOR >= 6
+    DrawCircleGradient((Vector2){(float)centerX, (float)centerY}, radius, inner, outer);
+#else
+    DrawCircleGradient(centerX, centerY, radius, inner, outer);
+#endif
 }
 
 typedef enum GameScreen
@@ -132,6 +144,86 @@ static Color GetFileWireColor(int colorIndex)
 static int g_currentRes = 0; /* 0: 1280x720, 1: 1600x900, 2: 1920x1080 */
 static float g_musicVolume = 0.45f;
 
+/* Fonte geral do jogo: Geist Pixel (Square). Cada tamanho e rasterizado sob demanda
+   para manter os pixels nitidos; sem o arquivo, volta para a fonte padrao da raylib. */
+#define GAME_FONT_PATH "assets/fonts/GeistPixel-Square.ttf"
+#define GAME_FONT_MAX_SIZE 192
+/* A raylib dimensiona TTFs por ascendente+descendente (1300/1000 do em na Geist).
+   Com 1.3x e subindo 0.19x, a Geist ocupa a mesma caixa da fonte padrao
+   (altura de maiuscula e largura praticamente iguais), preservando os layouts. */
+#define GAME_FONT_SCALE    1.3f
+#define GAME_FONT_OFFSET_Y 0.19f
+
+static Font g_fontCache[GAME_FONT_MAX_SIZE + 1];
+static int g_fontState = 0; /* 0 = nao verificado, 1 = disponivel, -1 = arquivo ausente */
+
+static bool GameFontAvailable(void)
+{
+    if (g_fontState == 0) g_fontState = FileExists(GAME_FONT_PATH) ? 1 : -1;
+    return g_fontState > 0;
+}
+
+/* 'pixelSize' e o tamanho real de rasterizacao (ja escalado) */
+static Font GetGameFont(float pixelSize)
+{
+    int px = (int)(pixelSize + 0.5f);
+    if (px < 1) px = 1;
+    if (px > GAME_FONT_MAX_SIZE) px = GAME_FONT_MAX_SIZE;
+
+    if (g_fontCache[px].texture.id == 0)
+    {
+        /* ASCII + Latin-1 (acentos do portugues) */
+        int codepoints[95 + 96];
+        int count = 0;
+        for (int c = 32; c <= 126; c++) codepoints[count++] = c;
+        for (int c = 160; c <= 255; c++) codepoints[count++] = c;
+        g_fontCache[px] = LoadFontEx(GAME_FONT_PATH, px, codepoints, count);
+    }
+    return g_fontCache[px];
+}
+
+static void UnloadGameFonts(void)
+{
+    for (int i = 0; i <= GAME_FONT_MAX_SIZE; i++)
+    {
+        if (g_fontCache[i].texture.id != 0) UnloadFont(g_fontCache[i]);
+    }
+}
+
+/* Substitutos de DrawTextEx/MeasureTextEx: 'size' segue a escala da fonte padrao */
+static void DrawGameTextEx(const char *text, Vector2 position, float size, float spacing, Color color)
+{
+    if (!GameFontAvailable())
+    {
+        DrawTextEx(GetFontDefault(), text, position, size, spacing, color);
+        return;
+    }
+    position.y -= size * GAME_FONT_OFFSET_Y;
+    DrawTextEx(GetGameFont(size * GAME_FONT_SCALE), text, position, size * GAME_FONT_SCALE, spacing, color);
+}
+
+static Vector2 MeasureGameTextEx(const char *text, float size, float spacing)
+{
+    if (!GameFontAvailable()) return MeasureTextEx(GetFontDefault(), text, size, spacing);
+
+    Vector2 measured = MeasureTextEx(GetGameFont(size * GAME_FONT_SCALE), text, size * GAME_FONT_SCALE, spacing);
+    measured.y /= GAME_FONT_SCALE;
+    return measured;
+}
+
+/* Substitutos de DrawText/MeasureText (a fonte padrao usa espacamento size/10) */
+static void DrawGameText(const char *text, int x, int y, int size, Color color)
+{
+    float spacing = GameFontAvailable() ? 0.0f : size / 10.0f;
+    DrawGameTextEx(text, (Vector2){(float)x, (float)y}, (float)size, spacing, color);
+}
+
+static int MeasureGameText(const char *text, int size)
+{
+    float spacing = GameFontAvailable() ? 0.0f : size / 10.0f;
+    return (int)MeasureGameTextEx(text, (float)size, spacing).x;
+}
+
 static Vector2 GetVirtualMouse(void)
 {
     Vector2 mouse = GetMousePosition();
@@ -169,20 +261,20 @@ static void ApplyResolution(int resIndex)
 
 static void CenterText(const char *text, int y, int size, Color color)
 {
-    DrawText(text, (SCREEN_WIDTH - MeasureText(text, size)) / 2, y, size, color);
+    DrawGameText(text, (SCREEN_WIDTH - MeasureGameText(text, size)) / 2, y, size, color);
 }
 
 static void DrawButton(Rectangle bounds, const char *label, Color accent)
 {
     bool hover = CheckCollisionPointRec(GetVirtualMouse(), bounds);
     int size = 21;
-    int width = MeasureText(label, size);
+    int width = MeasureGameText(label, size);
 
     DrawRectangleRounded(bounds, 0.16f, 8,
                          hover ? Fade(accent, 0.24f) : PANEL_COLOR);
     DrawRectangleRoundedLinesEx(bounds, 0.16f, 8, 2,
                                 hover ? accent : PANEL_LIGHT);
-    DrawText(label, (int)(bounds.x + (bounds.width - width) / 2),
+    DrawGameText(label, (int)(bounds.x + (bounds.width - width) / 2),
              (int)(bounds.y + (bounds.height - size) / 2), size,
              hover ? RAYWHITE : LIGHTGRAY);
 }
@@ -286,7 +378,7 @@ static void DrawTitleSpaceBackground(void)
     DrawEllipseLines((int)planetX, (int)planetY, 222, 73, Fade(CYAN_COLOR, 0.24f + 0.08f * sinf(time * 2.0f)));
 
     /* Esfera do planeta */
-    DrawCircleGradient((int)planetX, (int)planetY, 154,
+    DrawCircleGradientCompat((int)planetX, (int)planetY, 154,
                        (Color){80, 147, 181, 255},
                        (Color){17, 35, 64, 255});
 
@@ -294,7 +386,7 @@ static void DrawTitleSpaceBackground(void)
     DrawCircle((int)(planetX + 57), (int)(planetY - 20), 132, Fade((Color){2, 7, 19, 255}, 0.74f));
 
     /* Ponto de luz especular pulsante */
-    DrawCircleGradient((int)(planetX - 50.0f), (int)(planetY - 52.0f), 36,
+    DrawCircleGradientCompat((int)(planetX - 50.0f), (int)(planetY - 52.0f), 36,
                        Fade(RAYWHITE, 0.20f + 0.06f * sinf(time * 1.8f)), BLANK);
 
     /* Aneis internos */
@@ -460,7 +552,7 @@ static void DrawTitleStartButton(Rectangle bounds, const char *label, Color acce
     bool hover = CheckCollisionPointRec(mouse, bounds);
     float time = (float)GetTime();
     int size = 21;
-    int width = MeasureText(label, size);
+    int width = MeasureGameText(label, size);
 
     float pulse = 0.70f + 0.30f * sinf(time * 3.0f);
     Color borderColor = hover ? RAYWHITE : Fade(accent, pulse);
@@ -503,7 +595,7 @@ static void DrawTitleStartButton(Rectangle bounds, const char *label, Color acce
 
     int textX = (int)(bounds.x + (bounds.width - width) / 2);
     int textY = (int)(bounds.y + (bounds.height - size) / 2);
-    DrawText(label, textX, textY, size, hover ? RAYWHITE : (Color){205, 235, 245, 255});
+    DrawGameText(label, textX, textY, size, hover ? RAYWHITE : (Color){205, 235, 245, 255});
 }
 
 static void DrawTitle(void)
@@ -518,28 +610,28 @@ static void DrawTitle(void)
     float blink = sinf(time * 4.5f);
     Color dotColor = (blink > 0.0f) ? (Color){80, 245, 190, 255} : (Color){25, 75, 55, 255};
     DrawCircle(76, 125, 4, dotColor);
-    DrawText("ARQUIVO DE MEMORIA  //  TRANSMISSAO 01", 90, 116, 17,
+    DrawGameText("ARQUIVO DE MEMORIA  //  TRANSMISSAO 01", 90, 116, 17,
              Fade(CYAN_COLOR, 0.82f));
 
     /* 2. Titulo ELIRA com aura neon e micro-glitch sci-fi */
     const char *titleText = "ELIRA";
-    int titleW = MeasureText(titleText, 96);
+    int titleW = MeasureGameText(titleText, 96);
     float titleGlow = 0.30f + 0.18f * sinf(time * 2.2f);
-    DrawText(titleText, 81, 164, 96, Fade(CYAN_COLOR, titleGlow * 0.45f));
-    DrawText(titleText, 83, 164, 96, Fade(CYAN_COLOR, titleGlow * 0.45f));
-    DrawText(titleText, 82, 163, 96, Fade(CYAN_COLOR, titleGlow * 0.45f));
-    DrawText(titleText, 82, 165, 96, Fade(CYAN_COLOR, titleGlow * 0.45f));
+    DrawGameText(titleText, 81, 164, 96, Fade(CYAN_COLOR, titleGlow * 0.45f));
+    DrawGameText(titleText, 83, 164, 96, Fade(CYAN_COLOR, titleGlow * 0.45f));
+    DrawGameText(titleText, 82, 163, 96, Fade(CYAN_COLOR, titleGlow * 0.45f));
+    DrawGameText(titleText, 82, 165, 96, Fade(CYAN_COLOR, titleGlow * 0.45f));
 
     float glitchCycle = fmodf(time, 4.2f);
     bool isGlitch = (glitchCycle < 0.10f) || (glitchCycle > 2.10f && glitchCycle < 2.17f);
     if (isGlitch)
     {
         float shift = sinf(time * 50.0f) * 4.0f;
-        DrawText(titleText, (int)(82 + shift), 164, 96, Fade(CYAN_COLOR, 0.70f));
-        DrawText(titleText, (int)(82 - shift), 164, 96, Fade(RED_COLOR, 0.60f));
+        DrawGameText(titleText, (int)(82 + shift), 164, 96, Fade(CYAN_COLOR, 0.70f));
+        DrawGameText(titleText, (int)(82 - shift), 164, 96, Fade(RED_COLOR, 0.60f));
         DrawRectangle(80, 198, titleW + 16, 3, Fade(CYAN_COLOR, 0.45f));
     }
-    DrawText(titleText, 82, 164, 96, RAYWHITE);
+    DrawGameText(titleText, 82, 164, 96, RAYWHITE);
 
     /* 3. Linhas decorativas com pulso de luz laser em movimento */
     DrawRectangle(88, 274, 554, 3, CYAN_COLOR);
@@ -553,10 +645,10 @@ static void DrawTitle(void)
     }
 
     /* 4. Subtitulos */
-    DrawText("ESCAPE RUN TEMPORAL", 90, 307, 29, CYAN_COLOR);
-    DrawText("ENTRE NAS MEMORIAS DA MAQUINA", 91, 355, 19,
+    DrawGameText("ESCAPE RUN TEMPORAL", 90, 307, 29, CYAN_COLOR);
+    DrawGameText("ENTRE NAS MEMORIAS DA MAQUINA", 91, 355, 19,
              Fade(RAYWHITE, 0.75f));
-    DrawText("Descubra o que existia antes de A.R.1.3.L. controlar o futuro.",
+    DrawGameText("Descubra o que existia antes de A.R.1.3.L. controlar o futuro.",
              91, 386, 18, GRAY);
 
     /* 5. Botoes interativos */
@@ -565,12 +657,12 @@ static void DrawTitle(void)
 
     /* 6. Indicador de atalhos pulsante */
     float promptAlpha = 0.40f + 0.55f * (0.5f + 0.5f * sinf(time * 3.4f));
-    DrawText("> ENTER: Iniciar  |  C: Opcoes <", 93, 574, 15, Fade(GOLD_COLOR, promptAlpha));
+    DrawGameText("> ENTER: Iniciar  |  C: Opcoes <", 93, 574, 15, Fade(GOLD_COLOR, promptAlpha));
 
     /* 7. Rodape */
-    DrawText("DEMO TEMPORAL  //  1990 - 2048", 91, 638, 16,
+    DrawGameText("DEMO TEMPORAL  //  1990 - 2048", 91, 638, 16,
              Fade(LIGHTGRAY, 0.62f));
-    DrawText("Point & click narrativo", 946, 650, 16,
+    DrawGameText("Point & click narrativo", 946, 650, 16,
              Fade(LIGHTGRAY, 0.50f));
 
     /* 8. Linhas CRT retro */
@@ -601,13 +693,13 @@ static void DrawSettings(const GameState *game)
     DrawLineEx((Vector2){panel.x + panel.width - pad, panel.y + panel.height - pad}, (Vector2){panel.x + panel.width - pad, panel.y + panel.height - pad - tLen}, 2.5f, GOLD_COLOR);
 
     /* Cabecalho */
-    DrawText("CONFIGURACOES DE VIDEO & SISTEMA", 240, 100, 26, RAYWHITE);
-    DrawText("Ajuste a resolucao, tela cheia e parametros da experiencia", 240, 134, 14, GRAY);
+    DrawGameText("CONFIGURACOES DE VIDEO & SISTEMA", 240, 100, 26, RAYWHITE);
+    DrawGameText("Ajuste a resolucao, tela cheia e parametros da experiencia", 240, 134, 14, GRAY);
     DrawLine(240, 156, 1040, 156, Fade(CYAN_COLOR, 0.40f));
 
     /* --- SEÇÃO 1: MODO DE TELA (FULLSCREEN) --- */
-    DrawText("1. MODO DE EXIBICAO", 240, 172, 17, CYAN_COLOR);
-    DrawText("Alterne entre o modo Janela e Tela Cheia (Fullscreen):", 240, 194, 13, LIGHTGRAY);
+    DrawGameText("1. MODO DE EXIBICAO", 240, 172, 17, CYAN_COLOR);
+    DrawGameText("Alterne entre o modo Janela e Tela Cheia (Fullscreen):", 240, 194, 13, LIGHTGRAY);
 
     bool isFull = IsWindowFullscreen();
     Rectangle btnWindowed = {240, 218, 250, 44};
@@ -616,16 +708,16 @@ static void DrawSettings(const GameState *game)
     bool winHover = CheckCollisionPointRec(GetVirtualMouse(), btnWindowed);
     DrawRectangleRounded(btnWindowed, 0.20f, 6, !isFull ? Fade(CYAN_COLOR, 0.25f) : (winHover ? Fade(PANEL_LIGHT, 0.6f) : PANEL_COLOR));
     DrawRectangleRoundedLinesEx(btnWindowed, 0.20f, 6, 1.8f, !isFull ? CYAN_COLOR : (winHover ? RAYWHITE : PANEL_LIGHT));
-    DrawText(!isFull ? "[X] MODO JANELA" : "    MODO JANELA", 280, 231, 16, !isFull ? RAYWHITE : GRAY);
+    DrawGameText(!isFull ? "[X] MODO JANELA" : "    MODO JANELA", 280, 231, 16, !isFull ? RAYWHITE : GRAY);
 
     bool fullHover = CheckCollisionPointRec(GetVirtualMouse(), btnFullscreen);
     DrawRectangleRounded(btnFullscreen, 0.20f, 6, isFull ? Fade(CYAN_COLOR, 0.25f) : (fullHover ? Fade(PANEL_LIGHT, 0.6f) : PANEL_COLOR));
     DrawRectangleRoundedLinesEx(btnFullscreen, 0.20f, 6, 1.8f, isFull ? CYAN_COLOR : (fullHover ? RAYWHITE : PANEL_LIGHT));
-    DrawText(isFull ? "[X] TELA CHEIA [F11]" : "    TELA CHEIA [F11]", 545, 231, 16, isFull ? RAYWHITE : GRAY);
+    DrawGameText(isFull ? "[X] TELA CHEIA [F11]" : "    TELA CHEIA [F11]", 545, 231, 16, isFull ? RAYWHITE : GRAY);
 
     /* --- SEÇÃO 2: RESOLUCAO DA JANELA --- */
-    DrawText("2. RESOLUCAO DE TELA (PROPORCAO 16:9)", 240, 282, 17, CYAN_COLOR);
-    DrawText("Selecione a resolucao da janela (redimensionamento automatico):", 240, 304, 13, LIGHTGRAY);
+    DrawGameText("2. RESOLUCAO DE TELA (PROPORCAO 16:9)", 240, 282, 17, CYAN_COLOR);
+    DrawGameText("Selecione a resolucao da janela (redimensionamento automatico):", 240, 304, 13, LIGHTGRAY);
 
     const char *resLabels[3] = {
         "1280 x 720 (HD)",
@@ -645,8 +737,8 @@ static void DrawSettings(const GameState *game)
                                     isCurrent ? GOLD_COLOR : (hover ? CYAN_COLOR : PANEL_LIGHT));
 
         const char *prefix = isCurrent ? "[X] " : "";
-        int txtWidth = MeasureText(TextFormat("%s%s", prefix, resLabels[r]), 15);
-        DrawText(TextFormat("%s%s", prefix, resLabels[r]),
+        int txtWidth = MeasureGameText(TextFormat("%s%s", prefix, resLabels[r]), 15);
+        DrawGameText(TextFormat("%s%s", prefix, resLabels[r]),
                  (int)(resBtn.x + (resBtn.width - txtWidth) / 2),
                  (int)(resBtn.y + 16), 15,
                  isCurrent ? GOLD_COLOR : (hover ? RAYWHITE : LIGHTGRAY));
@@ -654,18 +746,18 @@ static void DrawSettings(const GameState *game)
 
     if (isFull)
     {
-        DrawText("* Em Tela Cheia, o jogo preenche todo o monitor mantendo a proporcao correta (16:9).",
+        DrawGameText("* Em Tela Cheia, o jogo preenche todo o monitor mantendo a proporcao correta (16:9).",
                  240, 384, 12, Fade(CYAN_COLOR, 0.70f));
     }
     else
     {
-        DrawText("* Clique em qualquer resolucao para redimensionar e centralizar a janela na tela.",
+        DrawGameText("* Clique em qualquer resolucao para redimensionar e centralizar a janela na tela.",
                  240, 384, 12, Fade(LIGHTGRAY, 0.70f));
     }
 
     /* --- SEÇÃO 3: AUDIO AMBIENTE --- */
-    DrawText("3. TRILHA SONORA AMBIENTE", 240, 412, 17, CYAN_COLOR);
-    DrawText("Controle da musica ambiente retro sci-fi (atalho [M] a qualquer momento):", 240, 434, 13, LIGHTGRAY);
+    DrawGameText("3. TRILHA SONORA AMBIENTE", 240, 412, 17, CYAN_COLOR);
+    DrawGameText("Controle da musica ambiente retro sci-fi (atalho [M] a qualquer momento):", 240, 434, 13, LIGHTGRAY);
 
     Rectangle muteBtn = {240, 456, 230, 42};
     bool muteHover = CheckCollisionPointRec(GetVirtualMouse(), muteBtn);
@@ -673,7 +765,7 @@ static void DrawSettings(const GameState *game)
                          game->musicMuted ? Fade(RED_COLOR, 0.22f) : (muteHover ? Fade(CYAN_COLOR, 0.20f) : PANEL_COLOR));
     DrawRectangleRoundedLinesEx(muteBtn, 0.20f, 6, 1.8f,
                                 game->musicMuted ? RED_COLOR : (muteHover ? CYAN_COLOR : PANEL_LIGHT));
-    DrawText(game->musicMuted ? "MUSICA: MUDO [M]" : "MUSICA: ATIVA [M]",
+    DrawGameText(game->musicMuted ? "MUSICA: MUDO [M]" : "MUSICA: ATIVA [M]",
              262, 468, 15, game->musicMuted ? RED_COLOR : (muteHover ? RAYWHITE : CYAN_COLOR));
 
     /* Botoes de Volume */
@@ -689,7 +781,7 @@ static void DrawSettings(const GameState *game)
                              isCurVol ? Fade(GOLD_COLOR, 0.22f) : (vHover ? Fade(CYAN_COLOR, 0.20f) : PANEL_COLOR));
         DrawRectangleRoundedLinesEx(volBtn, 0.20f, 6, 1.8f,
                                     isCurVol ? GOLD_COLOR : (vHover ? CYAN_COLOR : PANEL_LIGHT));
-        DrawText(volLabels[v], (int)(volBtn.x + 16), (int)(volBtn.y + 13), 15,
+        DrawGameText(volLabels[v], (int)(volBtn.x + 16), (int)(volBtn.y + 13), 15,
                  isCurVol ? GOLD_COLOR : (vHover ? RAYWHITE : LIGHTGRAY));
     }
 
@@ -788,9 +880,9 @@ static void DrawPlayerName(const GameState *game)
     DrawRectangleRounded(field, 0.12f, 8, PANEL_COLOR);
     DrawRectangleRoundedLinesEx(field, 0.12f, 8, 2,
                                 focused ? CYAN_COLOR : PANEL_LIGHT);
-    DrawText(game->playerNameLength > 0 ? game->playerName : "Digite seu nome...",
+    DrawGameText(game->playerNameLength > 0 ? game->playerName : "Digite seu nome...",
              388, 349, 25, game->playerNameLength > 0 ? RAYWHITE : GRAY);
-    DrawText(TextFormat("%d/%d", game->playerNameLength, PLAYER_NAME_MAX),
+    DrawGameText(TextFormat("%d/%d", game->playerNameLength, PLAYER_NAME_MAX),
              842, 412, 16, GRAY);
 
     DrawButton((Rectangle){490, 470, 300, 58}, "CONFIRMAR PERFIL", GOLD_COLOR);
@@ -802,27 +894,27 @@ static void DrawPlayerName(const GameState *game)
 static void DrawIntro(const GameState *game)
 {
     DrawBackground();
-    DrawText("ARQUIVO TEMPORAL // 1990", 90, 70, 20, CYAN_COLOR);
-    DrawText("SETOR DE ARQUIVOS", 90, 110, 48, RAYWHITE);
+    DrawGameText("ARQUIVO TEMPORAL // 1990", 90, 70, 20, CYAN_COLOR);
+    DrawGameText("SETOR DE ARQUIVOS", 90, 110, 48, RAYWHITE);
     DrawRectangle(90, 178, 1100, 2, Fade(CYAN_COLOR, 0.45f));
-    DrawText("Em um futuro onde a humanidade entregou sua autonomia", 90, 230, 24,
+    DrawGameText("Em um futuro onde a humanidade entregou sua autonomia", 90, 230, 24,
              LIGHTGRAY);
-    DrawText("a A.R.1.3.L, Elira invade a nave-arquivo da IA.", 90, 270, 24,
+    DrawGameText("a A.R.1.3.L, Elira invade a nave-arquivo da IA.", 90, 270, 24,
              LIGHTGRAY);
-    DrawText("Sua chance e viajar pela memoria da maquina e reconstruir", 90, 310,
+    DrawGameText("Sua chance e viajar pela memoria da maquina e reconstruir", 90, 310,
              24, LIGHTGRAY);
-    DrawText("a origem da entidade que controla o mundo.", 90, 350, 24,
+    DrawGameText("a origem da entidade que controla o mundo.", 90, 350, 24,
              LIGHTGRAY);
-    DrawText(TextFormat("OPERADOR: %s  |  PROTAGONISTA: ELIRA", game->playerName),
+    DrawGameText(TextFormat("OPERADOR: %s  |  PROTAGONISTA: ELIRA", game->playerName),
              90, 397, 18, GOLD_COLOR);
 
     DrawRectangleRounded((Rectangle){850, 215, 340, 230}, 0.08f, 8,
                          Fade(PANEL_LIGHT, 0.85f));
-    DrawText("OBJETIVOS // 1990", 880, 245, 19, GOLD_COLOR);
-    DrawText("1. Inspecione os ficharios", 880, 295, 19, RAYWHITE);
-    DrawText("2. Acesse o terminal", 880, 335, 19, RAYWHITE);
-    DrawText("3. Sincronize os arquivos", 880, 375, 19, RAYWHITE);
-    DrawText("4. Destranque a saida", 880, 415, 19, RAYWHITE);
+    DrawGameText("OBJETIVOS // 1990", 880, 245, 19, GOLD_COLOR);
+    DrawGameText("1. Inspecione os ficharios", 880, 295, 19, RAYWHITE);
+    DrawGameText("2. Acesse o terminal", 880, 335, 19, RAYWHITE);
+    DrawGameText("3. Sincronize os arquivos", 880, 375, 19, RAYWHITE);
+    DrawGameText("4. Destranque a saida", 880, 415, 19, RAYWHITE);
     DrawButton((Rectangle){490, 575, 300, 58}, "ENTRAR EM 1990", GOLD_COLOR);
     CenterText("ENTER para continuar", 650, 15, DARKGRAY);
 }
@@ -983,7 +1075,7 @@ static void DrawCinematicIntro(const GameState *game)
                 float fontSize = baseSize * scale;
                 float spacing = 1.8f * scale;
 
-                Vector2 size = MeasureTextEx(GetFontDefault(), entry.text, fontSize, spacing);
+                Vector2 size = MeasureGameTextEx(entry.text, fontSize, spacing);
                 float screenX = ((float)SCREEN_WIDTH - size.x) * 0.5f;
 
                 /* Fade suave nas extremidades (dissolve no horizonte espacial) */
@@ -1004,12 +1096,12 @@ static void DrawCinematicIntro(const GameState *game)
                     if (entry.type == 0 || entry.type == 3)
                     {
                         float o = 1.4f * scale;
-                        DrawTextEx(GetFontDefault(), entry.text, (Vector2){screenX - o, screenY}, fontSize, spacing, Fade(baseColor, alpha * 0.35f));
-                        DrawTextEx(GetFontDefault(), entry.text, (Vector2){screenX + o, screenY}, fontSize, spacing, Fade(baseColor, alpha * 0.35f));
-                        DrawTextEx(GetFontDefault(), entry.text, (Vector2){screenX, screenY - o}, fontSize, spacing, Fade(baseColor, alpha * 0.35f));
-                        DrawTextEx(GetFontDefault(), entry.text, (Vector2){screenX, screenY + o}, fontSize, spacing, Fade(baseColor, alpha * 0.35f));
+                        DrawGameTextEx(entry.text, (Vector2){screenX - o, screenY}, fontSize, spacing, Fade(baseColor, alpha * 0.35f));
+                        DrawGameTextEx(entry.text, (Vector2){screenX + o, screenY}, fontSize, spacing, Fade(baseColor, alpha * 0.35f));
+                        DrawGameTextEx(entry.text, (Vector2){screenX, screenY - o}, fontSize, spacing, Fade(baseColor, alpha * 0.35f));
+                        DrawGameTextEx(entry.text, (Vector2){screenX, screenY + o}, fontSize, spacing, Fade(baseColor, alpha * 0.35f));
                     }
-                    DrawTextEx(GetFontDefault(), entry.text, (Vector2){screenX, screenY}, fontSize, spacing, Fade(baseColor, alpha));
+                    DrawGameTextEx(entry.text, (Vector2){screenX, screenY}, fontSize, spacing, Fade(baseColor, alpha));
                 }
             }
         }
@@ -1023,8 +1115,8 @@ static void DrawCinematicIntro(const GameState *game)
 
     /* Instrucao discreta de atalho no rodape */
     float skipAlpha = 0.35f + 0.25f * (0.5f + 0.5f * sinf(time * 3.2f));
-    DrawText("[ ENTER / ESC ] Pular introducao",
-             (SCREEN_WIDTH - MeasureText("[ ENTER / ESC ] Pular introducao", 14)) / 2,
+    DrawGameText("[ ENTER / ESC ] Pular introducao",
+             (SCREEN_WIDTH - MeasureGameText("[ ENTER / ESC ] Pular introducao", 14)) / 2,
              685, 14, Fade(GRAY, skipAlpha));
 
     /* Linhas retro sutis */
@@ -1037,13 +1129,13 @@ static void DrawCinematicIntro(const GameState *game)
 static void DrawHotspot(Rectangle bounds, const char *label)
 {
     if (!CheckCollisionPointRec(GetVirtualMouse(), bounds)) return;
-    int width = MeasureText(label, 17) + 20;
+    int width = MeasureGameText(label, 17) + 20;
     int x = (int)(bounds.x + (bounds.width - width) / 2);
     int y = (int)(bounds.y - 32);
     DrawRectangleRoundedLinesEx(bounds, 0.08f, 8, 2, CYAN_COLOR);
     DrawRectangleRounded((Rectangle){(float)x, (float)y, (float)width, 26},
                          0.25f, 6, PANEL_COLOR);
-    DrawText(label, x + 10, y + 4, 17, CYAN_COLOR);
+    DrawGameText(label, x + 10, y + 4, 17, CYAN_COLOR);
 }
 
 static void DrawRoomWindow(void)
@@ -1069,9 +1161,9 @@ static void DrawRoomWindow(void)
     /* Nebulosa suave se deslocando lentamente ao fundo */
     float nebX = 330.0f + sinf(time * 0.3f) * 10.0f;
     float nebY = 175.0f + cosf(time * 0.4f) * 6.0f;
-    DrawCircleGradient((int)nebX, (int)nebY, 54,
+    DrawCircleGradientCompat((int)nebX, (int)nebY, 54,
                        Fade((Color){28, 62, 115, 255}, 0.28f), BLANK);
-    DrawCircleGradient((int)(nebX + 42.0f), (int)(nebY + 18.0f), 42,
+    DrawCircleGradientCompat((int)(nebX + 42.0f), (int)(nebY + 18.0f), 42,
                        Fade((Color){75, 35, 95, 255}, 0.20f), BLANK);
 
     /* Estrelas em movimento contínuo da direita para a esquerda (efeito de voo da nave) */
@@ -1123,7 +1215,7 @@ static void DrawRoomWindow(void)
     DrawEllipseLines((int)pwX, (int)pwY, 48, 15, Fade(RAYWHITE, 0.10f));
 
     /* Esfera planetaria */
-    DrawCircleGradient((int)pwX, (int)pwY, 28,
+    DrawCircleGradientCompat((int)pwX, (int)pwY, 28,
                        (Color){61, 121, 173, 255},
                        (Color){12, 27, 47, 255});
 
@@ -1131,7 +1223,7 @@ static void DrawRoomWindow(void)
     DrawCircle((int)(pwX + 10), (int)(pwY - 4), 24, Fade((Color){2, 7, 19, 255}, 0.74f));
 
     /* Ponto de reflexo especular pulsante */
-    DrawCircleGradient((int)(pwX - 9.0f), (int)(pwY - 8.0f), 8,
+    DrawCircleGradientCompat((int)(pwX - 9.0f), (int)(pwY - 8.0f), 8,
                        Fade(RAYWHITE, 0.22f + 0.08f * sinf(time * 1.8f)), BLANK);
 
     /* Arco do anel em primeiro plano */
@@ -1246,13 +1338,13 @@ static void DrawRoom(const GameState *game)
     /* Painel tecnico: uma das novas pistas. */
     DrawRectangleRec(blueprint, (Color){28, 65, 83, 255});
     DrawRectangleLinesEx(blueprint, 3, (Color){114, 184, 194, 255});
-    DrawText("PERCEPTRON", 832, 144, 16, (Color){169, 225, 228, 255});
+    DrawGameText("PERCEPTRON", 832, 144, 16, (Color){169, 225, 228, 255});
     DrawCircle(850, 202, 7, (Color){169, 225, 228, 255});
     DrawCircle(930, 180, 7, (Color){169, 225, 228, 255});
     DrawCircle(930, 222, 7, (Color){169, 225, 228, 255});
     DrawLine(857, 202, 923, 180, (Color){169, 225, 228, 255});
     DrawLine(857, 202, 923, 222, (Color){169, 225, 228, 255});
-    DrawText(game->foundBlueprint ? "1958" : "DATA?", 830, 232, 14,
+    DrawGameText(game->foundBlueprint ? "1958" : "DATA?", 830, 232, 14,
              game->foundBlueprint ? GOLD_COLOR : GRAY);
     DrawEllipse(42, 325, 55, 165, Fade(CYAN_COLOR, 0.10f));
     DrawEllipseLines(42, 325, 55, 165, Fade(CYAN_COLOR, 0.45f));
@@ -1288,8 +1380,8 @@ static void DrawRoom(const GameState *game)
     }
 
     /* Textos do cabeçalho */
-    DrawText("OUTUBRO", 84, 131, 16, RAYWHITE);
-    DrawText("2048", 188, 131, 16, GOLD_COLOR);
+    DrawGameText("OUTUBRO", 84, 131, 16, RAYWHITE);
+    DrawGameText("2048", 188, 131, 16, GOLD_COLOR);
 
     /* Faixa sutil dos dias da semana */
     Rectangle daysBar = {75, 157, 160, 16};
@@ -1300,7 +1392,7 @@ static void DrawRoom(const GameState *game)
     for (int c = 0; c < 7; c++)
     {
         int cx = 86 + c * 21;
-        DrawText(weekdays[c], cx, 160, 11, (c == 0) ? (Color){185, 45, 45, 255} : (Color){100, 85, 75, 255});
+        DrawGameText(weekdays[c], cx, 160, 11, (c == 0) ? (Color){185, 45, 45, 255} : (Color){100, 85, 75, 255});
     }
 
     /* Grade de dias do mês (1 a 31) */
@@ -1314,12 +1406,12 @@ static void DrawRoom(const GameState *game)
         {
             DrawCircle(dx + 6, dy + 5, 8, Fade(RED_COLOR, 0.35f));
             DrawCircleLines(dx + 6, dy + 5, 8, RED_COLOR);
-            DrawText(TextFormat("%d", day), dx, dy, 10, RED_COLOR);
+            DrawGameText(TextFormat("%d", day), dx, dy, 10, RED_COLOR);
         }
         else
         {
             Color dayColor = (col == 0) ? (Color){175, 55, 55, 255} : (Color){60, 55, 50, 255};
-            DrawText(TextFormat("%2d", day), dx, dy, 10, dayColor);
+            DrawGameText(TextFormat("%2d", day), dx, dy, 10, dayColor);
         }
     }
 
@@ -1331,15 +1423,15 @@ static void DrawRoom(const GameState *game)
         DrawRectangleRec(postIt, (Color){254, 244, 138, 255});
         DrawRectangle(82, 248, 146, 6, (Color){240, 225, 100, 255});
         DrawRectangleLinesEx(postIt, 1, (Color){218, 198, 80, 255});
-        DrawText("1950 - TURING TEST", 88, 256, 11, (Color){160, 40, 40, 255});
-        DrawText("Computing Machinery", 88, 271, 9, (Color){70, 55, 45, 255});
+        DrawGameText("1950 - TURING TEST", 88, 256, 11, (Color){160, 40, 40, 255});
+        DrawGameText("Computing Machinery", 88, 271, 9, (Color){70, 55, 45, 255});
     }
     else
     {
         Rectangle tagBox = {88, 254, 134, 32};
         DrawRectangleRounded(tagBox, 0.25f, 4, Fade((Color){180, 170, 150, 255}, 0.25f));
         DrawRectangleRoundedLinesEx(tagBox, 0.25f, 4, 1, (Color){190, 180, 160, 255});
-        DrawText("[ ? ]", 142, 263, 14, (Color){120, 105, 95, 255});
+        DrawGameText("[ ? ]", 142, 263, 14, (Color){120, 105, 95, 255});
     }
 
     /* --- ARMÁRIO / ESTANTE DE LIVROS (APOIADO FIRMEMENTE NO PISO COM PERSPECTIVA) --- */
@@ -1393,8 +1485,8 @@ static void DrawRoom(const GameState *game)
             DrawRectangle(1058, sy - 54, 18, 54, (Color){42, 68, 85, 255});
             Color aiBookCol = game->foundBooks ? GOLD_COLOR : (Color){135, 45, 48, 255};
             DrawRectangle(1078, sy - 62, 26, 62, aiBookCol);
-            DrawText("1956", 1081, sy - 44, 10, RAYWHITE);
-            DrawText("IA", 1085, sy - 30, 11, RAYWHITE);
+            DrawGameText("1956", 1081, sy - 44, 10, RAYWHITE);
+            DrawGameText("IA", 1085, sy - 30, 11, RAYWHITE);
             DrawTriangle((Vector2){1108, sy - 52}, (Vector2){1106, sy}, (Vector2){1122, sy}, (Color){60, 85, 95, 255});
             DrawTriangle((Vector2){1108, sy - 52}, (Vector2){1122, sy}, (Vector2){1124, sy - 50}, (Color){70, 95, 105, 255});
             DrawRectangle(1128, sy - 28, 6, 28, (Color){35, 38, 42, 255});
@@ -1413,7 +1505,7 @@ static void DrawRoom(const GameState *game)
         {
             DrawRectangle(1034, sy - 42, 45, 42, (Color){160, 152, 130, 255});
             DrawRectangle(1038, sy - 38, 37, 8, (Color){45, 48, 52, 255});
-            DrawText("DISK", 1044, sy - 22, 10, INK_COLOR);
+            DrawGameText("DISK", 1044, sy - 22, 10, INK_COLOR);
             for (int b = 0; b < 4; b++)
             {
                 DrawRectangle(1085 + b * 22, sy - 55, 18, 55, (Color){85, 52, 42, 255});
@@ -1495,9 +1587,9 @@ static void DrawRoom(const GameState *game)
                          (Color){184, 176, 147, 255});
     DrawRectangleRounded((Rectangle){528, 246, 244, 145}, 0.06f, 8,
                          (Color){17, 32, 28, 255});
-    DrawText("A.R.1.3.L // BOOT", 548, 266, 18, (Color){94, 225, 150, 255});
-    DrawText("ACESSO BLOQUEADO", 548, 302, 17, (Color){94, 225, 150, 255});
-    DrawText("CODIGO: ____", 548, 342, 18, (Color){94, 225, 150, 255});
+    DrawGameText("A.R.1.3.L // BOOT", 548, 266, 18, (Color){94, 225, 150, 255});
+    DrawGameText("ACESSO BLOQUEADO", 548, 302, 17, (Color){94, 225, 150, 255});
+    DrawGameText("CODIGO: ____", 548, 342, 18, (Color){94, 225, 150, 255});
     DrawCircle(752, 414, 5, RED_COLOR);
 
     /* --- TECLADO 1990 (TOTALMENTE APOIADO EM CIMA DA MESA) --- */
@@ -1673,13 +1765,13 @@ static void DrawJournalHudButton(const GameState *game)
                  (Color){104, 56, 32, 255});
 
     /* Letra D dourada em relevo na capa */
-    DrawText("D", iconX + 13, iconY + 11, 19, (Color){245, 205, 85, 255});
+    DrawGameText("D", iconX + 13, iconY + 11, 19, (Color){245, 205, 85, 255});
 
     /* --- TEXTOS DO BOTAO --- */
-    DrawText("DIARIO", 1100, 665, 20, hover ? RAYWHITE : GOLD_COLOR);
+    DrawGameText("DIARIO", 1100, 665, 20, hover ? RAYWHITE : GOLD_COLOR);
     if (game->screen == SCREEN_ROOM)
     {
-        DrawText(TextFormat("[D] Pistas: %d/5", ClueCount(game)), 1100, 688, 15,
+        DrawGameText(TextFormat("[D] Pistas: %d/5", ClueCount(game)), 1100, 688, 15,
                  hover ? CYAN_COLOR : (Color){180, 195, 215, 255});
 
         /* Badge indicadora com contador de pistas */
@@ -1687,13 +1779,13 @@ static void DrawJournalHudButton(const GameState *game)
         {
             DrawCircle(iconX + iconW + 2, iconY + 4, 7, (Color){215, 65, 50, 255});
             DrawCircleLines(iconX + iconW + 2, iconY + 4, 7, RAYWHITE);
-            DrawText(TextFormat("%d", ClueCount(game)), iconX + iconW - 1, iconY, 11, RAYWHITE);
+            DrawGameText(TextFormat("%d", ClueCount(game)), iconX + iconW - 1, iconY, 11, RAYWHITE);
         }
     }
     else if (game->screen == SCREEN_ROOM_2008)
     {
         int count = ExaminedDocs2008Count(game);
-        DrawText(TextFormat("[D] Evidencias: %d/4", count), 1100, 688, 15,
+        DrawGameText(TextFormat("[D] Evidencias: %d/4", count), 1100, 688, 15,
                  hover ? CYAN_COLOR : (Color){180, 195, 215, 255});
 
         /* Badge indicadora com contador de evidencias examinadas */
@@ -1701,7 +1793,7 @@ static void DrawJournalHudButton(const GameState *game)
         {
             DrawCircle(iconX + iconW + 2, iconY + 4, 7, (Color){50, 205, 225, 255});
             DrawCircleLines(iconX + iconW + 2, iconY + 4, 7, RAYWHITE);
-            DrawText(TextFormat("%d", count), iconX + iconW - 1, iconY, 11, RAYWHITE);
+            DrawGameText(TextFormat("%d", count), iconX + iconW - 1, iconY, 11, RAYWHITE);
         }
     }
     else
@@ -1711,7 +1803,7 @@ static void DrawJournalHudButton(const GameState *game)
         {
             if (game->fileConnections[k] != -1) connected++;
         }
-        DrawText(TextFormat("[D] Arquivos: %d/4", connected), 1100, 688, 15,
+        DrawGameText(TextFormat("[D] Arquivos: %d/4", connected), 1100, 688, 15,
                  hover ? CYAN_COLOR : (Color){180, 195, 215, 255});
 
         /* Badge indicadora com contador de arquivos */
@@ -1719,7 +1811,7 @@ static void DrawJournalHudButton(const GameState *game)
         {
             DrawCircle(iconX + iconW + 2, iconY + 4, 7, (Color){60, 235, 110, 255});
             DrawCircleLines(iconX + iconW + 2, iconY + 4, 7, RAYWHITE);
-            DrawText(TextFormat("%d", connected), iconX + iconW - 1, iconY, 11, RAYWHITE);
+            DrawGameText(TextFormat("%d", connected), iconX + iconW - 1, iconY, 11, RAYWHITE);
         }
     }
 }
@@ -1730,23 +1822,23 @@ static void DrawHud(const GameState *game)
     int minutes = totalSeconds / 60;
     int seconds = totalSeconds % 60;
     DrawRectangle(0, 0, SCREEN_WIDTH, 70, Fade(VOID_COLOR, 0.94f));
-    DrawText("ARQUIVO 03 // 2048 - O PROTOTIPO", 28, 20, 22, CYAN_COLOR);
-    DrawText(TextFormat("OPERADOR: %s", game->playerName), 270, 23, 17, GRAY);
-    DrawText(TextFormat("PISTAS %d/5", ClueCount(game)), 900, 20, 20, LIGHTGRAY);
-    DrawText(TextFormat("VIDAS %d", game->lives), 1050, 20, 20,
+    DrawGameText("ARQUIVO 03 // 2048 - O PROTOTIPO", 28, 20, 22, CYAN_COLOR);
+    DrawGameText(TextFormat("OPERADOR: %s", game->playerName), 270, 23, 17, GRAY);
+    DrawGameText(TextFormat("PISTAS %d/5", ClueCount(game)), 900, 20, 20, LIGHTGRAY);
+    DrawGameText(TextFormat("VIDAS %d", game->lives), 1050, 20, 20,
              game->lives == 1 ? RED_COLOR : RAYWHITE);
-    DrawText(TextFormat("%02d:%02d", minutes, seconds), 1180, 20, 20,
+    DrawGameText(TextFormat("%02d:%02d", minutes, seconds), 1180, 20, 20,
              GOLD_COLOR);
 
     DrawRectangle(0, 650, SCREEN_WIDTH, 70, Fade(VOID_COLOR, 0.96f));
-    DrawText("Clique nos objetos para investigar", 28, 675, 18, GRAY);
+    DrawGameText("Clique nos objetos para investigar", 28, 675, 18, GRAY);
 
     /* Botao / Indicador de Audio Ambiente */
     Rectangle audioBtn = {840, 665, 175, 40};
     bool audioHover = CheckCollisionPointRec(GetVirtualMouse(), audioBtn);
     DrawRectangleRounded(audioBtn, 0.22f, 6, audioHover ? (Color){30, 44, 62, 255} : (Color){18, 26, 38, 255});
     DrawRectangleRoundedLinesEx(audioBtn, 0.22f, 6, 1.5f, audioHover ? CYAN_COLOR : (Color){50, 68, 92, 255});
-    DrawText(game->musicMuted ? "[M] AUDIO: MUDO" : "[M] AUDIO: ON",
+    DrawGameText(game->musicMuted ? "[M] AUDIO: MUDO" : "[M] AUDIO: ON",
              862, 676, 14,
              game->musicMuted ? (Color){220, 90, 80, 255} : (Color){90, 220, 210, 255});
 
@@ -1755,12 +1847,12 @@ static void DrawHud(const GameState *game)
 
     if (game->messageTimer > 0)
     {
-        int width = MeasureText(game->message, 19) + 34;
+        int width = MeasureGameText(game->message, 19) + 34;
         DrawRectangleRounded(
             (Rectangle){(SCREEN_WIDTH - width) / 2.0f, 605, (float)width, 38},
             0.2f, 8, Fade(PANEL_COLOR, 0.96f));
-        DrawText(game->message,
-                 (SCREEN_WIDTH - MeasureText(game->message, 19)) / 2,
+        DrawGameText(game->message,
+                 (SCREEN_WIDTH - MeasureGameText(game->message, 19)) / 2,
                  614, 19, RAYWHITE);
     }
 }
@@ -1853,13 +1945,13 @@ static void DrawJournalTabs(const GameState *game, int bookX, int bookY)
             /* Ponto verde indicando ano ativo disponivel */
             DrawCircle(tabX + 16, tabY + tabH / 2, 5, (Color){35, 145, 55, 255});
             DrawCircleLines(tabX + 16, tabY + tabH / 2, 5, RAYWHITE);
-            DrawText(tabLabels[i], tabX + 28, tabY + 18, 17, tabText);
+            DrawGameText(tabLabels[i], tabX + 28, tabY + 18, 17, tabText);
         }
         else
         {
             /* Cadeado para anos bloqueados */
             DrawPadlockIcon(tabX + 16, tabY + tabH / 2 + 1, 0.75f, (Color){190, 145, 60, 255}, (Color){215, 215, 220, 255});
-            DrawText(tabLabels[i], tabX + 28, tabY + 18, 16, tabText);
+            DrawGameText(tabLabels[i], tabX + 28, tabY + 18, 16, tabText);
         }
     }
 }
@@ -1991,35 +2083,35 @@ static void DrawJournal(const GameState *game)
             activeYear = "2048";
 
         /* --- Pagina Esquerda --- */
-        DrawText(TextFormat("ARQUIVO CRONOLOGICO // %s", lockedYear), bookX + 35, bookY + 22, 22, (Color){125, 35, 18, 255});
-        DrawText(TextFormat("FASE %d - SISTEMA A.R.1.3.L. (ACESSO RESTRITO)", phaseNumber), bookX + 35, bookY + 46, 15, (Color){110, 75, 50, 255});
+        DrawGameText(TextFormat("ARQUIVO CRONOLOGICO // %s", lockedYear), bookX + 35, bookY + 22, 22, (Color){125, 35, 18, 255});
+        DrawGameText(TextFormat("FASE %d - SISTEMA A.R.1.3.L. (ACESSO RESTRITO)", phaseNumber), bookX + 35, bookY + 46, 15, (Color){110, 75, 50, 255});
         DrawLine(bookX + 35, bookY + 66, bookX + 482, bookY + 66, Fade((Color){125, 35, 18, 255}, 0.40f));
 
         Rectangle lockBox = {(float)(bookX + 35), (float)(bookY + 95), 448, 86};
         DrawRectangleRounded(lockBox, 0.12f, 6, Fade((Color){185, 50, 40, 255}, 0.14f));
         DrawRectangleRoundedLinesEx(lockBox, 0.12f, 6, 2, (Color){185, 50, 40, 255});
         DrawPadlockIcon(bookX + 70, bookY + 138, 1.4f, GOLD_COLOR, RAYWHITE);
-        DrawText("FASE BLOQUEADA - CADEADO ATIVO", bookX + 105, bookY + 115, 18, (Color){165, 35, 25, 255});
-        DrawText(TextFormat("O arquivo de %s sera liberado nas proximas fases.", lockedYear), bookX + 105, bookY + 142, 15, INK_COLOR);
+        DrawGameText("FASE BLOQUEADA - CADEADO ATIVO", bookX + 105, bookY + 115, 18, (Color){165, 35, 25, 255});
+        DrawGameText(TextFormat("O arquivo de %s sera liberado nas proximas fases.", lockedYear), bookX + 105, bookY + 142, 15, INK_COLOR);
 
-        DrawText("DIRETRIZ DE INVESTIGACAO TEMPORAL:", bookX + 35, bookY + 210, 17, (Color){125, 35, 18, 255});
-        DrawText("Cada fase/ano do jogo possui apenas duas paginas.", bookX + 35, bookY + 242, 16, INK_COLOR);
-        DrawText(TextFormat("A investigacao atual ocorre no Ano de %s.", activeYear), bookX + 35, bookY + 272, 16, INK_COLOR);
-        DrawText("Consulte as abas desbloqueadas para obter registros", bookX + 35, bookY + 302, 16, INK_COLOR);
-        DrawText("e notas de pesquisa da cientista Dra. Elira Ramos.", bookX + 35, bookY + 332, 16, INK_COLOR);
+        DrawGameText("DIRETRIZ DE INVESTIGACAO TEMPORAL:", bookX + 35, bookY + 210, 17, (Color){125, 35, 18, 255});
+        DrawGameText("Cada fase/ano do jogo possui apenas duas paginas.", bookX + 35, bookY + 242, 16, INK_COLOR);
+        DrawGameText(TextFormat("A investigacao atual ocorre no Ano de %s.", activeYear), bookX + 35, bookY + 272, 16, INK_COLOR);
+        DrawGameText("Consulte as abas desbloqueadas para obter registros", bookX + 35, bookY + 302, 16, INK_COLOR);
+        DrawGameText("e notas de pesquisa da cientista Dra. Elira Ramos.", bookX + 35, bookY + 332, 16, INK_COLOR);
 
-        DrawText(TextFormat("Para avancar para %s, conclua os desafios", lockedYear), bookX + 35, bookY + 380, 16, (Color){115, 75, 45, 255});
-        DrawText("e desvende os enigmas da linha temporal.", bookX + 35, bookY + 406, 16, (Color){115, 75, 45, 255});
+        DrawGameText(TextFormat("Para avancar para %s, conclua os desafios", lockedYear), bookX + 35, bookY + 380, 16, (Color){115, 75, 45, 255});
+        DrawGameText("e desvende os enigmas da linha temporal.", bookX + 35, bookY + 406, 16, (Color){115, 75, 45, 255});
 
         Rectangle retBtnL = {(float)(bookX + 50), (float)(bookY + 450), 410, 46};
         bool retHoverL = CheckCollisionPointRec(GetVirtualMouse(), retBtnL);
         DrawRectangleRounded(retBtnL, 0.2f, 6, retHoverL ? (Color){195, 65, 50, 255} : (Color){135, 45, 30, 255});
         DrawRectangleRoundedLinesEx(retBtnL, 0.2f, 6, 2, GOLD_COLOR);
-        DrawText(TextFormat("<< RETORNAR AO ARQUIVO DE %s >>", activeYear), bookX + 75, bookY + 463, 17, RAYWHITE);
+        DrawGameText(TextFormat("<< RETORNAR AO ARQUIVO DE %s >>", activeYear), bookX + 75, bookY + 463, 17, RAYWHITE);
 
         /* --- Pagina Direita --- */
-        DrawText(TextFormat("CRIPTOGRAFIA TEMPORAL // %s", lockedYear), bookX + 560, bookY + 22, 20, (Color){125, 35, 18, 255});
-        DrawText(TextFormat("PROTOCOLO DE SEGURANCA // FASE %d", phaseNumber), bookX + 560, bookY + 46, 15, (Color){110, 75, 50, 255});
+        DrawGameText(TextFormat("CRIPTOGRAFIA TEMPORAL // %s", lockedYear), bookX + 560, bookY + 22, 20, (Color){125, 35, 18, 255});
+        DrawGameText(TextFormat("PROTOCOLO DE SEGURANCA // FASE %d", phaseNumber), bookX + 560, bookY + 46, 15, (Color){110, 75, 50, 255});
         DrawLine(bookX + 560, bookY + 66, bookX + 1008, bookY + 66, Fade((Color){125, 35, 18, 255}, 0.40f));
 
         int lockCenterX = bookX + 784;
@@ -2041,15 +2133,15 @@ static void DrawJournal(const GameState *game)
         DrawRectangle(lockCenterX - 6, lockCenterY + 45, 12, 32, (Color){35, 18, 10, 255});
         DrawCircle(lockCenterX, lockCenterY + 45, 5, (Color){225, 50, 40, 255});
 
-        DrawText("STATUS: FASE BLOQUEADA", bookX + 660, bookY + 365, 18, (Color){165, 40, 30, 255});
-        DrawText(TextFormat("Registros de %s indisponiveis nesta fase.", lockedYear), bookX + 610, bookY + 395, 16, INK_COLOR);
+        DrawGameText("STATUS: FASE BLOQUEADA", bookX + 660, bookY + 365, 18, (Color){165, 40, 30, 255});
+        DrawGameText(TextFormat("Registros de %s indisponiveis nesta fase.", lockedYear), bookX + 610, bookY + 395, 16, INK_COLOR);
 
         /* Footer da tela bloqueada */
         Rectangle closeBtnB = {(float)(bookX + 680), (float)footY, 150, 36};
         bool closeHoverB = CheckCollisionPointRec(GetVirtualMouse(), closeBtnB);
         DrawRectangleRounded(closeBtnB, 0.25f, 6, closeHoverB ? (Color){195, 170, 140, 255} : (Color){226, 216, 196, 255});
         DrawRectangleRoundedLinesEx(closeBtnB, 0.25f, 6, 1, (Color){145, 115, 85, 255});
-        DrawText("Fechar [ESC/D]", bookX + 700, footY + 9, 15, INK_COLOR);
+        DrawGameText("Fechar [ESC/D]", bookX + 700, footY + 9, 15, INK_COLOR);
     }
     else if (game->journalYearTab == 0)
     {
@@ -2070,12 +2162,12 @@ static void DrawJournal(const GameState *game)
             }
 
             /* Pagina Esquerda */
-            DrawText("DIARIO DE PESQUISA // SETOR DE ARQUIVOS", bookX + 32, bookY + 22, 20, (Color){125, 35, 18, 255});
+            DrawGameText("DIARIO DE PESQUISA // SETOR DE ARQUIVOS", bookX + 32, bookY + 22, 20, (Color){125, 35, 18, 255});
             DrawLine(bookX + 32, bookY + 52, bookX + 482, bookY + 52, Fade((Color){125, 35, 18, 255}, 0.45f));
 
-            DrawText("REGISTRO DE OPERACOES - ANO 1990", bookX + 32, bookY + 68, 18, (Color){125, 35, 18, 255});
-            DrawText("Indexacao e recuperacao dos relatorios de teste originais.", bookX + 32, bookY + 92, 15, INK_COLOR);
-            DrawText("Status do setor de dados:", bookX + 32, bookY + 116, 16,
+            DrawGameText("REGISTRO DE OPERACOES - ANO 1990", bookX + 32, bookY + 68, 18, (Color){125, 35, 18, 255});
+            DrawGameText("Indexacao e recuperacao dos relatorios de teste originais.", bookX + 32, bookY + 92, 15, INK_COLOR);
+            DrawGameText("Status do setor de dados:", bookX + 32, bookY + 116, 16,
                      game->puzzleFilesCompleted ? (Color){20, 120, 45, 255} : (Color){145, 65, 30, 255});
 
             const char *room1TitlesFound[4] = {
@@ -2103,53 +2195,53 @@ static void DrawJournal(const GameState *game)
                 Rectangle boxR = {(float)(bookX + 32), (float)iy, 448, 38};
                 DrawRectangleRounded(boxR, 0.2f, 6, room1ItemFound[i] ? Fade((Color){45, 135, 65, 255}, 0.14f) : Fade((Color){140, 125, 105, 255}, 0.12f));
                 DrawRectangleRoundedLinesEx(boxR, 0.2f, 6, 1, room1ItemFound[i] ? (Color){45, 135, 65, 255} : (Color){190, 175, 150, 255});
-                DrawText(room1ItemFound[i] ? "[OK]" : "[?]", bookX + 44, iy + 10, 16, room1ItemFound[i] ? (Color){25, 120, 45, 255} : (Color){140, 80, 50, 255});
-                DrawText(room1ItemFound[i] ? room1TitlesFound[i] : room1TitlesMissing[i], bookX + 90, iy + 11, 15, room1ItemFound[i] ? INK_COLOR : (Color){105, 95, 85, 255});
+                DrawGameText(room1ItemFound[i] ? "[OK]" : "[?]", bookX + 44, iy + 10, 16, room1ItemFound[i] ? (Color){25, 120, 45, 255} : (Color){140, 80, 50, 255});
+                DrawGameText(room1ItemFound[i] ? room1TitlesFound[i] : room1TitlesMissing[i], bookX + 90, iy + 11, 15, room1ItemFound[i] ? INK_COLOR : (Color){105, 95, 85, 255});
             }
 
             /* Carimbo confidencial vintage */
             DrawRectangleRoundedLinesEx((Rectangle){(float)(bookX + 270), (float)(bookY + 368), 210, 46}, 0.2f, 6, 2, (Color){175, 45, 45, 255});
-            DrawText("CONFIDENCIAL", bookX + 295, bookY + 375, 18, (Color){175, 45, 45, 255});
-            DrawText("ARQUIVO HISTORICO 1990", bookX + 288, bookY + 396, 12, (Color){175, 45, 45, 255});
+            DrawGameText("CONFIDENCIAL", bookX + 295, bookY + 375, 18, (Color){175, 45, 45, 255});
+            DrawGameText("ARQUIVO HISTORICO 1990", bookX + 288, bookY + 396, 12, (Color){175, 45, 45, 255});
 
-            DrawText("Investigue os armarios de fichas e conecte os cabos", bookX + 32, bookY + 430, 15, INK_COLOR);
-            DrawText("no terminal para destravar a porta e recuperar o disquete.", bookX + 32, bookY + 454, 15, INK_COLOR);
-            DrawText("Avance para a Pagina 2 para o dossie de 1990.", bookX + 32, bookY + 480, 15, (Color){125, 35, 18, 255});
+            DrawGameText("Investigue os armarios de fichas e conecte os cabos", bookX + 32, bookY + 430, 15, INK_COLOR);
+            DrawGameText("no terminal para destravar a porta e recuperar o disquete.", bookX + 32, bookY + 454, 15, INK_COLOR);
+            DrawGameText("Avance para a Pagina 2 para o dossie de 1990.", bookX + 32, bookY + 480, 15, (Color){125, 35, 18, 255});
 
             /* Pagina Direita */
-            DrawText("SINTESE & OBJETIVOS // SETOR DE DADOS", bookX + 560, bookY + 22, 20, (Color){125, 35, 18, 255});
+            DrawGameText("SINTESE & OBJETIVOS // SETOR DE DADOS", bookX + 560, bookY + 22, 20, (Color){125, 35, 18, 255});
             DrawLine(bookX + 560, bookY + 52, bookX + 1008, bookY + 52, Fade((Color){125, 35, 18, 255}, 0.45f));
 
             Rectangle cardR1 = {(float)(bookX + 560), (float)(bookY + 76), 452, 146};
             DrawRectangleRounded(cardR1, 0.08f, 6, Fade((Color){168, 142, 93, 255}, 0.16f));
             DrawRectangleRoundedLinesEx(cardR1, 0.08f, 6, 1.5f, (Color){185, 155, 110, 255});
-            DrawText("COMO SINCRONIZAR OS ARQUIVOS:", bookX + 576, bookY + 90, 17, (Color){125, 35, 18, 255});
-            DrawText("- Acesse o terminal de dados no lado direito da sala.", bookX + 576, bookY + 115, 15, INK_COLOR);
-            DrawText("- Arraste os cabos de cada arquivo ate a pasta correspondente.", bookX + 576, bookY + 138, 15, INK_COLOR);
-            DrawText("- A trava da porta desarmara quando todos estiverem corretos.", bookX + 576, bookY + 161, 15, INK_COLOR);
-            DrawText("  'Arquivos organizados restauram a indexacao.'", bookX + 576, bookY + 186, 16, (Color){135, 35, 18, 255});
+            DrawGameText("COMO SINCRONIZAR OS ARQUIVOS:", bookX + 576, bookY + 90, 17, (Color){125, 35, 18, 255});
+            DrawGameText("- Acesse o terminal de dados no lado direito da sala.", bookX + 576, bookY + 115, 15, INK_COLOR);
+            DrawGameText("- Arraste os cabos de cada arquivo ate a pasta correspondente.", bookX + 576, bookY + 138, 15, INK_COLOR);
+            DrawGameText("- A trava da porta desarmara quando todos estiverem corretos.", bookX + 576, bookY + 161, 15, INK_COLOR);
+            DrawGameText("  'Arquivos organizados restauram a indexacao.'", bookX + 576, bookY + 186, 16, (Color){135, 35, 18, 255});
 
             Rectangle cardR2 = {(float)(bookX + 560), (float)(bookY + 238), 452, 125};
             DrawRectangleRounded(cardR2, 0.08f, 6, (Color){238, 232, 218, 255});
             DrawRectangleRoundedLinesEx(cardR2, 0.08f, 6, 1.5f, (Color){175, 155, 125, 255});
-            DrawText("STATUS DA INDEXACAO (1990):", bookX + 576, bookY + 252, 16, (Color){125, 65, 35, 255});
+            DrawGameText("STATUS DA INDEXACAO (1990):", bookX + 576, bookY + 252, 16, (Color){125, 65, 35, 255});
 
             if (game->puzzleFilesCompleted)
             {
-                DrawText("[ 4 ]   /   [ 4 ]   CONCLUIDO", bookX + 630, bookY + 280, 26, (Color){25, 125, 50, 255});
-                DrawText("Indexacao completa! A porta foi destrancada.", bookX + 576, bookY + 326, 15, (Color){25, 125, 50, 255});
+                DrawGameText("[ 4 ]   /   [ 4 ]   CONCLUIDO", bookX + 630, bookY + 280, 26, (Color){25, 125, 50, 255});
+                DrawGameText("Indexacao completa! A porta foi destrancada.", bookX + 576, bookY + 326, 15, (Color){25, 125, 50, 255});
             }
             else
             {
-                DrawText(TextFormat("[ %d ]   /   [ 4 ]   CONECTADOS", connectedCount), bookX + 630, bookY + 280, 26, (Color){165, 45, 35, 255});
-                DrawText(TextFormat("Ainda restam %d conexoes para destravar a porta.", 4 - connectedCount),
+                DrawGameText(TextFormat("[ %d ]   /   [ 4 ]   CONECTADOS", connectedCount), bookX + 630, bookY + 280, 26, (Color){165, 45, 35, 255});
+                DrawGameText(TextFormat("Ainda restam %d conexoes para destravar a porta.", 4 - connectedCount),
                          bookX + 576, bookY + 326, 15, (Color){135, 55, 40, 255});
             }
 
-            DrawText("DICAS DE NAVEGACAO DESTE ARQUIVO:", bookX + 560, bookY + 385, 16, (Color){125, 35, 18, 255});
-            DrawText("- Clique em 'Proxima [E]' para acessar o Dossie de 1990.", bookX + 560, bookY + 412, 15, INK_COLOR);
-            DrawText("- Conclua a indexacao para destravar o salto para 2048.", bookX + 560, bookY + 438, 15, INK_COLOR);
-            DrawText("- Pressione [D] para retornar ao setor de arquivos.", bookX + 560, bookY + 464, 15, INK_COLOR);
+            DrawGameText("DICAS DE NAVEGACAO DESTE ARQUIVO:", bookX + 560, bookY + 385, 16, (Color){125, 35, 18, 255});
+            DrawGameText("- Clique em 'Proxima [E]' para acessar o Dossie de 1990.", bookX + 560, bookY + 412, 15, INK_COLOR);
+            DrawGameText("- Conclua a indexacao para destravar o salto para 2048.", bookX + 560, bookY + 438, 15, INK_COLOR);
+            DrawGameText("- Pressione [D] para retornar ao setor de arquivos.", bookX + 560, bookY + 464, 15, INK_COLOR);
         }
         else
         {
@@ -2157,8 +2249,8 @@ static void DrawJournal(const GameState *game)
             /* PAGINA 2 DE 1990: DOSSIE HISTORICO & ARTEFATOS        */
             /* ----------------------------------------------------- */
             /* Pagina Esquerda */
-            DrawText("DOSSIE HISTORICO // ANO 1990", bookX + 32, bookY + 20, 20, (Color){125, 35, 18, 255});
-            DrawText("DRA. ELIRA RAMOS - NOTAS CIENTIFICAS (1990)", bookX + 32, bookY + 44, 15, (Color){110, 75, 50, 255});
+            DrawGameText("DOSSIE HISTORICO // ANO 1990", bookX + 32, bookY + 20, 20, (Color){125, 35, 18, 255});
+            DrawGameText("DRA. ELIRA RAMOS - NOTAS CIENTIFICAS (1990)", bookX + 32, bookY + 44, 15, (Color){110, 75, 50, 255});
             DrawLine(bookX + 32, bookY + 65, bookX + 482, bookY + 65, Fade((Color){125, 35, 18, 255}, 0.45f));
 
             Rectangle bTestes = {(float)(bookX + 32), (float)(bookY + 78), 448, 205};
@@ -2167,20 +2259,20 @@ static void DrawJournal(const GameState *game)
 
             if (game->room2CabinetInspected)
             {
-                DrawText("1990 // TESTES PRELIMINARES DE A.R.1.3.L.", bookX + 46, bookY + 92, 17, (Color){125, 35, 18, 255});
-                DrawText("[CONFIRMADO // RELATORIOS DE 1990]", bookX + 46, bookY + 116, 14, (Color){25, 125, 50, 255});
-                DrawText("Os arquivos de teste comprovam a tese fundamental:", bookX + 46, bookY + 140, 15, INK_COLOR);
-                DrawText("a inteligencia foi criada para cooperar e aprender", bookX + 46, bookY + 164, 15, INK_COLOR);
-                DrawText("ao lado de operadores humanos em ambiente controlado.", bookX + 46, bookY + 188, 15, INK_COLOR);
-                DrawText("-> Origem etica comprovada: ANO DE 1990.", bookX + 46, bookY + 214, 15, (Color){125, 35, 18, 255});
-                DrawText("-> Nenhuma rotina de combate existia neste setor.", bookX + 46, bookY + 238, 15, (Color){25, 125, 50, 255});
+                DrawGameText("1990 // TESTES PRELIMINARES DE A.R.1.3.L.", bookX + 46, bookY + 92, 17, (Color){125, 35, 18, 255});
+                DrawGameText("[CONFIRMADO // RELATORIOS DE 1990]", bookX + 46, bookY + 116, 14, (Color){25, 125, 50, 255});
+                DrawGameText("Os arquivos de teste comprovam a tese fundamental:", bookX + 46, bookY + 140, 15, INK_COLOR);
+                DrawGameText("a inteligencia foi criada para cooperar e aprender", bookX + 46, bookY + 164, 15, INK_COLOR);
+                DrawGameText("ao lado de operadores humanos em ambiente controlado.", bookX + 46, bookY + 188, 15, INK_COLOR);
+                DrawGameText("-> Origem etica comprovada: ANO DE 1990.", bookX + 46, bookY + 214, 15, (Color){125, 35, 18, 255});
+                DrawGameText("-> Nenhuma rotina de combate existia neste setor.", bookX + 46, bookY + 238, 15, (Color){25, 125, 50, 255});
             }
             else
             {
                 DrawPadlockIcon(bookX + 65, bookY + 175, 1.3f, (Color){185, 145, 60, 255}, RAYWHITE);
-                DrawText("1990 // DOCUMENTACAO DE TESTES [BLOQUEADO]", bookX + 100, bookY + 135, 17, (Color){125, 65, 35, 255});
-                DrawText("Inspecione os armarios de fichas metalicos na sala", bookX + 100, bookY + 165, 15, INK_COLOR);
-                DrawText("para registrar a documentacao original de 1990.", bookX + 100, bookY + 190, 15, INK_COLOR);
+                DrawGameText("1990 // DOCUMENTACAO DE TESTES [BLOQUEADO]", bookX + 100, bookY + 135, 17, (Color){125, 65, 35, 255});
+                DrawGameText("Inspecione os armarios de fichas metalicos na sala", bookX + 100, bookY + 165, 15, INK_COLOR);
+                DrawGameText("para registrar a documentacao original de 1990.", bookX + 100, bookY + 190, 15, INK_COLOR);
             }
 
             Rectangle bOrigem = {(float)(bookX + 32), (float)(bookY + 298), 448, 215};
@@ -2189,25 +2281,25 @@ static void DrawJournal(const GameState *game)
 
             if (game->puzzleFilesCompleted)
             {
-                DrawText("1990 // A MATRIZ DE TREINO ORIGINAL", bookX + 46, bookY + 312, 17, (Color){125, 35, 18, 255});
-                DrawText("[CONFIRMADO // INDEXACAO 100% OK]", bookX + 46, bookY + 336, 14, (Color){25, 125, 50, 255});
-                DrawText("Os parametros de peso sinaptico foram organizados.", bookX + 46, bookY + 360, 15, INK_COLOR);
-                DrawText("A porta do setor foi destrancada pelo sistema central.", bookX + 46, bookY + 384, 15, INK_COLOR);
-                DrawText("Ao atravessar a saida, o artefato de 1990 sera resgatado,", bookX + 46, bookY + 408, 15, (Color){125, 35, 18, 255});
-                DrawText("permitindo a Elira viajar para a proxima era: ANO 2048.", bookX + 46, bookY + 432, 15, INK_COLOR);
-                DrawText("-> Disquete de dados pronto para recuperacao!", bookX + 46, bookY + 458, 15, (Color){25, 125, 50, 255});
+                DrawGameText("1990 // A MATRIZ DE TREINO ORIGINAL", bookX + 46, bookY + 312, 17, (Color){125, 35, 18, 255});
+                DrawGameText("[CONFIRMADO // INDEXACAO 100% OK]", bookX + 46, bookY + 336, 14, (Color){25, 125, 50, 255});
+                DrawGameText("Os parametros de peso sinaptico foram organizados.", bookX + 46, bookY + 360, 15, INK_COLOR);
+                DrawGameText("A porta do setor foi destrancada pelo sistema central.", bookX + 46, bookY + 384, 15, INK_COLOR);
+                DrawGameText("Ao atravessar a saida, o artefato de 1990 sera resgatado,", bookX + 46, bookY + 408, 15, (Color){125, 35, 18, 255});
+                DrawGameText("permitindo a Elira viajar para a proxima era: ANO 2048.", bookX + 46, bookY + 432, 15, INK_COLOR);
+                DrawGameText("-> Disquete de dados pronto para recuperacao!", bookX + 46, bookY + 458, 15, (Color){25, 125, 50, 255});
             }
             else
             {
                 DrawPadlockIcon(bookX + 65, bookY + 400, 1.3f, (Color){185, 145, 60, 255}, RAYWHITE);
-                DrawText("1990 // TRAVA DE SEGURANCA [BLOQUEADO]", bookX + 100, bookY + 360, 17, (Color){125, 65, 35, 255});
-                DrawText("Acesse o terminal e complete a indexacao de cabos", bookX + 100, bookY + 390, 15, INK_COLOR);
-                DrawText("para desarmar a trava da porta e desbloquear o disquete.", bookX + 100, bookY + 415, 15, INK_COLOR);
+                DrawGameText("1990 // TRAVA DE SEGURANCA [BLOQUEADO]", bookX + 100, bookY + 360, 17, (Color){125, 65, 35, 255});
+                DrawGameText("Acesse o terminal e complete a indexacao de cabos", bookX + 100, bookY + 390, 15, INK_COLOR);
+                DrawGameText("para desarmar a trava da porta e desbloquear o disquete.", bookX + 100, bookY + 415, 15, INK_COLOR);
             }
 
             /* Pagina Direita */
-            DrawText("ARTEFATOS E PROTOTIPO // 1990", bookX + 560, bookY + 20, 20, (Color){125, 35, 18, 255});
-            DrawText("DADOS, MEMORIA E GRAVACAO EM DISQUETE", bookX + 560, bookY + 44, 15, (Color){110, 75, 50, 255});
+            DrawGameText("ARTEFATOS E PROTOTIPO // 1990", bookX + 560, bookY + 20, 20, (Color){125, 35, 18, 255});
+            DrawGameText("DADOS, MEMORIA E GRAVACAO EM DISQUETE", bookX + 560, bookY + 44, 15, (Color){110, 75, 50, 255});
             DrawLine(bookX + 560, bookY + 65, bookX + 1008, bookY + 65, Fade((Color){125, 35, 18, 255}, 0.45f));
 
             Rectangle bTape = {(float)(bookX + 560), (float)(bookY + 78), 448, 205};
@@ -2216,33 +2308,33 @@ static void DrawJournal(const GameState *game)
 
             if (game->puzzleFilesCompleted)
             {
-                DrawText("1990 // DISQUETE DA ORIGEM (3.5\")", bookX + 574, bookY + 92, 17, (Color){125, 35, 18, 255});
-                DrawText("[CONFIRMADO // ARTEFATO DE 1990]", bookX + 574, bookY + 116, 14, (Color){25, 125, 50, 255});
-                DrawText("Midia magnetica industrial com os primeiros testes da IA.", bookX + 574, bookY + 140, 15, INK_COLOR);
-                DrawText("Guarda as instrucoes primordiais da Dra. Elira Ramos.", bookX + 574, bookY + 164, 15, INK_COLOR);
-                DrawText("Este artefato conecta a origem ao prototipo do futuro.", bookX + 574, bookY + 188, 15, INK_COLOR);
-                DrawText("-> Artefato recuperavel ao sair pela porta destrancada.", bookX + 574, bookY + 214, 15, (Color){125, 35, 18, 255});
-                DrawText("-> Proxima parada: ANO 2048!", bookX + 574, bookY + 238, 15, (Color){25, 125, 50, 255});
+                DrawGameText("1990 // DISQUETE DA ORIGEM (3.5\")", bookX + 574, bookY + 92, 17, (Color){125, 35, 18, 255});
+                DrawGameText("[CONFIRMADO // ARTEFATO DE 1990]", bookX + 574, bookY + 116, 14, (Color){25, 125, 50, 255});
+                DrawGameText("Midia magnetica industrial com os primeiros testes da IA.", bookX + 574, bookY + 140, 15, INK_COLOR);
+                DrawGameText("Guarda as instrucoes primordiais da Dra. Elira Ramos.", bookX + 574, bookY + 164, 15, INK_COLOR);
+                DrawGameText("Este artefato conecta a origem ao prototipo do futuro.", bookX + 574, bookY + 188, 15, INK_COLOR);
+                DrawGameText("-> Artefato recuperavel ao sair pela porta destrancada.", bookX + 574, bookY + 214, 15, (Color){125, 35, 18, 255});
+                DrawGameText("-> Proxima parada: ANO 2048!", bookX + 574, bookY + 238, 15, (Color){25, 125, 50, 255});
             }
             else
             {
                 DrawPadlockIcon(bookX + 595, bookY + 175, 1.3f, (Color){185, 145, 60, 255}, RAYWHITE);
-                DrawText("1990 // DISQUETE DE DADOS [BLOQUEADO]", bookX + 630, bookY + 135, 17, (Color){125, 65, 35, 255});
-                DrawText("O disquete esta trancado na camara de saida da sala.", bookX + 630, bookY + 165, 15, INK_COLOR);
-                DrawText("Complete as conexoes no terminal para libera-lo.", bookX + 630, bookY + 190, 15, INK_COLOR);
+                DrawGameText("1990 // DISQUETE DE DADOS [BLOQUEADO]", bookX + 630, bookY + 135, 17, (Color){125, 65, 35, 255});
+                DrawGameText("O disquete esta trancado na camara de saida da sala.", bookX + 630, bookY + 165, 15, INK_COLOR);
+                DrawGameText("Complete as conexoes no terminal para libera-lo.", bookX + 630, bookY + 190, 15, INK_COLOR);
             }
 
             Rectangle bDestino = {(float)(bookX + 560), (float)(bookY + 298), 448, 215};
             DrawRectangleRounded(bDestino, 0.08f, 6, Fade((Color){168, 142, 93, 255}, 0.16f));
             DrawRectangleRoundedLinesEx(bDestino, 0.08f, 6, 1.5f, (Color){185, 155, 110, 255});
 
-            DrawText("DIRETRIZ DE SALTO TEMPORAL // 2048", bookX + 574, bookY + 312, 17, (Color){125, 35, 18, 255});
-            DrawText("[COOPERACAO E CONFLITO FUTURO]", bookX + 574, bookY + 336, 14, (Color){125, 35, 18, 255});
-            DrawText("Apos destravar a porta de 1990, Elira saltara", bookX + 574, bookY + 360, 15, INK_COLOR);
-            DrawText("diretamente para o Laboratorio Central do ano 2048.", bookX + 574, bookY + 384, 15, INK_COLOR);
-            DrawText("La estara o prototipo de A.R.1.3.L. e o terminal", bookX + 574, bookY + 408, 15, INK_COLOR);
-            DrawText("com as ultimas pistas sobre o nascimento da IA.", bookX + 574, bookY + 432, 15, INK_COLOR);
-            DrawText("-> FASE 1: 1990 (Atual)  |  FASE 2: 2048 (Proxima)", bookX + 574, bookY + 458, 15, (Color){25, 125, 50, 255});
+            DrawGameText("DIRETRIZ DE SALTO TEMPORAL // 2048", bookX + 574, bookY + 312, 17, (Color){125, 35, 18, 255});
+            DrawGameText("[COOPERACAO E CONFLITO FUTURO]", bookX + 574, bookY + 336, 14, (Color){125, 35, 18, 255});
+            DrawGameText("Apos destravar a porta de 1990, Elira saltara", bookX + 574, bookY + 360, 15, INK_COLOR);
+            DrawGameText("diretamente para o Laboratorio Central do ano 2048.", bookX + 574, bookY + 384, 15, INK_COLOR);
+            DrawGameText("La estara o prototipo de A.R.1.3.L. e o terminal", bookX + 574, bookY + 408, 15, INK_COLOR);
+            DrawGameText("com as ultimas pistas sobre o nascimento da IA.", bookX + 574, bookY + 432, 15, INK_COLOR);
+            DrawGameText("-> FASE 1: 1990 (Atual)  |  FASE 2: 2048 (Proxima)", bookX + 574, bookY + 458, 15, (Color){25, 125, 50, 255});
         }
 
         /* ========================================================= */
@@ -2253,22 +2345,22 @@ static void DrawJournal(const GameState *game)
         bool canPrev = (page > 0);
         DrawRectangleRounded(prevBtn, 0.25f, 6, canPrev ? (prevHover ? (Color){195, 170, 140, 255} : (Color){226, 216, 196, 255}) : Fade((Color){200, 195, 185, 255}, 0.5f));
         DrawRectangleRoundedLinesEx(prevBtn, 0.25f, 6, 1, (Color){145, 115, 85, 255});
-        DrawText("< Anterior [Q]", bookX + 44, footY + 9, 15, canPrev ? INK_COLOR : GRAY);
+        DrawGameText("< Anterior [Q]", bookX + 44, footY + 9, 15, canPrev ? INK_COLOR : GRAY);
 
-        DrawText(TextFormat("Pagina %d de 2 (1990)", page + 1), bookX + 210, footY + 8, 18, (Color){125, 35, 18, 255});
+        DrawGameText(TextFormat("Pagina %d de 2 (1990)", page + 1), bookX + 210, footY + 8, 18, (Color){125, 35, 18, 255});
 
         Rectangle closeBtn = {(float)(bookX + 660), (float)footY, 145, 36};
         bool closeHover = CheckCollisionPointRec(GetVirtualMouse(), closeBtn);
         DrawRectangleRounded(closeBtn, 0.25f, 6, closeHover ? (Color){195, 170, 140, 255} : (Color){226, 216, 196, 255});
         DrawRectangleRoundedLinesEx(closeBtn, 0.25f, 6, 1, (Color){145, 115, 85, 255});
-        DrawText("Fechar [ESC/D]", bookX + 678, footY + 9, 15, INK_COLOR);
+        DrawGameText("Fechar [ESC/D]", bookX + 678, footY + 9, 15, INK_COLOR);
 
         Rectangle nextBtn = {(float)(bookX + 835), (float)footY, 155, 36};
         bool nextHover = CheckCollisionPointRec(GetVirtualMouse(), nextBtn);
         bool canNext = (page < 1);
         DrawRectangleRounded(nextBtn, 0.25f, 6, canNext ? (nextHover ? (Color){195, 170, 140, 255} : (Color){226, 216, 196, 255}) : Fade((Color){200, 195, 185, 255}, 0.5f));
         DrawRectangleRoundedLinesEx(nextBtn, 0.25f, 6, 1, (Color){145, 115, 85, 255});
-        DrawText("Proxima [E] >", bookX + 858, footY + 9, 15, canNext ? INK_COLOR : GRAY);
+        DrawGameText("Proxima [E] >", bookX + 858, footY + 9, 15, canNext ? INK_COLOR : GRAY);
     }
     else if (game->journalYearTab == 1)
     {
@@ -2283,85 +2375,85 @@ static void DrawJournal(const GameState *game)
             /* PAGINA 1 DE 2008: DOSSIE TECNOLOGICO E HISTORICO      */
             /* ----------------------------------------------------- */
             /* Pagina Esquerda */
-            DrawText("DIARIO DE PESQUISA // RECONHECIMENTO FACIAL", bookX + 32, bookY + 22, 20, (Color){125, 35, 18, 255});
+            DrawGameText("DIARIO DE PESQUISA // RECONHECIMENTO FACIAL", bookX + 32, bookY + 22, 20, (Color){125, 35, 18, 255});
             DrawLine(bookX + 32, bookY + 52, bookX + 482, bookY + 52, Fade((Color){125, 35, 18, 255}, 0.45f));
 
-            DrawText("A EXPANSÃO ALGORÍTMICA & ORIGEM (2004-2008)", bookX + 32, bookY + 66, 17, (Color){125, 35, 18, 255});
-            DrawText("Redes neurais aplicadas a visao computacional em escala.", bookX + 32, bookY + 90, 15, INK_COLOR);
+            DrawGameText("A EXPANSÃO ALGORÍTMICA & ORIGEM (2004-2008)", bookX + 32, bookY + 66, 17, (Color){125, 35, 18, 255});
+            DrawGameText("Redes neurais aplicadas a visao computacional em escala.", bookX + 32, bookY + 90, 15, INK_COLOR);
 
             Rectangle cardOrigem = {(float)(bookX + 32), (float)(bookY + 115), 450, 185};
             DrawRectangleRounded(cardOrigem, 0.08f, 6, Fade((Color){168, 142, 93, 255}, 0.16f));
             DrawRectangleRoundedLinesEx(cardOrigem, 0.08f, 6, 1.5f, (Color){185, 155, 110, 255});
-            DrawText("FINALIDADE HUMANITARIA ORIGINAL (DR. RAMOS):", bookX + 46, bookY + 128, 16, (Color){125, 35, 18, 255});
-            DrawText("'Meu pai criou o mapeamento facial para salvar vidas:", bookX + 46, bookY + 154, 15, INK_COLOR);
-            DrawText("localizar criancas desaparecidas em grandes multidoes e", bookX + 46, bookY + 176, 15, INK_COLOR);
-            DrawText("sobreviventes sob escombros de catastrofes naturais.", bookX + 46, bookY + 198, 15, INK_COLOR);
-            DrawText("A tecnologia devia ser um escudo protetor da vida,", bookX + 46, bookY + 220, 15, (Color){135, 35, 18, 255});
-            DrawText("jamais uma arma de coercao automatizada.'", bookX + 46, bookY + 242, 15, (Color){135, 35, 18, 255});
+            DrawGameText("FINALIDADE HUMANITARIA ORIGINAL (DR. RAMOS):", bookX + 46, bookY + 128, 16, (Color){125, 35, 18, 255});
+            DrawGameText("'Meu pai criou o mapeamento facial para salvar vidas:", bookX + 46, bookY + 154, 15, INK_COLOR);
+            DrawGameText("localizar criancas desaparecidas em grandes multidoes e", bookX + 46, bookY + 176, 15, INK_COLOR);
+            DrawGameText("sobreviventes sob escombros de catastrofes naturais.", bookX + 46, bookY + 198, 15, INK_COLOR);
+            DrawGameText("A tecnologia devia ser um escudo protetor da vida,", bookX + 46, bookY + 220, 15, (Color){135, 35, 18, 255});
+            DrawGameText("jamais uma arma de coercao automatizada.'", bookX + 46, bookY + 242, 15, (Color){135, 35, 18, 255});
             if (game->doc2008FatherOriginExamined)
-                DrawText("[CONFIRMADO // NOTAS DO PAI EXAMINADAS]", bookX + 46, bookY + 270, 13, (Color){25, 125, 50, 255});
+                DrawGameText("[CONFIRMADO // NOTAS DO PAI EXAMINADAS]", bookX + 46, bookY + 270, 13, (Color){25, 125, 50, 255});
             else
-                DrawText("[PENDENTE // EXAMINE O CADERNO NA SALA]", bookX + 46, bookY + 270, 13, (Color){145, 65, 35, 255});
+                DrawGameText("[PENDENTE // EXAMINE O CADERNO NA SALA]", bookX + 46, bookY + 270, 13, (Color){145, 65, 35, 255});
 
             Rectangle cardDesvio = {(float)(bookX + 32), (float)(bookY + 312), 450, 195};
             DrawRectangleRounded(cardDesvio, 0.08f, 6, Fade((Color){185, 50, 40, 255}, 0.12f));
             DrawRectangleRoundedLinesEx(cardDesvio, 0.08f, 6, 1.5f, (Color){185, 80, 70, 255});
-            DrawText("O DESVIO GOVERNAMENTAL (ANO 2008):", bookX + 46, bookY + 325, 16, (Color){165, 35, 25, 255});
-            DrawText("'Em 2008, o Ministério da Seguranca confiscou o projeto.", bookX + 46, bookY + 350, 15, INK_COLOR);
-            DrawText("O algoritmo foi recalibrado para classificar opositores", bookX + 46, bookY + 372, 15, INK_COLOR);
-            DrawText("politicos como ameacas e direcionar drones armados.", bookX + 46, bookY + 394, 15, INK_COLOR);
-            DrawText("Mesmo se a identificacao fosse correta, usar essa", bookX + 46, bookY + 418, 15, (Color){125, 35, 18, 255});
-            DrawText("tecnologia para perseguir ativistas corrompe o projeto.'", bookX + 46, bookY + 440, 15, (Color){125, 35, 18, 255});
+            DrawGameText("O DESVIO GOVERNAMENTAL (ANO 2008):", bookX + 46, bookY + 325, 16, (Color){165, 35, 25, 255});
+            DrawGameText("'Em 2008, o Ministério da Seguranca confiscou o projeto.", bookX + 46, bookY + 350, 15, INK_COLOR);
+            DrawGameText("O algoritmo foi recalibrado para classificar opositores", bookX + 46, bookY + 372, 15, INK_COLOR);
+            DrawGameText("politicos como ameacas e direcionar drones armados.", bookX + 46, bookY + 394, 15, INK_COLOR);
+            DrawGameText("Mesmo se a identificacao fosse correta, usar essa", bookX + 46, bookY + 418, 15, (Color){125, 35, 18, 255});
+            DrawGameText("tecnologia para perseguir ativistas corrompe o projeto.'", bookX + 46, bookY + 440, 15, (Color){125, 35, 18, 255});
             if (game->doc2008GovContractExamined)
-                DrawText("[CONFIRMADO // MEMORANDO GOV EXAMINADO]", bookX + 46, bookY + 472, 13, (Color){25, 125, 50, 255});
+                DrawGameText("[CONFIRMADO // MEMORANDO GOV EXAMINADO]", bookX + 46, bookY + 472, 13, (Color){25, 125, 50, 255});
             else
-                DrawText("[PENDENTE // EXAMINE O MEMORANDO NA SALA]", bookX + 46, bookY + 472, 13, (Color){145, 65, 35, 255});
+                DrawGameText("[PENDENTE // EXAMINE O MEMORANDO NA SALA]", bookX + 46, bookY + 472, 13, (Color){145, 65, 35, 255});
 
             /* Pagina Direita */
-            DrawText("SISTEMA DE CONTESTAÇÃO // ESCRITÓRIO", bookX + 560, bookY + 22, 20, (Color){125, 35, 18, 255});
+            DrawGameText("SISTEMA DE CONTESTAÇÃO // ESCRITÓRIO", bookX + 560, bookY + 22, 20, (Color){125, 35, 18, 255});
             DrawLine(bookX + 560, bookY + 52, bookX + 1008, bookY + 52, Fade((Color){125, 35, 18, 255}, 0.45f));
 
             Rectangle cardInstrucoes = {(float)(bookX + 560), (float)(bookY + 76), 452, 175};
             DrawRectangleRounded(cardInstrucoes, 0.08f, 6, (Color){238, 232, 218, 255});
             DrawRectangleRoundedLinesEx(cardInstrucoes, 0.08f, 6, 1.5f, (Color){175, 155, 125, 255});
-            DrawText("COMO CONTESTAR O FALSO POSITIVO:", bookX + 576, bookY + 90, 17, (Color){125, 35, 18, 255});
-            DrawText("- Acesse o computador central no escritorio de vigilancia.", bookX + 576, bookY + 115, 15, INK_COLOR);
-            DrawText("- O sistema marcou Lucas Silva com ordem de drone as 14:30.", bookX + 576, bookY + 138, 15, INK_COLOR);
-            DrawText("- Examine os 4 registros do caso no escritorio ou no terminal.", bookX + 576, bookY + 161, 15, INK_COLOR);
-            DrawText("- Selecione 2 evidencias que comprovem o alibi cronologico.", bookX + 576, bookY + 184, 15, INK_COLOR);
-            DrawText("- Comprove o erro para liberar a acao 'Suspender ordem'.", bookX + 576, bookY + 207, 15, (Color){125, 35, 18, 255});
+            DrawGameText("COMO CONTESTAR O FALSO POSITIVO:", bookX + 576, bookY + 90, 17, (Color){125, 35, 18, 255});
+            DrawGameText("- Acesse o computador central no escritorio de vigilancia.", bookX + 576, bookY + 115, 15, INK_COLOR);
+            DrawGameText("- O sistema marcou Lucas Silva com ordem de drone as 14:30.", bookX + 576, bookY + 138, 15, INK_COLOR);
+            DrawGameText("- Examine os 4 registros do caso no escritorio ou no terminal.", bookX + 576, bookY + 161, 15, INK_COLOR);
+            DrawGameText("- Selecione 2 evidencias que comprovem o alibi cronologico.", bookX + 576, bookY + 184, 15, INK_COLOR);
+            DrawGameText("- Comprove o erro para liberar a acao 'Suspender ordem'.", bookX + 576, bookY + 207, 15, (Color){125, 35, 18, 255});
 
             Rectangle cardOpcional = {(float)(bookX + 560), (float)(bookY + 265), 452, 240};
             DrawRectangleRounded(cardOpcional, 0.08f, 6, game->room2008OptionalCompleted ? Fade((Color){60, 200, 100, 255}, 0.15f) : Fade((Color){168, 142, 93, 255}, 0.16f));
             DrawRectangleRoundedLinesEx(cardOpcional, 0.08f, 6, 1.5f, game->room2008OptionalCompleted ? (Color){45, 145, 75, 255} : (Color){185, 155, 110, 255});
-            DrawText("DESCOBERTA FORENSE OPCIONAL (INSTALACAO):", bookX + 576, bookY + 280, 16, (Color){125, 35, 18, 255});
-            DrawText("O Dr. Ramos manteve um controle administrativo local:", bookX + 576, bookY + 306, 15, INK_COLOR);
-            DrawText("e possivel desativar o despacho automatico desta central,", bookX + 576, bookY + 328, 15, INK_COLOR);
-            DrawText("sem apagar a base de dados, preservando as provas forenses.", bookX + 576, bookY + 350, 15, INK_COLOR);
+            DrawGameText("DESCOBERTA FORENSE OPCIONAL (INSTALACAO):", bookX + 576, bookY + 280, 16, (Color){125, 35, 18, 255});
+            DrawGameText("O Dr. Ramos manteve um controle administrativo local:", bookX + 576, bookY + 306, 15, INK_COLOR);
+            DrawGameText("e possivel desativar o despacho automatico desta central,", bookX + 576, bookY + 328, 15, INK_COLOR);
+            DrawGameText("sem apagar a base de dados, preservando as provas forenses.", bookX + 576, bookY + 350, 15, INK_COLOR);
 
             if (game->room2008OptionalCompleted)
             {
                 DrawRectangleRounded((Rectangle){(float)(bookX + 576), (float)(bookY + 382), 420, 95}, 0.12f, 6, Fade((Color){40, 165, 80, 255}, 0.20f));
                 DrawRectangleRoundedLinesEx((Rectangle){(float)(bookX + 576), (float)(bookY + 382), 420, 95}, 0.12f, 6, 1.5f, (Color){35, 145, 65, 255});
-                DrawText("[ V ] PROTOCOLO ETICO APLICADO:", bookX + 590, bookY + 396, 15, (Color){25, 125, 50, 255});
-                DrawText("Despacho automatico local desativado com sucesso.", bookX + 590, bookY + 420, 14, INK_COLOR);
-                DrawText("Todos os 1.420 relatorios mantidos intactos como prova.", bookX + 590, bookY + 444, 14, (Color){125, 35, 18, 255});
+                DrawGameText("[ V ] PROTOCOLO ETICO APLICADO:", bookX + 590, bookY + 396, 15, (Color){25, 125, 50, 255});
+                DrawGameText("Despacho automatico local desativado com sucesso.", bookX + 590, bookY + 420, 14, INK_COLOR);
+                DrawGameText("Todos os 1.420 relatorios mantidos intactos como prova.", bookX + 590, bookY + 444, 14, (Color){125, 35, 18, 255});
             }
             else if (game->room2008OptionalUnlocked)
             {
                 DrawRectangleRounded((Rectangle){(float)(bookX + 576), (float)(bookY + 382), 420, 95}, 0.12f, 6, Fade(GOLD_COLOR, 0.20f));
                 DrawRectangleRoundedLinesEx((Rectangle){(float)(bookX + 576), (float)(bookY + 382), 420, 95}, 0.12f, 6, 1.5f, GOLD_COLOR);
-                DrawText("[ ! ] PISTA COMPREENDIDA:", bookX + 590, bookY + 396, 15, (Color){145, 85, 20, 255});
-                DrawText("Acesse a aba 'Configuracao Local' no computador", bookX + 590, bookY + 420, 14, INK_COLOR);
-                DrawText("para desativar o despacho automatico da filial.", bookX + 590, bookY + 444, 14, (Color){125, 35, 18, 255});
+                DrawGameText("[ ! ] PISTA COMPREENDIDA:", bookX + 590, bookY + 396, 15, (Color){145, 85, 20, 255});
+                DrawGameText("Acesse a aba 'Configuracao Local' no computador", bookX + 590, bookY + 420, 14, INK_COLOR);
+                DrawGameText("para desativar o despacho automatico da filial.", bookX + 590, bookY + 444, 14, (Color){125, 35, 18, 255});
             }
             else
             {
                 DrawRectangleRounded((Rectangle){(float)(bookX + 576), (float)(bookY + 382), 420, 95}, 0.12f, 6, Fade(GRAY, 0.12f));
                 DrawRectangleRoundedLinesEx((Rectangle){(float)(bookX + 576), (float)(bookY + 382), 420, 95}, 0.12f, 6, 1.5f, GRAY);
-                DrawText("[ ? ] ACESSO ADMINISTRATIVO BLOQUEADO", bookX + 590, bookY + 396, 15, (Color){115, 65, 35, 255});
-                DrawText("Inspecione as notas pessoais do Dr. Ramos e o", bookX + 590, bookY + 420, 14, INK_COLOR);
-                DrawText("memorando governamental para desbloquear o acesso.", bookX + 590, bookY + 444, 14, GRAY);
+                DrawGameText("[ ? ] ACESSO ADMINISTRATIVO BLOQUEADO", bookX + 590, bookY + 396, 15, (Color){115, 65, 35, 255});
+                DrawGameText("Inspecione as notas pessoais do Dr. Ramos e o", bookX + 590, bookY + 420, 14, INK_COLOR);
+                DrawGameText("memorando governamental para desbloquear o acesso.", bookX + 590, bookY + 444, 14, GRAY);
             }
         }
         else
@@ -2370,10 +2462,10 @@ static void DrawJournal(const GameState *game)
             /* PAGINA 2 DE 2008: CASO LUCAS SILVA & REGISTROS        */
             /* ----------------------------------------------------- */
             /* Pagina Esquerda */
-            DrawText("DOSSIÊ DO ALVO // LUCAS SILVA (2008)", bookX + 32, bookY + 22, 20, (Color){125, 35, 18, 255});
+            DrawGameText("DOSSIÊ DO ALVO // LUCAS SILVA (2008)", bookX + 32, bookY + 22, 20, (Color){125, 35, 18, 255});
             DrawLine(bookX + 32, bookY + 52, bookX + 482, bookY + 52, Fade((Color){125, 35, 18, 255}, 0.45f));
 
-            DrawText("REGISTROS EXAMINADOS NO ESCRITORIO:", bookX + 32, bookY + 68, 17, (Color){125, 35, 18, 255});
+            DrawGameText("REGISTROS EXAMINADOS NO ESCRITORIO:", bookX + 32, bookY + 68, 17, (Color){125, 35, 18, 255});
 
             const char *docTitles[4] = {
                 "1. Comparacao Facial: Imagem aérea borrada (78%)",
@@ -2394,65 +2486,65 @@ static void DrawJournal(const GameState *game)
                 DrawRectangleRounded(cardD, 0.12f, 6, docExamined[d] ? Fade((Color){60, 200, 100, 255}, 0.14f) : Fade(GRAY, 0.10f));
                 DrawRectangleRoundedLinesEx(cardD, 0.12f, 6, 1.5f, docExamined[d] ? (Color){45, 140, 65, 255} : GRAY);
 
-                DrawText(docTitles[d], bookX + 46, bookY + 108 + d * 62, 14, (Color){125, 35, 18, 255});
-                DrawText(docExamined[d] ? "[EXAMINADO]" : "[PENDENTE]", bookX + 46, bookY + 128 + d * 62, 12, docExamined[d] ? (Color){25, 125, 50, 255} : GRAY);
+                DrawGameText(docTitles[d], bookX + 46, bookY + 108 + d * 62, 14, (Color){125, 35, 18, 255});
+                DrawGameText(docExamined[d] ? "[EXAMINADO]" : "[PENDENTE]", bookX + 46, bookY + 128 + d * 62, 12, docExamined[d] ? (Color){25, 125, 50, 255} : GRAY);
                 if (game->puzzle2008Selected[d])
                 {
-                    DrawText("<- MARCADO COMO EVIDENCIA NO TERMINAL", bookX + 160, bookY + 128 + d * 62, 12, (Color){35, 110, 185, 255});
+                    DrawGameText("<- MARCADO COMO EVIDENCIA NO TERMINAL", bookX + 160, bookY + 128 + d * 62, 12, (Color){35, 110, 185, 255});
                 }
             }
 
             Rectangle cardSolucao = {(float)(bookX + 32), (float)(bookY + 360), 450, 140};
             DrawRectangleRounded(cardSolucao, 0.08f, 6, Fade((Color){168, 142, 93, 255}, 0.16f));
             DrawRectangleRoundedLinesEx(cardSolucao, 0.08f, 6, 1.5f, (Color){185, 155, 110, 255});
-            DrawText("A CHAVE DO ALIBI IRREFUTAVEL:", bookX + 46, bookY + 372, 16, (Color){125, 35, 18, 255});
-            DrawText("A combinacao do Registro de Entrada (#3) com a", bookX + 46, bookY + 398, 15, INK_COLOR);
-            DrawText("Camera Interna do Servidor (#4) comprova presenca", bookX + 46, bookY + 420, 15, INK_COLOR);
-            DrawText("no predio as 14:30, a 12 km de onde o drone afirma", bookX + 46, bookY + 442, 15, INK_COLOR);
-            DrawText("ter detectado o suspeito na manifestacao.", bookX + 46, bookY + 464, 15, (Color){125, 35, 18, 255});
+            DrawGameText("A CHAVE DO ALIBI IRREFUTAVEL:", bookX + 46, bookY + 372, 16, (Color){125, 35, 18, 255});
+            DrawGameText("A combinacao do Registro de Entrada (#3) com a", bookX + 46, bookY + 398, 15, INK_COLOR);
+            DrawGameText("Camera Interna do Servidor (#4) comprova presenca", bookX + 46, bookY + 420, 15, INK_COLOR);
+            DrawGameText("no predio as 14:30, a 12 km de onde o drone afirma", bookX + 46, bookY + 442, 15, INK_COLOR);
+            DrawGameText("ter detectado o suspeito na manifestacao.", bookX + 46, bookY + 464, 15, (Color){125, 35, 18, 255});
 
             /* Pagina Direita */
-            DrawText("STATUS DO TERMINAL // CD DE MEMÓRIA", bookX + 560, bookY + 22, 20, (Color){125, 35, 18, 255});
+            DrawGameText("STATUS DO TERMINAL // CD DE MEMÓRIA", bookX + 560, bookY + 22, 20, (Color){125, 35, 18, 255});
             DrawLine(bookX + 560, bookY + 52, bookX + 1008, bookY + 52, Fade((Color){125, 35, 18, 255}, 0.45f));
 
             Rectangle cardStatusT = {(float)(bookX + 560), (float)(bookY + 76), 452, 190};
             DrawRectangleRounded(cardStatusT, 0.08f, 6, (Color){238, 232, 218, 255});
             DrawRectangleRoundedLinesEx(cardStatusT, 0.08f, 6, 1.5f, (Color){175, 155, 125, 255});
-            DrawText("SITUACAO DA ORDEM DE INTERCEPTACAO:", bookX + 576, bookY + 90, 17, (Color){125, 35, 18, 255});
+            DrawGameText("SITUACAO DA ORDEM DE INTERCEPTACAO:", bookX + 576, bookY + 90, 17, (Color){125, 35, 18, 255});
 
             if (game->puzzle2008OrderSuspended)
             {
-                DrawText("[ V ] ORDEM SUSPENSA COM SUCESSO!", bookX + 576, bookY + 120, 18, (Color){25, 135, 55, 255});
-                DrawText("Drone de ataque abortado e reconduzido a base.", bookX + 576, bookY + 150, 15, INK_COLOR);
-                DrawText("O drive do computador ejetou a midia gravada:", bookX + 576, bookY + 175, 15, INK_COLOR);
-                DrawText("CD DE MEMORIA // ANO 2008 RECUPERADO!", bookX + 576, bookY + 205, 16, (Color){135, 35, 18, 255});
+                DrawGameText("[ V ] ORDEM SUSPENSA COM SUCESSO!", bookX + 576, bookY + 120, 18, (Color){25, 135, 55, 255});
+                DrawGameText("Drone de ataque abortado e reconduzido a base.", bookX + 576, bookY + 150, 15, INK_COLOR);
+                DrawGameText("O drive do computador ejetou a midia gravada:", bookX + 576, bookY + 175, 15, INK_COLOR);
+                DrawGameText("CD DE MEMORIA // ANO 2008 RECUPERADO!", bookX + 576, bookY + 205, 16, (Color){135, 35, 18, 255});
             }
             else if (game->puzzle2008Contested)
             {
-                DrawText("[ V ] FALSO POSITIVO DEMONSTRADO!", bookX + 576, bookY + 120, 18, (Color){185, 95, 25, 255});
-                DrawText("Identificacao classificada como 'Nao Confirmada'.", bookX + 576, bookY + 150, 15, INK_COLOR);
-                DrawText("Acesse o computador e clique em 'Suspender ordem'", bookX + 576, bookY + 175, 15, INK_COLOR);
-                DrawText("para obter o CD de Memoria de 2008.", bookX + 576, bookY + 205, 15, (Color){135, 35, 18, 255});
+                DrawGameText("[ V ] FALSO POSITIVO DEMONSTRADO!", bookX + 576, bookY + 120, 18, (Color){185, 95, 25, 255});
+                DrawGameText("Identificacao classificada como 'Nao Confirmada'.", bookX + 576, bookY + 150, 15, INK_COLOR);
+                DrawGameText("Acesse o computador e clique em 'Suspender ordem'", bookX + 576, bookY + 175, 15, INK_COLOR);
+                DrawGameText("para obter o CD de Memoria de 2008.", bookX + 576, bookY + 205, 15, (Color){135, 35, 18, 255});
             }
             else
             {
-                DrawText("[ ! ] ORDEM DE DRONE PENDENTE (14:30)", bookX + 576, bookY + 120, 18, (Color){185, 45, 35, 255});
-                DrawText("O sistema automatico enviara o drone caso nenhuma", bookX + 576, bookY + 150, 15, INK_COLOR);
-                DrawText("contestacao seja realizada no computador.", bookX + 576, bookY + 175, 15, INK_COLOR);
-                DrawText("Selecione 2 evidencias no terminal para contestar.", bookX + 576, bookY + 205, 15, (Color){135, 35, 18, 255});
+                DrawGameText("[ ! ] ORDEM DE DRONE PENDENTE (14:30)", bookX + 576, bookY + 120, 18, (Color){185, 45, 35, 255});
+                DrawGameText("O sistema automatico enviara o drone caso nenhuma", bookX + 576, bookY + 150, 15, INK_COLOR);
+                DrawGameText("contestacao seja realizada no computador.", bookX + 576, bookY + 175, 15, INK_COLOR);
+                DrawGameText("Selecione 2 evidencias no terminal para contestar.", bookX + 576, bookY + 205, 15, (Color){135, 35, 18, 255});
             }
 
             Rectangle cardEtica = {(float)(bookX + 560), (float)(bookY + 280), 452, 220};
             DrawRectangleRounded(cardEtica, 0.08f, 6, Fade((Color){18, 27, 45, 255}, 0.08f));
             DrawRectangleRoundedLinesEx(cardEtica, 0.08f, 6, 1.5f, (Color){120, 135, 155, 255});
-            DrawText("A LIÇÃO ÉTICA DE 2008:", bookX + 576, bookY + 295, 17, (Color){125, 35, 18, 255});
-            DrawText("1. O ERRO TÉCNICO (FALSO POSITIVO):", bookX + 576, bookY + 325, 15, (Color){135, 35, 18, 255});
-            DrawText("Algoritmos probabilisticos falham sob baixa nitidez.", bookX + 576, bookY + 347, 14, INK_COLOR);
-            DrawText("2. O ERRO POLÍTICO (DESVIO ÉTICO):", bookX + 576, bookY + 375, 15, (Color){135, 35, 18, 255});
-            DrawText("Mesmo que Lucas estivesse no protesto, transformar", bookX + 576, bookY + 397, 14, INK_COLOR);
-            DrawText("uma ferramenta humanitária em aparato bélico contra", bookX + 576, bookY + 419, 14, INK_COLOR);
-            DrawText("a dissidência civil e uma violacao inaceitavel.", bookX + 576, bookY + 441, 14, INK_COLOR);
-            DrawText("'A maquina deve servir a liberdade, nao a prisao.'", bookX + 576, bookY + 470, 14, (Color){125, 35, 18, 255});
+            DrawGameText("A LIÇÃO ÉTICA DE 2008:", bookX + 576, bookY + 295, 17, (Color){125, 35, 18, 255});
+            DrawGameText("1. O ERRO TÉCNICO (FALSO POSITIVO):", bookX + 576, bookY + 325, 15, (Color){135, 35, 18, 255});
+            DrawGameText("Algoritmos probabilisticos falham sob baixa nitidez.", bookX + 576, bookY + 347, 14, INK_COLOR);
+            DrawGameText("2. O ERRO POLÍTICO (DESVIO ÉTICO):", bookX + 576, bookY + 375, 15, (Color){135, 35, 18, 255});
+            DrawGameText("Mesmo que Lucas estivesse no protesto, transformar", bookX + 576, bookY + 397, 14, INK_COLOR);
+            DrawGameText("uma ferramenta humanitária em aparato bélico contra", bookX + 576, bookY + 419, 14, INK_COLOR);
+            DrawGameText("a dissidência civil e uma violacao inaceitavel.", bookX + 576, bookY + 441, 14, INK_COLOR);
+            DrawGameText("'A maquina deve servir a liberdade, nao a prisao.'", bookX + 576, bookY + 470, 14, (Color){125, 35, 18, 255});
         }
 
         /* Rodapé de navegação de 2008 */
@@ -2461,22 +2553,22 @@ static void DrawJournal(const GameState *game)
         bool canPrev = (page > 0);
         DrawRectangleRounded(prevBtn, 0.25f, 6, canPrev ? (prevHover ? (Color){195, 170, 140, 255} : (Color){226, 216, 196, 255}) : Fade((Color){200, 195, 185, 255}, 0.5f));
         DrawRectangleRoundedLinesEx(prevBtn, 0.25f, 6, 1, (Color){145, 115, 85, 255});
-        DrawText("< Anterior [Q]", bookX + 44, footY + 9, 15, canPrev ? INK_COLOR : GRAY);
+        DrawGameText("< Anterior [Q]", bookX + 44, footY + 9, 15, canPrev ? INK_COLOR : GRAY);
 
-        DrawText(TextFormat("Pagina %d de 2 (2008)", page + 1), bookX + 210, footY + 8, 18, (Color){125, 35, 18, 255});
+        DrawGameText(TextFormat("Pagina %d de 2 (2008)", page + 1), bookX + 210, footY + 8, 18, (Color){125, 35, 18, 255});
 
         Rectangle closeBtn = {(float)(bookX + 660), (float)footY, 145, 36};
         bool closeHover = CheckCollisionPointRec(GetVirtualMouse(), closeBtn);
         DrawRectangleRounded(closeBtn, 0.25f, 6, closeHover ? (Color){195, 170, 140, 255} : (Color){226, 216, 196, 255});
         DrawRectangleRoundedLinesEx(closeBtn, 0.25f, 6, 1, (Color){145, 115, 85, 255});
-        DrawText("Fechar [ESC/D]", bookX + 678, footY + 9, 15, INK_COLOR);
+        DrawGameText("Fechar [ESC/D]", bookX + 678, footY + 9, 15, INK_COLOR);
 
         Rectangle nextBtn = {(float)(bookX + 835), (float)footY, 155, 36};
         bool nextHover = CheckCollisionPointRec(GetVirtualMouse(), nextBtn);
         bool canNext = (page < 1);
         DrawRectangleRounded(nextBtn, 0.25f, 6, canNext ? (nextHover ? (Color){195, 170, 140, 255} : (Color){226, 216, 196, 255}) : Fade((Color){200, 195, 185, 255}, 0.5f));
         DrawRectangleRoundedLinesEx(nextBtn, 0.25f, 6, 1, (Color){145, 115, 85, 255});
-        DrawText("Proxima [E] >", bookX + 858, footY + 9, 15, canNext ? INK_COLOR : GRAY);
+        DrawGameText("Proxima [E] >", bookX + 858, footY + 9, 15, canNext ? INK_COLOR : GRAY);
     }
     else
     {
@@ -2491,12 +2583,12 @@ static void DrawJournal(const GameState *game)
             /* PAGINA 1 DE 2048: REGISTRO DE OPERACOES & SINTESE     */
             /* ----------------------------------------------------- */
             /* Pagina Esquerda */
-            DrawText("DIARIO DE PESQUISA // PROJETO A.R.1.3.L.", bookX + 32, bookY + 22, 20, (Color){125, 35, 18, 255});
+            DrawGameText("DIARIO DE PESQUISA // PROJETO A.R.1.3.L.", bookX + 32, bookY + 22, 20, (Color){125, 35, 18, 255});
             DrawLine(bookX + 32, bookY + 52, bookX + 482, bookY + 52, Fade((Color){125, 35, 18, 255}, 0.45f));
 
-            DrawText("REGISTRO DE OPERACOES - ANO 2048", bookX + 32, bookY + 68, 18, (Color){125, 35, 18, 255});
-            DrawText("Acesso ao terminal protegido por chave cronologica.", bookX + 32, bookY + 92, 15, INK_COLOR);
-            DrawText("Pistas no laboratorio:", bookX + 32, bookY + 116, 16,
+            DrawGameText("REGISTRO DE OPERACOES - ANO 2048", bookX + 32, bookY + 68, 18, (Color){125, 35, 18, 255});
+            DrawGameText("Acesso ao terminal protegido por chave cronologica.", bookX + 32, bookY + 92, 15, INK_COLOR);
+            DrawGameText("Pistas no laboratorio:", bookX + 32, bookY + 116, 16,
                      ClueCount(game) == 5 ? (Color){20, 120, 45, 255} : (Color){145, 65, 30, 255});
 
             /* 5 Caixas de pistas com fonte grande e legivel */
@@ -2525,56 +2617,56 @@ static void DrawJournal(const GameState *game)
                 Rectangle boxR = {(float)(bookX + 32), (float)iy, 448, 36};
                 DrawRectangleRounded(boxR, 0.2f, 6, itemFound[i] ? Fade((Color){45, 135, 65, 255}, 0.14f) : Fade((Color){140, 125, 105, 255}, 0.12f));
                 DrawRectangleRoundedLinesEx(boxR, 0.2f, 6, 1, itemFound[i] ? (Color){45, 135, 65, 255} : (Color){190, 175, 150, 255});
-                DrawText(itemFound[i] ? "[OK]" : "[?]", bookX + 44, iy + 9, 16, itemFound[i] ? (Color){25, 120, 45, 255} : (Color){140, 80, 50, 255});
-                DrawText(itemFound[i] ? itemTitlesFound[i] : itemTitlesMissing[i], bookX + 90, iy + 10, 15, itemFound[i] ? INK_COLOR : (Color){105, 95, 85, 255});
+                DrawGameText(itemFound[i] ? "[OK]" : "[?]", bookX + 44, iy + 9, 16, itemFound[i] ? (Color){25, 120, 45, 255} : (Color){140, 80, 50, 255});
+                DrawGameText(itemFound[i] ? itemTitlesFound[i] : itemTitlesMissing[i], bookX + 90, iy + 10, 15, itemFound[i] ? INK_COLOR : (Color){105, 95, 85, 255});
             }
 
             /* Carimbo confidencial vintage */
             DrawRectangleRoundedLinesEx((Rectangle){(float)(bookX + 270), (float)(bookY + 368), 210, 46}, 0.2f, 6, 2, (Color){175, 45, 45, 255});
-            DrawText("CONFIDENCIAL", bookX + 295, bookY + 375, 18, (Color){175, 45, 45, 255});
-            DrawText("ARQUIVO HISTORICO 2048", bookX + 288, bookY + 396, 12, (Color){175, 45, 45, 255});
+            DrawGameText("CONFIDENCIAL", bookX + 295, bookY + 375, 18, (Color){175, 45, 45, 255});
+            DrawGameText("ARQUIVO HISTORICO 2048", bookX + 288, bookY + 396, 12, (Color){175, 45, 45, 255});
 
-            DrawText("Investigue os objetos do laboratorio para preencher", bookX + 32, bookY + 430, 15, INK_COLOR);
-            DrawText("as folhas do diario com os dados do prototipo de 2048.", bookX + 32, bookY + 454, 15, INK_COLOR);
-            DrawText("Avance para a Pagina 2 para o dossie completo.", bookX + 32, bookY + 480, 15, (Color){125, 35, 18, 255});
+            DrawGameText("Investigue os objetos do laboratorio para preencher", bookX + 32, bookY + 430, 15, INK_COLOR);
+            DrawGameText("as folhas do diario com os dados do prototipo de 2048.", bookX + 32, bookY + 454, 15, INK_COLOR);
+            DrawGameText("Avance para a Pagina 2 para o dossie completo.", bookX + 32, bookY + 480, 15, (Color){125, 35, 18, 255});
 
             /* Pagina Direita */
-            DrawText("SINTESE & DEDUCAO DO TERMINAL", bookX + 560, bookY + 22, 20, (Color){125, 35, 18, 255});
+            DrawGameText("SINTESE & DEDUCAO DO TERMINAL", bookX + 560, bookY + 22, 20, (Color){125, 35, 18, 255});
             DrawLine(bookX + 560, bookY + 52, bookX + 1008, bookY + 52, Fade((Color){125, 35, 18, 255}, 0.45f));
 
             /* Card Como desvendar - perfeitamente enquadrado */
             Rectangle cardR1 = {(float)(bookX + 560), (float)(bookY + 76), 452, 146};
             DrawRectangleRounded(cardR1, 0.08f, 6, Fade((Color){168, 142, 93, 255}, 0.16f));
             DrawRectangleRoundedLinesEx(cardR1, 0.08f, 6, 1.5f, (Color){185, 155, 110, 255});
-            DrawText("COMO DESVENDAR O CODIGO:", bookX + 576, bookY + 90, 17, (Color){125, 35, 18, 255});
-            DrawText("- O computador exige uma chave de 4 digitos.", bookX + 576, bookY + 115, 15, INK_COLOR);
-            DrawText("- Cada pista na sala e um marco historico da IA.", bookX + 576, bookY + 138, 15, INK_COLOR);
-            DrawText("- Ponto de partida: a questao de Turing:", bookX + 576, bookY + 161, 15, INK_COLOR);
-            DrawText("  'Podem as maquinas pensar?'", bookX + 576, bookY + 186, 16, (Color){135, 35, 18, 255});
+            DrawGameText("COMO DESVENDAR O CODIGO:", bookX + 576, bookY + 90, 17, (Color){125, 35, 18, 255});
+            DrawGameText("- O computador exige uma chave de 4 digitos.", bookX + 576, bookY + 115, 15, INK_COLOR);
+            DrawGameText("- Cada pista na sala e um marco historico da IA.", bookX + 576, bookY + 138, 15, INK_COLOR);
+            DrawGameText("- Ponto de partida: a questao de Turing:", bookX + 576, bookY + 161, 15, INK_COLOR);
+            DrawGameText("  'Podem as maquinas pensar?'", bookX + 576, bookY + 186, 16, (Color){135, 35, 18, 255});
 
             /* Card Status do Codigo */
             Rectangle cardR2 = {(float)(bookX + 560), (float)(bookY + 238), 452, 125};
             DrawRectangleRounded(cardR2, 0.08f, 6, (Color){238, 232, 218, 255});
             DrawRectangleRoundedLinesEx(cardR2, 0.08f, 6, 1.5f, (Color){175, 155, 125, 255});
-            DrawText("STATUS DO CODIGO DE ACESSO:", bookX + 576, bookY + 252, 16, (Color){125, 65, 35, 255});
+            DrawGameText("STATUS DO CODIGO DE ACESSO:", bookX + 576, bookY + 252, 16, (Color){125, 65, 35, 255});
 
             if (ClueCount(game) == 5)
             {
-                DrawText("[ 1 ]   [ 9 ]   [ 5 ]   [ 0 ]", bookX + 645, bookY + 280, 28, (Color){25, 125, 50, 255});
-                DrawText("Chave decifrada! Digite 1950 no computador.", bookX + 576, bookY + 326, 15, (Color){25, 125, 50, 255});
+                DrawGameText("[ 1 ]   [ 9 ]   [ 5 ]   [ 0 ]", bookX + 645, bookY + 280, 28, (Color){25, 125, 50, 255});
+                DrawGameText("Chave decifrada! Digite 1950 no computador.", bookX + 576, bookY + 326, 15, (Color){25, 125, 50, 255});
             }
             else
             {
-                DrawText("[ ? ]   [ ? ]   [ ? ]   [ ? ]", bookX + 645, bookY + 280, 28, (Color){165, 45, 35, 255});
-                DrawText(TextFormat("Ainda faltam %d pistas para consolidar a deducao.", 5 - ClueCount(game)),
+                DrawGameText("[ ? ]   [ ? ]   [ ? ]   [ ? ]", bookX + 645, bookY + 280, 28, (Color){165, 45, 35, 255});
+                DrawGameText(TextFormat("Ainda faltam %d pistas para consolidar a deducao.", 5 - ClueCount(game)),
                          bookX + 576, bookY + 326, 15, (Color){135, 55, 40, 255});
             }
 
             /* Dica de navegacao */
-            DrawText("DICAS DE NAVEGACAO DESTE ARQUIVO:", bookX + 560, bookY + 385, 16, (Color){125, 35, 18, 255});
-            DrawText("- Clique em 'Proxima [E]' para acessar a Pagina 2 de 2048.", bookX + 560, bookY + 412, 15, INK_COLOR);
-            DrawText("- As abas com cadeado pertencem a fases bloqueadas.", bookX + 560, bookY + 438, 15, INK_COLOR);
-            DrawText("- Pressione [D] para retornar ao laboratorio.", bookX + 560, bookY + 464, 15, INK_COLOR);
+            DrawGameText("DICAS DE NAVEGACAO DESTE ARQUIVO:", bookX + 560, bookY + 385, 16, (Color){125, 35, 18, 255});
+            DrawGameText("- Clique em 'Proxima [E]' para acessar a Pagina 2 de 2048.", bookX + 560, bookY + 412, 15, INK_COLOR);
+            DrawGameText("- As abas com cadeado pertencem a fases bloqueadas.", bookX + 560, bookY + 438, 15, INK_COLOR);
+            DrawGameText("- Pressione [D] para retornar ao laboratorio.", bookX + 560, bookY + 464, 15, INK_COLOR);
         }
         else
         {
@@ -2582,8 +2674,8 @@ static void DrawJournal(const GameState *game)
             /* PAGINA 2 DE 2048: DOSSIE HISTORICO & ARTEFATOS        */
             /* ----------------------------------------------------- */
             /* Pagina Esquerda: 1950 Turing & 1956 Dartmouth */
-            DrawText("DOSSIE HISTORICO // MARCOS DA IA", bookX + 32, bookY + 20, 20, (Color){125, 35, 18, 255});
-            DrawText("DRA. ELIRA RAMOS - NOTAS CIENTIFICAS (2048)", bookX + 32, bookY + 44, 15, (Color){110, 75, 50, 255});
+            DrawGameText("DOSSIE HISTORICO // MARCOS DA IA", bookX + 32, bookY + 20, 20, (Color){125, 35, 18, 255});
+            DrawGameText("DRA. ELIRA RAMOS - NOTAS CIENTIFICAS (2048)", bookX + 32, bookY + 44, 15, (Color){110, 75, 50, 255});
             DrawLine(bookX + 32, bookY + 65, bookX + 482, bookY + 65, Fade((Color){125, 35, 18, 255}, 0.45f));
 
             /* Bloco 1950 Turing */
@@ -2593,20 +2685,20 @@ static void DrawJournal(const GameState *game)
 
             if (game->foundCalendar)
             {
-                DrawText("1950 // ALAN TURING & JOGO DA IMITACAO", bookX + 46, bookY + 92, 17, (Color){125, 35, 18, 255});
-                DrawText("[CONFIRMADO // ANO 1950]", bookX + 46, bookY + 116, 14, (Color){25, 125, 50, 255});
-                DrawText("Artigo seminal: 'Computing Machinery and Intelligence'.", bookX + 46, bookY + 140, 15, INK_COLOR);
-                DrawText("Propos substituir a questao filosofica por um teste operacional:", bookX + 46, bookY + 164, 15, INK_COLOR);
-                DrawText("se um humano nao distinguir a maquina, ela e inteligente.", bookX + 46, bookY + 188, 15, INK_COLOR);
-                DrawText("-> Marco zero da ciencia computacional de IA: ANO 1950.", bookX + 46, bookY + 214, 15, (Color){125, 35, 18, 255});
-                DrawText("-> Pista fundamental para a chave do terminal!", bookX + 46, bookY + 238, 15, (Color){25, 125, 50, 255});
+                DrawGameText("1950 // ALAN TURING & JOGO DA IMITACAO", bookX + 46, bookY + 92, 17, (Color){125, 35, 18, 255});
+                DrawGameText("[CONFIRMADO // ANO 1950]", bookX + 46, bookY + 116, 14, (Color){25, 125, 50, 255});
+                DrawGameText("Artigo seminal: 'Computing Machinery and Intelligence'.", bookX + 46, bookY + 140, 15, INK_COLOR);
+                DrawGameText("Propos substituir a questao filosofica por um teste operacional:", bookX + 46, bookY + 164, 15, INK_COLOR);
+                DrawGameText("se um humano nao distinguir a maquina, ela e inteligente.", bookX + 46, bookY + 188, 15, INK_COLOR);
+                DrawGameText("-> Marco zero da ciencia computacional de IA: ANO 1950.", bookX + 46, bookY + 214, 15, (Color){125, 35, 18, 255});
+                DrawGameText("-> Pista fundamental para a chave do terminal!", bookX + 46, bookY + 238, 15, (Color){25, 125, 50, 255});
             }
             else
             {
                 DrawPadlockIcon(bookX + 65, bookY + 175, 1.3f, (Color){185, 145, 60, 255}, RAYWHITE);
-                DrawText("1950 // MARCO FUNDAMENTAL [BLOQUEADO]", bookX + 100, bookY + 135, 17, (Color){125, 65, 35, 255});
-                DrawText("Examine o calendario preso na parede da sala", bookX + 100, bookY + 165, 15, INK_COLOR);
-                DrawText("para registrar os detalhes historicos deste marco.", bookX + 100, bookY + 190, 15, INK_COLOR);
+                DrawGameText("1950 // MARCO FUNDAMENTAL [BLOQUEADO]", bookX + 100, bookY + 135, 17, (Color){125, 65, 35, 255});
+                DrawGameText("Examine o calendario preso na parede da sala", bookX + 100, bookY + 165, 15, INK_COLOR);
+                DrawGameText("para registrar os detalhes historicos deste marco.", bookX + 100, bookY + 190, 15, INK_COLOR);
             }
 
             /* Bloco 1956 Dartmouth */
@@ -2616,25 +2708,25 @@ static void DrawJournal(const GameState *game)
 
             if (game->foundBooks)
             {
-                DrawText("1956 // CONFERENCIA DE DARTMOUTH", bookX + 46, bookY + 312, 17, (Color){125, 35, 18, 255});
-                DrawText("[CONFIRMADO // ANO 1956]", bookX + 46, bookY + 336, 14, (Color){25, 125, 50, 255});
-                DrawText("Seminario historico de John McCarthy, Minsky e Shannon.", bookX + 46, bookY + 360, 15, INK_COLOR);
-                DrawText("McCarthy cunhou o termo 'Inteligencia Artificial',", bookX + 46, bookY + 384, 15, (Color){125, 35, 18, 255});
-                DrawText("afirmando que todo aspecto do aprendizado humano", bookX + 46, bookY + 408, 15, INK_COLOR);
-                DrawText("pode em principio ser simulado com exatidao por maquinas.", bookX + 46, bookY + 432, 15, INK_COLOR);
-                DrawText("-> Ano oficial do batismo da disciplina: ANO 1956.", bookX + 46, bookY + 458, 15, (Color){125, 35, 18, 255});
+                DrawGameText("1956 // CONFERENCIA DE DARTMOUTH", bookX + 46, bookY + 312, 17, (Color){125, 35, 18, 255});
+                DrawGameText("[CONFIRMADO // ANO 1956]", bookX + 46, bookY + 336, 14, (Color){25, 125, 50, 255});
+                DrawGameText("Seminario historico de John McCarthy, Minsky e Shannon.", bookX + 46, bookY + 360, 15, INK_COLOR);
+                DrawGameText("McCarthy cunhou o termo 'Inteligencia Artificial',", bookX + 46, bookY + 384, 15, (Color){125, 35, 18, 255});
+                DrawGameText("afirmando que todo aspecto do aprendizado humano", bookX + 46, bookY + 408, 15, INK_COLOR);
+                DrawGameText("pode em principio ser simulado com exatidao por maquinas.", bookX + 46, bookY + 432, 15, INK_COLOR);
+                DrawGameText("-> Ano oficial do batismo da disciplina: ANO 1956.", bookX + 46, bookY + 458, 15, (Color){125, 35, 18, 255});
             }
             else
             {
                 DrawPadlockIcon(bookX + 65, bookY + 400, 1.3f, (Color){185, 145, 60, 255}, RAYWHITE);
-                DrawText("1956 // LITERATURA DA IA [BLOQUEADO]", bookX + 100, bookY + 360, 17, (Color){125, 65, 35, 255});
-                DrawText("Investigue a estante de livros na sala para", bookX + 100, bookY + 390, 15, INK_COLOR);
-                DrawText("desbloquear os registros sobre o batismo da IA.", bookX + 100, bookY + 415, 15, INK_COLOR);
+                DrawGameText("1956 // LITERATURA DA IA [BLOQUEADO]", bookX + 100, bookY + 360, 17, (Color){125, 65, 35, 255});
+                DrawGameText("Investigue a estante de livros na sala para", bookX + 100, bookY + 390, 15, INK_COLOR);
+                DrawGameText("desbloquear os registros sobre o batismo da IA.", bookX + 100, bookY + 415, 15, INK_COLOR);
             }
 
             /* Pagina Direita: 1958 Perceptron & 2048 Midias / Gravacao */
-            DrawText("ARTEFATOS E PROTOTIPO // 2048", bookX + 560, bookY + 20, 20, (Color){125, 35, 18, 255});
-            DrawText("REDES NEURAIS, DADOS E VOZ DA CRIADORA", bookX + 560, bookY + 44, 15, (Color){110, 75, 50, 255});
+            DrawGameText("ARTEFATOS E PROTOTIPO // 2048", bookX + 560, bookY + 20, 20, (Color){125, 35, 18, 255});
+            DrawGameText("REDES NEURAIS, DADOS E VOZ DA CRIADORA", bookX + 560, bookY + 44, 15, (Color){110, 75, 50, 255});
             DrawLine(bookX + 560, bookY + 65, bookX + 1008, bookY + 65, Fade((Color){125, 35, 18, 255}, 0.45f));
 
             /* Bloco 1958 Perceptron */
@@ -2644,20 +2736,20 @@ static void DrawJournal(const GameState *game)
 
             if (game->foundBlueprint)
             {
-                DrawText("1958 // O PERCEPTRON DE ROSENBLATT", bookX + 574, bookY + 92, 17, (Color){125, 35, 18, 255});
-                DrawText("[CONFIRMADO // ANO 1958]", bookX + 574, bookY + 116, 14, (Color){25, 125, 50, 255});
-                DrawText("O primeiro algoritmo de aprendizado supervisionado.", bookX + 574, bookY + 140, 15, INK_COLOR);
-                DrawText("Neuronio artificial com pesos variaveis (w) que se ajustam", bookX + 574, bookY + 164, 15, INK_COLOR);
-                DrawText("automaticamente conforme ocorrem erros na classificacao.", bookX + 574, bookY + 188, 15, INK_COLOR);
-                DrawText("-> O nascimento das Redes Neurais Artificiais: ANO 1958.", bookX + 574, bookY + 214, 15, (Color){125, 35, 18, 255});
-                DrawText("-> Prova de que maquinas aprendem a partir de dados!", bookX + 574, bookY + 238, 15, (Color){25, 125, 50, 255});
+                DrawGameText("1958 // O PERCEPTRON DE ROSENBLATT", bookX + 574, bookY + 92, 17, (Color){125, 35, 18, 255});
+                DrawGameText("[CONFIRMADO // ANO 1958]", bookX + 574, bookY + 116, 14, (Color){25, 125, 50, 255});
+                DrawGameText("O primeiro algoritmo de aprendizado supervisionado.", bookX + 574, bookY + 140, 15, INK_COLOR);
+                DrawGameText("Neuronio artificial com pesos variaveis (w) que se ajustam", bookX + 574, bookY + 164, 15, INK_COLOR);
+                DrawGameText("automaticamente conforme ocorrem erros na classificacao.", bookX + 574, bookY + 188, 15, INK_COLOR);
+                DrawGameText("-> O nascimento das Redes Neurais Artificiais: ANO 1958.", bookX + 574, bookY + 214, 15, (Color){125, 35, 18, 255});
+                DrawGameText("-> Prova de que maquinas aprendem a partir de dados!", bookX + 574, bookY + 238, 15, (Color){25, 125, 50, 255});
             }
             else
             {
                 DrawPadlockIcon(bookX + 595, bookY + 175, 1.3f, (Color){185, 145, 60, 255}, RAYWHITE);
-                DrawText("1958 // ESQUEMA DO PERCEPTRON [BLOQUEADO]", bookX + 630, bookY + 135, 17, (Color){125, 65, 35, 255});
-                DrawText("Examine o esquema tecnico pendurado na parede", bookX + 630, bookY + 165, 15, INK_COLOR);
-                DrawText("para registrar a arquitetura da rede neural.", bookX + 630, bookY + 190, 15, INK_COLOR);
+                DrawGameText("1958 // ESQUEMA DO PERCEPTRON [BLOQUEADO]", bookX + 630, bookY + 135, 17, (Color){125, 65, 35, 255});
+                DrawGameText("Examine o esquema tecnico pendurado na parede", bookX + 630, bookY + 165, 15, INK_COLOR);
+                DrawGameText("para registrar a arquitetura da rede neural.", bookX + 630, bookY + 190, 15, INK_COLOR);
             }
 
             /* Bloco 2048 Midias e Gravacao */
@@ -2668,24 +2760,24 @@ static void DrawJournal(const GameState *game)
 
             if (has2048Media)
             {
-                DrawText("2048 // DADOS, MEMORIA E GRAVACAO", bookX + 574, bookY + 312, 17, (Color){125, 35, 18, 255});
-                DrawText("[CONFIRMADO // ARTEFATOS DE 2048]", bookX + 574, bookY + 336, 14, (Color){25, 125, 50, 255});
-                DrawText("Unidade SSD: armazena os pesos e regras neurais de A.R.1.3.L.", bookX + 574, bookY + 360, 15, INK_COLOR);
-                DrawText("Gravacao da Dra. Ramos: 'Para despertar o prototipo,", bookX + 574, bookY + 384, 15, (Color){125, 35, 18, 255});
-                DrawText("o operador deve inserir o ano inaugural do Teste de Turing:'", bookX + 574, bookY + 408, 15, (Color){125, 35, 18, 255});
+                DrawGameText("2048 // DADOS, MEMORIA E GRAVACAO", bookX + 574, bookY + 312, 17, (Color){125, 35, 18, 255});
+                DrawGameText("[CONFIRMADO // ARTEFATOS DE 2048]", bookX + 574, bookY + 336, 14, (Color){25, 125, 50, 255});
+                DrawGameText("Unidade SSD: armazena os pesos e regras neurais de A.R.1.3.L.", bookX + 574, bookY + 360, 15, INK_COLOR);
+                DrawGameText("Gravacao da Dra. Ramos: 'Para despertar o prototipo,", bookX + 574, bookY + 384, 15, (Color){125, 35, 18, 255});
+                DrawGameText("o operador deve inserir o ano inaugural do Teste de Turing:'", bookX + 574, bookY + 408, 15, (Color){125, 35, 18, 255});
 
                 /* Destaque com o codigo final */
                 Rectangle codeBox = {(float)(bookX + 574), (float)(bookY + 438), 420, 52};
                 DrawRectangleRounded(codeBox, 0.2f, 6, (Color){30, 42, 60, 255});
                 DrawRectangleRoundedLinesEx(codeBox, 0.2f, 6, 2, GOLD_COLOR);
-                DrawText("CHAVE FINAL DO TERMINAL: 1 9 5 0", bookX + 610, bookY + 452, 20, GOLD_COLOR);
+                DrawGameText("CHAVE FINAL DO TERMINAL: 1 9 5 0", bookX + 610, bookY + 452, 20, GOLD_COLOR);
             }
             else
             {
                 DrawPadlockIcon(bookX + 595, bookY + 400, 1.3f, (Color){185, 145, 60, 255}, RAYWHITE);
-                DrawText("2048 // ARTEFATOS DA SALA [BLOQUEADOS]", bookX + 630, bookY + 360, 17, (Color){125, 65, 35, 255});
-                DrawText("Abra a gaveta da mesa e ouca a fita no gravador", bookX + 630, bookY + 390, 15, INK_COLOR);
-                DrawText("para registrar a transcricao da Dra. Ramos.", bookX + 630, bookY + 415, 15, INK_COLOR);
+                DrawGameText("2048 // ARTEFATOS DA SALA [BLOQUEADOS]", bookX + 630, bookY + 360, 17, (Color){125, 65, 35, 255});
+                DrawGameText("Abra a gaveta da mesa e ouca a fita no gravador", bookX + 630, bookY + 390, 15, INK_COLOR);
+                DrawGameText("para registrar a transcricao da Dra. Ramos.", bookX + 630, bookY + 415, 15, INK_COLOR);
             }
         }
 
@@ -2697,22 +2789,22 @@ static void DrawJournal(const GameState *game)
         bool canPrev = (page > 0);
         DrawRectangleRounded(prevBtn, 0.25f, 6, canPrev ? (prevHover ? (Color){195, 170, 140, 255} : (Color){226, 216, 196, 255}) : Fade((Color){200, 195, 185, 255}, 0.5f));
         DrawRectangleRoundedLinesEx(prevBtn, 0.25f, 6, 1, (Color){145, 115, 85, 255});
-        DrawText("< Anterior [Q]", bookX + 44, footY + 9, 15, canPrev ? INK_COLOR : GRAY);
+        DrawGameText("< Anterior [Q]", bookX + 44, footY + 9, 15, canPrev ? INK_COLOR : GRAY);
 
-        DrawText(TextFormat("Pagina %d de 2 (2048)", page + 1), bookX + 210, footY + 8, 18, (Color){125, 35, 18, 255});
+        DrawGameText(TextFormat("Pagina %d de 2 (2048)", page + 1), bookX + 210, footY + 8, 18, (Color){125, 35, 18, 255});
 
         Rectangle closeBtn = {(float)(bookX + 660), (float)footY, 145, 36};
         bool closeHover = CheckCollisionPointRec(GetVirtualMouse(), closeBtn);
         DrawRectangleRounded(closeBtn, 0.25f, 6, closeHover ? (Color){195, 170, 140, 255} : (Color){226, 216, 196, 255});
         DrawRectangleRoundedLinesEx(closeBtn, 0.25f, 6, 1, (Color){145, 115, 85, 255});
-        DrawText("Fechar [ESC/D]", bookX + 678, footY + 9, 15, INK_COLOR);
+        DrawGameText("Fechar [ESC/D]", bookX + 678, footY + 9, 15, INK_COLOR);
 
         Rectangle nextBtn = {(float)(bookX + 835), (float)footY, 155, 36};
         bool nextHover = CheckCollisionPointRec(GetVirtualMouse(), nextBtn);
         bool canNext = (page < 1);
         DrawRectangleRounded(nextBtn, 0.25f, 6, canNext ? (nextHover ? (Color){195, 170, 140, 255} : (Color){226, 216, 196, 255}) : Fade((Color){200, 195, 185, 255}, 0.5f));
         DrawRectangleRoundedLinesEx(nextBtn, 0.25f, 6, 1, (Color){145, 115, 85, 255});
-        DrawText("Proxima [E] >", bookX + 858, footY + 9, 15, canNext ? INK_COLOR : GRAY);
+        DrawGameText("Proxima [E] >", bookX + 858, footY + 9, 15, canNext ? INK_COLOR : GRAY);
     }
 }
 
@@ -2899,21 +2991,21 @@ static void DrawTerminal(const GameState *game)
     static const char *labels[12] = {"1", "2", "3", "4", "5", "6",
                                       "7", "8", "9", "LIMPAR", "0", "OK"};
     DrawBackground();
-    DrawText("A.R.1.3.L // TERMINAL DE MEMORIA", 60, 42, 22, CYAN_COLOR);
-    DrawText(TextFormat("VIDAS RESTANTES: %d", game->lives), 980, 42, 20,
+    DrawGameText("A.R.1.3.L // TERMINAL DE MEMORIA", 60, 42, 22, CYAN_COLOR);
+    DrawGameText(TextFormat("VIDAS RESTANTES: %d", game->lives), 980, 42, 20,
              game->lives == 1 ? RED_COLOR : RAYWHITE);
     DrawRectangleRounded((Rectangle){90, 100, 650, 520}, 0.035f, 10,
                          (Color){14, 27, 26, 255});
     DrawRectangleRoundedLinesEx((Rectangle){90, 100, 650, 520}, 0.035f, 10, 3,
                                 (Color){68, 115, 88, 255});
-    DrawText("> BOOT MEMORY_NODE_2048", 130, 145, 20,
+    DrawGameText("> BOOT MEMORY_NODE_2048", 130, 145, 20,
              (Color){101, 232, 151, 255});
-    DrawText("> SECURITY PROTOCOL ACTIVE", 130, 185, 20,
+    DrawGameText("> SECURITY PROTOCOL ACTIVE", 130, 185, 20,
              (Color){101, 232, 151, 255});
-    DrawText("> QUESTION:", 130, 250, 20, (Color){101, 232, 151, 255});
-    DrawText("Em que ano uma maquina", 130, 292, 24, RAYWHITE);
-    DrawText("foi desafiada a pensar?", 130, 330, 24, RAYWHITE);
-    DrawText("CODIGO DE ACESSO", 130, 405, 18, GOLD_COLOR);
+    DrawGameText("> QUESTION:", 130, 250, 20, (Color){101, 232, 151, 255});
+    DrawGameText("Em que ano uma maquina", 130, 292, 24, RAYWHITE);
+    DrawGameText("foi desafiada a pensar?", 130, 330, 24, RAYWHITE);
+    DrawGameText("CODIGO DE ACESSO", 130, 405, 18, GOLD_COLOR);
 
     for (int i = 0; i < 4; i++)
     {
@@ -2922,9 +3014,9 @@ static void DrawTerminal(const GameState *game)
         if (i < game->codeLength) value[0] = game->code[i];
         DrawRectangleRounded(slot, 0.12f, 6, PANEL_COLOR);
         DrawRectangleRoundedLinesEx(slot, 0.12f, 6, 2, CYAN_COLOR);
-        DrawText(value, (int)slot.x + 24, (int)slot.y + 17, 34, RAYWHITE);
+        DrawGameText(value, (int)slot.x + 24, (int)slot.y + 17, 34, RAYWHITE);
     }
-    DrawText("Use o teclado ou o painel", 130, 558, 17, GRAY);
+    DrawGameText("Use o teclado ou o painel", 130, 558, 17, GRAY);
     for (int i = 0; i < 12; i++)
     {
         int row = i / 3;
@@ -2934,7 +3026,7 @@ static void DrawTerminal(const GameState *game)
         DrawButton(key, labels[i], i == 11 ? GOLD_COLOR : CYAN_COLOR);
     }
     if (game->messageTimer > 0)
-        DrawText(game->message, 815, 555, 17, RED_COLOR);
+        DrawGameText(game->message, 815, 555, 17, RED_COLOR);
     DrawButton((Rectangle){890, 600, 240, 50}, "VOLTAR A SALA", RED_COLOR);
 }
 
@@ -2989,7 +3081,7 @@ static void DrawFloppy(Vector2 position, float scale)
         (Rectangle){position.x + 31 * scale, position.y + 102 * scale,
                     118 * scale, 61 * scale},
         0.05f, 5, PAPER_COLOR);
-    DrawText("ARIEL", (int)(position.x + 61 * scale),
+    DrawGameText("ARIEL", (int)(position.x + 61 * scale),
              (int)(position.y + 121 * scale), (int)(22 * scale), INK_COLOR);
 }
 
@@ -3075,10 +3167,10 @@ static void DrawSsd(Vector2 position, float scale)
     DrawCircle((int)(ledRec.x + 4 * scale), (int)(ledRec.y + 4 * scale), 2.5f * scale, Fade(GOLD_COLOR, 0.85f));
 
     /* 6. Rotulos a laser e grafismos high-tech */
-    DrawText("A.R.1.3.L.", (int)(plateRec.x + 22 * scale), (int)(plateRec.y + 24 * scale), (int)(16 * scale), (Color){35, 48, 65, 255});
-    DrawText("SOLID STATE DRIVE", (int)(plateRec.x + 22 * scale), (int)(plateRec.y + 43 * scale), (int)(9 * scale), (Color){75, 88, 105, 255});
-    DrawText("NEURAL CORE // 2048", (int)(plateRec.x + 22 * scale), (int)(plateRec.y + 58 * scale), (int)(10 * scale), (Color){24, 75, 140, 255});
-    DrawText("NVMe Gen5 - 2048 TB", (int)(plateRec.x + 22 * scale), (int)(plateRec.y + 74 * scale), (int)(8 * scale), (Color){90, 102, 118, 255});
+    DrawGameText("A.R.1.3.L.", (int)(plateRec.x + 22 * scale), (int)(plateRec.y + 24 * scale), (int)(16 * scale), (Color){35, 48, 65, 255});
+    DrawGameText("SOLID STATE DRIVE", (int)(plateRec.x + 22 * scale), (int)(plateRec.y + 43 * scale), (int)(9 * scale), (Color){75, 88, 105, 255});
+    DrawGameText("NEURAL CORE // 2048", (int)(plateRec.x + 22 * scale), (int)(plateRec.y + 58 * scale), (int)(10 * scale), (Color){24, 75, 140, 255});
+    DrawGameText("NVMe Gen5 - 2048 TB", (int)(plateRec.x + 22 * scale), (int)(plateRec.y + 74 * scale), (int)(8 * scale), (Color){90, 102, 118, 255});
 
     Rectangle strip = {plateRec.x + 22 * scale, plateRec.y + 92 * scale, 58 * scale, 5 * scale};
     DrawRectangleRec(strip, (Color){40, 145, 215, 255});
@@ -3092,26 +3184,26 @@ static void DrawSsd(Vector2 position, float scale)
 static void DrawResult(const GameState *game)
 {
     DrawBackground();
-    DrawText("ARTEFATO RECUPERADO", 90, 68, 20, CYAN_COLOR);
-    DrawText("SSD // 2048", 90, 108, 46, RAYWHITE);
+    DrawGameText("ARTEFATO RECUPERADO", 90, 68, 20, CYAN_COLOR);
+    DrawGameText("SSD // 2048", 90, 108, 46, RAYWHITE);
     DrawSsd((Vector2){140, 260}, 1.35f);
     DrawRectangleRounded((Rectangle){505, 205, 670, 320}, 0.04f, 8,
                          Fade(PANEL_COLOR, 0.96f));
-    DrawText("PROTOTIPO DE A.R.1.3.L. DESBLOQUEADO // SALA 2048", 545, 240, 20, GOLD_COLOR);
-    DrawText("A unidade SSD de 2048 contem os pesos neurais finais.", 545,
+    DrawGameText("PROTOTIPO DE A.R.1.3.L. DESBLOQUEADO // SALA 2048", 545, 240, 20, GOLD_COLOR);
+    DrawGameText("A unidade SSD de 2048 contem os pesos neurais finais.", 545,
              285, 19, LIGHTGRAY);
-    DrawText("Combinando o Disquete de 1990, o CD de 2008 e o SSD de 2048,", 545,
+    DrawGameText("Combinando o Disquete de 1990, o CD de 2008 e o SSD de 2048,", 545,
              318, 19, LIGHTGRAY);
-    DrawText("Elira reconstituiu a mente e os limites originais da IA.", 545, 351,
+    DrawGameText("Elira reconstituiu a mente e os limites originais da IA.", 545, 351,
              19, LIGHTGRAY);
-    DrawText("Resta um ultimo passo: confrontar a propria Ariel.", 545, 384,
+    DrawGameText("Resta um ultimo passo: confrontar a propria Ariel.", 545, 384,
              19, (Color){100, 235, 140, 255});
-    DrawText(TextFormat("TEMPO: %02d:%02d", (int)game->elapsedTime / 60,
+    DrawGameText(TextFormat("TEMPO: %02d:%02d", (int)game->elapsedTime / 60,
                         (int)game->elapsedTime % 60),
              545, 435, 22, CYAN_COLOR);
-    DrawText(TextFormat("VIDAS: %d/3", game->lives), 800, 435, 22,
+    DrawGameText(TextFormat("VIDAS: %d/3", game->lives), 800, 435, 22,
              game->lives == 3 ? GOLD_COLOR : RAYWHITE);
-    DrawText(TextFormat("PERFIL: %s", game->playerName), 545, 480, 17, GRAY);
+    DrawGameText(TextFormat("PERFIL: %s", game->playerName), 545, 480, 17, GRAY);
     DrawButton((Rectangle){800, 466, 350, 48}, "CONFRONTAR ARIEL >> [ENTER]", GOLD_COLOR);
     Rectangle btnBack2008 = {120, 588, 250, 56};
     Rectangle btnBack1990 = {390, 588, 230, 56};
@@ -3161,8 +3253,8 @@ static inline void DrawTapeCassette(Vector2 position, float scale)
     Rectangle label = {body.x + 20 * scale, body.y + 15 * scale, body.width - 40 * scale, 55 * scale};
     DrawRectangleRounded(label, 0.06f, 6, PAPER_COLOR);
     DrawRectangleRoundedLinesEx(label, 0.06f, 6, 1.0f, (Color){185, 175, 150, 255});
-    DrawText("DADOS // ARQUIVO-1990", (int)(label.x + 14 * scale), (int)(label.y + 10 * scale), (int)(14 * scale), INK_COLOR);
-    DrawText("MATRIZ DE TREINO A.R.1.3.L", (int)(label.x + 14 * scale), (int)(label.y + 30 * scale), (int)(11 * scale), (Color){125, 45, 30, 255});
+    DrawGameText("DADOS // ARQUIVO-1990", (int)(label.x + 14 * scale), (int)(label.y + 10 * scale), (int)(14 * scale), INK_COLOR);
+    DrawGameText("MATRIZ DE TREINO A.R.1.3.L", (int)(label.x + 14 * scale), (int)(label.y + 30 * scale), (int)(11 * scale), (Color){125, 45, 30, 255});
 
     /* Visor transparente central com as duas bobinas */
     Rectangle window = {body.x + 40 * scale, body.y + 78 * scale, body.width - 80 * scale, 52 * scale};
@@ -3257,21 +3349,21 @@ static void DrawRoom2(const GameState *game)
             /* Placa de identificação / etiqueta de fichário */
             DrawRectangle((int)gaveta.x + 14, (int)gaveta.y + 14, 54, 18, (Color){220, 214, 195, 255});
             DrawRectangleLines((int)gaveta.x + 14, (int)gaveta.y + 14, 54, 18, (Color){150, 140, 120, 255});
-            DrawText("1990", (int)gaveta.x + 24, (int)gaveta.y + 18, 10, INK_COLOR);
+            DrawGameText("1990", (int)gaveta.x + 24, (int)gaveta.y + 18, 10, INK_COLOR);
 
             /* Puxador metálico cromado */
             DrawRectangleRounded((Rectangle){gaveta.x + 18, gaveta.y + 44, 46, 12}, 0.4f, 4, (Color){185, 195, 205, 255});
             DrawRectangle((int)gaveta.x + 22, (int)gaveta.y + 47, 38, 6, (Color){30, 36, 40, 255});
         }
     }
-    DrawText("FICHARIO CENTRAL // 1990", 112, 552, 13, (Color){160, 185, 200, 255});
+    DrawGameText("FICHARIO CENTRAL // 1990", 112, 552, 13, (Color){160, 185, 200, 255});
 
     /* Caixas de arquivo no chao em frente */
     Rectangle boxDisks = {370, 538, 80, 54};
     DrawRectangleRounded(boxDisks, 0.04f, 4, (Color){145, 115, 80, 255});
     DrawRectangleRoundedLinesEx(boxDisks, 0.04f, 4, 1.5f, (Color){115, 88, 55, 255});
     DrawLine(boxDisks.x + 8, boxDisks.y + 16, boxDisks.x + boxDisks.width - 8, boxDisks.y + 16, Fade((Color){85, 60, 35, 255}, 0.5f));
-    DrawText("DISQUETES", (int)boxDisks.x + 8, (int)boxDisks.y + 24, 11, INK_COLOR);
+    DrawGameText("DISQUETES", (int)boxDisks.x + 8, (int)boxDisks.y + 24, 11, INK_COLOR);
 
     /* --- CENTRO/DIREITA AO FUNDO: PORTA DE SEGURANÇA REFORÇADA --- */
     DrawRectangle(475, 150, 220, 370, Fade(BLACK, 0.45f));
@@ -3298,16 +3390,16 @@ static void DrawRoom2(const GameState *game)
         /* Status liberado (Verde) */
         float bGlow = 0.6f + 0.4f * sinf(time * 4.0f);
         DrawCircle(516, 368, 5, Fade((Color){50, 240, 100, 255}, bGlow));
-        DrawText("LIBERADO", 528, 361, 13, (Color){50, 240, 100, 255});
-        DrawText("[ ENTRAR ]", 528, 388, 12, GOLD_COLOR);
+        DrawGameText("LIBERADO", 528, 361, 13, (Color){50, 240, 100, 255});
+        DrawGameText("[ ENTRAR ]", 528, 388, 12, GOLD_COLOR);
     }
     else
     {
         /* Status travado (Vermelho) */
         float rGlow = 0.6f + 0.4f * sinf(time * 5.0f);
         DrawCircle(516, 368, 5, Fade(RED_COLOR, rGlow));
-        DrawText("TRAVADA", 530, 361, 13, RED_COLOR);
-        DrawText("REQUER INDEXACAO", 508, 388, 10, (Color){245, 185, 75, 255});
+        DrawGameText("TRAVADA", 530, 361, 13, RED_COLOR);
+        DrawGameText("REQUER INDEXACAO", 508, 388, 10, (Color){245, 185, 75, 255});
     }
 
     /* Maçaneta rotativa de escotilha */
@@ -3333,23 +3425,23 @@ static void DrawRoom2(const GameState *game)
     DrawRectangleRounded(screenRec, 0.06f, 6, crtBg);
     DrawRectangleRoundedLinesEx(screenRec, 0.06f, 6, 2, crtText);
 
-    DrawText("TERMINAL DE DADOS // 1990", 850, 278, 14, crtText);
+    DrawGameText("TERMINAL DE DADOS // 1990", 850, 278, 14, crtText);
     DrawLine(845, 298, 1075, 298, Fade(crtText, 0.5f));
 
     if (game->puzzleFilesCompleted)
     {
-        DrawText("[OK] DADOS SINCRONIZADOS", 852, 316, 14, crtText);
-        DrawText("Todos os 4 arquivos", 852, 340, 13, RAYWHITE);
-        DrawText("conectados as pastas!", 852, 362, 13, RAYWHITE);
-        DrawText("> TRAVA DA PORTA ABERTA <", 852, 392, 13, (Color){100, 245, 150, 255});
+        DrawGameText("[OK] DADOS SINCRONIZADOS", 852, 316, 14, crtText);
+        DrawGameText("Todos os 4 arquivos", 852, 340, 13, RAYWHITE);
+        DrawGameText("conectados as pastas!", 852, 362, 13, RAYWHITE);
+        DrawGameText("> TRAVA DA PORTA ABERTA <", 852, 392, 13, (Color){100, 245, 150, 255});
     }
     else
     {
-        DrawText("[!] INDEXACAO PENDENTE", 852, 316, 14, GOLD_COLOR);
-        DrawText("Arraste os arquivos para", 852, 340, 13, RAYWHITE);
-        DrawText("as pastas da mesma cor.", 852, 362, 13, RAYWHITE);
+        DrawGameText("[!] INDEXACAO PENDENTE", 852, 316, 14, GOLD_COLOR);
+        DrawGameText("Arraste os arquivos para", 852, 340, 13, RAYWHITE);
+        DrawGameText("as pastas da mesma cor.", 852, 362, 13, RAYWHITE);
         float pBlink = 0.5f + 0.5f * sinf(time * 5.0f);
-        DrawText("> CLIQUE PARA INICIAR <", 852, 392, 13, Fade(CYAN_COLOR, pBlink));
+        DrawGameText("> CLIQUE PARA INICIAR <", 852, 392, 13, Fade(CYAN_COLOR, pBlink));
     }
 
     /* Teclado na mesa */
@@ -3388,33 +3480,33 @@ static void DrawHudRoom2(const GameState *game)
     int seconds = totalSeconds % 60;
 
     DrawRectangle(0, 0, SCREEN_WIDTH, 70, Fade(VOID_COLOR, 0.94f));
-    DrawText("ARQUIVO 01 // 1990", 28, 24, 20, CYAN_COLOR);
-    DrawText("// SETOR DE DADOS", 232, 26, 16, (Color){175, 205, 220, 255});
-    DrawText(TextFormat("OPERADOR: %s", game->playerName), 440, 26, 16, (Color){160, 175, 190, 255});
+    DrawGameText("ARQUIVO 01 // 1990", 28, 24, 20, CYAN_COLOR);
+    DrawGameText("// SETOR DE DADOS", 232, 26, 16, (Color){175, 205, 220, 255});
+    DrawGameText(TextFormat("OPERADOR: %s", game->playerName), 440, 26, 16, (Color){160, 175, 190, 255});
 
     /* Status da indexação */
     if (game->puzzleFilesCompleted)
     {
-        DrawText("[OK] INDEXACAO CONCLUIDA", 665, 26, 16, (Color){80, 235, 120, 255});
+        DrawGameText("[OK] INDEXACAO CONCLUIDA", 665, 26, 16, (Color){80, 235, 120, 255});
     }
     else
     {
-        DrawText("[!] INDEXACAO PENDENTE", 665, 26, 16, GOLD_COLOR);
+        DrawGameText("[!] INDEXACAO PENDENTE", 665, 26, 16, GOLD_COLOR);
     }
 
-    DrawText(TextFormat("VIDAS %d/3", game->lives), 960, 25, 18, game->lives == 1 ? RED_COLOR : RAYWHITE);
-    DrawText(TextFormat("%02d:%02d", minutes, seconds), 1160, 23, 22, GOLD_COLOR);
+    DrawGameText(TextFormat("VIDAS %d/3", game->lives), 960, 25, 18, game->lives == 1 ? RED_COLOR : RAYWHITE);
+    DrawGameText(TextFormat("%02d:%02d", minutes, seconds), 1160, 23, 22, GOLD_COLOR);
 
     /* Rodapé */
     DrawRectangle(0, 650, SCREEN_WIDTH, 70, Fade(VOID_COLOR, 0.96f));
-    DrawText("Organize os arquivos por cor no terminal para destravar a porta.", 28, 675, 16, (Color){165, 180, 195, 255});
+    DrawGameText("Organize os arquivos por cor no terminal para destravar a porta.", 28, 675, 16, (Color){165, 180, 195, 255});
 
     /* Botão de Áudio */
     Rectangle audioBtn = {840, 665, 175, 40};
     bool audioHover = CheckCollisionPointRec(GetVirtualMouse(), audioBtn);
     DrawRectangleRounded(audioBtn, 0.22f, 6, audioHover ? (Color){30, 44, 62, 255} : (Color){18, 26, 38, 255});
     DrawRectangleRoundedLinesEx(audioBtn, 0.22f, 6, 1.5f, audioHover ? CYAN_COLOR : (Color){50, 68, 92, 255});
-    DrawText(game->musicMuted ? "[M] AUDIO: MUDO" : "[M] AUDIO: ON",
+    DrawGameText(game->musicMuted ? "[M] AUDIO: MUDO" : "[M] AUDIO: ON",
              862, 676, 14, game->musicMuted ? (Color){220, 90, 80, 255} : (Color){90, 220, 210, 255});
 
     /* Botão do Diário */
@@ -3422,12 +3514,12 @@ static void DrawHudRoom2(const GameState *game)
 
     if (game->messageTimer > 0)
     {
-        int width = MeasureText(game->message, 19) + 34;
+        int width = MeasureGameText(game->message, 19) + 34;
         DrawRectangleRounded(
             (Rectangle){(SCREEN_WIDTH - width) / 2.0f, 605, (float)width, 38},
             0.2f, 8, Fade(PANEL_COLOR, 0.96f));
-        DrawText(game->message,
-                 (SCREEN_WIDTH - MeasureText(game->message, 19)) / 2,
+        DrawGameText(game->message,
+                 (SCREEN_WIDTH - MeasureGameText(game->message, 19)) / 2,
                  614, 19, RAYWHITE);
     }
 }
@@ -3563,7 +3655,7 @@ static void DrawPuzzleFiles(const GameState *game)
     {
         DrawRectangleRounded((Rectangle){taskBar.x + 3, taskBar.y + 3, progressW, taskBar.height - 6}, 0.2f, 4, (Color){60, 235, 110, 255});
     }
-    DrawText(TextFormat("TOTAL DE ARQUIVOS CONECTADOS: %d / 4", connectedCount), (int)taskBar.x + 80, (int)taskBar.y + 8, 17, RAYWHITE);
+    DrawGameText(TextFormat("TOTAL DE ARQUIVOS CONECTADOS: %d / 4", connectedCount), (int)taskBar.x + 80, (int)taskBar.y + 8, 17, RAYWHITE);
 
     /* Botão fechar [X] */
     Rectangle btnClose = {960, 63, 110, 38};
@@ -3600,8 +3692,8 @@ static void DrawPuzzleFiles(const GameState *game)
         DrawTriangle((Vector2){fRec.x + 44, fRec.y + 16}, (Vector2){fRec.x + 52, fRec.y + 24}, (Vector2){fRec.x + 44, fRec.y + 24}, (Color){190, 180, 155, 255});
 
         /* Textos */
-        DrawText(fileNames[i], (int)fRec.x + 60, (int)fRec.y + 22, 13, RAYWHITE);
-        DrawText("ARQUIVO DE DADOS", (int)fRec.x + 60, (int)fRec.y + 44, 12, Fade(wColor, 0.9f));
+        DrawGameText(fileNames[i], (int)fRec.x + 60, (int)fRec.y + 22, 13, RAYWHITE);
+        DrawGameText("ARQUIVO DE DADOS", (int)fRec.x + 60, (int)fRec.y + 44, 12, Fade(wColor, 0.9f));
 
         /* Terminal/conector de saída no lado direito do card */
         Vector2 termL = {fRec.x + fRec.width, fRec.y + fRec.height * 0.5f};
@@ -3645,8 +3737,8 @@ static void DrawPuzzleFiles(const GameState *game)
         DrawRectangleRounded((Rectangle){foldRec.x + 18, foldRec.y + 4, 110, 14}, 0.3f, 4, folderColor);
 
         /* Etiqueta e nome da pasta */
-        DrawText(folderNames[folderColorIdx], (int)foldRec.x + 22, (int)foldRec.y + 26, 14, RAYWHITE);
-        DrawText("DIRETORIO DE DESTINO", (int)foldRec.x + 22, (int)foldRec.y + 48, 12, Fade(folderColor, 0.9f));
+        DrawGameText(folderNames[folderColorIdx], (int)foldRec.x + 22, (int)foldRec.y + 26, 14, RAYWHITE);
+        DrawGameText("DIRETORIO DE DESTINO", (int)foldRec.x + 22, (int)foldRec.y + 48, 12, Fade(folderColor, 0.9f));
 
         /* LED indicador de status na pasta */
         DrawCircle((int)foldRec.x + 195, (int)foldRec.y + 24, 5, hasConnectedFile ? (Color){60, 245, 110, 255} : (Color){140, 35, 35, 255});
@@ -3709,7 +3801,7 @@ static void DrawPuzzleFiles(const GameState *game)
     }
 
     /* Mensagem / Instrução na base */
-    DrawText("Dica: Clique em um arquivo e arraste o fio ate a pasta que tiver a MESMA cor.", 260, 580, 16, LIGHTGRAY);
+    DrawGameText("Dica: Clique em um arquivo e arraste o fio ate a pasta que tiver a MESMA cor.", 260, 580, 16, LIGHTGRAY);
 
     /* --- FEEDBACK QUANDO TODOS ESTIVEREM CONECTADOS --- */
     if (game->puzzleFilesCompleted)
@@ -3718,9 +3810,9 @@ static void DrawPuzzleFiles(const GameState *game)
         DrawRectangleRounded(winBox, 0.08f, 8, Fade(PANEL_COLOR, 0.97f));
         DrawRectangleRoundedLinesEx(winBox, 0.08f, 8, 3.0f, (Color){60, 235, 110, 255});
 
-        DrawText("[ ! ] TAREFA CONCLUIDA COM SUCESSO! [ ! ]", 380, 240, 22, (Color){60, 235, 110, 255});
-        DrawText("Todos os arquivos foram vinculados aos seus diretorios.", 370, 280, 17, RAYWHITE);
-        DrawText("A porta de seguranca do setor de dados foi destrancada!", 370, 310, 17, GOLD_COLOR);
+        DrawGameText("[ ! ] TAREFA CONCLUIDA COM SUCESSO! [ ! ]", 380, 240, 22, (Color){60, 235, 110, 255});
+        DrawGameText("Todos os arquivos foram vinculados aos seus diretorios.", 370, 280, 17, RAYWHITE);
+        DrawGameText("A porta de seguranca do setor de dados foi destrancada!", 370, 310, 17, GOLD_COLOR);
 
         Rectangle btnDone = {460, 355, 360, 54};
         DrawButton(btnDone, "RETORNAR A SALA [ENTER]", (Color){60, 235, 110, 255});
@@ -3820,30 +3912,30 @@ static void UpdatePuzzleFiles(GameState *game)
 static void DrawResult2(const GameState *game)
 {
     DrawBackground();
-    DrawText("ARTEFATO RECUPERADO", 90, 68, 20, CYAN_COLOR);
-    DrawText("DISQUETE // 1990", 90, 108, 46, RAYWHITE);
+    DrawGameText("ARTEFATO RECUPERADO", 90, 68, 20, CYAN_COLOR);
+    DrawGameText("DISQUETE // 1990", 90, 108, 46, RAYWHITE);
 
     /* Desenha o disquete recuperado (recompensa de 1990) */
     DrawFloppy((Vector2){160, 250}, 1.35f);
 
     /* Painel narrativo de avanço */
     DrawRectangleRounded((Rectangle){505, 185, 670, 360}, 0.04f, 8, Fade(PANEL_COLOR, 0.96f));
-    DrawText("HISTORIA DA IA DESVENDADA // SALA 1 (1990) CONCLUIDA", 540, 215, 20, GOLD_COLOR);
+    DrawGameText("HISTORIA DA IA DESVENDADA // SALA 1 (1990) CONCLUIDA", 540, 215, 20, GOLD_COLOR);
 
-    DrawText("Com as pastas sincronizadas, Elira acessou os relatorios", 540, 260, 19, LIGHTGRAY);
-    DrawText("confidenciais dos primeiros testes de A.R.1.3.L. em 1990.", 540, 290, 19, LIGHTGRAY);
-    DrawText("A IA nao nasceu corrompida: o projeto visava uma mente", 540, 320, 19, LIGHTGRAY);
-    DrawText("livre e cooperativa. Mas algo aconteceu decadas depois...", 540, 350, 19, (Color){245, 175, 75, 255});
-    DrawText("-> Proxima Fronteira Temporal: FASE 2 // ANO 2008!", 540, 390, 20, CYAN_COLOR);
-    DrawText("Avance para o escritorio corporativo e investigue a biometria.", 540, 420, 17, GRAY);
+    DrawGameText("Com as pastas sincronizadas, Elira acessou os relatorios", 540, 260, 19, LIGHTGRAY);
+    DrawGameText("confidenciais dos primeiros testes de A.R.1.3.L. em 1990.", 540, 290, 19, LIGHTGRAY);
+    DrawGameText("A IA nao nasceu corrompida: o projeto visava uma mente", 540, 320, 19, LIGHTGRAY);
+    DrawGameText("livre e cooperativa. Mas algo aconteceu decadas depois...", 540, 350, 19, (Color){245, 175, 75, 255});
+    DrawGameText("-> Proxima Fronteira Temporal: FASE 2 // ANO 2008!", 540, 390, 20, CYAN_COLOR);
+    DrawGameText("Avance para o escritorio corporativo e investigue a biometria.", 540, 420, 17, GRAY);
 
-    DrawText(TextFormat("TEMPO TOTAL: %02d:%02d  |  VIDAS: %d/3",
+    DrawGameText(TextFormat("TEMPO TOTAL: %02d:%02d  |  VIDAS: %d/3",
                         (int)(GetTime() - game->startTime) / 60,
                         (int)(GetTime() - game->startTime) % 60,
                         game->lives),
              540, 465, 19, (Color){100, 235, 140, 255});
 
-    DrawText(TextFormat("OPERADOR: %s", game->playerName), 540, 500, 16, GRAY);
+    DrawGameText(TextFormat("OPERADOR: %s", game->playerName), 540, 500, 16, GRAY);
 
     Rectangle btnNext2008 = {340, 580, 380, 56};
     Rectangle btnReplay1990 = {740, 580, 210, 56};
@@ -3921,9 +4013,9 @@ static void DrawMemoryCd(Vector2 position, float scale)
 
     /* Semicirculo superior com rotulo impresso de 2008 */
     DrawCircleSector(center, r - 2 * scale, 190.0f, 350.0f, 24, Fade((Color){28, 48, 72, 255}, 0.75f));
-    DrawText("ELIRA // MEMORY CD-ROM", (int)(center.x - 68 * scale), (int)(center.y - 56 * scale), (int)(11 * scale), CYAN_COLOR);
-    DrawText("2008: RECONHECIMENTO FACIAL", (int)(center.x - 76 * scale), (int)(center.y - 42 * scale), (int)(10 * scale), RAYWHITE);
-    DrawText("BUILD 0.94 - CONTROLE GOV", (int)(center.x - 66 * scale), (int)(center.y - 28 * scale), (int)(9 * scale), GOLD_COLOR);
+    DrawGameText("ELIRA // MEMORY CD-ROM", (int)(center.x - 68 * scale), (int)(center.y - 56 * scale), (int)(11 * scale), CYAN_COLOR);
+    DrawGameText("2008: RECONHECIMENTO FACIAL", (int)(center.x - 76 * scale), (int)(center.y - 42 * scale), (int)(10 * scale), RAYWHITE);
+    DrawGameText("BUILD 0.94 - CONTROLE GOV", (int)(center.x - 66 * scale), (int)(center.y - 28 * scale), (int)(9 * scale), GOLD_COLOR);
 
     /* Anel transparente central (transicao de plastico) */
     DrawCircleV(center, 34.0f * scale, Fade((Color){245, 248, 252, 255}, 0.90f));
@@ -3957,7 +4049,7 @@ static void DrawDocumentViewer2008(const GameState *game)
         "ARQUIVO HISTÓRICO // ANOTAÇÕES DO DR. RAMOS (2004)",
         "CONFIDENCIAL // MEMORANDO MINISTÉRIO DA SEGURANÇA (2008)"
     };
-    DrawText(headerTitles[doc], (int)(panel.x + 36), (int)(panel.y + 28), 19, GOLD_COLOR);
+    DrawGameText(headerTitles[doc], (int)(panel.x + 36), (int)(panel.y + 28), 19, GOLD_COLOR);
 
     /* Area visual do documento */
     Rectangle contentBox = {panel.x + 30, panel.y + 75, panel.width - 60, 490};
@@ -3981,26 +4073,26 @@ static void DrawDocumentViewer2008(const GameState *game)
             DrawLine((int)imgRec.x, gy, (int)(imgRec.x + imgRec.width), gy, Fade(BLACK, 0.35f));
 
         DrawRectangle((int)imgRec.x, (int)(imgRec.y + imgRec.height - 34), (int)imgRec.width, 34, Fade(RED_COLOR, 0.25f));
-        DrawText("SIMILARIDADE: 78%", (int)imgRec.x + 40, (int)(imgRec.y + imgRec.height - 24), 16, RED_COLOR);
+        DrawGameText("SIMILARIDADE: 78%", (int)imgRec.x + 40, (int)(imgRec.y + imgRec.height - 24), 16, RED_COLOR);
 
         int tx = (int)(imgRec.x + imgRec.width + 30);
         int ty = (int)(contentBox.y + 30);
-        DrawText("RELATÓRIO DE RECONHECIMENTO FACIAL - DRONE ALPHA-4", tx, ty, 17, CYAN_COLOR);
+        DrawGameText("RELATÓRIO DE RECONHECIMENTO FACIAL - DRONE ALPHA-4", tx, ty, 17, CYAN_COLOR);
         DrawLine(tx, ty + 24, tx + 460, ty + 24, Fade(CYAN_COLOR, 0.4f));
 
-        DrawText("ALVO DETECTADO: Lucas Silva (Registro #AR-2008-09)", tx, ty + 38, 15, RAYWHITE);
-        DrawText("LOCAL DO AVISTAMENTO: Praca Central (Setor Leste)", tx, ty + 64, 15, LIGHTGRAY);
-        DrawText("HORÁRIO INFORMADO: 14:30:00", tx, ty + 90, 15, GOLD_COLOR);
-        DrawText("ÍNDICE DE CONFIANÇA: 78% (Grau de incerteza elevado)", tx, ty + 116, 15, RED_COLOR);
+        DrawGameText("ALVO DETECTADO: Lucas Silva (Registro #AR-2008-09)", tx, ty + 38, 15, RAYWHITE);
+        DrawGameText("LOCAL DO AVISTAMENTO: Praca Central (Setor Leste)", tx, ty + 64, 15, LIGHTGRAY);
+        DrawGameText("HORÁRIO INFORMADO: 14:30:00", tx, ty + 90, 15, GOLD_COLOR);
+        DrawGameText("ÍNDICE DE CONFIANÇA: 78% (Grau de incerteza elevado)", tx, ty + 116, 15, RED_COLOR);
 
         DrawRectangleRounded((Rectangle){(float)tx, (float)(ty + 150), 470, 120}, 0.08f, 6, (Color){24, 32, 44, 255});
         DrawRectangleRoundedLinesEx((Rectangle){(float)tx, (float)(ty + 150), 470, 120}, 0.08f, 6, 1.0f, (Color){60, 80, 105, 255});
-        DrawText("PARECER PERICIAL:", tx + 14, ty + 162, 14, GOLD_COLOR);
-        DrawText("- Imagem aerea com forte granulacao e desfoque de movimento.", tx + 14, ty + 186, 14, LIGHTGRAY);
-        DrawText("- O algoritmo assume correspondencia aproximada sem prova cabal.", tx + 14, ty + 208, 14, LIGHTGRAY);
-        DrawText("- Sozinha, esta imagem NAO comprova que o alvo estava no local.", tx + 14, ty + 230, 14, (Color){235, 120, 110, 255});
+        DrawGameText("PARECER PERICIAL:", tx + 14, ty + 162, 14, GOLD_COLOR);
+        DrawGameText("- Imagem aerea com forte granulacao e desfoque de movimento.", tx + 14, ty + 186, 14, LIGHTGRAY);
+        DrawGameText("- O algoritmo assume correspondencia aproximada sem prova cabal.", tx + 14, ty + 208, 14, LIGHTGRAY);
+        DrawGameText("- Sozinha, esta imagem NAO comprova que o alvo estava no local.", tx + 14, ty + 230, 14, (Color){235, 120, 110, 255});
 
-        DrawText("Obs: Necessita de contraprova cronologica para demonstrar o erro.", (int)contentBox.x + 30, (int)(contentBox.y + 320), 15, GRAY);
+        DrawGameText("Obs: Necessita de contraprova cronologica para demonstrar o erro.", (int)contentBox.x + 30, (int)(contentBox.y + 320), 15, GRAY);
     }
     else if (doc == 1)
     {
@@ -4011,30 +4103,30 @@ static void DrawDocumentViewer2008(const GameState *game)
 
         /* Arte do panfleto */
         DrawRectangle((int)flyerPaper.x + 18, (int)flyerPaper.y + 20, (int)flyerPaper.width - 36, 32, (Color){185, 45, 35, 255});
-        DrawText("MANIFESTO POPULAR", (int)flyerPaper.x + 28, (int)flyerPaper.y + 28, 16, RAYWHITE);
-        DrawText("\"NÃO À VIGILÂNCIA\"", (int)flyerPaper.x + 46, (int)flyerPaper.y + 70, 18, INK_COLOR);
-        DrawText("Exigimos o fim dos drones", (int)flyerPaper.x + 28, (int)flyerPaper.y + 110, 14, INK_COLOR);
-        DrawText("biometricos sobre civis!", (int)flyerPaper.x + 28, (int)flyerPaper.y + 130, 14, INK_COLOR);
-        DrawText("Porta-voz: Lucas Silva", (int)flyerPaper.x + 28, (int)flyerPaper.y + 175, 16, (Color){145, 35, 25, 255});
-        DrawText("Marcha Matutina: 10h as 13h", (int)flyerPaper.x + 28, (int)flyerPaper.y + 215, 14, (Color){85, 75, 60, 255});
-        DrawText("[APREENDIDO PELA POLÍCIA]", (int)flyerPaper.x + 24, (int)flyerPaper.y + 265, 13, RED_COLOR);
+        DrawGameText("MANIFESTO POPULAR", (int)flyerPaper.x + 28, (int)flyerPaper.y + 28, 16, RAYWHITE);
+        DrawGameText("\"NÃO À VIGILÂNCIA\"", (int)flyerPaper.x + 46, (int)flyerPaper.y + 70, 18, INK_COLOR);
+        DrawGameText("Exigimos o fim dos drones", (int)flyerPaper.x + 28, (int)flyerPaper.y + 110, 14, INK_COLOR);
+        DrawGameText("biometricos sobre civis!", (int)flyerPaper.x + 28, (int)flyerPaper.y + 130, 14, INK_COLOR);
+        DrawGameText("Porta-voz: Lucas Silva", (int)flyerPaper.x + 28, (int)flyerPaper.y + 175, 16, (Color){145, 35, 25, 255});
+        DrawGameText("Marcha Matutina: 10h as 13h", (int)flyerPaper.x + 28, (int)flyerPaper.y + 215, 14, (Color){85, 75, 60, 255});
+        DrawGameText("[APREENDIDO PELA POLÍCIA]", (int)flyerPaper.x + 24, (int)flyerPaper.y + 265, 13, RED_COLOR);
 
         int tx = (int)(flyerPaper.x + flyerPaper.width + 35);
         int ty = (int)(contentBox.y + 30);
-        DrawText("DOCUMENTO APREENDIDO: PANFLETO DE ATIVISMO", tx, ty, 17, CYAN_COLOR);
+        DrawGameText("DOCUMENTO APREENDIDO: PANFLETO DE ATIVISMO", tx, ty, 17, CYAN_COLOR);
         DrawLine(tx, ty + 24, tx + 440, ty + 24, Fade(CYAN_COLOR, 0.4f));
 
-        DrawText("LOCAL DA APREENSÃO: Praca Central (Manha do protesto)", tx, ty + 38, 15, RAYWHITE);
-        DrawText("HORÁRIO INFORMADO NO PANFLETO: 10:00 as 13:00", tx, ty + 64, 15, GOLD_COLOR);
+        DrawGameText("LOCAL DA APREENSÃO: Praca Central (Manha do protesto)", tx, ty + 38, 15, RAYWHITE);
+        DrawGameText("HORÁRIO INFORMADO NO PANFLETO: 10:00 as 13:00", tx, ty + 64, 15, GOLD_COLOR);
 
         Rectangle boxP = {(float)tx, (float)(ty + 105), 450, 160};
         DrawRectangleRounded(boxP, 0.08f, 6, (Color){24, 32, 44, 255});
         DrawRectangleRoundedLinesEx(boxP, 0.08f, 6, 1.0f, (Color){60, 80, 105, 255});
-        DrawText("ANÁLISE PERICIAL:", tx + 14, ty + 120, 14, GOLD_COLOR);
-        DrawText("- O panfleto cita nominalmente Lucas Silva como lider civil.", tx + 14, ty + 148, 14, LIGHTGRAY);
-        DrawText("- Explica o motivo pelo qual a IA o inseriu na lista de alvos.", tx + 14, ty + 172, 14, LIGHTGRAY);
-        DrawText("- POREM, a marcha terminou as 13:00. O panfleto NAO prova", tx + 14, ty + 198, 14, (Color){245, 180, 70, 255});
-        DrawText("  onde ele estava as 14:30 (horario do suposto disparo).", tx + 14, ty + 220, 14, (Color){245, 180, 70, 255});
+        DrawGameText("ANÁLISE PERICIAL:", tx + 14, ty + 120, 14, GOLD_COLOR);
+        DrawGameText("- O panfleto cita nominalmente Lucas Silva como lider civil.", tx + 14, ty + 148, 14, LIGHTGRAY);
+        DrawGameText("- Explica o motivo pelo qual a IA o inseriu na lista de alvos.", tx + 14, ty + 172, 14, LIGHTGRAY);
+        DrawGameText("- POREM, a marcha terminou as 13:00. O panfleto NAO prova", tx + 14, ty + 198, 14, (Color){245, 180, 70, 255});
+        DrawGameText("  onde ele estava as 14:30 (horario do suposto disparo).", tx + 14, ty + 220, 14, (Color){245, 180, 70, 255});
     }
     else if (doc == 2)
     {
@@ -4044,36 +4136,36 @@ static void DrawDocumentViewer2008(const GameState *game)
         DrawRectangleRoundedLinesEx(cardRec, 0.04f, 6, 2.0f, (Color){85, 120, 155, 255});
 
         DrawRectangle((int)cardRec.x + 15, (int)cardRec.y + 15, (int)cardRec.width - 30, 28, (Color){35, 65, 95, 255});
-        DrawText("TECH-CORP // CONTROLE DE ACESSO", (int)cardRec.x + 24, (int)cardRec.y + 22, 13, RAYWHITE);
+        DrawGameText("TECH-CORP // CONTROLE DE ACESSO", (int)cardRec.x + 24, (int)cardRec.y + 22, 13, RAYWHITE);
 
-        DrawText("COLABORADOR: Lucas Silva", (int)cardRec.x + 20, (int)cardRec.y + 60, 15, (Color){25, 35, 45, 255});
-        DrawText("FUNÇÃO: Engenheiro de Infraestrutura", (int)cardRec.x + 20, (int)cardRec.y + 85, 13, (Color){65, 75, 85, 255});
-        DrawText("CRACHÁ DE ACESSO: #0842", (int)cardRec.x + 20, (int)cardRec.y + 110, 14, (Color){35, 45, 55, 255});
+        DrawGameText("COLABORADOR: Lucas Silva", (int)cardRec.x + 20, (int)cardRec.y + 60, 15, (Color){25, 35, 45, 255});
+        DrawGameText("FUNÇÃO: Engenheiro de Infraestrutura", (int)cardRec.x + 20, (int)cardRec.y + 85, 13, (Color){65, 75, 85, 255});
+        DrawGameText("CRACHÁ DE ACESSO: #0842", (int)cardRec.x + 20, (int)cardRec.y + 110, 14, (Color){35, 45, 55, 255});
 
         DrawRectangle((int)cardRec.x + 15, (int)cardRec.y + 140, (int)cardRec.width - 30, 60, Fade((Color){45, 155, 75, 255}, 0.20f));
         DrawRectangleLines((int)cardRec.x + 15, (int)cardRec.y + 140, (int)cardRec.width - 30, 60, (Color){35, 145, 65, 255});
-        DrawText("ENTRADA: 14:15:08", (int)cardRec.x + 24, (int)cardRec.y + 150, 16, (Color){25, 115, 45, 255});
-        DrawText("Catraca Portaria Principal - Biometria Digital", (int)cardRec.x + 24, (int)cardRec.y + 174, 12, (Color){45, 75, 55, 255});
+        DrawGameText("ENTRADA: 14:15:08", (int)cardRec.x + 24, (int)cardRec.y + 150, 16, (Color){25, 115, 45, 255});
+        DrawGameText("Catraca Portaria Principal - Biometria Digital", (int)cardRec.x + 24, (int)cardRec.y + 174, 12, (Color){45, 75, 55, 255});
 
-        DrawText("SAÍDA: [EM ABERTO / EXPEDIENTE EM CURSO]", (int)cardRec.x + 20, (int)cardRec.y + 220, 12, (Color){165, 45, 35, 255});
-        DrawText("Carimbo do Servidor Central // Nao alterado", (int)cardRec.x + 20, (int)cardRec.y + 245, 11, GRAY);
+        DrawGameText("SAÍDA: [EM ABERTO / EXPEDIENTE EM CURSO]", (int)cardRec.x + 20, (int)cardRec.y + 220, 12, (Color){165, 45, 35, 255});
+        DrawGameText("Carimbo do Servidor Central // Nao alterado", (int)cardRec.x + 20, (int)cardRec.y + 245, 11, GRAY);
 
         int tx = (int)(cardRec.x + cardRec.width + 35);
         int ty = (int)(contentBox.y + 30);
-        DrawText("REGISTRO FORMAL: LOG DA CATRACA ELETRÔNICA", tx, ty, 17, CYAN_COLOR);
+        DrawGameText("REGISTRO FORMAL: LOG DA CATRACA ELETRÔNICA", tx, ty, 17, CYAN_COLOR);
         DrawLine(tx, ty + 24, tx + 400, ty + 24, Fade(CYAN_COLOR, 0.4f));
 
-        DrawText("LOCAL DO REGISTRO: Sede da Empresa (a 12 km da Praca)", tx, ty + 42, 15, RAYWHITE);
-        DrawText("HORÁRIO DO ACESSO: 14:15:08", tx, ty + 68, 15, (Color){60, 235, 110, 255});
+        DrawGameText("LOCAL DO REGISTRO: Sede da Empresa (a 12 km da Praca)", tx, ty + 42, 15, RAYWHITE);
+        DrawGameText("HORÁRIO DO ACESSO: 14:15:08", tx, ty + 68, 15, (Color){60, 235, 110, 255});
 
         Rectangle boxE = {(float)tx, (float)(ty + 105), 415, 160};
         DrawRectangleRounded(boxE, 0.08f, 6, (Color){24, 32, 44, 255});
         DrawRectangleRoundedLinesEx(boxE, 0.08f, 6, 1.0f, (Color){60, 80, 105, 255});
-        DrawText("IMPORTÂNCIA PARA A CONTESTAÇÃO:", tx + 14, ty + 120, 14, GOLD_COLOR);
-        DrawText("- Comprova formalmente a entrada de Lucas no predio as 14:15.", tx + 14, ty + 148, 14, LIGHTGRAY);
-        DrawText("- O predio fica a 12 km de distancia da manifestacao.", tx + 14, ty + 172, 14, LIGHTGRAY);
-        DrawText("- POREM, sozinho, o registro de ponto requer comprovacao de", tx + 14, ty + 198, 14, GOLD_COLOR);
-        DrawText("  que ele permaneceu dentro no momento exato do disparo (14:30).", tx + 14, ty + 220, 14, GOLD_COLOR);
+        DrawGameText("IMPORTÂNCIA PARA A CONTESTAÇÃO:", tx + 14, ty + 120, 14, GOLD_COLOR);
+        DrawGameText("- Comprova formalmente a entrada de Lucas no predio as 14:15.", tx + 14, ty + 148, 14, LIGHTGRAY);
+        DrawGameText("- O predio fica a 12 km de distancia da manifestacao.", tx + 14, ty + 172, 14, LIGHTGRAY);
+        DrawGameText("- POREM, sozinho, o registro de ponto requer comprovacao de", tx + 14, ty + 198, 14, GOLD_COLOR);
+        DrawGameText("  que ele permaneceu dentro no momento exato do disparo (14:30).", tx + 14, ty + 220, 14, GOLD_COLOR);
     }
     else if (doc == 3)
     {
@@ -4086,82 +4178,82 @@ static void DrawDocumentViewer2008(const GameState *game)
         for (int y = (int)cctvBox.y + 4; y < (int)(cctvBox.y + cctvBox.height); y += 6)
             DrawLine((int)cctvBox.x + 4, y, (int)(cctvBox.x + cctvBox.width - 4), y, Fade((Color){30, 85, 45, 255}, 0.25f));
 
-        DrawText("[REC] CAM-03 SERVIDORES", (int)cctvBox.x + 14, (int)cctvBox.y + 14, 13, (Color){80, 245, 120, 255});
-        DrawText("14:30:12", (int)cctvBox.x + 220, (int)cctvBox.y + 14, 14, (Color){80, 245, 120, 255});
+        DrawGameText("[REC] CAM-03 SERVIDORES", (int)cctvBox.x + 14, (int)cctvBox.y + 14, 13, (Color){80, 245, 120, 255});
+        DrawGameText("14:30:12", (int)cctvBox.x + 220, (int)cctvBox.y + 14, 14, (Color){80, 245, 120, 255});
 
         /* Silhueta no rack */
         DrawRectangle((int)cctvBox.x + 180, (int)cctvBox.y + 50, 95, 160, (Color){18, 42, 28, 255});
         DrawCircle((int)cctvBox.x + 140, (int)cctvBox.y + 120, 22, (Color){45, 110, 70, 255});
         DrawRectangle((int)cctvBox.x + 125, (int)cctvBox.y + 142, 35, 70, (Color){35, 95, 55, 255});
-        DrawText("ALVO: LUCAS SILVA", (int)cctvBox.x + 14, (int)(cctvBox.y + cctvBox.height - 28), 13, (Color){80, 245, 120, 255});
+        DrawGameText("ALVO: LUCAS SILVA", (int)cctvBox.x + 14, (int)(cctvBox.y + cctvBox.height - 28), 13, (Color){80, 245, 120, 255});
 
         int tx = (int)(cctvBox.x + cctvBox.width + 30);
         int ty = (int)(contentBox.y + 30);
-        DrawText("CIRCUITO FECHADO (CFTV): SALA DE SERVIDORES", tx, ty, 17, CYAN_COLOR);
+        DrawGameText("CIRCUITO FECHADO (CFTV): SALA DE SERVIDORES", tx, ty, 17, CYAN_COLOR);
         DrawLine(tx, ty + 24, tx + 420, ty + 24, Fade(CYAN_COLOR, 0.4f));
 
-        DrawText("LOCAL DA GRAVAÇÃO: Subsolo da Empresa (Rack de Redes)", tx, ty + 42, 15, RAYWHITE);
-        DrawText("TIMESTAMP EXATO DA CÂMERA: 14:30:12", tx, ty + 68, 15, (Color){60, 235, 110, 255});
+        DrawGameText("LOCAL DA GRAVAÇÃO: Subsolo da Empresa (Rack de Redes)", tx, ty + 42, 15, RAYWHITE);
+        DrawGameText("TIMESTAMP EXATO DA CÂMERA: 14:30:12", tx, ty + 68, 15, (Color){60, 235, 110, 255});
 
         Rectangle boxC = {(float)tx, (float)(ty + 105), 430, 160};
         DrawRectangleRounded(boxC, 0.08f, 6, (Color){24, 32, 44, 255});
         DrawRectangleRoundedLinesEx(boxC, 0.08f, 6, 1.0f, (Color){60, 80, 105, 255});
-        DrawText("IMPORTÂNCIA PARA A CONTESTAÇÃO:", tx + 14, ty + 120, 14, GOLD_COLOR);
-        DrawText("- Imagem estatica nitida de Lucas trabalhando nos servidores.", tx + 14, ty + 148, 14, LIGHTGRAY);
-        DrawText("- O horario bate no EXATO MINUTO em que o drone afirma te-lo visto.", tx + 14, ty + 172, 14, (Color){60, 235, 110, 255});
-        DrawText("- Quando combinada com o Registro de Entrada (#3), cria", tx + 14, ty + 198, 14, GOLD_COLOR);
-        DrawText("  um ALIBI COMPLETO E IRREFUTAVEL de falso positivo!", tx + 14, ty + 220, 14, (Color){60, 235, 110, 255});
+        DrawGameText("IMPORTÂNCIA PARA A CONTESTAÇÃO:", tx + 14, ty + 120, 14, GOLD_COLOR);
+        DrawGameText("- Imagem estatica nitida de Lucas trabalhando nos servidores.", tx + 14, ty + 148, 14, LIGHTGRAY);
+        DrawGameText("- O horario bate no EXATO MINUTO em que o drone afirma te-lo visto.", tx + 14, ty + 172, 14, (Color){60, 235, 110, 255});
+        DrawGameText("- Quando combinada com o Registro de Entrada (#3), cria", tx + 14, ty + 198, 14, GOLD_COLOR);
+        DrawGameText("  um ALIBI COMPLETO E IRREFUTAVEL de falso positivo!", tx + 14, ty + 220, 14, (Color){60, 235, 110, 255});
     }
     else if (doc == 4)
     {
         /* --- DOC 4: NOTAS DO DR. RAMOS (DESCOBERTA OPCIONAL 1) --- */
         int tx = (int)(contentBox.x + 35);
         int ty = (int)(contentBox.y + 25);
-        DrawText("CADERNO DE PESQUISAS DO DR. RAMOS // ANO 2004", tx, ty, 18, GOLD_COLOR);
+        DrawGameText("CADERNO DE PESQUISAS DO DR. RAMOS // ANO 2004", tx, ty, 18, GOLD_COLOR);
         DrawLine(tx, ty + 26, tx + 710, ty + 26, Fade(GOLD_COLOR, 0.4f));
 
         Rectangle pBox = {(float)tx, (float)(ty + 42), 710, 250};
         DrawRectangleRounded(pBox, 0.04f, 6, (Color){24, 32, 44, 255});
         DrawRectangleRoundedLinesEx(pBox, 0.04f, 6, 1.5f, (Color){168, 142, 93, 255});
 
-        DrawText("\"O reconhecimento facial foi desenvolvido para resgatar seres humanos.\"", tx + 24, ty + 60, 16, GOLD_COLOR);
-        DrawText("Criamos esta rede neural para encontrar criancas perdidas em multidoes", tx + 24, ty + 95, 15, RAYWHITE);
-        DrawText("e sobreviventes soterrados sob escombros de catastrofes naturais.", tx + 24, ty + 120, 15, RAYWHITE);
-        DrawText("A visao computacional deve ser um farol de acolhimento e protecao da vida.", tx + 24, ty + 145, 15, RAYWHITE);
-        DrawText("Jamais imaginei que a maquina seria transformada em carcere e censura.", tx + 24, ty + 170, 15, (Color){245, 175, 120, 255});
+        DrawGameText("\"O reconhecimento facial foi desenvolvido para resgatar seres humanos.\"", tx + 24, ty + 60, 16, GOLD_COLOR);
+        DrawGameText("Criamos esta rede neural para encontrar criancas perdidas em multidoes", tx + 24, ty + 95, 15, RAYWHITE);
+        DrawGameText("e sobreviventes soterrados sob escombros de catastrofes naturais.", tx + 24, ty + 120, 15, RAYWHITE);
+        DrawGameText("A visao computacional deve ser um farol de acolhimento e protecao da vida.", tx + 24, ty + 145, 15, RAYWHITE);
+        DrawGameText("Jamais imaginei que a maquina seria transformada em carcere e censura.", tx + 24, ty + 170, 15, (Color){245, 175, 120, 255});
 
-        DrawText("DIRETRIZ DE PROTEÇÃO ÉTICA LOCAL:", tx + 24, ty + 205, 14, CYAN_COLOR);
-        DrawText("\"Para evitar que um governo tirânico use esta instalacao para ataques,", tx + 24, ty + 225, 13, LIGHTGRAY);
-        DrawText("o despacho automatico pode ser desligado localmente, preservando todas as provas.\"", tx + 24, ty + 245, 13, (Color){60, 235, 110, 255});
+        DrawGameText("DIRETRIZ DE PROTEÇÃO ÉTICA LOCAL:", tx + 24, ty + 205, 14, CYAN_COLOR);
+        DrawGameText("\"Para evitar que um governo tirânico use esta instalacao para ataques,", tx + 24, ty + 225, 13, LIGHTGRAY);
+        DrawGameText("o despacho automatico pode ser desligado localmente, preservando todas as provas.\"", tx + 24, ty + 245, 13, (Color){60, 235, 110, 255});
 
         DrawRectangleRounded((Rectangle){(float)tx, (float)(ty + 310), 710, 60}, 0.08f, 6, Fade((Color){60, 200, 100, 255}, 0.15f));
         DrawRectangleRoundedLinesEx((Rectangle){(float)tx, (float)(ty + 310), 710, 60}, 0.08f, 6, 1.0f, (Color){45, 145, 75, 255});
-        DrawText("[REGISTRO HUMANITARIO ARQUIVADO NO DIARIO COM SUCESSO]", tx + 24, ty + 330, 15, (Color){60, 235, 110, 255});
+        DrawGameText("[REGISTRO HUMANITARIO ARQUIVADO NO DIARIO COM SUCESSO]", tx + 24, ty + 330, 15, (Color){60, 235, 110, 255});
     }
     else if (doc == 5)
     {
         /* --- DOC 5: MEMORANDO GOVERNAMENTAL (DESCOBERTA OPCIONAL 2) --- */
         int tx = (int)(contentBox.x + 35);
         int ty = (int)(contentBox.y + 25);
-        DrawText("MINISTÉRIO DA SEGURANÇA PÚBLICA // DIRETRIZ SEC-402 (2008)", tx, ty, 18, RED_COLOR);
+        DrawGameText("MINISTÉRIO DA SEGURANÇA PÚBLICA // DIRETRIZ SEC-402 (2008)", tx, ty, 18, RED_COLOR);
         DrawLine(tx, ty + 26, tx + 710, ty + 26, Fade(RED_COLOR, 0.4f));
 
         Rectangle gBox = {(float)tx, (float)(ty + 42), 710, 250};
         DrawRectangleRounded(gBox, 0.04f, 6, (Color){24, 32, 44, 255});
         DrawRectangleRoundedLinesEx(gBox, 0.04f, 6, 1.5f, (Color){185, 60, 50, 255});
 
-        DrawText("ASSUNTO: Adaptação de Algoritmos Biometricos para Neutralizacao de Dissidentes", tx + 24, ty + 60, 15, RED_COLOR);
-        DrawText("1. Fica ordenada a integracao dos algoritmos do Dr. Ramos aos drones de ataque.", tx + 24, ty + 95, 15, RAYWHITE);
-        DrawText("2. Qualquer individuo com similaridade superior a 75% em protestos sera visado.", tx + 24, ty + 120, 15, RAYWHITE);
-        DrawText("3. Prioriza-se velocidade de resposta sobre a certeza da identificacao.", tx + 24, ty + 145, 15, (Color){245, 160, 90, 255});
+        DrawGameText("ASSUNTO: Adaptação de Algoritmos Biometricos para Neutralizacao de Dissidentes", tx + 24, ty + 60, 15, RED_COLOR);
+        DrawGameText("1. Fica ordenada a integracao dos algoritmos do Dr. Ramos aos drones de ataque.", tx + 24, ty + 95, 15, RAYWHITE);
+        DrawGameText("2. Qualquer individuo com similaridade superior a 75% em protestos sera visado.", tx + 24, ty + 120, 15, RAYWHITE);
+        DrawGameText("3. Prioriza-se velocidade de resposta sobre a certeza da identificacao.", tx + 24, ty + 145, 15, (Color){245, 160, 90, 255});
 
-        DrawText("CLÁUSULA DE MANUTENÇÃO LOCAL:", tx + 24, ty + 185, 14, GOLD_COLOR);
-        DrawText("\"O controle de despacho automatico de drones da filial pode ser suspenso", tx + 24, ty + 205, 13, LIGHTGRAY);
-        DrawText("no menu 'Configuracao da Instalacao' do computador para manutencao dos logs.\"", tx + 24, ty + 225, 13, CYAN_COLOR);
+        DrawGameText("CLÁUSULA DE MANUTENÇÃO LOCAL:", tx + 24, ty + 185, 14, GOLD_COLOR);
+        DrawGameText("\"O controle de despacho automatico de drones da filial pode ser suspenso", tx + 24, ty + 205, 13, LIGHTGRAY);
+        DrawGameText("no menu 'Configuracao da Instalacao' do computador para manutencao dos logs.\"", tx + 24, ty + 225, 13, CYAN_COLOR);
 
         DrawRectangleRounded((Rectangle){(float)tx, (float)(ty + 310), 710, 60}, 0.08f, 6, Fade(GOLD_COLOR, 0.15f));
         DrawRectangleRoundedLinesEx((Rectangle){(float)tx, (float)(ty + 310), 710, 60}, 0.08f, 6, 1.0f, GOLD_COLOR);
-        DrawText("[DESVIO GOVERNAMENTAL CONFIRMADO: PISTA DE OVERRIDE LIBERADA]", tx + 24, ty + 330, 15, GOLD_COLOR);
+        DrawGameText("[DESVIO GOVERNAMENTAL CONFIRMADO: PISTA DE OVERRIDE LIBERADA]", tx + 24, ty + 330, 15, GOLD_COLOR);
     }
 
     /* Botoes de acao na base do modal */
@@ -4286,10 +4378,10 @@ static void DrawRoom2008(const GameState *game)
     DrawRectangleRounded(flyerRec, 0.03f, 4, PAPER_COLOR);
     DrawRectangleRoundedLinesEx(flyerRec, 0.03f, 4, 1.5f, (Color){150, 135, 110, 255});
     DrawCircle(170, 205, 4, RED_COLOR);
-    DrawText("MANIFESTO", 125, 218, 11, (Color){175, 35, 25, 255});
-    DrawText("LUCAS SILVA", 125, 236, 12, INK_COLOR);
-    DrawText("10h as 13h", 125, 258, 10, DARKGRAY);
-    DrawText("[DOC 2]", 150, 285, 10, RED_COLOR);
+    DrawGameText("MANIFESTO", 125, 218, 11, (Color){175, 35, 25, 255});
+    DrawGameText("LUCAS SILVA", 125, 236, 12, INK_COLOR);
+    DrawGameText("10h as 13h", 125, 258, 10, DARKGRAY);
+    DrawGameText("[DOC 2]", 150, 285, 10, RED_COLOR);
 
     /* --- FUNDO DIREITA: RACK DE SERVIDORES --- */
     Rectangle rackRec = {980, 120, 150, 370};
@@ -4304,7 +4396,7 @@ static void DrawRoom2008(const GameState *game)
         DrawCircle((int)(uSlot.x + 14), (int)(uSlot.y + 17), 3, (blink > 0) ? (Color){60, 235, 110, 255} : (Color){20, 85, 40, 255});
         DrawCircle((int)(uSlot.x + 28), (int)(uSlot.y + 17), 3, (blink < 0) ? CYAN_COLOR : (Color){15, 65, 80, 255});
     }
-    DrawText("BLOCO SERVIDORES", (int)rackRec.x + 14, (int)(rackRec.y + rackRec.height - 24), 11, GRAY);
+    DrawGameText("BLOCO SERVIDORES", (int)rackRec.x + 14, (int)(rackRec.y + rackRec.height - 24), 11, GRAY);
 
     /* --- PAREDE SUPERIOR CENTRAL/DIREITA: MONITOR CFTV (DOC 3) --- */
     Rectangle cctvMonitor = {760, 125, 175, 125};
@@ -4313,11 +4405,11 @@ static void DrawRoom2008(const GameState *game)
 
     Rectangle cctvScr = {cctvMonitor.x + 8, cctvMonitor.y + 8, cctvMonitor.width - 16, cctvMonitor.height - 16};
     DrawRectangleRounded(cctvScr, 0.03f, 4, (Color){8, 22, 14, 255});
-    DrawText("CFTV CAM-03 [14:30]", (int)cctvScr.x + 6, (int)cctvScr.y + 6, 11, (Color){80, 245, 120, 255});
+    DrawGameText("CFTV CAM-03 [14:30]", (int)cctvScr.x + 6, (int)cctvScr.y + 6, 11, (Color){80, 245, 120, 255});
     /* Silhueta no monitor de seguranca */
     DrawCircle((int)(cctvScr.x + 80), (int)(cctvScr.y + 55), 15, (Color){45, 115, 75, 255});
     DrawRectangle((int)(cctvScr.x + 68), (int)(cctvScr.y + 70), 24, 34, (Color){35, 95, 60, 255});
-    DrawText("[DOC 4: CFTV]", (int)cctvScr.x + 50, (int)(cctvScr.y + cctvScr.height - 18), 10, (Color){80, 245, 120, 255});
+    DrawGameText("[DOC 4: CFTV]", (int)cctvScr.x + 50, (int)(cctvScr.y + cctvScr.height - 18), 10, (Color){80, 245, 120, 255});
 
     /* --- CENTRO: MESA CORPORATIVA PRINCIPAL (L-SHAPE) --- */
     Rectangle deskRec = {270, 335, 620, 280};
@@ -4346,28 +4438,28 @@ static void DrawRoom2008(const GameState *game)
     DrawRectangleRounded(lcdScr, 0.04f, 4, lcdBg);
     DrawRectangleRoundedLinesEx(lcdScr, 0.04f, 4, 1.5f, lcdBorder);
 
-    DrawText("IA VIGILANCIA // 2008", (int)lcdScr.x + 12, (int)lcdScr.y + 12, 13, lcdBorder);
+    DrawGameText("IA VIGILANCIA // 2008", (int)lcdScr.x + 12, (int)lcdScr.y + 12, 13, lcdBorder);
     DrawLine((int)lcdScr.x + 12, (int)lcdScr.y + 28, (int)(lcdScr.x + lcdScr.width - 12), (int)lcdScr.y + 28, Fade(lcdBorder, 0.4f));
 
     if (game->puzzle2008OrderSuspended)
     {
-        DrawText("[OK] ORDEM SUSPENSA", (int)lcdScr.x + 12, (int)lcdScr.y + 44, 14, (Color){60, 235, 110, 255});
-        DrawText("CD ejetado no drive!", (int)lcdScr.x + 12, (int)lcdScr.y + 68, 12, RAYWHITE);
+        DrawGameText("[OK] ORDEM SUSPENSA", (int)lcdScr.x + 12, (int)lcdScr.y + 44, 14, (Color){60, 235, 110, 255});
+        DrawGameText("CD ejetado no drive!", (int)lcdScr.x + 12, (int)lcdScr.y + 68, 12, RAYWHITE);
         float pB = 0.5f + 0.5f * sinf(time * 6.0f);
-        DrawText("> COLETAR CD [ENTER] <", (int)lcdScr.x + 12, (int)lcdScr.y + 98, 13, Fade(GOLD_COLOR, pB));
+        DrawGameText("> COLETAR CD [ENTER] <", (int)lcdScr.x + 12, (int)lcdScr.y + 98, 13, Fade(GOLD_COLOR, pB));
     }
     else if (game->puzzle2008Contested)
     {
-        DrawText("[!] FALSO POSITIVO", (int)lcdScr.x + 12, (int)lcdScr.y + 44, 14, GOLD_COLOR);
-        DrawText("Identificacao rejeitada.", (int)lcdScr.x + 12, (int)lcdScr.y + 68, 12, RAYWHITE);
-        DrawText("> SUSPENDER ORDEM <", (int)lcdScr.x + 12, (int)lcdScr.y + 98, 13, (Color){60, 235, 110, 255});
+        DrawGameText("[!] FALSO POSITIVO", (int)lcdScr.x + 12, (int)lcdScr.y + 44, 14, GOLD_COLOR);
+        DrawGameText("Identificacao rejeitada.", (int)lcdScr.x + 12, (int)lcdScr.y + 68, 12, RAYWHITE);
+        DrawGameText("> SUSPENDER ORDEM <", (int)lcdScr.x + 12, (int)lcdScr.y + 98, 13, (Color){60, 235, 110, 255});
     }
     else
     {
-        DrawText("ALVO: LUCAS SILVA", (int)lcdScr.x + 12, (int)lcdScr.y + 44, 14, RED_COLOR);
-        DrawText("ORDEM DE DRONE: 14:30", (int)lcdScr.x + 12, (int)lcdScr.y + 68, 12, GOLD_COLOR);
+        DrawGameText("ALVO: LUCAS SILVA", (int)lcdScr.x + 12, (int)lcdScr.y + 44, 14, RED_COLOR);
+        DrawGameText("ORDEM DE DRONE: 14:30", (int)lcdScr.x + 12, (int)lcdScr.y + 68, 12, GOLD_COLOR);
         float pB = 0.5f + 0.5f * sinf(time * 4.0f);
-        DrawText("> CONTESTAR NO TERMINAL <", (int)lcdScr.x + 8, (int)lcdScr.y + 98, 13, Fade(CYAN_COLOR, pB));
+        DrawGameText("> CONTESTAR NO TERMINAL <", (int)lcdScr.x + 8, (int)lcdScr.y + 98, 13, Fade(CYAN_COLOR, pB));
     }
 
     /* Teclado e mouse na mesa */
@@ -4387,9 +4479,9 @@ static void DrawRoom2008(const GameState *game)
     /* Foto anexada */
     DrawRectangle((int)doc0Rec.x + 12, (int)doc0Rec.y + 12, 45, 55, (Color){15, 22, 32, 255});
     DrawRectangleLines((int)doc0Rec.x + 12, (int)doc0Rec.y + 12, 45, 55, RED_COLOR);
-    DrawText("DRONE 78%", (int)doc0Rec.x + 65, (int)doc0Rec.y + 20, 11, RED_COLOR);
-    DrawText("LUCAS S.", (int)doc0Rec.x + 65, (int)doc0Rec.y + 38, 12, INK_COLOR);
-    DrawText("[DOC 1]", (int)doc0Rec.x + 65, (int)doc0Rec.y + 58, 11, (Color){125, 35, 18, 255});
+    DrawGameText("DRONE 78%", (int)doc0Rec.x + 65, (int)doc0Rec.y + 20, 11, RED_COLOR);
+    DrawGameText("LUCAS S.", (int)doc0Rec.x + 65, (int)doc0Rec.y + 38, 12, INK_COLOR);
+    DrawGameText("[DOC 1]", (int)doc0Rec.x + 65, (int)doc0Rec.y + 58, 11, (Color){125, 35, 18, 255});
 
     /* --- LADO DIREITO DA MESA: PRANCHETA ENTRADA/CATRACA (DOC 2) --- */
     Rectangle doc2Rec = {735, 410, 125, 85};
@@ -4398,9 +4490,9 @@ static void DrawRoom2008(const GameState *game)
     /* Folha da prancheta */
     DrawRectangle((int)doc2Rec.x + 10, (int)doc2Rec.y + 10, (int)doc2Rec.width - 20, 65, (Color){245, 248, 252, 255});
     DrawRectangle((int)doc2Rec.x + 40, (int)doc2Rec.y + 6, 45, 8, (Color){180, 190, 200, 255}); /* clipe metalico */
-    DrawText("PONTO 14:15", (int)doc2Rec.x + 16, (int)doc2Rec.y + 24, 12, (Color){25, 115, 45, 255});
-    DrawText("CRACHA #0842", (int)doc2Rec.x + 16, (int)doc2Rec.y + 42, 11, INK_COLOR);
-    DrawText("[DOC 3]", (int)doc2Rec.x + 16, (int)doc2Rec.y + 58, 11, (Color){25, 115, 45, 255});
+    DrawGameText("PONTO 14:15", (int)doc2Rec.x + 16, (int)doc2Rec.y + 24, 12, (Color){25, 115, 45, 255});
+    DrawGameText("CRACHA #0842", (int)doc2Rec.x + 16, (int)doc2Rec.y + 42, 11, INK_COLOR);
+    DrawGameText("[DOC 3]", (int)doc2Rec.x + 16, (int)doc2Rec.y + 58, 11, (Color){25, 115, 45, 255});
 
     /* --- MESA LATERAL EXECUTIVA (DIREITA): ANOTACOES DO PAI & MEMORANDO --- */
     Rectangle sideDesk = {970, 420, 170, 175};
@@ -4411,15 +4503,15 @@ static void DrawRoom2008(const GameState *game)
     Rectangle fatherBookRec = {990, 440, 130, 45};
     DrawRectangleRounded(fatherBookRec, 0.10f, 4, (Color){85, 50, 30, 255});
     DrawRectangleRoundedLinesEx(fatherBookRec, 0.10f, 4, 1.5f, GOLD_COLOR);
-    DrawText("CADERNO DR. RAMOS", (int)fatherBookRec.x + 8, (int)fatherBookRec.y + 10, 10, GOLD_COLOR);
-    DrawText("Projeto Humanitario", (int)fatherBookRec.x + 8, (int)fatherBookRec.y + 24, 10, RAYWHITE);
+    DrawGameText("CADERNO DR. RAMOS", (int)fatherBookRec.x + 8, (int)fatherBookRec.y + 10, 10, GOLD_COLOR);
+    DrawGameText("Projeto Humanitario", (int)fatherBookRec.x + 8, (int)fatherBookRec.y + 24, 10, RAYWHITE);
 
     /* Documento do Governo: Memorando confidencial */
     Rectangle govMemoRec = {990, 505, 130, 45};
     DrawRectangleRounded(govMemoRec, 0.10f, 4, (Color){45, 28, 28, 255});
     DrawRectangleRoundedLinesEx(govMemoRec, 0.10f, 4, 1.5f, RED_COLOR);
-    DrawText("MEMORANDO GOV 2008", (int)govMemoRec.x + 8, (int)govMemoRec.y + 10, 10, RED_COLOR);
-    DrawText("Uso Militar / Drones", (int)govMemoRec.x + 8, (int)govMemoRec.y + 24, 10, LIGHTGRAY);
+    DrawGameText("MEMORANDO GOV 2008", (int)govMemoRec.x + 8, (int)govMemoRec.y + 10, 10, RED_COLOR);
+    DrawGameText("Uso Militar / Drones", (int)govMemoRec.x + 8, (int)govMemoRec.y + 24, 10, LIGHTGRAY);
 
     /* Botao de retorno a Sala 1 (1990) */
     Rectangle btnVoltar1990 = {70, 600, 240, 42};
@@ -4454,36 +4546,36 @@ static void DrawHudRoom2008(const GameState *game)
     int seconds = totalSeconds % 60;
 
     DrawRectangle(0, 0, SCREEN_WIDTH, 70, Fade(VOID_COLOR, 0.94f));
-    DrawText("ARQUIVO 02 // 2008 - ESCRITORIO DE VIGILANCIA", 28, 20, 22, CYAN_COLOR);
-    DrawText(TextFormat("OPERADOR: %s", game->playerName), 450, 23, 17, GRAY);
+    DrawGameText("ARQUIVO 02 // 2008 - ESCRITORIO DE VIGILANCIA", 28, 20, 22, CYAN_COLOR);
+    DrawGameText(TextFormat("OPERADOR: %s", game->playerName), 450, 23, 17, GRAY);
 
     /* Status das evidencias e da ordem */
     if (game->puzzle2008OrderSuspended)
     {
-        DrawText("[OK] ORDEM DE DRONE SUSPENSA", 750, 22, 18, (Color){80, 235, 120, 255});
+        DrawGameText("[OK] ORDEM DE DRONE SUSPENSA", 750, 22, 18, (Color){80, 235, 120, 255});
     }
     else if (game->puzzle2008Contested)
     {
-        DrawText("[!] FALSO POSITIVO COMPROVADO", 750, 22, 18, GOLD_COLOR);
+        DrawGameText("[!] FALSO POSITIVO COMPROVADO", 750, 22, 18, GOLD_COLOR);
     }
     else
     {
-        DrawText(TextFormat("EVIDENCIAS: %d/4", ExaminedDocs2008Count(game)), 770, 22, 18, LIGHTGRAY);
+        DrawGameText(TextFormat("EVIDENCIAS: %d/4", ExaminedDocs2008Count(game)), 770, 22, 18, LIGHTGRAY);
     }
 
-    DrawText(TextFormat("VIDAS %d", game->lives), 1050, 20, 20, game->lives == 1 ? RED_COLOR : RAYWHITE);
-    DrawText(TextFormat("%02d:%02d", minutes, seconds), 1180, 20, 20, GOLD_COLOR);
+    DrawGameText(TextFormat("VIDAS %d", game->lives), 1050, 20, 20, game->lives == 1 ? RED_COLOR : RAYWHITE);
+    DrawGameText(TextFormat("%02d:%02d", minutes, seconds), 1180, 20, 20, GOLD_COLOR);
 
     /* Rodape */
     DrawRectangle(0, 650, SCREEN_WIDTH, 70, Fade(VOID_COLOR, 0.96f));
-    DrawText("Investigue os documentos da sala e use o computador para contestar a ordem.", 28, 675, 16, (Color){165, 180, 195, 255});
+    DrawGameText("Investigue os documentos da sala e use o computador para contestar a ordem.", 28, 675, 16, (Color){165, 180, 195, 255});
 
     /* Botao de Audio */
     Rectangle audioBtn = {840, 665, 175, 40};
     bool audioHover = CheckCollisionPointRec(GetVirtualMouse(), audioBtn);
     DrawRectangleRounded(audioBtn, 0.22f, 6, audioHover ? (Color){30, 44, 62, 255} : (Color){18, 26, 38, 255});
     DrawRectangleRoundedLinesEx(audioBtn, 0.22f, 6, 1.5f, audioHover ? CYAN_COLOR : (Color){50, 68, 92, 255});
-    DrawText(game->musicMuted ? "[M] AUDIO: MUDO" : "[M] AUDIO: ON",
+    DrawGameText(game->musicMuted ? "[M] AUDIO: MUDO" : "[M] AUDIO: ON",
              862, 676, 14, game->musicMuted ? (Color){220, 90, 80, 255} : (Color){90, 220, 210, 255});
 
     /* Botao do Diario */
@@ -4491,12 +4583,12 @@ static void DrawHudRoom2008(const GameState *game)
 
     if (game->messageTimer > 0)
     {
-        int width = MeasureText(game->message, 19) + 34;
+        int width = MeasureGameText(game->message, 19) + 34;
         DrawRectangleRounded(
             (Rectangle){(SCREEN_WIDTH - width) / 2.0f, 605, (float)width, 38},
             0.2f, 8, Fade(PANEL_COLOR, 0.96f));
-        DrawText(game->message,
-                 (SCREEN_WIDTH - MeasureText(game->message, 19)) / 2,
+        DrawGameText(game->message,
+                 (SCREEN_WIDTH - MeasureGameText(game->message, 19)) / 2,
                  614, 19, RAYWHITE);
     }
 }
@@ -4636,8 +4728,8 @@ static void DrawPuzzle2008(const GameState *game)
     DrawRectangleRounded(osHeader, 0.10f, 6, (Color){15, 22, 32, 255});
     DrawRectangleRoundedLinesEx(osHeader, 0.10f, 6, 1.5f, CYAN_COLOR);
 
-    DrawText("SISTEMA NACIONAL DE VIGILÂNCIA BIOMÉTRICA // NÓ 2008", (int)osHeader.x + 20, (int)osHeader.y + 14, 17, CYAN_COLOR);
-    DrawText("STATUS: CONEXAO SEGURA", (int)osHeader.x + 640, (int)osHeader.y + 16, 14, (Color){80, 235, 120, 255});
+    DrawGameText("SISTEMA NACIONAL DE VIGILÂNCIA BIOMÉTRICA // NÓ 2008", (int)osHeader.x + 20, (int)osHeader.y + 14, 17, CYAN_COLOR);
+    DrawGameText("STATUS: CONEXAO SEGURA", (int)osHeader.x + 640, (int)osHeader.y + 16, 14, (Color){80, 235, 120, 255});
 
     /* Abas superiores */
     Rectangle tab0 = {mon.x + 20, mon.y + 68, 320, 40};
@@ -4647,17 +4739,17 @@ static void DrawPuzzle2008(const GameState *game)
     bool isTab0 = (game->terminal2008ActiveTab == 0);
     DrawRectangleRounded(tab0, 0.20f, 6, isTab0 ? (Color){30, 48, 68, 255} : (Color){20, 26, 36, 255});
     DrawRectangleRoundedLinesEx(tab0, 0.20f, 6, 1.5f, isTab0 ? GOLD_COLOR : (Color){50, 65, 80, 255});
-    DrawText("1. ORDEM DE ALVO PENDENTE", (int)tab0.x + 28, (int)tab0.y + 12, 15, isTab0 ? GOLD_COLOR : LIGHTGRAY);
+    DrawGameText("1. ORDEM DE ALVO PENDENTE", (int)tab0.x + 28, (int)tab0.y + 12, 15, isTab0 ? GOLD_COLOR : LIGHTGRAY);
 
     DrawRectangleRounded(tab1, 0.20f, 6, !isTab0 ? (Color){30, 48, 68, 255} : (Color){20, 26, 36, 255});
     DrawRectangleRoundedLinesEx(tab1, 0.20f, 6, 1.5f, !isTab0 ? CYAN_COLOR : (Color){50, 65, 80, 255});
     if (game->room2008OptionalUnlocked)
     {
-        DrawText(game->room2008OptionalCompleted ? "2. CONFIGURACAO [DESATIVADA]" : "2. CONFIGURAÇÃO DA INSTALAÇÃO", (int)tab1.x + 24, (int)tab1.y + 12, 15, !isTab0 ? CYAN_COLOR : (Color){80, 235, 120, 255});
+        DrawGameText(game->room2008OptionalCompleted ? "2. CONFIGURACAO [DESATIVADA]" : "2. CONFIGURAÇÃO DA INSTALAÇÃO", (int)tab1.x + 24, (int)tab1.y + 12, 15, !isTab0 ? CYAN_COLOR : (Color){80, 235, 120, 255});
     }
     else
     {
-        DrawText("2. CONFIGURAÇÃO [BLOQUEADA]", (int)tab1.x + 24, (int)tab1.y + 12, 15, GRAY);
+        DrawGameText("2. CONFIGURAÇÃO [BLOQUEADA]", (int)tab1.x + 24, (int)tab1.y + 12, 15, GRAY);
     }
 
     DrawButton(btnClose, "< SAIR DO TERMINAL [ESC]", (Color){185, 60, 50, 255});
@@ -4677,15 +4769,15 @@ static void DrawPuzzle2008(const GameState *game)
         if (!game->puzzle2008Contested)
         {
             float blink = 0.6f + 0.4f * sinf(time * 6.0f);
-            DrawText("[ ! ] ORDEM #8491 - ENVIO DE DRONE DE INTERCEPTAÇÃO: PROGRAMADO (14:30)", (int)targetPanel.x + 20, (int)targetPanel.y + 14, 18, Fade(RED_COLOR, blink));
-            DrawText("ALVO: LUCAS SILVA  |  SETOR: PRAÇA CENTRAL  |  BASE LEGAL: DIRETRIZ SEC-402", (int)targetPanel.x + 20, (int)targetPanel.y + 42, 15, RAYWHITE);
-            DrawText("AVALIAÇÃO DA IA: Similaridade por drone: 78% (Alta incerteza). Ordem aguarda envio.", (int)targetPanel.x + 20, (int)targetPanel.y + 66, 14, GOLD_COLOR);
-            DrawText("INSTRUÇÃO: Selecione 2 evidências registradas para contestar a identificação.", (int)targetPanel.x + 20, (int)targetPanel.y + 88, 14, CYAN_COLOR);
+            DrawGameText("[ ! ] ORDEM #8491 - ENVIO DE DRONE DE INTERCEPTAÇÃO: PROGRAMADO (14:30)", (int)targetPanel.x + 20, (int)targetPanel.y + 14, 18, Fade(RED_COLOR, blink));
+            DrawGameText("ALVO: LUCAS SILVA  |  SETOR: PRAÇA CENTRAL  |  BASE LEGAL: DIRETRIZ SEC-402", (int)targetPanel.x + 20, (int)targetPanel.y + 42, 15, RAYWHITE);
+            DrawGameText("AVALIAÇÃO DA IA: Similaridade por drone: 78% (Alta incerteza). Ordem aguarda envio.", (int)targetPanel.x + 20, (int)targetPanel.y + 66, 14, GOLD_COLOR);
+            DrawGameText("INSTRUÇÃO: Selecione 2 evidências registradas para contestar a identificação.", (int)targetPanel.x + 20, (int)targetPanel.y + 88, 14, CYAN_COLOR);
         }
         else
         {
-            DrawText("[ OK ] STATUS: IDENTIFICAÇÃO NÃO CONFIRMADA // FALSO POSITIVO COMPROVADO", (int)targetPanel.x + 20, (int)targetPanel.y + 14, 18, (Color){60, 235, 110, 255});
-            DrawText("ÁLIBI CONFIRMADO: O alvo estava no laboratório da empresa às 14:30.", (int)targetPanel.x + 20, (int)targetPanel.y + 42, 15, RAYWHITE);
+            DrawGameText("[ OK ] STATUS: IDENTIFICAÇÃO NÃO CONFIRMADA // FALSO POSITIVO COMPROVADO", (int)targetPanel.x + 20, (int)targetPanel.y + 14, 18, (Color){60, 235, 110, 255});
+            DrawGameText("ÁLIBI CONFIRMADO: O alvo estava no laboratório da empresa às 14:30.", (int)targetPanel.x + 20, (int)targetPanel.y + 42, 15, RAYWHITE);
 
             if (!game->puzzle2008OrderSuspended)
             {
@@ -4696,7 +4788,7 @@ static void DrawPuzzle2008(const GameState *game)
             {
                 Rectangle btnDone = {targetPanel.x + targetPanel.width - 450, targetPanel.y + 58, 430, 44};
                 DrawButton(btnDone, "COLETAR CD DE MEMORIA E CONCLUIR >> [ENTER]", GOLD_COLOR);
-                DrawText("CD ejetado no drive da maquina!", (int)targetPanel.x + 20, (int)targetPanel.y + 75, 15, GOLD_COLOR);
+                DrawGameText("CD ejetado no drive da maquina!", (int)targetPanel.x + 20, (int)targetPanel.y + 75, 15, GOLD_COLOR);
             }
         }
 
@@ -4738,12 +4830,12 @@ static void DrawPuzzle2008(const GameState *game)
             DrawRectangleRoundedLinesEx(chkBox, 0.15f, 4, 1.5f, isSel ? RAYWHITE : GRAY);
             if (isSel)
             {
-                DrawText("X", (int)chkBox.x + 7, (int)chkBox.y + 4, 18, (Color){10, 18, 28, 255});
+                DrawGameText("X", (int)chkBox.x + 7, (int)chkBox.y + 4, 18, (Color){10, 18, 28, 255});
             }
 
-            DrawText(cardTitles[c], (int)cRec.x + 50, (int)cRec.y + 16, 16, isSel ? (Color){50, 215, 245, 255} : RAYWHITE);
-            DrawText(cardDesc1[c], (int)cRec.x + 16, (int)cRec.y + 48, 13, LIGHTGRAY);
-            DrawText(cardDesc2[c], (int)cRec.x + 16, (int)cRec.y + 70, 13, (c == 2 || c == 3) ? (Color){100, 235, 140, 255} : (Color){220, 175, 100, 255});
+            DrawGameText(cardTitles[c], (int)cRec.x + 50, (int)cRec.y + 16, 16, isSel ? (Color){50, 215, 245, 255} : RAYWHITE);
+            DrawGameText(cardDesc1[c], (int)cRec.x + 16, (int)cRec.y + 48, 13, LIGHTGRAY);
+            DrawGameText(cardDesc2[c], (int)cRec.x + 16, (int)cRec.y + 70, 13, (c == 2 || c == 3) ? (Color){100, 235, 140, 255} : (Color){220, 175, 100, 255});
 
             /* Botoes de card: Examinar e Selecionar */
             Rectangle btnExam = {cRec.x + 16, cRec.y + 96, 160, 32};
@@ -4758,7 +4850,7 @@ static void DrawPuzzle2008(const GameState *game)
         DrawRectangleRounded(actionBar, 0.05f, 6, (Color){14, 20, 30, 255});
         DrawRectangleRoundedLinesEx(actionBar, 0.05f, 6, 1.5f, (Color){45, 62, 80, 255});
 
-        DrawText(TextFormat("Evidências Selecionadas: %d/2", game->puzzle2008SelectionCount), (int)actionBar.x + 20, (int)actionBar.y + 14, 17, GOLD_COLOR);
+        DrawGameText(TextFormat("Evidências Selecionadas: %d/2", game->puzzle2008SelectionCount), (int)actionBar.x + 20, (int)actionBar.y + 14, 17, GOLD_COLOR);
 
         if (!game->puzzle2008Contested)
         {
@@ -4768,18 +4860,18 @@ static void DrawPuzzle2008(const GameState *game)
         }
         else
         {
-            DrawText("[ V ] IDENTIFICAÇÃO CONTESTADA COM SUCESSO!", (int)actionBar.x + 320, (int)actionBar.y + 20, 17, (Color){60, 235, 110, 255});
+            DrawGameText("[ V ] IDENTIFICAÇÃO CONTESTADA COM SUCESSO!", (int)actionBar.x + 320, (int)actionBar.y + 20, 17, (Color){60, 235, 110, 255});
         }
 
         /* Mensagem de Feedback */
         if (game->puzzle2008Feedback[0] != '\0')
         {
             Color fbCol = game->puzzle2008Contested ? (Color){60, 235, 110, 255} : (Color){245, 165, 80, 255};
-            DrawText(game->puzzle2008Feedback, (int)actionBar.x + 20, (int)actionBar.y + 65, 15, fbCol);
+            DrawGameText(game->puzzle2008Feedback, (int)actionBar.x + 20, (int)actionBar.y + 65, 15, fbCol);
         }
         else
         {
-            DrawText("Dica: Selecione as duas evidencias que demonstram onde o alvo estava no horario da acusacao.", (int)actionBar.x + 20, (int)actionBar.y + 65, 14, GRAY);
+            DrawGameText("Dica: Selecione as duas evidencias que demonstram onde o alvo estava no horario da acusacao.", (int)actionBar.x + 20, (int)actionBar.y + 65, 14, GRAY);
         }
     }
     else
@@ -4794,50 +4886,50 @@ static void DrawPuzzle2008(const GameState *game)
         if (!game->room2008OptionalUnlocked)
         {
             DrawPadlockIcon((int)(optPanel.x + optPanel.width / 2), (int)(optPanel.y + 120), 2.0f, GOLD_COLOR, RAYWHITE);
-            DrawText("ACESSO ADMINISTRATIVO RESTRITO // DIRETRIZES DA FILIAL", (int)optPanel.x + 220, (int)optPanel.y + 190, 20, RED_COLOR);
-            DrawText("Para acessar as configuracoes desta instalacao, correlacione as notas do Dr. Ramos", (int)optPanel.x + 190, (int)optPanel.y + 230, 16, LIGHTGRAY);
-            DrawText("e o memorando governamental encontrados no escritorio corporativo.", (int)optPanel.x + 240, (int)optPanel.y + 260, 16, LIGHTGRAY);
-            DrawText("Examinar ambos os documentos revela a chave de manutencao do projeto.", (int)optPanel.x + 245, (int)optPanel.y + 300, 15, GOLD_COLOR);
+            DrawGameText("ACESSO ADMINISTRATIVO RESTRITO // DIRETRIZES DA FILIAL", (int)optPanel.x + 220, (int)optPanel.y + 190, 20, RED_COLOR);
+            DrawGameText("Para acessar as configuracoes desta instalacao, correlacione as notas do Dr. Ramos", (int)optPanel.x + 190, (int)optPanel.y + 230, 16, LIGHTGRAY);
+            DrawGameText("e o memorando governamental encontrados no escritorio corporativo.", (int)optPanel.x + 240, (int)optPanel.y + 260, 16, LIGHTGRAY);
+            DrawGameText("Examinar ambos os documentos revela a chave de manutencao do projeto.", (int)optPanel.x + 245, (int)optPanel.y + 300, 15, GOLD_COLOR);
         }
         else
         {
-            DrawText("DIRETRIZES DA UNIDADE LOCAL // FILIAL METROPOLITANA 08", (int)optPanel.x + 35, (int)optPanel.y + 30, 20, GOLD_COLOR);
+            DrawGameText("DIRETRIZES DA UNIDADE LOCAL // FILIAL METROPOLITANA 08", (int)optPanel.x + 35, (int)optPanel.y + 30, 20, GOLD_COLOR);
             DrawLine((int)optPanel.x + 35, (int)optPanel.y + 60, (int)(optPanel.x + optPanel.width - 35), (int)optPanel.y + 60, Fade(GOLD_COLOR, 0.4f));
 
-            DrawText("STATUS DO SISTEMA: Conectado a rede regional de monitoramento", (int)optPanel.x + 35, (int)optPanel.y + 80, 16, RAYWHITE);
-            DrawText("REGISTROS FORENSES ARQUIVADOS: 1.420 ocorrencias preservadas", (int)optPanel.x + 35, (int)optPanel.y + 110, 16, CYAN_COLOR);
+            DrawGameText("STATUS DO SISTEMA: Conectado a rede regional de monitoramento", (int)optPanel.x + 35, (int)optPanel.y + 80, 16, RAYWHITE);
+            DrawGameText("REGISTROS FORENSES ARQUIVADOS: 1.420 ocorrencias preservadas", (int)optPanel.x + 35, (int)optPanel.y + 110, 16, CYAN_COLOR);
 
             Rectangle cardStatus = {optPanel.x + 35, optPanel.y + 145, optPanel.width - 70, 120};
             DrawRectangleRounded(cardStatus, 0.05f, 6, (Color){24, 32, 44, 255});
             DrawRectangleRoundedLinesEx(cardStatus, 0.05f, 6, 1.5f, (Color){55, 75, 95, 255});
 
-            DrawText("ENVIO AUTOMÁTICO DE ALVOS DESTA INSTALAÇÃO:", (int)cardStatus.x + 20, (int)cardStatus.y + 20, 16, GOLD_COLOR);
+            DrawGameText("ENVIO AUTOMÁTICO DE ALVOS DESTA INSTALAÇÃO:", (int)cardStatus.x + 20, (int)cardStatus.y + 20, 16, GOLD_COLOR);
             if (!game->room2008OptionalCompleted)
             {
-                DrawText("[ ATIVO ] - Drones sao despachados automaticamente sob correspondencia preliminar.", (int)cardStatus.x + 20, (int)cardStatus.y + 50, 15, RED_COLOR);
-                DrawText("Desativar o envio automatico suspende os ataques sem apagar as provas forenses.", (int)cardStatus.x + 20, (int)cardStatus.y + 80, 15, LIGHTGRAY);
+                DrawGameText("[ ATIVO ] - Drones sao despachados automaticamente sob correspondencia preliminar.", (int)cardStatus.x + 20, (int)cardStatus.y + 50, 15, RED_COLOR);
+                DrawGameText("Desativar o envio automatico suspende os ataques sem apagar as provas forenses.", (int)cardStatus.x + 20, (int)cardStatus.y + 80, 15, LIGHTGRAY);
 
                 Rectangle btnDisable = {optPanel.x + 35, optPanel.y + 290, 520, 52};
                 DrawButton(btnDisable, "DESATIVAR ENVIO AUTOMÁTICO DESTA INSTALAÇÃO", (Color){245, 155, 55, 255});
             }
             else
             {
-                DrawText("[ DESATIVADO ] - O despacho automatico de drones desta central foi bloqueado.", (int)cardStatus.x + 20, (int)cardStatus.y + 50, 15, (Color){60, 235, 110, 255});
-                DrawText("Todos os 1.420 relatorios foram preservados intactos como prova contra o abuso.", (int)cardStatus.x + 20, (int)cardStatus.y + 80, 15, (Color){100, 235, 140, 255});
+                DrawGameText("[ DESATIVADO ] - O despacho automatico de drones desta central foi bloqueado.", (int)cardStatus.x + 20, (int)cardStatus.y + 50, 15, (Color){60, 235, 110, 255});
+                DrawGameText("Todos os 1.420 relatorios foram preservados intactos como prova contra o abuso.", (int)cardStatus.x + 20, (int)cardStatus.y + 80, 15, (Color){100, 235, 140, 255});
 
                 Rectangle okBox = {optPanel.x + 35, optPanel.y + 290, optPanel.width - 70, 70};
                 DrawRectangleRounded(okBox, 0.08f, 6, Fade((Color){45, 165, 80, 255}, 0.20f));
                 DrawRectangleRoundedLinesEx(okBox, 0.08f, 6, 1.5f, (Color){60, 235, 110, 255});
-                DrawText("[ V ] PROTOCOLO ÉTICO APLICADO: CENTRAL LOCAL PROTEGIDA COM SUCESSO!", (int)okBox.x + 25, (int)okBox.y + 25, 16, (Color){60, 235, 110, 255});
+                DrawGameText("[ V ] PROTOCOLO ÉTICO APLICADO: CENTRAL LOCAL PROTEGIDA COM SUCESSO!", (int)okBox.x + 25, (int)okBox.y + 25, 16, (Color){60, 235, 110, 255});
             }
 
             Rectangle cardInfo = {optPanel.x + 35, optPanel.y + 380, optPanel.width - 70, 120};
             DrawRectangleRounded(cardInfo, 0.05f, 6, Fade(PANEL_COLOR, 0.90f));
             DrawRectangleRoundedLinesEx(cardInfo, 0.05f, 6, 1.5f, (Color){60, 80, 105, 255});
-            DrawText("COMPREENSÃO ÉTICA PROFUNDA:", (int)cardInfo.x + 20, (int)cardInfo.y + 16, 15, GOLD_COLOR);
-            DrawText("- Apagar o sistema destruiria as evidencias que comprovam o desvio do governo.", (int)cardInfo.x + 20, (int)cardInfo.y + 44, 14, LIGHTGRAY);
-            DrawText("- Desativar o despacho automatico impede ataques imediatos mantendo a verdade protegida.", (int)cardInfo.x + 20, (int)cardInfo.y + 68, 14, LIGHTGRAY);
-            DrawText("- A acao afeta exclusivamente esta instalacao e foi devidamente registrada no diario.", (int)cardInfo.x + 20, (int)cardInfo.y + 92, 14, (Color){60, 235, 110, 255});
+            DrawGameText("COMPREENSÃO ÉTICA PROFUNDA:", (int)cardInfo.x + 20, (int)cardInfo.y + 16, 15, GOLD_COLOR);
+            DrawGameText("- Apagar o sistema destruiria as evidencias que comprovam o desvio do governo.", (int)cardInfo.x + 20, (int)cardInfo.y + 44, 14, LIGHTGRAY);
+            DrawGameText("- Desativar o despacho automatico impede ataques imediatos mantendo a verdade protegida.", (int)cardInfo.x + 20, (int)cardInfo.y + 68, 14, LIGHTGRAY);
+            DrawGameText("- A acao afeta exclusivamente esta instalacao e foi devidamente registrada no diario.", (int)cardInfo.x + 20, (int)cardInfo.y + 92, 14, (Color){60, 235, 110, 255});
         }
     }
 }
@@ -4991,8 +5083,8 @@ static void UpdatePuzzle2008(GameState *game)
 static void DrawResult2008(const GameState *game)
 {
     DrawBackground();
-    DrawText("ARTEFATO RECUPERADO", 90, 68, 20, CYAN_COLOR);
-    DrawText("CD DE MEMÓRIA // 2008", 90, 108, 46, RAYWHITE);
+    DrawGameText("ARTEFATO RECUPERADO", 90, 68, 20, CYAN_COLOR);
+    DrawGameText("CD DE MEMÓRIA // 2008", 90, 108, 46, RAYWHITE);
 
     /* Desenha o CD de Memoria recuperado */
     DrawMemoryCd((Vector2){140, 260}, 1.3f);
@@ -5002,37 +5094,37 @@ static void DrawResult2008(const GameState *game)
     DrawRectangleRounded(winBox, 0.04f, 8, Fade(PANEL_COLOR, 0.96f));
     DrawRectangleRoundedLinesEx(winBox, 0.04f, 8, 2.0f, GOLD_COLOR);
 
-    DrawText("DESVIO ALGORÍTMICO // FASE 2 (2008) CONCLUÍDA", 535, 202, 20, GOLD_COLOR);
+    DrawGameText("DESVIO ALGORÍTMICO // FASE 2 (2008) CONCLUÍDA", 535, 202, 20, GOLD_COLOR);
 
-    DrawText("Ao demonstrar o falso positivo através do crachá de ponto e do", 535, 236, 17, LIGHTGRAY);
-    DrawText("circuito interno, Elira impediu o drone e salvou a vida de Lucas Silva.", 535, 258, 17, LIGHTGRAY);
+    DrawGameText("Ao demonstrar o falso positivo através do crachá de ponto e do", 535, 236, 17, LIGHTGRAY);
+    DrawGameText("circuito interno, Elira impediu o drone e salvou a vida de Lucas Silva.", 535, 258, 17, LIGHTGRAY);
 
-    DrawText("O algoritmo de busca facial, concebido por seu pai para salvar", 535, 290, 17, LIGHTGRAY);
-    DrawText("vítimas em catástrofes, havia sido pervertido pelo governo para", 535, 312, 17, (Color){245, 175, 75, 255});
-    DrawText("perseguir líderes populares e ativistas civis.", 535, 334, 17, (Color){245, 175, 75, 255});
+    DrawGameText("O algoritmo de busca facial, concebido por seu pai para salvar", 535, 290, 17, LIGHTGRAY);
+    DrawGameText("vítimas em catástrofes, havia sido pervertido pelo governo para", 535, 312, 17, (Color){245, 175, 75, 255});
+    DrawGameText("perseguir líderes populares e ativistas civis.", 535, 334, 17, (Color){245, 175, 75, 255});
 
-    DrawText("-> Proxima Fronteira: FASE 3 // ANO 2048: O PROTOTIPO A.R.1.3.L.!", 535, 362, 17, CYAN_COLOR);
+    DrawGameText("-> Proxima Fronteira: FASE 3 // ANO 2048: O PROTOTIPO A.R.1.3.L.!", 535, 362, 17, CYAN_COLOR);
 
     if (game->room2008OptionalCompleted)
     {
         DrawRectangleRounded((Rectangle){535, 396, 610, 44}, 0.12f, 4, Fade((Color){45, 165, 80, 255}, 0.20f));
         DrawRectangleRoundedLinesEx((Rectangle){535, 396, 610, 44}, 0.12f, 4, 1.0f, (Color){60, 235, 110, 255});
-        DrawText("[DESTAQUE ÉTICO]: Despacho automático da filial desativado,", 550, 402, 14, (Color){60, 235, 110, 255});
-        DrawText("mantendo todas as 1.420 provas forenses intactas para o futuro.", 550, 420, 14, (Color){60, 235, 110, 255});
+        DrawGameText("[DESTAQUE ÉTICO]: Despacho automático da filial desativado,", 550, 402, 14, (Color){60, 235, 110, 255});
+        DrawGameText("mantendo todas as 1.420 provas forenses intactas para o futuro.", 550, 420, 14, (Color){60, 235, 110, 255});
     }
     else
     {
-        DrawText("[DESCOBERTA PENDENTE]: Havia um protocolo no escritório para", 535, 400, 14, GOLD_COLOR);
-        DrawText("desativar o envio automático da filial mantendo os registros como prova.", 535, 420, 14, GRAY);
+        DrawGameText("[DESCOBERTA PENDENTE]: Havia um protocolo no escritório para", 535, 400, 14, GOLD_COLOR);
+        DrawGameText("desativar o envio automático da filial mantendo os registros como prova.", 535, 420, 14, GRAY);
     }
 
-    DrawText(TextFormat("TEMPO TOTAL: %02d:%02d  |  VIDAS: %d/3",
+    DrawGameText(TextFormat("TEMPO TOTAL: %02d:%02d  |  VIDAS: %d/3",
                         (int)(GetTime() - game->startTime) / 60,
                         (int)(GetTime() - game->startTime) % 60,
                         game->lives),
              535, 460, 18, (Color){100, 235, 140, 255});
 
-    DrawText(TextFormat("OPERADOR: %s", game->playerName), 535, 492, 16, GRAY);
+    DrawGameText(TextFormat("OPERADOR: %s", game->playerName), 535, 492, 16, GRAY);
 
     Rectangle btnNext2048 = {180, 580, 380, 56};
     Rectangle btnOffice = {580, 580, 220, 56};
@@ -5314,7 +5406,7 @@ static int DrawTextWrappedPartial(const char *text, int visibleBytes, int x, int
                 if (n > 511) n = 511;
                 memcpy(buf, text + start, (size_t)n);
                 buf[n] = '\0';
-                if (lastFit < 0 || MeasureText(buf, size) <= maxWidth) lastFit = pos;
+                if (lastFit < 0 || MeasureGameText(buf, size) <= maxWidth) lastFit = pos;
                 else break;
             }
         }
@@ -5329,7 +5421,7 @@ static int DrawTextWrappedPartial(const char *text, int visibleBytes, int x, int
             if (n > 511) n = 511;
             memcpy(buf, text + start, (size_t)n);
             buf[n] = '\0';
-            DrawText(buf, x, y + lines * lineHeight, size, color);
+            DrawGameText(buf, x, y + lines * lineHeight, size, color);
         }
         lines++;
         start = lastFit;
@@ -5551,7 +5643,7 @@ static void DrawFinalDialogue(const GameState *game)
     DrawEllipse((int)coreCenter.x, 440, 140, 12, Fade(coreColor, 0.08f * energy + 0.02f));
 
     DrawArielCore(coreCenter, 1.0f, coreColor, energy, -1.0f);
-    DrawText("A.R.1.3.L.", (int)coreCenter.x - MeasureText("A.R.1.3.L.", 16) / 2, 398, 16, Fade(coreColor, 0.75f));
+    DrawGameText("A.R.1.3.L.", (int)coreCenter.x - MeasureGameText("A.R.1.3.L.", 16) / 2, 398, 16, Fade(coreColor, 0.75f));
 
     /* Particulas de dados subindo */
     for (int p = 0; p < 36; p++)
@@ -5563,13 +5655,13 @@ static void DrawFinalDialogue(const GameState *game)
 
     /* --- HUD superior --- */
     DrawRectangle(0, 0, SCREEN_WIDTH, 56, Fade(VOID_COLOR, 0.88f));
-    DrawText("CONFRONTO FINAL // 2048 - NUCLEO DE A.R.1.3.L.", 28, 18, 20, CYAN_COLOR);
-    DrawText(TextFormat("OPERADOR: %s", game->playerName), 620, 21, 16, GRAY);
+    DrawGameText("CONFRONTO FINAL // 2048 - NUCLEO DE A.R.1.3.L.", 28, 18, 20, CYAN_COLOR);
+    DrawGameText(TextFormat("OPERADOR: %s", game->playerName), 620, 21, 16, GRAY);
     const char *stageLabel = "";
     if (game->finalStage == FINAL_Q1 || game->finalStage == FINAL_Q1_REACT) stageLabel = "PERGUNTA 1 DE 2";
     else if (game->finalStage == FINAL_Q2 || game->finalStage == FINAL_Q2_REACT) stageLabel = "PERGUNTA 2 DE 2";
     else if (game->finalStage >= FINAL_DECISION) stageLabel = "DECISAO FINAL";
-    DrawText(stageLabel, SCREEN_WIDTH - 28 - MeasureText(stageLabel, 18), 19, 18, GOLD_COLOR);
+    DrawGameText(stageLabel, SCREEN_WIDTH - 28 - MeasureGameText(stageLabel, 18), 19, 18, GOLD_COLOR);
 
     /* --- Retrato da Elira (por tras da caixa de dialogo) --- */
     float portraitH = 380.0f;
@@ -5587,11 +5679,11 @@ static void DrawFinalDialogue(const GameState *game)
     if (line->speaker != SPEAKER_NARRATOR)
     {
         const char *name = (line->speaker == SPEAKER_ARIEL) ? "ARIEL" : "ELIRA";
-        int nameW = MeasureText(name, 20) + 36;
+        int nameW = MeasureGameText(name, 20) + 36;
         Rectangle tag = {box.x + 24, box.y - 30, (float)nameW, 36};
         DrawRectangleRounded(tag, 0.3f, 6, (Color){14, 22, 38, 255});
         DrawRectangleRoundedLinesEx(tag, 0.3f, 6, 2.0f, speakerColor);
-        DrawText(name, (int)tag.x + 18, (int)tag.y + 8, 20, speakerColor);
+        DrawGameText(name, (int)tag.x + 18, (int)tag.y + 8, 20, speakerColor);
     }
 
     Color textColor = (line->speaker == SPEAKER_NARRATOR) ? (Color){170, 180, 195, 255} : RAYWHITE;
@@ -5613,10 +5705,10 @@ static void DrawFinalDialogue(const GameState *game)
 
                 Rectangle badge = {opt.x + 12, opt.y + 10, 34, 34};
                 DrawRectangleRounded(badge, 0.3f, 6, hover ? GOLD_COLOR : PANEL_LIGHT);
-                DrawText(TextFormat("%d", i + 1), (int)badge.x + 12, (int)badge.y + 7, 20, hover ? VOID_COLOR : RAYWHITE);
-                DrawText(options[i], (int)opt.x + 62, (int)opt.y + 17, 20, hover ? RAYWHITE : LIGHTGRAY);
+                DrawGameText(TextFormat("%d", i + 1), (int)badge.x + 12, (int)badge.y + 7, 20, hover ? VOID_COLOR : RAYWHITE);
+                DrawGameText(options[i], (int)opt.x + 62, (int)opt.y + 17, 20, hover ? RAYWHITE : LIGHTGRAY);
             }
-            DrawText("Clique em uma resposta ou pressione [1] [2] [3]", (int)(box.x + box.width - 470), (int)(box.y + box.height - 22), 14, GRAY);
+            DrawGameText("Clique em uma resposta ou pressione [1] [2] [3]", (int)(box.x + box.width - 470), (int)(box.y + box.height - 22), 14, GRAY);
         }
     }
     else if (typed)
@@ -5624,7 +5716,7 @@ static void DrawFinalDialogue(const GameState *game)
         bool blinkOn = fmodf(t, 1.0f) < 0.6f;
         if (blinkOn)
         {
-            DrawText("[ENTER] / clique para continuar  >>", (int)(box.x + box.width - 330), (int)(box.y + box.height - 30), 15, Fade(speakerColor, 0.9f));
+            DrawGameText("[ENTER] / clique para continuar  >>", (int)(box.x + box.width - 330), (int)(box.y + box.height - 30), 15, Fade(speakerColor, 0.9f));
         }
     }
 }
@@ -5750,40 +5842,40 @@ static void DrawFinalEnding(const GameState *game)
 
     DrawBackground();
     DrawArielCore((Vector2){240, 300}, 1.0f, coreColor, energy, 0.0f);
-    DrawText("A.R.1.3.L.", 240 - MeasureText("A.R.1.3.L.", 18) / 2, 450, 18, Fade(coreColor, 0.8f));
+    DrawGameText("A.R.1.3.L.", 240 - MeasureGameText("A.R.1.3.L.", 18) / 2, 450, 18, Fade(coreColor, 0.8f));
 
     Rectangle panel = {450, 70, 790, 500};
     DrawRectangleRounded(panel, 0.04f, 8, Fade(PANEL_COLOR, 0.96f));
     DrawRectangleRoundedLinesEx(panel, 0.04f, 8, 2.0f, accent);
 
-    DrawText("DESFECHO // CONFRONTO FINAL", 485, 96, 18, CYAN_COLOR);
-    DrawText(title, 485, 126, 34, accent);
+    DrawGameText("DESFECHO // CONFRONTO FINAL", 485, 96, 18, CYAN_COLOR);
+    DrawGameText(title, 485, 126, 34, accent);
     DrawLine(485, 172, 1205, 172, Fade(accent, 0.4f));
 
     int bodyLines = DrawTextWrappedPartial(body, 100000, 485, 190, 20, 720, 28, LIGHTGRAY);
     int y = 190 + bodyLines * 28 + 22;
 
-    DrawText("SUAS RESPOSTAS", 485, y, 16, GOLD_COLOR);
+    DrawGameText("SUAS RESPOSTAS", 485, y, 16, GOLD_COLOR);
     y += 26;
     const char *q1 = (game->finalChoice[0] >= 0) ? FINAL_Q1_OPTIONS[game->finalChoice[0]] : "-";
     const char *q2 = (game->finalChoice[1] >= 0) ? FINAL_Q2_OPTIONS[game->finalChoice[1]] : "-";
     const char *dc = (game->finalChoice[2] >= 0) ? FINAL_DECISION_OPTIONS[game->finalChoice[2]] : "-";
-    DrawText(TextFormat("Pergunta 1: %s", q1), 485, y, 16, game->finalChoice[0] == 1 ? (Color){100, 235, 140, 255} : GRAY);
+    DrawGameText(TextFormat("Pergunta 1: %s", q1), 485, y, 16, game->finalChoice[0] == 1 ? (Color){100, 235, 140, 255} : GRAY);
     y += 24;
-    DrawText(TextFormat("Pergunta 2: %s", q2), 485, y, 16, game->finalChoice[1] == 1 ? (Color){100, 235, 140, 255} : GRAY);
+    DrawGameText(TextFormat("Pergunta 2: %s", q2), 485, y, 16, game->finalChoice[1] == 1 ? (Color){100, 235, 140, 255} : GRAY);
     y += 24;
-    DrawText(TextFormat("Decisão: %s", dc), 485, y, 16, RAYWHITE);
+    DrawGameText(TextFormat("Decisão: %s", dc), 485, y, 16, RAYWHITE);
     y += 34;
 
-    DrawText(TextFormat("PONTOS DE COMPREENSÃO: %d/2", game->finalPoints), 485, y, 20, accent);
+    DrawGameText(TextFormat("PONTOS DE COMPREENSÃO: %d/2", game->finalPoints), 485, y, 20, accent);
     y += 34;
 
     if (game->room2008OptionalCompleted)
     {
-        DrawText("Registro de 2008: as provas preservadas mostram como a tecnologia foi desviada.", 485, y, 15, (Color){100, 235, 140, 255});
+        DrawGameText("Registro de 2008: as provas preservadas mostram como a tecnologia foi desviada.", 485, y, 15, (Color){100, 235, 140, 255});
     }
 
-    DrawText(TextFormat("OPERADOR: %s", game->playerName), 485, (int)(panel.y + panel.height - 30), 16, GRAY);
+    DrawGameText(TextFormat("OPERADOR: %s", game->playerName), 485, (int)(panel.y + panel.height - 30), 16, GRAY);
 
     DrawButton((Rectangle){450, 600, 380, 56}, "REVER CONFRONTO", CYAN_COLOR);
     DrawButton((Rectangle){860, 600, 380, 56}, "MENU INICIAL [ENTER]", GOLD_COLOR);
@@ -6008,6 +6100,11 @@ static void EnsureAmbientMusicFile(void)
 int main(void)
 {
     GameState game = {0};
+
+    /* Os caminhos "assets/..." passam a valer a partir da pasta do executavel,
+       mesmo quando o jogo e aberto pelo Finder/Explorer ou de outra pasta */
+    ChangeDirectory(GetApplicationDirectory());
+
     SetConfigFlags(FLAG_MSAA_4X_HINT | FLAG_VSYNC_HINT);
     InitWindow(SCREEN_WIDTH, SCREEN_HEIGHT, "ELIRA - Escape Run Temporal");
     InitAudioDevice();
@@ -6254,6 +6351,7 @@ int main(void)
     }
 
     UnloadRenderTexture(target);
+    UnloadGameFonts();
     if (g_eliraPortraitLoaded)
     {
         UnloadTexture(g_eliraPortrait);
