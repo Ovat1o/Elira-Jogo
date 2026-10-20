@@ -40,6 +40,7 @@ typedef enum GameScreen
     SCREEN_TERMINAL,
     SCREEN_RESULT,
     SCREEN_ROOM_2,
+    SCREEN_MEMORY_1990,
     SCREEN_PUZZLE_FILES,
     SCREEN_RESULT_2,
     SCREEN_ROOM_2008,
@@ -74,14 +75,28 @@ typedef struct GameState
     char message[160];
     float messageTimer;
 
-    /* --- QUARTO 2 & PUZZLE DE ARQUIVOS/PASTAS (AMONG US STYLE) --- */
+    /* --- QUARTO 2 (1990): MINIGAME DE MEMORIA & PUZZLE DE ARQUIVOS/PASTAS --- */
     bool room2CabinetInspected;
     bool room2DoorInspected;
+    bool memory1990Completed;
+    int memorySequence[5];
+    int memoryRound;                /* Rodada atual: 1 a 5 */
+    int memoryInputIndex;           /* Indice de entrada do jogador na rodada */
+    int memoryState;                /* 0=demonstrando, 1=entrada, 2=etapa ok, 3=erro, 4=concluido */
+    int memoryShowIndex;            /* Posicao sendo demonstrada na sequencia */
+    float memoryTimer;              /* Temporizador de animacao da sequencia/feedback */
+    bool memoryLightOn;             /* Estado aceso/apagado da demonstracao */
+    int memoryLastClicked;          /* Ultimo botao clicado na grade 3x3 (0..8) */
+    float memoryClickTimer;         /* Duracao do brilho do clique */
     bool puzzleFilesCompleted;
     int draggingFileIndex;
     int fileConnections[4];
     int rightFolderColors[4];
     float puzzleCompleteTimer;
+    int puzzleFilesErrorFolder;     /* Pasta que recebeu tentativa incorreta (-1 = nenhuma) */
+    float puzzleFilesFeedbackTimer; /* Temporizador de feedback no painel de arquivos */
+    bool puzzleFilesFeedbackIsError;
+    char puzzleFilesFeedback[128];
 
     /* --- CONTROLE TEMPORAL (1990 -> 2008 -> 2026 -> 2048) --- */
     bool year2008Unlocked;
@@ -198,11 +213,15 @@ static Font GetGameFont(float pixelSize)
 
     if (g_fontCache[px].texture.id == 0)
     {
-        /* ASCII + Latin-1 (acentos do portugues) */
-        int codepoints[95 + 96];
+        /* ASCII + Latin-1 (acentos do portugues) + simbolos extras de UI */
+        int codepoints[95 + 96 + 4];
         int count = 0;
         for (int c = 32; c <= 126; c++) codepoints[count++] = c;
         for (int c = 160; c <= 255; c++) codepoints[count++] = c;
+        codepoints[count++] = 0x2013; /* en-dash */
+        codepoints[count++] = 0x2014; /* em-dash */
+        codepoints[count++] = 0x25CF; /* black circle */
+        codepoints[count++] = 0x25CB; /* white circle */
         g_fontCache[px] = LoadFontEx(GAME_FONT_PATH, px, codepoints, count);
     }
     return g_fontCache[px];
@@ -469,11 +488,51 @@ static int ExaminedDocs2008Count(const GameState *game)
            (game->doc2008CameraExamined ? 1 : 0);
 }
 
+static void GenerateMemory1990Sequence(GameState *game)
+{
+    int prev = -1;
+    for (int i = 0; i < 5; i++)
+    {
+        int next = GetRandomValue(0, 8);
+        if (next == prev)
+        {
+            next = (next + GetRandomValue(1, 8)) % 9;
+        }
+        game->memorySequence[i] = next;
+        prev = next;
+    }
+}
+
+static void StartMemory1990Round(GameState *game, int round)
+{
+    game->memoryRound = round;
+    game->memoryInputIndex = 0;
+    game->memoryState = 0; /* Demonstrando sequencia */
+    game->memoryShowIndex = 0;
+    game->memoryLightOn = false;
+    game->memoryTimer = 0.50f;
+    game->memoryLastClicked = -1;
+    game->memoryClickTimer = 0.0f;
+}
+
+static void InitMemory1990(GameState *game)
+{
+    GenerateMemory1990Sequence(game);
+    StartMemory1990Round(game, 1);
+}
+
 static void InitRoom2Puzzle(GameState *game)
 {
+    game->memory1990Completed = false;
+    InitMemory1990(game);
+
     game->puzzleFilesCompleted = false;
     game->draggingFileIndex = -1;
     game->puzzleCompleteTimer = 0.0f;
+    game->puzzleFilesErrorFolder = -1;
+    game->puzzleFilesFeedbackTimer = 0.0f;
+    game->puzzleFilesFeedbackIsError = false;
+    game->puzzleFilesFeedback[0] = '\0';
     for (int i = 0; i < 4; i++)
     {
         game->fileConnections[i] = -1;
@@ -3742,13 +3801,21 @@ static void DrawRoom2(const GameState *game)
         DrawGameText("conectados as pastas!", 852, 362, 13, RAYWHITE);
         DrawGameText("> TRAVA DA PORTA ABERTA <", 852, 392, 13, (Color){100, 245, 150, 255});
     }
+    else if (!game->memory1990Completed)
+    {
+        DrawGameText("[!] ACESSO PROTEGIDO", 852, 316, 14, GOLD_COLOR);
+        DrawGameText("Autenticacao de memoria", 852, 340, 13, RAYWHITE);
+        DrawGameText("exigida na inicializacao.", 852, 362, 13, RAYWHITE);
+        float pBlink = 0.5f + 0.5f * sinf(time * 5.0f);
+        DrawGameText("> CLIQUE PARA DESBLOQUEAR <", 844, 392, 13, Fade(CYAN_COLOR, pBlink));
+    }
     else
     {
         DrawGameText("[!] INDEXACAO PENDENTE", 852, 316, 14, GOLD_COLOR);
         DrawGameText("Arraste os arquivos para", 852, 340, 13, RAYWHITE);
-        DrawGameText("as pastas da mesma cor.", 852, 362, 13, RAYWHITE);
+        DrawGameText("as pastas correspondentes.", 852, 362, 13, RAYWHITE);
         float pBlink = 0.5f + 0.5f * sinf(time * 5.0f);
-        DrawGameText("> CLIQUE PARA INICIAR <", 852, 392, 13, Fade(CYAN_COLOR, pBlink));
+        DrawGameText("> CLIQUE PARA ORGANIZAR <", 848, 392, 13, Fade(CYAN_COLOR, pBlink));
     }
 
     /* Teclado na mesa */
@@ -3772,7 +3839,7 @@ static void DrawRoom2(const GameState *game)
 
     /* Hotspots ao passar o mouse */
     DrawHotspot(armarios, "Examinar arquivos de fichas");
-    DrawHotspot(terminal, game->puzzleFilesCompleted ? "Terminal (Indexacao 100% OK)" : "Acessar terminal de indexacao [PUZZLE]");
+    DrawHotspot(terminal, game->puzzleFilesCompleted ? "Terminal (Indexacao 100% OK)" : (!game->memory1990Completed ? "Acessar terminal [DESBLOQUEAR ACESSO]" : "Acessar sistema de arquivos [PUZZLE]"));
     DrawHotspot(porta, game->puzzleFilesCompleted ? "Acessar porta de saida [ENTRAR]" : "Porta trancada (requer indexacao)");
     if (game->year2008Unlocked)
     {
@@ -3796,6 +3863,10 @@ static void DrawHudRoom2(const GameState *game)
     {
         DrawGameText("[OK] INDEXACAO CONCLUIDA", 665, 26, 16, (Color){80, 235, 120, 255});
     }
+    else if (!game->memory1990Completed)
+    {
+        DrawGameText("[!] TERMINAL BLOQUEADO", 665, 26, 16, GOLD_COLOR);
+    }
     else
     {
         DrawGameText("[!] INDEXACAO PENDENTE", 665, 26, 16, GOLD_COLOR);
@@ -3806,7 +3877,10 @@ static void DrawHudRoom2(const GameState *game)
 
     /* Rodapé */
     DrawRectangle(0, 650, SCREEN_WIDTH, 70, Fade(VOID_COLOR, 0.96f));
-    DrawGameText("Organize os arquivos por cor no terminal para destravar a porta.", 28, 675, 16, (Color){165, 180, 195, 255});
+    DrawGameText(game->memory1990Completed
+                 ? "Organize os arquivos por cor no terminal para destravar a porta."
+                 : "Desbloqueie o terminal de pesquisa e organize os arquivos do sistema.",
+                 28, 675, 16, (Color){165, 180, 195, 255});
 
     /* Botão de Áudio */
     Rectangle audioBtn = {840, 665, 175, 40};
@@ -3883,7 +3957,12 @@ static void UpdateRoom2(GameState *game)
 
     if (Clicked(terminal))
     {
-        if (!game->puzzleFilesCompleted)
+        if (!game->memory1990Completed)
+        {
+            InitMemory1990(game);
+            game->screen = SCREEN_MEMORY_1990;
+        }
+        else if (!game->puzzleFilesCompleted)
         {
             game->screen = SCREEN_PUZZLE_FILES;
         }
@@ -3918,6 +3997,446 @@ static void UpdateRoom2(GameState *game)
     }
 }
 
+/* ========================================================================= */
+/* ETAPA 1 (1990): MINIGAME DE MEMORIA (SISTEMA DE ACESSO INICIAL)           */
+/* ========================================================================= */
+
+static void DrawMemoryProgressDots(int startX, int y, int completedStages, int activeRound, bool isError)
+{
+    DrawGameText("[", startX, y - 9, 20, LIGHTGRAY);
+    for (int s = 0; s < 5; s++)
+    {
+        int cx = startX + 24 + s * 28;
+        int cy = y;
+        if (s < completedStages)
+        {
+            DrawCircle(cx, cy, 7.0f, (Color){60, 235, 110, 255});
+            DrawCircleLines(cx, cy, 7.0f, RAYWHITE);
+        }
+        else if (isError && s == activeRound - 1)
+        {
+            DrawCircle(cx, cy, 7.0f, RED_COLOR);
+            DrawCircleLines(cx, cy, 7.0f, RAYWHITE);
+        }
+        else if (s == activeRound - 1)
+        {
+            DrawCircle(cx, cy, 7.0f, Fade(GOLD_COLOR, 0.35f));
+            DrawCircleLines(cx, cy, 7.0f, GOLD_COLOR);
+        }
+        else
+        {
+            DrawCircleLines(cx, cy, 7.0f, (Color){110, 130, 145, 255});
+        }
+    }
+    DrawGameText("]", startX + 24 + 5 * 28 - 8, y - 9, 20, LIGHTGRAY);
+}
+
+static void DrawMemory1990(const GameState *game)
+{
+    float time = (float)GetTime();
+    Vector2 mouse = GetVirtualMouse();
+
+    /* Escurecimento do fundo */
+    DrawRectangle(0, 0, SCREEN_WIDTH, SCREEN_HEIGHT, Fade(BLACK, 0.88f));
+
+    /* Painel Principal do Terminal 1990 */
+    Rectangle panel = {190, 45, 900, 630};
+    DrawRectangleRounded(panel, 0.03f, 8, (Color){20, 27, 34, 255});
+    DrawRectangleRoundedLinesEx(panel, 0.03f, 8, 3.0f, (Color){75, 95, 110, 255});
+
+    /* Parafusos metalicos nos cantos */
+    DrawCircle((int)panel.x + 16, (int)panel.y + 16, 5, (Color){185, 195, 205, 255});
+    DrawCircle((int)(panel.x + panel.width - 16), (int)panel.y + 16, 5, (Color){185, 195, 205, 255});
+    DrawCircle((int)panel.x + 16, (int)(panel.y + panel.height - 16), 5, (Color){185, 195, 205, 255});
+    DrawCircle((int)(panel.x + panel.width - 16), (int)(panel.y + panel.height - 16), 5, (Color){185, 195, 205, 255});
+
+    /* Barra superior do painel */
+    Rectangle topBar = {220, 62, 720, 42};
+    DrawRectangleRounded(topBar, 0.16f, 6, (Color){12, 18, 24, 255});
+    DrawRectangleRoundedLinesEx(topBar, 0.16f, 6, 1.5f, (Color){55, 78, 95, 255});
+    DrawGameText("TERMINAL DE PESQUISA — 1990", 238, 74, 18, CYAN_COLOR);
+
+    int completedStages = (game->memoryState == 4) ? 5 : ((game->memoryState == 2) ? game->memoryRound : (game->memoryRound - 1));
+    DrawGameText("PROGRESSO:", 625, 75, 15, LIGHTGRAY);
+    DrawMemoryProgressDots(730, 83, completedStages, game->memoryRound, game->memoryState == 3);
+
+    /* Botao sair [X] */
+    Rectangle btnClose = {960, 63, 110, 38};
+    DrawButton(btnClose, "SAIR [X]", RED_COLOR);
+
+    /* ===================================================================== */
+    /* LADO ESQUERDO: VISOR / MONITOR DE SEQUENCIA DE INICIALIZACAO          */
+    /* ===================================================================== */
+    Rectangle leftMonitor = {220, 120, 405, 485};
+    DrawRectangleRounded(leftMonitor, 0.04f, 8, (Color){14, 24, 20, 255});
+    Color monBorder = (game->memoryState == 3) ? RED_COLOR :
+                      ((game->memoryState == 2 || game->memoryState == 4) ? (Color){60, 235, 110, 255} : (Color){68, 135, 105, 255});
+    DrawRectangleRoundedLinesEx(leftMonitor, 0.04f, 8, 2.5f, monBorder);
+
+    /* Cabecalho narrativo do visor CRT */
+    DrawGameText("TERMINAL DE PESQUISA — 1990", (int)leftMonitor.x + 22, (int)leftMonitor.y + 18, 16, (Color){95, 235, 155, 255});
+    DrawGameText("SISTEMA DE ACESSO INICIAL", (int)leftMonitor.x + 22, (int)leftMonitor.y + 42, 18, GOLD_COLOR);
+    DrawLine((int)leftMonitor.x + 22, (int)leftMonitor.y + 68, (int)(leftMonitor.x + leftMonitor.width - 22), (int)leftMonitor.y + 68, Fade((Color){95, 235, 155, 255}, 0.35f));
+
+    DrawGameText("Para acessar o banco de dados,", (int)leftMonitor.x + 22, (int)leftMonitor.y + 78, 15, RAYWHITE);
+    DrawGameText("repita corretamente a sequência", (int)leftMonitor.x + 22, (int)leftMonitor.y + 98, 15, RAYWHITE);
+    DrawGameText("de inicialização do sistema.", (int)leftMonitor.x + 22, (int)leftMonitor.y + 118, 15, RAYWHITE);
+
+    /* Sub-visor 3x3 de demonstracao da sequencia */
+    Rectangle visorBox = {leftMonitor.x + 68, leftMonitor.y + 148, 270, 228};
+    DrawRectangleRounded(visorBox, 0.06f, 6, (Color){8, 15, 13, 255});
+    DrawRectangleRoundedLinesEx(visorBox, 0.06f, 6, 1.5f, (Color){45, 95, 75, 255});
+    DrawGameText(TextFormat("VISOR DE SEQUÊNCIA // ETAPA %d/5", game->memoryRound), (int)visorBox.x + 22, (int)visorBox.y + 10, 13, CYAN_COLOR);
+
+    int activeShowPos = (game->memoryState == 0 && game->memoryLightOn && game->memoryShowIndex < game->memoryRound)
+                        ? game->memorySequence[game->memoryShowIndex]
+                        : -1;
+
+    for (int idx = 0; idx < 9; idx++)
+    {
+        int r = idx / 3;
+        int c = idx % 3;
+        Rectangle cell = {visorBox.x + 42 + c * 66, visorBox.y + 36 + r * 60, 54, 50};
+        bool lit = (activeShowPos == idx);
+        bool completedFlash = (game->memoryState == 2 || game->memoryState == 4);
+        bool errorFlash = (game->memoryState == 3);
+
+        Color cellBg = (Color){18, 32, 28, 255};
+        Color cellBorder = (Color){48, 88, 72, 255};
+        if (lit)
+        {
+            cellBg = CYAN_COLOR;
+            cellBorder = RAYWHITE;
+        }
+        else if (completedFlash)
+        {
+            cellBg = Fade((Color){60, 235, 110, 255}, 0.35f);
+            cellBorder = (Color){60, 235, 110, 255};
+        }
+        else if (errorFlash)
+        {
+            cellBg = Fade(RED_COLOR, 0.30f);
+            cellBorder = RED_COLOR;
+        }
+
+        DrawRectangleRounded(cell, 0.18f, 6, cellBg);
+        DrawRectangleRoundedLinesEx(cell, 0.18f, 6, lit ? 2.5f : 1.5f, cellBorder);
+        if (lit)
+        {
+            DrawCircle((int)(cell.x + cell.width * 0.5f), (int)(cell.y + cell.height * 0.5f), 10, RAYWHITE);
+        }
+    }
+
+    /* Caixa de feedback no rodape do monitor esquerdo */
+    Rectangle statusBox = {leftMonitor.x + 20, leftMonitor.y + 390, leftMonitor.width - 40, 78};
+    DrawRectangleRounded(statusBox, 0.10f, 6, (Color){10, 18, 16, 255});
+    DrawRectangleRoundedLinesEx(statusBox, 0.10f, 6, 1.5f, monBorder);
+
+    if (game->memoryState == 0)
+    {
+        float pulse = 0.55f + 0.45f * sinf(time * 6.0f);
+        DrawGameText("DEMONSTRANDO SEQUÊNCIA...", (int)statusBox.x + 18, (int)statusBox.y + 16, 16, Fade(GOLD_COLOR, pulse));
+        DrawGameText("Observe os pontos acesos no visor.", (int)statusBox.x + 18, (int)statusBox.y + 44, 14, LIGHTGRAY);
+    }
+    else if (game->memoryState == 1)
+    {
+        DrawGameText("AGUARDANDO REPETIÇÃO DO JOGADOR", (int)statusBox.x + 18, (int)statusBox.y + 16, 16, CYAN_COLOR);
+        DrawGameText(TextFormat("Clique na grade à direita (%d / %d).", game->memoryInputIndex, game->memoryRound),
+                     (int)statusBox.x + 18, (int)statusBox.y + 44, 14, RAYWHITE);
+    }
+    else if (game->memoryState == 2)
+    {
+        DrawGameText(TextFormat("ETAPA %d/5 VALIDADA", game->memoryRound), (int)statusBox.x + 18, (int)statusBox.y + 16, 18, (Color){60, 235, 110, 255});
+        DrawGameText("Sincronizando próxima camada de memória...", (int)statusBox.x + 18, (int)statusBox.y + 44, 14, RAYWHITE);
+    }
+    else if (game->memoryState == 3)
+    {
+        DrawGameText("ERRO DE SEQUÊNCIA", (int)statusBox.x + 18, (int)statusBox.y + 16, 18, RED_COLOR);
+        DrawGameText("REINICIANDO VERIFICAÇÃO...", (int)statusBox.x + 18, (int)statusBox.y + 44, 15, GOLD_COLOR);
+    }
+    else if (game->memoryState == 4)
+    {
+        DrawGameText("ACESSO AUTORIZADO", (int)statusBox.x + 18, (int)statusBox.y + 16, 19, (Color){60, 235, 110, 255});
+        DrawGameText("Carregando sistema de arquivos...", (int)statusBox.x + 18, (int)statusBox.y + 44, 15, RAYWHITE);
+    }
+
+    /* ===================================================================== */
+    /* LADO DIREITO: GRADE INTERATIVA 3x3 DO JOGADOR                         */
+    /* ===================================================================== */
+    Rectangle rightPanel = {645, 120, 415, 485};
+    DrawRectangleRounded(rightPanel, 0.04f, 8, (Color){16, 22, 30, 255});
+    DrawRectangleRoundedLinesEx(rightPanel, 0.04f, 8, 2.0f,
+                                (game->memoryState == 1) ? CYAN_COLOR : (Color){55, 72, 88, 255});
+
+    DrawGameText("MATRIZ DE ENTRADA // GRADE 3x3", (int)rightPanel.x + 24, (int)rightPanel.y + 18, 17, RAYWHITE);
+    if (game->memoryState == 1)
+    {
+        DrawGameText("STATUS: ENTRADA LIBERADA — SUA VEZ!", (int)rightPanel.x + 24, (int)rightPanel.y + 44, 14, (Color){60, 235, 110, 255});
+    }
+    else if (game->memoryState == 0)
+    {
+        DrawGameText("STATUS: BLOQUEADO DURANTE DEMONSTRAÇÃO", (int)rightPanel.x + 24, (int)rightPanel.y + 44, 14, GOLD_COLOR);
+    }
+    else
+    {
+        DrawGameText("STATUS: PROCESSANDO VERIFICAÇÃO...", (int)rightPanel.x + 24, (int)rightPanel.y + 44, 14, LIGHTGRAY);
+    }
+
+    /* Indicadores de progresso no topo da grade direita */
+    DrawMemoryProgressDots((int)rightPanel.x + 118, (int)rightPanel.y + 82, completedStages, game->memoryRound, game->memoryState == 3);
+
+    /* Grade 3x3 de botoes interativos */
+    bool canInput = (game->memoryState == 1);
+    for (int idx = 0; idx < 9; idx++)
+    {
+        int r = idx / 3;
+        int c = idx % 3;
+        Rectangle btn = {rightPanel.x + 46 + c * 112, rightPanel.y + 112 + r * 106, 98, 92};
+        bool hover = canInput && CheckCollisionPointRec(mouse, btn);
+        bool clickedFlash = (game->memoryLastClicked == idx && game->memoryClickTimer > 0.0f);
+        bool demoHighlight = (activeShowPos == idx);
+
+        Color btnBg = (Color){28, 38, 50, 255};
+        Color btnBorder = (Color){70, 92, 112, 255};
+
+        if (clickedFlash)
+        {
+            btnBg = (game->memoryState == 3) ? RED_COLOR : (Color){60, 235, 110, 255};
+            btnBorder = RAYWHITE;
+        }
+        else if (demoHighlight)
+        {
+            btnBg = Fade(CYAN_COLOR, 0.32f);
+            btnBorder = CYAN_COLOR;
+        }
+        else if (hover)
+        {
+            btnBg = (Color){42, 62, 82, 255};
+            btnBorder = CYAN_COLOR;
+        }
+
+        DrawRectangleRounded(btn, 0.16f, 6, btnBg);
+        DrawRectangleRoundedLinesEx(btn, 0.16f, 6, (hover || clickedFlash || demoHighlight) ? 2.5f : 2.0f, btnBorder);
+
+        /* Detalhe central do botao da matriz */
+        Rectangle innerPad = {btn.x + 22, btn.y + 20, btn.width - 44, btn.height - 40};
+        DrawRectangleRounded(innerPad, 0.2f, 4,
+                             clickedFlash ? RAYWHITE : (hover ? Fade(CYAN_COLOR, 0.35f) : (Color){20, 28, 38, 255}));
+        DrawGameText(TextFormat("0%d", idx + 1), (int)btn.x + 10, (int)btn.y + 8, 12,
+                     clickedFlash ? (Color){15, 25, 35, 255} : Fade(LIGHTGRAY, 0.65f));
+    }
+
+    /* Barra inferior de progresso de cliques da rodada */
+    DrawGameText(TextFormat("SEQUÊNCIA DA ETAPA %d: %d / %d POSIÇÕES",
+                            game->memoryRound, game->memoryInputIndex, game->memoryRound),
+                 (int)rightPanel.x + 52, (int)rightPanel.y + 442, 15, LIGHTGRAY);
+
+    /* Rodape do painel */
+    DrawGameText("Dica: Observe a ordem em que os blocos acendem no visor e repita na grade 3x3.",
+                 265, 628, 16, LIGHTGRAY);
+
+    /* Modal de conclusao quando as 5 etapas sao finalizadas */
+    if (game->memoryState == 4)
+    {
+        Rectangle authBox = {350, 235, 580, 210};
+        DrawRectangleRounded(authBox, 0.08f, 8, Fade(PANEL_COLOR, 0.98f));
+        DrawRectangleRoundedLinesEx(authBox, 0.08f, 8, 3.0f, (Color){60, 235, 110, 255});
+
+        CenterText("ACESSO AUTORIZADO", 272, 28, (Color){60, 235, 110, 255});
+        CenterText("Carregando sistema de arquivos...", 320, 20, RAYWHITE);
+
+        float loadRatio = 1.0f - (game->memoryTimer / 1.6f);
+        if (loadRatio < 0.0f) loadRatio = 0.0f;
+        if (loadRatio > 1.0f) loadRatio = 1.0f;
+        Rectangle barRec = {430, 368, 420, 24};
+        DrawRectangleRounded(barRec, 0.3f, 6, (Color){12, 18, 26, 255});
+        DrawRectangleRounded((Rectangle){barRec.x + 3, barRec.y + 3, (barRec.width - 6) * loadRatio, barRec.height - 6},
+                             0.3f, 6, (Color){60, 235, 110, 255});
+        DrawRectangleRoundedLinesEx(barRec, 0.3f, 6, 1.5f, CYAN_COLOR);
+    }
+}
+
+static void UpdateMemory1990(GameState *game)
+{
+    float delta = GetFrameTime();
+    Vector2 mouse = GetVirtualMouse();
+
+    Rectangle btnClose = {960, 63, 110, 38};
+    if (Clicked(btnClose) || IsKeyPressed(KEY_ESCAPE))
+    {
+        game->screen = SCREEN_ROOM_2;
+        return;
+    }
+
+    if (game->memoryClickTimer > 0.0f)
+    {
+        game->memoryClickTimer -= delta;
+        if (game->memoryClickTimer <= 0.0f)
+        {
+            game->memoryLastClicked = -1;
+        }
+    }
+
+    if (game->memoryState == 0)
+    {
+        /* Demonstrando a sequencia (jogador bloqueado) */
+        game->memoryTimer -= delta;
+        if (game->memoryTimer <= 0.0f)
+        {
+            if (!game->memoryLightOn)
+            {
+                if (game->memoryShowIndex < game->memoryRound)
+                {
+                    game->memoryLightOn = true;
+                    game->memoryTimer = 0.55f;
+                }
+                else
+                {
+                    game->memoryState = 1; /* Libera entrada do jogador */
+                    game->memoryInputIndex = 0;
+                }
+            }
+            else
+            {
+                game->memoryLightOn = false;
+                game->memoryShowIndex++;
+                game->memoryTimer = (game->memoryShowIndex < game->memoryRound) ? 0.24f : 0.16f;
+            }
+        }
+    }
+    else if (game->memoryState == 1)
+    {
+        /* Entrada do jogador liberada na grade 3x3 */
+        if (IsMouseButtonPressed(MOUSE_BUTTON_LEFT))
+        {
+            Rectangle rightPanel = {645, 120, 415, 485};
+            for (int idx = 0; idx < 9; idx++)
+            {
+                int r = idx / 3;
+                int c = idx % 3;
+                Rectangle btn = {rightPanel.x + 46 + c * 112, rightPanel.y + 112 + r * 106, 98, 92};
+                if (CheckCollisionPointRec(mouse, btn))
+                {
+                    game->memoryLastClicked = idx;
+                    game->memoryClickTimer = 0.28f;
+
+                    if (idx == game->memorySequence[game->memoryInputIndex])
+                    {
+                        game->memoryInputIndex++;
+                        if (game->memoryInputIndex >= game->memoryRound)
+                        {
+                            if (game->memoryRound < 5)
+                            {
+                                game->memoryState = 2; /* Etapa validada */
+                                game->memoryTimer = 1.0f;
+                            }
+                            else
+                            {
+                                game->memory1990Completed = true;
+                                game->memoryState = 4; /* Acesso autorizado */
+                                game->memoryTimer = 1.6f;
+                            }
+                        }
+                    }
+                    else
+                    {
+                        /* Erro de sequencia: reinicia verificacao sem perder vida */
+                        game->memoryState = 3;
+                        game->memoryTimer = 1.4f;
+                    }
+                    break;
+                }
+            }
+        }
+    }
+    else if (game->memoryState == 2)
+    {
+        /* Feedback de etapa validada -> avanca para proxima rodada cumulativa */
+        game->memoryTimer -= delta;
+        if (game->memoryTimer <= 0.0f)
+        {
+            StartMemory1990Round(game, game->memoryRound + 1);
+        }
+    }
+    else if (game->memoryState == 3)
+    {
+        /* Feedback de erro -> reinicia sequencia da etapa atual */
+        game->memoryTimer -= delta;
+        if (game->memoryTimer <= 0.0f)
+        {
+            StartMemory1990Round(game, game->memoryRound);
+        }
+    }
+    else if (game->memoryState == 4)
+    {
+        /* Acesso autorizado -> abre sistema de arquivos */
+        game->memoryTimer -= delta;
+        if (game->memoryTimer <= 0.0f || IsKeyPressed(KEY_ENTER) || IsKeyPressed(KEY_SPACE) || IsMouseButtonPressed(MOUSE_BUTTON_LEFT))
+        {
+            game->screen = SCREEN_PUZZLE_FILES;
+        }
+    }
+}
+
+/* ========================================================================= */
+/* ETAPA 2 (1990): PUZZLE DE ARQUIVOS E PASTAS (SPRITES E DRAG & DROP)       */
+/* ========================================================================= */
+
+static void DrawDigitalFileIcon(float x, float y, Color accentColor)
+{
+    /* Sombra do documento */
+    DrawRectangle((int)x + 2, (int)y + 3, 34, 44, Fade(BLACK, 0.35f));
+
+    /* Corpo da folha de arquivo digital */
+    DrawRectangle((int)x, (int)y, 34, 44, PAPER_COLOR);
+    DrawRectangleLines((int)x, (int)y, 34, 44, (Color){170, 160, 138, 255});
+
+    /* Dobra superior direita da folha */
+    DrawTriangle((Vector2){x + 24, y}, (Vector2){x + 34, y + 10}, (Vector2){x + 24, y + 10}, (Color){185, 175, 150, 255});
+    DrawTriangle((Vector2){x + 24, y}, (Vector2){x + 34, y}, (Vector2){x + 34, y + 10}, (Color){38, 48, 56, 255});
+
+    /* Faixa superior de identificacao de cor do arquivo */
+    DrawRectangle((int)x + 3, (int)y + 4, 18, 6, accentColor);
+
+    /* Linhas internas de dados / codigo */
+    DrawRectangle((int)x + 5, (int)y + 15, 24, 3, (Color){70, 75, 82, 255});
+    DrawRectangle((int)x + 5, (int)y + 21, 20, 3, (Color){95, 100, 108, 255});
+    DrawRectangle((int)x + 5, (int)y + 27, 24, 3, (Color){95, 100, 108, 255});
+    DrawRectangle((int)x + 5, (int)y + 34, 15, 4, accentColor);
+}
+
+static void DrawFolderDirectoryIcon(float x, float y, Color folderColor, bool hasFile)
+{
+    Color backCol = {
+        (unsigned char)(folderColor.r * 0.72f),
+        (unsigned char)(folderColor.g * 0.72f),
+        (unsigned char)(folderColor.b * 0.72f),
+        255
+    };
+
+    /* Sombra da pasta */
+    DrawRectangleRounded((Rectangle){x + 2, y + 8, 44, 32}, 0.15f, 4, Fade(BLACK, 0.38f));
+
+    /* Aba superior esquerda da pasta (diretorio) */
+    DrawRectangleRounded((Rectangle){x, y + 2, 20, 10}, 0.25f, 4, backCol);
+
+    /* Parte traseira da pasta */
+    DrawRectangleRounded((Rectangle){x, y + 7, 44, 31}, 0.12f, 4, backCol);
+
+    /* Folha de arquivo inserida dentro da pasta quando conectada */
+    if (hasFile)
+    {
+        DrawRectangle((int)x + 6, (int)y + 5, 30, 14, PAPER_COLOR);
+        DrawLine((int)x + 9, (int)y + 9, (int)x + 31, (int)y + 9, folderColor);
+    }
+
+    /* Bolso frontal da pasta na cor associada */
+    Rectangle frontPocket = {x, y + 13, 44, 25};
+    DrawRectangleRounded(frontPocket, 0.15f, 4, folderColor);
+    DrawRectangleRoundedLinesEx(frontPocket, 0.15f, 4, 1.5f, Fade(RAYWHITE, 0.65f));
+    DrawLine((int)x + 4, (int)y + 17, (int)x + 40, (int)y + 17, Fade(RAYWHITE, 0.45f));
+}
+
 static void DrawPuzzleFiles(const GameState *game)
 {
     float time = (float)GetTime();
@@ -3926,7 +4445,7 @@ static void DrawPuzzleFiles(const GameState *game)
     /* Escurecimento do fundo */
     DrawRectangle(0, 0, SCREEN_WIDTH, SCREEN_HEIGHT, Fade(BLACK, 0.88f));
 
-    /* Painel Central Estilo Among Us / Gabinete de Indexação dos Anos 90 */
+    /* Painel Central do Sistema de Arquivos de 1990 */
     Rectangle panel = {190, 45, 900, 630};
     DrawRectangleRounded(panel, 0.03f, 8, (Color){20, 27, 34, 255});
     DrawRectangleRoundedLinesEx(panel, 0.03f, 8, 3.0f, (Color){75, 95, 110, 255});
@@ -3937,23 +4456,23 @@ static void DrawPuzzleFiles(const GameState *game)
     DrawCircle((int)panel.x + 16, (int)(panel.y + panel.height - 16), 5, (Color){185, 195, 205, 255});
     DrawCircle((int)(panel.x + panel.width - 16), (int)(panel.y + panel.height - 16), 5, (Color){185, 195, 205, 255});
 
-    /* Calha central interna escura com cabos passando ao fundo (estilo Among Us) */
-    DrawRectangle(475, 120, 330, 470, (Color){12, 16, 20, 255});
-    DrawRectangleLinesEx((Rectangle){475, 120, 330, 470}, 2, (Color){30, 40, 48, 255});
+    /* Calha central interna escura onde as conexoes e o arrasto aparecem */
+    DrawRectangle(475, 120, 330, 460, (Color){12, 16, 20, 255});
+    DrawRectangleLinesEx((Rectangle){475, 120, 330, 460}, 2, (Color){30, 40, 48, 255});
 
     /* Feixes de cabos ao fundo na calha */
-    DrawLineEx((Vector2){580, 120}, (Vector2){620, 590}, 16, Fade((Color){85, 20, 20, 255}, 0.7f));
-    DrawLineEx((Vector2){650, 120}, (Vector2){640, 590}, 18, Fade((Color){20, 45, 85, 255}, 0.7f));
-    DrawLineEx((Vector2){700, 120}, (Vector2){670, 590}, 14, Fade((Color){85, 70, 20, 255}, 0.7f));
+    DrawLineEx((Vector2){580, 120}, (Vector2){620, 580}, 16, Fade((Color){85, 20, 20, 255}, 0.7f));
+    DrawLineEx((Vector2){650, 120}, (Vector2){640, 580}, 18, Fade((Color){20, 45, 85, 255}, 0.7f));
+    DrawLineEx((Vector2){700, 120}, (Vector2){670, 580}, 14, Fade((Color){85, 70, 20, 255}, 0.7f));
 
-    /* --- BARRA DE STATUS / PROGRESSO ESTILO AMONG US NO TOPO --- */
+    /* --- CABECALHO DE PROGRESSO NO TOPO --- */
     int connectedCount = 0;
     for (int k = 0; k < 4; k++)
     {
         if (game->fileConnections[k] != -1) connectedCount++;
     }
 
-    Rectangle taskBar = {220, 65, 520, 34};
+    Rectangle taskBar = {220, 63, 520, 36};
     DrawRectangleRounded(taskBar, 0.2f, 6, (Color){10, 14, 18, 255});
     DrawRectangleRoundedLinesEx(taskBar, 0.2f, 6, 2, RAYWHITE);
 
@@ -3962,16 +4481,20 @@ static void DrawPuzzleFiles(const GameState *game)
     {
         DrawRectangleRounded((Rectangle){taskBar.x + 3, taskBar.y + 3, progressW, taskBar.height - 6}, 0.2f, 4, (Color){60, 235, 110, 255});
     }
-    DrawGameText(TextFormat("TOTAL DE ARQUIVOS CONECTADOS: %d / 4", connectedCount), (int)taskBar.x + 80, (int)taskBar.y + 8, 17, RAYWHITE);
+    DrawGameText(TextFormat("TOTAL DE ARQUIVOS CONECTADOS: %d / 4", connectedCount), (int)taskBar.x + 76, (int)taskBar.y + 9, 17, RAYWHITE);
 
     /* Botão fechar [X] */
     Rectangle btnClose = {960, 63, 110, 38};
     DrawButton(btnClose, "SAIR [X]", RED_COLOR);
 
-    /* Posições verticais dos 4 slots */
-    int ySlots[4] = { 135, 250, 365, 480 };
+    /* Titulos das colunas */
+    DrawGameText("ARQUIVOS DE DADOS", 252, 110, 15, CYAN_COLOR);
+    DrawGameText("PASTAS DE DESTINO", 864, 110, 15, GOLD_COLOR);
 
-    /* --- LADO ESQUERDO: 4 ARQUIVOS COM CORES FIXAS (0=Amarelo, 1=Vermelho, 2=Azul, 3=Rosa) --- */
+    /* Posições verticais dos 4 slots */
+    int ySlots[4] = { 135, 248, 361, 474 };
+
+    /* --- LADO ESQUERDO: 4 ARQUIVOS COM SPRITES DE DOCUMENTO DIGITAL --- */
     const char *fileNames[4] = {
         "PARAM_NEURAL.DAT",
         "CORE_SISTEMA.SYS",
@@ -3982,25 +4505,29 @@ static void DrawPuzzleFiles(const GameState *game)
     for (int i = 0; i < 4; i++)
     {
         int y = ySlots[i];
-        Rectangle fRec = {220, (float)y, 230, 84};
+        Rectangle fRec = {220, (float)y, 235, 84};
         Color wColor = GetFileWireColor(i);
         bool isConnected = (game->fileConnections[i] != -1);
         bool isDraggingThis = (game->draggingFileIndex == i);
+        bool hoverFile = (!game->puzzleFilesCompleted && game->draggingFileIndex == -1 && CheckCollisionPointRec(mouse, fRec));
 
         /* Card do arquivo */
-        DrawRectangleRounded(fRec, 0.12f, 6, (Color){38, 48, 56, 255});
-        DrawRectangleRoundedLinesEx(fRec, 0.12f, 6, 2, isDraggingThis ? wColor : (isConnected ? (Color){90, 220, 130, 255} : (Color){70, 85, 98, 255}));
+        Color cardBg = isDraggingThis ? (Color){28, 36, 44, 255} : (hoverFile ? (Color){46, 58, 68, 255} : (Color){38, 48, 56, 255});
+        DrawRectangleRounded(fRec, 0.12f, 6, cardBg);
+        DrawRectangleRoundedLinesEx(fRec, 0.12f, 6, (isDraggingThis || hoverFile) ? 2.5f : 2.0f,
+                                    (isDraggingThis || hoverFile) ? wColor : (isConnected ? (Color){90, 220, 130, 255} : (Color){70, 85, 98, 255}));
 
         /* Tarja vertical com a cor do arquivo */
-        DrawRectangleRounded((Rectangle){fRec.x + 4, fRec.y + 4, 18, fRec.height - 8}, 0.3f, 4, wColor);
+        DrawRectangleRounded((Rectangle){fRec.x + 4, fRec.y + 4, 12, fRec.height - 8}, 0.3f, 4, wColor);
 
-        /* Ícone de documento */
-        DrawRectangle((int)fRec.x + 30, (int)fRec.y + 16, 22, 28, PAPER_COLOR);
-        DrawTriangle((Vector2){fRec.x + 44, fRec.y + 16}, (Vector2){fRec.x + 52, fRec.y + 24}, (Vector2){fRec.x + 44, fRec.y + 24}, (Color){190, 180, 155, 255});
+        /* Sprite / icone de folha / arquivo digital */
+        DrawDigitalFileIcon(fRec.x + 22, fRec.y + 20, wColor);
 
-        /* Textos */
-        DrawGameText(fileNames[i], (int)fRec.x + 60, (int)fRec.y + 22, 13, RAYWHITE);
-        DrawGameText("ARQUIVO DE DADOS", (int)fRec.x + 60, (int)fRec.y + 44, 12, Fade(wColor, 0.9f));
+        /* Textos do arquivo */
+        DrawGameText(fileNames[i], (int)fRec.x + 64, (int)fRec.y + 20, 13, RAYWHITE);
+        DrawGameText(isConnected ? "ARQUIVO VINCULADO" : "ARQUIVO DE DADOS",
+                     (int)fRec.x + 64, (int)fRec.y + 44, 12,
+                     isConnected ? (Color){90, 235, 135, 255} : Fade(wColor, 0.95f));
 
         /* Terminal/conector de saída no lado direito do card */
         Vector2 termL = {fRec.x + fRec.width, fRec.y + fRec.height * 0.5f};
@@ -4014,7 +4541,7 @@ static void DrawPuzzleFiles(const GameState *game)
         }
     }
 
-    /* --- LADO DIREITO: 4 PASTAS SUSPENSAS (ORDEM EMBARALHADA) --- */
+    /* --- LADO DIREITO: 4 PASTAS / DIRETORIOS DE DESTINO --- */
     const char *folderNames[4] = {
         "PASTA: PARAMETROS",
         "PASTA: SISTEMA",
@@ -4025,7 +4552,7 @@ static void DrawPuzzleFiles(const GameState *game)
     for (int j = 0; j < 4; j++)
     {
         int y = ySlots[j];
-        Rectangle foldRec = {830, (float)y, 230, 84};
+        Rectangle foldRec = {825, (float)y, 235, 84};
         int folderColorIdx = game->rightFolderColors[j];
         Color folderColor = GetFileWireColor(folderColorIdx);
 
@@ -4036,20 +4563,31 @@ static void DrawPuzzleFiles(const GameState *game)
             if (game->fileConnections[k] == j) hasConnectedFile = true;
         }
 
-        /* Card da pasta suspensa kraft */
-        DrawRectangleRounded(foldRec, 0.12f, 6, (Color){50, 42, 34, 255});
-        DrawRectangleRoundedLinesEx(foldRec, 0.12f, 6, 2, hasConnectedFile ? (Color){90, 230, 130, 255} : (Color){105, 88, 70, 255});
+        Rectangle dropZone = {805, (float)y, 255, 84};
+        bool hoverDrop = (game->draggingFileIndex != -1 && CheckCollisionPointRec(mouse, dropZone));
+        bool isErrorFolder = (game->puzzleFilesErrorFolder == j && game->puzzleFilesFeedbackTimer > 0.0f && game->puzzleFilesFeedbackIsError);
+
+        /* Card da pasta / diretorio */
+        Color foldBg = isErrorFolder ? (Color){75, 28, 32, 255} : (hoverDrop ? (Color){62, 54, 44, 255} : (Color){50, 42, 34, 255});
+        Color foldBorder = isErrorFolder ? RED_COLOR : (hasConnectedFile ? (Color){90, 230, 130, 255} : (hoverDrop ? folderColor : (Color){105, 88, 70, 255}));
+        DrawRectangleRounded(foldRec, 0.12f, 6, foldBg);
+        DrawRectangleRoundedLinesEx(foldRec, 0.12f, 6, (hoverDrop || isErrorFolder) ? 2.8f : 2.0f, foldBorder);
 
         /* Aba/orelha superior colorida da pasta */
-        DrawRectangleRounded((Rectangle){foldRec.x + 18, foldRec.y + 4, 110, 14}, 0.3f, 4, folderColor);
+        DrawRectangleRounded((Rectangle){foldRec.x + 18, foldRec.y + 4, 110, 10}, 0.3f, 4, folderColor);
 
-        /* Etiqueta e nome da pasta */
-        DrawGameText(folderNames[folderColorIdx], (int)foldRec.x + 22, (int)foldRec.y + 26, 14, RAYWHITE);
-        DrawGameText("DIRETORIO DE DESTINO", (int)foldRec.x + 22, (int)foldRec.y + 48, 12, Fade(folderColor, 0.9f));
+        /* Sprite / icone de pasta de diretorio */
+        DrawFolderDirectoryIcon(foldRec.x + 20, foldRec.y + 22, folderColor, hasConnectedFile);
+
+        /* Nome da pasta e subtitulo */
+        DrawGameText(folderNames[folderColorIdx], (int)foldRec.x + 70, (int)foldRec.y + 22, 13, RAYWHITE);
+        DrawGameText(hasConnectedFile ? "ARQUIVO RECEBIDO" : "DIRETORIO DE DESTINO",
+                     (int)foldRec.x + 70, (int)foldRec.y + 44, 12,
+                     hasConnectedFile ? (Color){90, 235, 135, 255} : Fade(folderColor, 0.95f));
 
         /* LED indicador de status na pasta */
-        DrawCircle((int)foldRec.x + 195, (int)foldRec.y + 24, 5, hasConnectedFile ? (Color){60, 245, 110, 255} : (Color){140, 35, 35, 255});
-        DrawCircleLines((int)foldRec.x + 195, (int)foldRec.y + 24, 5, RAYWHITE);
+        DrawCircle((int)foldRec.x + 216, (int)foldRec.y + 20, 5, hasConnectedFile ? (Color){60, 245, 110, 255} : (Color){140, 35, 35, 255});
+        DrawCircleLines((int)foldRec.x + 216, (int)foldRec.y + 20, 5, RAYWHITE);
 
         /* Terminal/receptáculo de entrada no lado esquerdo da pasta */
         Vector2 termR = {foldRec.x, foldRec.y + foldRec.height * 0.5f};
@@ -4063,14 +4601,14 @@ static void DrawPuzzleFiles(const GameState *game)
         }
     }
 
-    /* --- DESENHO DOS CABOS / FIOS CONECTADOS --- */
+    /* --- DESENHO DOS CABOS / CONEXOES CONFIRMADAS --- */
     for (int i = 0; i < 4; i++)
     {
         if (game->fileConnections[i] != -1)
         {
             int j = game->fileConnections[i];
-            Vector2 p1 = {450.0f, ySlots[i] + 42.0f};
-            Vector2 p2 = {830.0f, ySlots[j] + 42.0f};
+            Vector2 p1 = {455.0f, ySlots[i] + 42.0f};
+            Vector2 p2 = {825.0f, ySlots[j] + 42.0f};
             Color col = GetFileWireColor(i);
 
             /* Sombra do cabo */
@@ -4086,50 +4624,75 @@ static void DrawPuzzleFiles(const GameState *game)
         }
     }
 
-    /* --- DESENHO DO CABO SENDO ARRASTADO --- */
+    /* --- DESENHO DO ARQUIVO E CABO SENDO ARRASTADOS --- */
     if (game->draggingFileIndex != -1)
     {
         int i = game->draggingFileIndex;
-        Vector2 p1 = {450.0f, ySlots[i] + 42.0f};
+        Vector2 p1 = {455.0f, ySlots[i] + 42.0f};
         Vector2 p2 = mouse;
         Color col = GetFileWireColor(i);
 
-        /* Sombra */
-        DrawLineEx((Vector2){p1.x + 3, p1.y + 4}, (Vector2){p2.x + 3, p2.y + 4}, 14.0f, Fade(BLACK, 0.40f));
-        /* Corpo do cabo */
-        DrawLineEx(p1, p2, 10.0f, col);
-        /* Brilho */
-        DrawLineEx((Vector2){p1.x, p1.y - 1}, (Vector2){p2.x, p2.y - 1}, 3.0f, Fade(RAYWHITE, 0.65f));
+        /* Sombra e corpo da linha de conexao */
+        DrawLineEx((Vector2){p1.x + 3, p1.y + 4}, (Vector2){p2.x + 3, p2.y + 4}, 12.0f, Fade(BLACK, 0.40f));
+        DrawLineEx(p1, p2, 8.0f, col);
+        DrawLineEx((Vector2){p1.x, p1.y - 1}, (Vector2){p2.x, p2.y - 1}, 2.5f, Fade(RAYWHITE, 0.65f));
 
-        /* Plugue metálico na ponta do mouse */
-        DrawRectangleRounded((Rectangle){p2.x - 12, p2.y - 8, 24, 16}, 0.3f, 4, (Color){200, 205, 215, 255});
-        DrawCircle((int)p2.x, (int)p2.y, 5, col);
-        DrawCircle((int)p2.x, (int)p2.y, 9, Fade(col, 0.35f + 0.25f * sinf(time * 8.0f)));
+        /* Sprite flutuante do arquivo sendo arrastado junto ao cursor */
+        Rectangle dragCard = {p2.x - 85, p2.y - 28, 170, 56};
+        DrawRectangleRounded((Rectangle){dragCard.x + 4, dragCard.y + 5, dragCard.width, dragCard.height}, 0.16f, 6, Fade(BLACK, 0.45f));
+        DrawRectangleRounded(dragCard, 0.16f, 6, Fade((Color){30, 40, 50, 255}, 0.96f));
+        DrawRectangleRoundedLinesEx(dragCard, 0.16f, 6, 2.5f, col);
+        DrawDigitalFileIcon(dragCard.x + 10, dragCard.y + 6, col);
+        DrawGameText(fileNames[i], (int)dragCard.x + 50, (int)dragCard.y + 12, 11, RAYWHITE);
+        DrawGameText("ARRASTANDO...", (int)dragCard.x + 50, (int)dragCard.y + 30, 11, col);
+        DrawCircle((int)p2.x, (int)p2.y, 6, Fade(col, 0.40f + 0.30f * sinf(time * 8.0f)));
     }
 
-    /* Mensagem / Instrução na base */
-    DrawGameText("Dica: Clique em um arquivo e arraste o fio ate a pasta que tiver a MESMA cor.", 260, 580, 16, LIGHTGRAY);
+    /* Feedback visual de acerto/erro e dica na base */
+    if (game->puzzleFilesFeedbackTimer > 0.0f && game->puzzleFilesFeedback[0] != '\0')
+    {
+        Color fbCol = game->puzzleFilesFeedbackIsError ? RED_COLOR : (Color){60, 235, 110, 255};
+        Rectangle fbBox = {250, 584, 780, 32};
+        DrawRectangleRounded(fbBox, 0.2f, 6, Fade(fbCol, 0.16f));
+        DrawRectangleRoundedLinesEx(fbBox, 0.2f, 6, 1.5f, fbCol);
+        CenterText(game->puzzleFilesFeedback, 592, 16, fbCol);
+    }
+
+    DrawGameText("Dica: Clique em um arquivo e arraste até a pasta correspondente.", 335, 626, 16, LIGHTGRAY);
 
     /* --- FEEDBACK QUANDO TODOS ESTIVEREM CONECTADOS --- */
     if (game->puzzleFilesCompleted)
     {
-        Rectangle winBox = {330, 210, 620, 230};
-        DrawRectangleRounded(winBox, 0.08f, 8, Fade(PANEL_COLOR, 0.97f));
+        Rectangle winBox = {310, 185, 660, 290};
+        DrawRectangleRounded(winBox, 0.08f, 8, Fade(PANEL_COLOR, 0.98f));
         DrawRectangleRoundedLinesEx(winBox, 0.08f, 8, 3.0f, (Color){60, 235, 110, 255});
 
-        DrawGameText("[ ! ] TAREFA CONCLUIDA COM SUCESSO! [ ! ]", 380, 240, 22, (Color){60, 235, 110, 255});
-        DrawGameText("Todos os arquivos foram vinculados aos seus diretorios.", 370, 280, 17, RAYWHITE);
-        DrawGameText("A porta de seguranca do setor de dados foi destrancada!", 370, 310, 17, GOLD_COLOR);
+        CenterText("SALA DE 1990 CONCLUÍDA", 212, 24, (Color){60, 235, 110, 255});
+        CenterText("Elira restaurou a organização do sistema", 256, 18, RAYWHITE);
+        CenterText("e recuperou o registro inicial do projeto.", 282, 18, RAYWHITE);
+        CenterText("RECOMPENSA OBTIDA: DISQUETE", 322, 20, GOLD_COLOR);
 
-        Rectangle btnDone = {460, 355, 360, 54};
-        DrawButton(btnDone, "RETORNAR A SALA [ENTER]", (Color){60, 235, 110, 255});
+        Rectangle btnClaim = {360, 376, 340, 52};
+        Rectangle btnRoom = {720, 376, 200, 52};
+        DrawButton(btnClaim, "OBTER DISQUETE [ENTER]", GOLD_COLOR);
+        DrawButton(btnRoom, "VOLTAR À SALA", CYAN_COLOR);
     }
 }
 
 static void UpdatePuzzleFiles(GameState *game)
 {
+    float delta = GetFrameTime();
     Vector2 mouse = GetVirtualMouse();
-    int ySlots[4] = { 135, 250, 365, 480 };
+    int ySlots[4] = { 135, 248, 361, 474 };
+
+    if (game->puzzleFilesFeedbackTimer > 0.0f)
+    {
+        game->puzzleFilesFeedbackTimer -= delta;
+        if (game->puzzleFilesFeedbackTimer <= 0.0f)
+        {
+            game->puzzleFilesErrorFolder = -1;
+        }
+    }
 
     Rectangle btnClose = {960, 63, 110, 38};
     if (Clicked(btnClose) || IsKeyPressed(KEY_ESCAPE))
@@ -4141,8 +4704,13 @@ static void UpdatePuzzleFiles(GameState *game)
 
     if (game->puzzleFilesCompleted)
     {
-        Rectangle btnDone = {460, 355, 360, 54};
-        if (Clicked(btnDone) || IsKeyPressed(KEY_ENTER) || IsKeyPressed(KEY_SPACE))
+        Rectangle btnClaim = {360, 376, 340, 52};
+        Rectangle btnRoom = {720, 376, 200, 52};
+        if (Clicked(btnClaim) || IsKeyPressed(KEY_ENTER) || IsKeyPressed(KEY_SPACE))
+        {
+            game->screen = SCREEN_RESULT_2;
+        }
+        else if (Clicked(btnRoom))
         {
             game->screen = SCREEN_ROOM_2;
         }
@@ -4154,7 +4722,7 @@ static void UpdatePuzzleFiles(GameState *game)
     {
         for (int i = 0; i < 4; i++)
         {
-            Rectangle fRec = {220, (float)ySlots[i], 250, 84};
+            Rectangle fRec = {220, (float)ySlots[i], 255, 84};
             if (CheckCollisionPointRec(mouse, fRec))
             {
                 game->draggingFileIndex = i;
@@ -4173,7 +4741,7 @@ static void UpdatePuzzleFiles(GameState *game)
 
         for (int j = 0; j < 4; j++)
         {
-            Rectangle foldRec = {810, (float)ySlots[j], 250, 84};
+            Rectangle foldRec = {805, (float)ySlots[j], 255, 84};
             if (CheckCollisionPointRec(mouse, foldRec))
             {
                 droppedOnFolder = true;
@@ -4183,6 +4751,11 @@ static void UpdatePuzzleFiles(GameState *game)
                 {
                     /* Cor idêntica! Conexão bem-sucedida! */
                     game->fileConnections[fileIdx] = j;
+                    game->puzzleFilesErrorFolder = -1;
+                    game->puzzleFilesFeedbackIsError = false;
+                    game->puzzleFilesFeedbackTimer = 2.2f;
+                    snprintf(game->puzzleFilesFeedback, sizeof(game->puzzleFilesFeedback),
+                             "Arquivo conectado com sucesso na pasta correspondente!");
                     SetMessage(game, "Arquivo conectado com sucesso na pasta correspondente!");
 
                     /* Verifica se todos os 4 foram conectados */
@@ -4199,7 +4772,12 @@ static void UpdatePuzzleFiles(GameState *game)
                 }
                 else
                 {
-                    /* Cor incorreta */
+                    /* Cor incorreta: da feedback visual e retorna */
+                    game->puzzleFilesErrorFolder = j;
+                    game->puzzleFilesFeedbackIsError = true;
+                    game->puzzleFilesFeedbackTimer = 2.2f;
+                    snprintf(game->puzzleFilesFeedback, sizeof(game->puzzleFilesFeedback),
+                             "Pasta incorreta! Arraste o arquivo ate a pasta da mesma cor.");
                     SetMessage(game, "Cor incompativel! Conecte na pasta da mesma cor do arquivo.");
                 }
                 break;
@@ -4208,7 +4786,7 @@ static void UpdatePuzzleFiles(GameState *game)
 
         if (!droppedOnFolder)
         {
-            /* Soltou fora: o fio se retrai */
+            /* Soltou fora: o arquivo retorna a origem */
             game->fileConnections[fileIdx] = -1;
         }
 
@@ -4219,7 +4797,7 @@ static void UpdatePuzzleFiles(GameState *game)
 static void DrawResult2(const GameState *game)
 {
     DrawBackground();
-    DrawGameText("ARTEFATO RECUPERADO", 90, 68, 20, CYAN_COLOR);
+    DrawGameText("RECOMPENSA OBTIDA:", 90, 68, 20, CYAN_COLOR);
     DrawGameText("DISQUETE // 1990", 90, 108, 46, RAYWHITE);
 
     /* Desenha o disquete recuperado (recompensa de 1990) */
@@ -4227,22 +4805,22 @@ static void DrawResult2(const GameState *game)
 
     /* Painel narrativo de avanço */
     DrawRectangleRounded((Rectangle){505, 185, 670, 360}, 0.04f, 8, Fade(PANEL_COLOR, 0.96f));
-    DrawGameText("HISTORIA DA IA DESVENDADA // SALA 1 (1990) CONCLUIDA", 540, 215, 20, GOLD_COLOR);
+    DrawGameText("SALA DE 1990 CONCLUÍDA", 540, 212, 22, GOLD_COLOR);
 
-    DrawGameText("Com as pastas sincronizadas, Elira acessou os relatorios", 540, 260, 19, LIGHTGRAY);
-    DrawGameText("confidenciais dos primeiros testes de A.R.1.3.L. em 1990.", 540, 290, 19, LIGHTGRAY);
-    DrawGameText("A IA nao nasceu corrompida: o projeto visava uma mente", 540, 320, 19, LIGHTGRAY);
-    DrawGameText("livre e cooperativa. Mas algo aconteceu decadas depois...", 540, 350, 19, (Color){245, 175, 75, 255});
-    DrawGameText("-> Proxima Fronteira Temporal: FASE 2 // ANO 2008!", 540, 390, 20, CYAN_COLOR);
-    DrawGameText("Avance para o escritorio corporativo e investigue a biometria.", 540, 420, 17, GRAY);
+    DrawGameText("Elira restaurou a organização do sistema", 540, 252, 19, RAYWHITE);
+    DrawGameText("e recuperou o registro inicial do projeto.", 540, 280, 19, RAYWHITE);
+    DrawGameText("RECOMPENSA OBTIDA: DISQUETE", 540, 316, 19, (Color){100, 235, 140, 255});
+    DrawGameText("A IA nao nasceu corrompida: o projeto visava uma mente", 540, 350, 17, LIGHTGRAY);
+    DrawGameText("livre e cooperativa. Mas algo aconteceu decadas depois...", 540, 374, 17, (Color){245, 175, 75, 255});
+    DrawGameText("-> Proxima Fronteira Temporal: FASE 2 // ANO 2008!", 540, 408, 19, CYAN_COLOR);
 
     DrawGameText(TextFormat("TEMPO TOTAL: %02d:%02d  |  VIDAS: %d/3",
                         (int)(GetTime() - game->startTime) / 60,
                         (int)(GetTime() - game->startTime) % 60,
                         game->lives),
-             540, 465, 19, (Color){100, 235, 140, 255});
+             540, 458, 19, (Color){100, 235, 140, 255});
 
-    DrawGameText(TextFormat("OPERADOR: %s", game->playerName), 540, 500, 16, GRAY);
+    DrawGameText(TextFormat("OPERADOR: %s", game->playerName), 540, 498, 16, GRAY);
 
     Rectangle btnNext2008 = {340, 580, 380, 56};
     Rectangle btnReplay1990 = {740, 580, 210, 56};
@@ -4268,8 +4846,7 @@ static void UpdateResult2(GameState *game)
     }
     else if (Clicked(btnReplay1990))
     {
-        game->puzzleFilesCompleted = false;
-        for (int k = 0; k < 4; k++) game->fileConnections[k] = -1;
+        InitRoom2Puzzle(game);
         game->screen = SCREEN_ROOM_2;
     }
     else if (Clicked(btnTitle) || IsKeyPressed(KEY_ESCAPE))
@@ -7696,6 +8273,9 @@ int main(void)
             case SCREEN_ROOM_2:
                 UpdateRoom2(&game);
                 break;
+            case SCREEN_MEMORY_1990:
+                UpdateMemory1990(&game);
+                break;
             case SCREEN_PUZZLE_FILES:
                 UpdatePuzzleFiles(&game);
                 break;
@@ -7756,7 +8336,12 @@ int main(void)
                 DrawHudRoom2(&game);
                 if (game.journalOpen) DrawJournal(&game);
                 break;
+            case SCREEN_MEMORY_1990:
+                DrawRoom2(&game);
+                DrawMemory1990(&game);
+                break;
             case SCREEN_PUZZLE_FILES:
+                DrawRoom2(&game);
                 DrawPuzzleFiles(&game);
                 break;
             case SCREEN_RESULT_2:
