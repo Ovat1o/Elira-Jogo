@@ -1,6 +1,0 @@
-# Arquivo de configuração local de build (caminhos individuais de cada máquina)
-config.mk
-
-# Binários e objetos
-*.o
-
