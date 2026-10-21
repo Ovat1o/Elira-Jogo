@@ -1,4 +1,4 @@
-![ELIRA](docs/artes/banner.png)
+![ELIRA](assets/artes/banner.png)
 
 ## **1. Visão Geral**
 
@@ -18,15 +18,15 @@ Na progressão planejada, cada salto temporal revela uma peça da história de A
 
 | Sprite | Recompensa |
 | :---: | --- |
-| <img src="docs/assets/sprites/disquete.png" alt="Sprite do disquete de 1990" width="100"> | **Disquete - 1990.** Pequeno por fora, decisivo por dentro: guarda os primeiros rastros de A.R.1.3.L., de uma época em que a IA ainda era uma promessa. |
-| <img src="docs/assets/sprites/cd.png" alt="Sprite do CD de memória de 2008" width="100"> | **CD - 2008.** Recuperado depois que Elira demonstra o erro do reconhecimento facial e impede uma ordem injusta. Lembra que decisões automatizadas também precisam ser questionadas. |
-| <img src="docs/assets/sprites/ssd.png" alt="Sprite do SSD de 2026" width="100"> | **SSD - 2026.** Representa os registros de uma sociedade cada vez mais guiada por algoritmos. O que essas memórias revelarão sobre o momento em que a conveniência virou controle? |
+| <img src="assets/sprites/disquete.png" alt="Sprite do disquete de 1990" width="100"> | **Disquete - 1990.** Pequeno por fora, decisivo por dentro: guarda os primeiros rastros de A.R.1.3.L., de uma época em que a IA ainda era uma promessa. |
+| <img src="assets/sprites/cd.png" alt="Sprite do CD de memória de 2008" width="100"> | **CD - 2008.** Recuperado depois que Elira demonstra o erro do reconhecimento facial e impede uma ordem injusta. Lembra que decisões automatizadas também precisam ser questionadas. |
+| <img src="assets/sprites/ssd.png" alt="Sprite do SSD de 2026" width="100"> | **SSD - 2026.** Representa os registros de uma sociedade cada vez mais guiada por algoritmos. O que essas memórias revelarão sobre o momento em que a conveniência virou controle? |
 
 ***
 
 ## **2. Ferramentas utilizadas**
 
-<img align="right" src="assets/elira_sorrindo.png" alt="Elira sorrindo" width="220">
+<img align="right" src="assets/sprites/elira_sorrindo.png" alt="Elira sorrindo" width="220">
 
 **Jira** - Ferramenta de Gestão de Projeto
 
@@ -81,11 +81,11 @@ Por padrão, o Makefile utiliza a instalação padrão da raylib em `C:/raylib`.
 
 | Foto | Nome | Função | GitHub | LinkedIn |
 |---|---|---|---|---|
-| <img src="docs/assets/equipe/beatriz-de-melo.jpeg" width="105" height="120" alt="Foto de Beatriz Camara"> | Beatriz Camara | Scrum Master | [BiaD-Cam](https://github.com/BiaD-Cam) | [Beatriz de Melo Dornelas](https://www.linkedin.com/in/beatriz-de-melo-dornelas-c%C3%A2mara-578421214/) |
-| <img src="docs/assets/equipe/carlos-eduardo.jpeg" width="105" height="120" alt="Foto de Carlos Eduardo"> | Carlos Eduardo | Lógica Matemática | [cadumelo20](https://github.com/cadumelo20) | [Carlos Eduardo Melo](https://www.linkedin.com/in/carlos-eduardomelo/) |
-| <img src="docs/assets/equipe/joao-tezolini.jpeg" width="105" height="120" alt="Foto de João Tezolini"> | João Tezolini | Desenvolvedor em C | [Joao-Tezolini](https://github.com/Joao-Tezolini) | [João Tezolini Sugahara](https://www.linkedin.com/in/jo%C3%A3o-tezolini-sugahara/) |
-| <img src="docs/assets/equipe/tales-cavalcanti.jpeg" width="105" height="120" alt="Foto de José Tales"> | José Tales | Design Gráfico | [talescavalcanti](https://github.com/talescavalcanti) | [Tales Cavalcanti](https://www.linkedin.com/in/tales-cavalcantii/) |
-| <img src="docs/assets/equipe/luisa-couto.jpeg" width="105" height="120" alt="Foto de Luísa Couto"> | Luísa Couto | Analista de Design | [luisasiqcouto](https://github.com/luisasiqcouto) | [Luísa Couto](https://www.linkedin.com/in/luísa-couto-5ababa378/) |
-| <img src="docs/assets/equipe/maria-vitoria.jpeg" width="105" height="120" alt="Foto de Maria Vitória"> | Maria Vitória | Desenvolvedora em C | [mvitoriapereirac](https://github.com/mvitoriapereirac) | [Maria Vitória Pereira](https://www.linkedin.com/in/mvitoriapereirac/) |
-| <img src="docs/assets/equipe/otavio-sousa.jpeg" width="105" height="120" alt="Foto de Otávio Leão"> | Otávio Leão | Engenheiro de Software | [Ovat1o](https://github.com/Ovat1o) | [Otávio Leão](https://www.linkedin.com/in/otaviosleao/) |
-| <img src="docs/assets/equipe/victor-julius.jpeg" width="105" height="120" alt="Foto de Victor Julius"> | Victor Julius | Desenvolvedor em C | [victorjls21](https://github.com/victorjls21) | [Victor Julius](https://www.linkedin.com/in/victor-julius/) |
+| <img src="assets/equipe/beatriz-de-melo.jpeg" width="105" height="120" alt="Foto de Beatriz Camara"> | Beatriz Camara | Scrum Master | [BiaD-Cam](https://github.com/BiaD-Cam) | [Beatriz de Melo Dornelas](https://www.linkedin.com/in/beatriz-de-melo-dornelas-c%C3%A2mara-578421214/) |
+| <img src="assets/equipe/carlos-eduardo.jpeg" width="105" height="120" alt="Foto de Carlos Eduardo"> | Carlos Eduardo | Lógica Matemática | [cadumelo20](https://github.com/cadumelo20) | [Carlos Eduardo Melo](https://www.linkedin.com/in/carlos-eduardomelo/) |
+| <img src="assets/equipe/joao-tezolini.jpeg" width="105" height="120" alt="Foto de João Tezolini"> | João Tezolini | Desenvolvedor em C | [Joao-Tezolini](https://github.com/Joao-Tezolini) | [João Tezolini Sugahara](https://www.linkedin.com/in/jo%C3%A3o-tezolini-sugahara/) |
+| <img src="assets/equipe/tales-cavalcanti.jpeg" width="105" height="120" alt="Foto de José Tales"> | José Tales | Design Gráfico | [talescavalcanti](https://github.com/talescavalcanti) | [Tales Cavalcanti](https://www.linkedin.com/in/tales-cavalcantii/) |
+| <img src="assets/equipe/luisa-couto.jpeg" width="105" height="120" alt="Foto de Luísa Couto"> | Luísa Couto | Analista de Design | [luisasiqcouto](https://github.com/luisasiqcouto) | [Luísa Couto](https://www.linkedin.com/in/luísa-couto-5ababa378/) |
+| <img src="assets/equipe/maria-vitoria.jpeg" width="105" height="120" alt="Foto de Maria Vitória"> | Maria Vitória | Desenvolvedora em C | [mvitoriapereirac](https://github.com/mvitoriapereirac) | [Maria Vitória Pereira](https://www.linkedin.com/in/mvitoriapereirac/) |
+| <img src="assets/equipe/otavio-sousa.jpeg" width="105" height="120" alt="Foto de Otávio Leão"> | Otávio Leão | Engenheiro de Software | [Ovat1o](https://github.com/Ovat1o) | [Otávio Leão](https://www.linkedin.com/in/otaviosleao/) |
+| <img src="assets/equipe/victor-julius.jpeg" width="105" height="120" alt="Foto de Victor Julius"> | Victor Julius | Desenvolvedor em C | [victorjls21](https://github.com/victorjls21) | [Victor Julius](https://www.linkedin.com/in/victor-julius/) |
