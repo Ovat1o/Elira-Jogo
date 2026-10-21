@@ -70,7 +70,6 @@ Na progressão planejada, cada salto temporal revela uma peça da história de A
 
 ```powershell
 make clean
-make
 make run
 ```
 
