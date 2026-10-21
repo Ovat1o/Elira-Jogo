@@ -4433,39 +4433,39 @@ void DrawDigitalFileIcon(float x, float y, Color accentColor)
 
 void DrawFolderDirectoryIcon(float x, float y, Color folderColor, bool hasFile)
 {
-    Color backCol = {
-        (unsigned char)(folderColor.r * 0.72f),
-        (unsigned char)(folderColor.g * 0.72f),
-        (unsigned char)(folderColor.b * 0.72f),
-        255
-    };
+    (void)folderColor; /* Pastas agora utilizam tom manila retrô padronizado */
+    Color manilaMain = (Color){220, 182, 105, 255};
+    Color manilaBack = (Color){185, 148, 78, 255};
+    Color manilaBorder = (Color){135, 105, 50, 255};
 
     /* Sombra da pasta */
     DrawRectangleRounded((Rectangle){x + 2, y + 8, 44, 32}, 0.15f, 4, Fade(BLACK, 0.38f));
 
-    /* Aba superior esquerda da pasta (diretorio) */
-    DrawRectangleRounded((Rectangle){x, y + 2, 20, 10}, 0.25f, 4, backCol);
+    /* Aba superior esquerda da pasta (diretório retrô manila) */
+    DrawRectangleRounded((Rectangle){x, y + 2, 20, 10}, 0.25f, 4, manilaBack);
+    DrawRectangleRoundedLinesEx((Rectangle){x, y + 2, 20, 10}, 0.25f, 4, 1.2f, manilaBorder);
 
     /* Parte traseira da pasta */
-    DrawRectangleRounded((Rectangle){x, y + 7, 44, 31}, 0.12f, 4, backCol);
+    DrawRectangleRounded((Rectangle){x, y + 7, 44, 31}, 0.12f, 4, manilaBack);
 
     /* Folha de arquivo inserida dentro da pasta quando conectada */
     if (hasFile)
     {
-        DrawRectangle((int)x + 6, (int)y + 5, 30, 14, PAPER_COLOR);
-        DrawLine((int)x + 9, (int)y + 9, (int)x + 31, (int)y + 9, folderColor);
+        DrawRectangle((int)x + 7, (int)y + 4, 28, 16, PAPER_COLOR);
+        DrawRectangleLines((int)x + 7, (int)y + 4, 28, 16, (Color){170, 160, 138, 255});
+        DrawLine((int)x + 10, (int)y + 8, (int)x + 30, (int)y + 8, (Color){70, 75, 82, 255});
+        DrawLine((int)x + 10, (int)y + 12, (int)x + 26, (int)y + 12, (Color){95, 100, 108, 255});
     }
 
-    /* Bolso frontal da pasta na cor associada */
+    /* Bolso frontal da pasta no tom manila clássico */
     Rectangle frontPocket = {x, y + 13, 44, 25};
-    DrawRectangleRounded(frontPocket, 0.15f, 4, folderColor);
-    DrawRectangleRoundedLinesEx(frontPocket, 0.15f, 4, 1.5f, Fade(RAYWHITE, 0.65f));
+    DrawRectangleRounded(frontPocket, 0.15f, 4, manilaMain);
+    DrawRectangleRoundedLinesEx(frontPocket, 0.15f, 4, 1.5f, manilaBorder);
     DrawLine((int)x + 4, (int)y + 17, (int)x + 40, (int)y + 17, Fade(RAYWHITE, 0.45f));
 }
 
 void DrawPuzzleFiles(const GameState *game)
 {
-    float time = (float)GetTime();
     Vector2 mouse = GetVirtualMouse();
 
     /* Escurecimento do fundo */
@@ -4482,14 +4482,13 @@ void DrawPuzzleFiles(const GameState *game)
     DrawCircle((int)panel.x + 16, (int)(panel.y + panel.height - 16), 5, (Color){185, 195, 205, 255});
     DrawCircle((int)(panel.x + panel.width - 16), (int)(panel.y + panel.height - 16), 5, (Color){185, 195, 205, 255});
 
-    /* Calha central interna escura onde as conexoes e o arrasto aparecem */
-    DrawRectangle(475, 120, 330, 460, (Color){12, 16, 20, 255});
-    DrawRectangleLinesEx((Rectangle){475, 120, 330, 460}, 2, (Color){30, 40, 48, 255});
+    /* Calha central interna retrô (sem cabos) */
+    DrawRectangle(475, 120, 330, 460, (Color){14, 18, 24, 255});
+    DrawRectangleLinesEx((Rectangle){475, 120, 330, 460}, 1.5f, (Color){38, 48, 58, 255});
 
-    /* Feixes de cabos ao fundo na calha */
-    DrawLineEx((Vector2){580, 120}, (Vector2){620, 580}, 16, Fade((Color){85, 20, 20, 255}, 0.7f));
-    DrawLineEx((Vector2){650, 120}, (Vector2){640, 580}, 18, Fade((Color){20, 45, 85, 255}, 0.7f));
-    DrawLineEx((Vector2){700, 120}, (Vector2){670, 580}, 14, Fade((Color){85, 70, 20, 255}, 0.7f));
+    /* Indicador sutil de fluxo retrô (Arquivos -> Pastas) */
+    CenterText("ARRASTE PARA O DESTINO", 335, 14, Fade(LIGHTGRAY, 0.30f));
+    CenterText(">>>", 360, 18, Fade(LIGHTGRAY, 0.25f));
 
     /* --- CABECALHO DE PROGRESSO NO TOPO --- */
     int connectedCount = 0;
@@ -4537,37 +4536,26 @@ void DrawPuzzleFiles(const GameState *game)
         bool isDraggingThis = (game->draggingFileIndex == i);
         bool hoverFile = (!game->puzzleFilesCompleted && game->draggingFileIndex == -1 && CheckCollisionPointRec(mouse, fRec));
 
-        /* Card do arquivo */
-        Color cardBg = isDraggingThis ? (Color){28, 36, 44, 255} : (hoverFile ? (Color){46, 58, 68, 255} : (Color){38, 48, 56, 255});
+        /* Card do arquivo retrô */
+        Color cardBg = isDraggingThis ? (Color){24, 30, 38, 255} : (hoverFile ? (Color){42, 52, 64, 255} : (Color){32, 40, 50, 255});
         DrawRectangleRounded(fRec, 0.12f, 6, cardBg);
-        DrawRectangleRoundedLinesEx(fRec, 0.12f, 6, (isDraggingThis || hoverFile) ? 2.5f : 2.0f,
-                                    (isDraggingThis || hoverFile) ? wColor : (isConnected ? (Color){90, 220, 130, 255} : (Color){70, 85, 98, 255}));
+        DrawRectangleRoundedLinesEx(fRec, 0.12f, 6, (isDraggingThis || hoverFile) ? 2.5f : 1.8f,
+                                    (isDraggingThis || hoverFile) ? wColor : (isConnected ? (Color){80, 225, 125, 255} : (Color){65, 80, 95, 255}));
 
-        /* Tarja vertical com a cor do arquivo */
-        DrawRectangleRounded((Rectangle){fRec.x + 4, fRec.y + 4, 12, fRec.height - 8}, 0.3f, 4, wColor);
+        /* Tarja vertical com a cor identificadora do arquivo */
+        DrawRectangleRounded((Rectangle){fRec.x + 4, fRec.y + 4, 10, fRec.height - 8}, 0.3f, 4, wColor);
 
-        /* Sprite / icone de folha / arquivo digital */
-        DrawDigitalFileIcon(fRec.x + 22, fRec.y + 20, wColor);
+        /* Sprite / icone de folha / arquivo digital retrô */
+        DrawDigitalFileIcon(fRec.x + 20, fRec.y + 20, wColor);
 
         /* Textos do arquivo */
-        DrawGameText(fileNames[i], (int)fRec.x + 64, (int)fRec.y + 20, 13, RAYWHITE);
-        DrawGameText(isConnected ? "ARQUIVO VINCULADO" : "ARQUIVO DE DADOS",
-                     (int)fRec.x + 64, (int)fRec.y + 44, 12,
-                     isConnected ? (Color){90, 235, 135, 255} : Fade(wColor, 0.95f));
-
-        /* Terminal/conector de saída no lado direito do card */
-        Vector2 termL = {fRec.x + fRec.width, fRec.y + fRec.height * 0.5f};
-        DrawCircle((int)termL.x, (int)termL.y, 14, (Color){28, 36, 42, 255});
-        DrawCircle((int)termL.x, (int)termL.y, 10, wColor);
-        DrawCircleLines((int)termL.x, (int)termL.y, 14, isConnected ? (Color){80, 240, 120, 255} : GOLD_COLOR);
-
-        if (isConnected)
-        {
-            DrawCircle((int)termL.x, (int)termL.y, 4, RAYWHITE);
-        }
+        DrawGameText(fileNames[i], (int)fRec.x + 62, (int)fRec.y + 20, 13, RAYWHITE);
+        DrawGameText(isConnected ? "[TRANSFERIDO]" : "ARQUIVO DE DADOS",
+                     (int)fRec.x + 62, (int)fRec.y + 44, 12,
+                     isConnected ? (Color){85, 230, 130, 255} : Fade(wColor, 0.95f));
     }
 
-    /* --- LADO DIREITO: 4 PASTAS / DIRETORIOS DE DESTINO --- */
+    /* --- LADO DIREITO: 4 PASTAS / DIRETORIOS DE DESTINO (VISUAL RETRÔ PADRONIZADO, SEM CORES DE DICA) --- */
     const char *folderNames[4] = {
         "PASTA: PARAMETROS",
         "PASTA: SISTEMA",
@@ -4580,7 +4568,6 @@ void DrawPuzzleFiles(const GameState *game)
         int y = ySlots[j];
         Rectangle foldRec = {825, (float)y, 235, 84};
         int folderColorIdx = game->rightFolderColors[j];
-        Color folderColor = GetFileWireColor(folderColorIdx);
 
         /* Checa se algum arquivo está conectado nesta pasta */
         bool hasConnectedFile = false;
@@ -4593,85 +4580,45 @@ void DrawPuzzleFiles(const GameState *game)
         bool hoverDrop = (game->draggingFileIndex != -1 && CheckCollisionPointRec(mouse, dropZone));
         bool isErrorFolder = (game->puzzleFilesErrorFolder == j && game->puzzleFilesFeedbackTimer > 0.0f && game->puzzleFilesFeedbackIsError);
 
-        /* Card da pasta / diretorio */
-        Color foldBg = isErrorFolder ? (Color){75, 28, 32, 255} : (hoverDrop ? (Color){62, 54, 44, 255} : (Color){50, 42, 34, 255});
-        Color foldBorder = isErrorFolder ? RED_COLOR : (hasConnectedFile ? (Color){90, 230, 130, 255} : (hoverDrop ? folderColor : (Color){105, 88, 70, 255}));
+        /* Card da pasta / diretorio retrô (todos neutros sem entregar a resposta por cor) */
+        Color foldBg = isErrorFolder ? (Color){70, 28, 32, 255} : (hoverDrop ? (Color){46, 52, 60, 255} : (Color){36, 42, 48, 255});
+        Color foldBorder = isErrorFolder ? RED_COLOR : (hasConnectedFile ? (Color){80, 230, 120, 255} : (hoverDrop ? (Color){220, 185, 110, 255} : (Color){75, 88, 100, 255}));
         DrawRectangleRounded(foldRec, 0.12f, 6, foldBg);
-        DrawRectangleRoundedLinesEx(foldRec, 0.12f, 6, (hoverDrop || isErrorFolder) ? 2.8f : 2.0f, foldBorder);
+        DrawRectangleRoundedLinesEx(foldRec, 0.12f, 6, (hoverDrop || isErrorFolder) ? 2.5f : 1.8f, foldBorder);
 
-        /* Aba/orelha superior colorida da pasta */
-        DrawRectangleRounded((Rectangle){foldRec.x + 18, foldRec.y + 4, 110, 10}, 0.3f, 4, folderColor);
+        /* Aba superior neutra da pasta retrô (tom clássico de pasta manila) */
+        DrawRectangleRounded((Rectangle){foldRec.x + 18, foldRec.y + 4, 110, 8}, 0.3f, 4, (Color){210, 175, 95, 255});
 
-        /* Sprite / icone de pasta de diretorio */
-        DrawFolderDirectoryIcon(foldRec.x + 20, foldRec.y + 22, folderColor, hasConnectedFile);
+        /* Sprite padronizado de pasta retrô */
+        DrawFolderDirectoryIcon(foldRec.x + 20, foldRec.y + 20, (Color){220, 182, 105, 255}, hasConnectedFile);
 
         /* Nome da pasta e subtitulo */
         DrawGameText(folderNames[folderColorIdx], (int)foldRec.x + 70, (int)foldRec.y + 22, 13, RAYWHITE);
-        DrawGameText(hasConnectedFile ? "ARQUIVO RECEBIDO" : "DIRETORIO DE DESTINO",
+        DrawGameText(hasConnectedFile ? "[ARQUIVO ARMAZENADO]" : "[DIRETORIO VAZIO]",
                      (int)foldRec.x + 70, (int)foldRec.y + 44, 12,
-                     hasConnectedFile ? (Color){90, 235, 135, 255} : Fade(folderColor, 0.95f));
+                     hasConnectedFile ? (Color){85, 230, 130, 255} : (Color){150, 158, 168, 255});
 
-        /* LED indicador de status na pasta */
-        DrawCircle((int)foldRec.x + 216, (int)foldRec.y + 20, 5, hasConnectedFile ? (Color){60, 245, 110, 255} : (Color){140, 35, 35, 255});
-        DrawCircleLines((int)foldRec.x + 216, (int)foldRec.y + 20, 5, RAYWHITE);
-
-        /* Terminal/receptáculo de entrada no lado esquerdo da pasta */
-        Vector2 termR = {foldRec.x, foldRec.y + foldRec.height * 0.5f};
-        DrawCircle((int)termR.x, (int)termR.y, 14, (Color){28, 36, 42, 255});
-        DrawCircle((int)termR.x, (int)termR.y, 10, folderColor);
-        DrawCircleLines((int)termR.x, (int)termR.y, 14, hasConnectedFile ? (Color){80, 240, 120, 255} : (Color){185, 175, 150, 255});
-
-        if (hasConnectedFile)
-        {
-            DrawCircle((int)termR.x, (int)termR.y, 4, RAYWHITE);
-        }
+        /* Indicador sutil de status na pasta */
+        DrawCircle((int)foldRec.x + 216, (int)foldRec.y + 22, 5, hasConnectedFile ? (Color){60, 245, 110, 255} : (Color){85, 95, 105, 255});
+        DrawCircleLines((int)foldRec.x + 216, (int)foldRec.y + 22, 5, Fade(RAYWHITE, 0.5f));
     }
 
-    /* --- DESENHO DOS CABOS / CONEXOES CONFIRMADAS --- */
-    for (int i = 0; i < 4; i++)
-    {
-        if (game->fileConnections[i] != -1)
-        {
-            int j = game->fileConnections[i];
-            Vector2 p1 = {455.0f, ySlots[i] + 42.0f};
-            Vector2 p2 = {825.0f, ySlots[j] + 42.0f};
-            Color col = GetFileWireColor(i);
-
-            /* Sombra do cabo */
-            DrawLineEx((Vector2){p1.x + 3, p1.y + 4}, (Vector2){p2.x + 3, p2.y + 4}, 14.0f, Fade(BLACK, 0.45f));
-            /* Cabo principal */
-            DrawLineEx(p1, p2, 10.0f, col);
-            /* Brilho no topo do cabo */
-            DrawLineEx((Vector2){p1.x, p1.y - 1}, (Vector2){p2.x, p2.y - 1}, 3.0f, Fade(RAYWHITE, 0.55f));
-
-            /* Conectores metálicos nas pontas */
-            DrawCircle((int)p1.x, (int)p1.y, 7, (Color){215, 195, 75, 255});
-            DrawCircle((int)p2.x, (int)p2.y, 7, (Color){215, 195, 75, 255});
-        }
-    }
-
-    /* --- DESENHO DO ARQUIVO E CABO SENDO ARRASTADOS --- */
+    /* --- DESENHO DO ARQUIVO SENDO ARRASTADO (DIRETO NO MOUSE, SEM CABOS) --- */
     if (game->draggingFileIndex != -1)
     {
         int i = game->draggingFileIndex;
-        Vector2 p1 = {455.0f, ySlots[i] + 42.0f};
         Vector2 p2 = mouse;
         Color col = GetFileWireColor(i);
 
-        /* Sombra e corpo da linha de conexao */
-        DrawLineEx((Vector2){p1.x + 3, p1.y + 4}, (Vector2){p2.x + 3, p2.y + 4}, 12.0f, Fade(BLACK, 0.40f));
-        DrawLineEx(p1, p2, 8.0f, col);
-        DrawLineEx((Vector2){p1.x, p1.y - 1}, (Vector2){p2.x, p2.y - 1}, 2.5f, Fade(RAYWHITE, 0.65f));
-
-        /* Sprite flutuante do arquivo sendo arrastado junto ao cursor */
-        Rectangle dragCard = {p2.x - 85, p2.y - 28, 170, 56};
-        DrawRectangleRounded((Rectangle){dragCard.x + 4, dragCard.y + 5, dragCard.width, dragCard.height}, 0.16f, 6, Fade(BLACK, 0.45f));
-        DrawRectangleRounded(dragCard, 0.16f, 6, Fade((Color){30, 40, 50, 255}, 0.96f));
-        DrawRectangleRoundedLinesEx(dragCard, 0.16f, 6, 2.5f, col);
-        DrawDigitalFileIcon(dragCard.x + 10, dragCard.y + 6, col);
-        DrawGameText(fileNames[i], (int)dragCard.x + 50, (int)dragCard.y + 12, 11, RAYWHITE);
-        DrawGameText("ARRASTANDO...", (int)dragCard.x + 50, (int)dragCard.y + 30, 11, col);
-        DrawCircle((int)p2.x, (int)p2.y, 6, Fade(col, 0.40f + 0.30f * sinf(time * 8.0f)));
+        /* Sprite flutuante retrô do arquivo sendo arrastado sob o cursor */
+        Rectangle dragCard = {p2.x - 85, p2.y - 28, 175, 58};
+        DrawRectangleRounded((Rectangle){dragCard.x + 4, dragCard.y + 5, dragCard.width, dragCard.height}, 0.14f, 6, Fade(BLACK, 0.50f));
+        DrawRectangleRounded(dragCard, 0.14f, 6, (Color){25, 32, 42, 250});
+        DrawRectangleRoundedLinesEx(dragCard, 0.14f, 6, 2.2f, col);
+        DrawRectangleRounded((Rectangle){dragCard.x + 4, dragCard.y + 4, 8, dragCard.height - 8}, 0.3f, 4, col);
+        DrawDigitalFileIcon(dragCard.x + 16, dragCard.y + 8, col);
+        DrawGameText(fileNames[i], (int)dragCard.x + 56, (int)dragCard.y + 13, 11, RAYWHITE);
+        DrawGameText("MOVER ARQUIVO...", (int)dragCard.x + 56, (int)dragCard.y + 32, 11, col);
     }
 
     /* Feedback visual de acerto/erro e dica na base */
@@ -4684,7 +4631,7 @@ void DrawPuzzleFiles(const GameState *game)
         CenterText(game->puzzleFilesFeedback, 592, 16, fbCol);
     }
 
-    DrawGameText("Dica: Clique em um arquivo e arraste até a pasta correspondente.", 335, 626, 16, LIGHTGRAY);
+    DrawGameText("Dica: Clique em um arquivo e arraste até o diretório correspondente.", 310, 626, 16, LIGHTGRAY);
 
     /* --- FEEDBACK QUANDO TODOS ESTIVEREM CONECTADOS --- */
     if (game->puzzleFilesCompleted)
@@ -4775,14 +4722,14 @@ void UpdatePuzzleFiles(GameState *game)
 
                 if (fileIdx == folderColor)
                 {
-                    /* Cor idêntica! Conexão bem-sucedida! */
+                    /* Associação correta! Conexão bem-sucedida! */
                     game->fileConnections[fileIdx] = j;
                     game->puzzleFilesErrorFolder = -1;
                     game->puzzleFilesFeedbackIsError = false;
                     game->puzzleFilesFeedbackTimer = 2.2f;
                     snprintf(game->puzzleFilesFeedback, sizeof(game->puzzleFilesFeedback),
-                             "Arquivo conectado com sucesso na pasta correspondente!");
-                    SetMessage(game, "Arquivo conectado com sucesso na pasta correspondente!");
+                             "Arquivo armazenado com sucesso no diretorio correto!");
+                    SetMessage(game, "Arquivo armazenado com sucesso no diretorio!");
 
                     /* Verifica se todos os 4 foram conectados */
                     bool allConnected = true;
@@ -4798,13 +4745,13 @@ void UpdatePuzzleFiles(GameState *game)
                 }
                 else
                 {
-                    /* Cor incorreta: da feedback visual e retorna */
+                    /* Diretório incorreto: dá feedback visual e retorna */
                     game->puzzleFilesErrorFolder = j;
                     game->puzzleFilesFeedbackIsError = true;
                     game->puzzleFilesFeedbackTimer = 2.2f;
                     snprintf(game->puzzleFilesFeedback, sizeof(game->puzzleFilesFeedback),
-                             "Pasta incorreta! Arraste o arquivo ate a pasta da mesma cor.");
-                    SetMessage(game, "Cor incompativel! Conecte na pasta da mesma cor do arquivo.");
+                             "Diretorio incorreto! Este arquivo nao pertence a esta pasta.");
+                    SetMessage(game, "Destino incompativel! Escolha a pasta correta para o arquivo.");
                 }
                 break;
             }
