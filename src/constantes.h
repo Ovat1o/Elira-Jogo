@@ -7,15 +7,39 @@
 #define ACCESS_CODE "1950"
 #define PLAYER_NAME_MAX 20
 
-/* Fonte geral do jogo: Geist Pixel (Square). Cada tamanho e rasterizado sob demanda
-   para manter os pixels nitidos; sem o arquivo, volta para a fonte padrao da raylib. */
-#define GAME_FONT_PATH "assets/fonts/GeistPixel-Square.ttf"
+/* ========================================================================= */
+/* FONTE GERAL DO JOGO                                                       */
+/* ========================================================================= */
+/* COMO TROCAR A FONTE:
+     1. Coloque o arquivo da fonte (.ttf ou .otf) na pasta assets/fonts/
+     2. Altere GAME_FONT_FILE abaixo para o nome do arquivo
+     3. Recompile (make clean && make run)
+   Use GAME_FONT_FILE "" para usar a fonte padrao (pixelada) embutida na raylib.
+   Exemplos:
+     #define GAME_FONT_FILE "GeistPixel-Square.ttf"   -> Geist Pixel (Square)
+     #define GAME_FONT_FILE "MinhaFonte.otf"          -> qualquer outra fonte
+     #define GAME_FONT_FILE ""                        -> fonte padrao da raylib
+   Cada tamanho e rasterizado sob demanda (cache por tamanho em pixels). Se o
+   arquivo nao for encontrado, o jogo volta automaticamente para a fonte padrao. */
+#define GAME_FONT_DIR      "assets/fonts/"
+#ifndef GAME_FONT_FILE
+#define GAME_FONT_FILE     "GeistPixel-Square.ttf"
+#endif
+#define GAME_FONT_PATH     GAME_FONT_DIR GAME_FONT_FILE
 #define GAME_FONT_MAX_SIZE 192
-/* A raylib dimensiona TTFs por ascendente+descendente (1300/1000 do em na Geist).
-   Com 1.3x e subindo 0.19x, a Geist ocupa a mesma caixa da fonte padrao
-   (altura de maiuscula e largura praticamente iguais), preservando os layouts. */
-#define GAME_FONT_SCALE    1.3f
-#define GAME_FONT_OFFSET_Y 0.19f
+
+/* Filtro da textura da fonte: 1 = pixel art (POINT, bordas nitidas),
+   0 = fonte suave/vetorial (BILINEAR, bordas suavizadas) */
+#define GAME_FONT_PIXEL_ART 1
+
+/* Metricas: por padrao a escala e o deslocamento vertical sao calibrados
+   AUTOMATICAMENTE lendo a altura da letra 'H' da fonte escolhida, para que ela
+   ocupe a mesma caixa da fonte padrao da raylib (preservando todos os layouts).
+   Para ajustar manualmente, mude GAME_FONT_MANUAL_METRICS para 1 e edite os
+   valores abaixo (ex.: Geist Pixel = 1.3f e 0.19f). */
+#define GAME_FONT_MANUAL_METRICS 0
+#define GAME_FONT_SCALE          1.3f
+#define GAME_FONT_OFFSET_Y       0.19f
 
 /* ========================================================================= */
 /* PARAMETROS DA ABERTURA CINEMATOGRAFICA (AJUSTAVEIS)                       */

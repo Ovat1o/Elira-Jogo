@@ -1,7 +1,0 @@
-# Exemplo de configuração local para compilação
-# Copie este arquivo para "config.mk" e altere os caminhos conforme sua máquina:
-
-# RAYLIB_DIR = C:/raylib
-# RAYLIB_DIR = D:/dev/raylib
-# CC = gcc
-

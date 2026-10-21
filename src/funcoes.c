@@ -52,44 +52,230 @@ Color GetFileWireColor(int colorIndex)
 int g_currentRes = 0; /* 0: 1280x720, 1: 1600x900, 2: 1920x1080 */
 float g_musicVolume = 0.45f;
 
-static Font g_fontCache[GAME_FONT_MAX_SIZE + 1];
-static int g_fontState = 0; /* 0 = nao verificado, 1 = disponivel, -1 = arquivo ausente */
+/* ========================================================================= */
+/* SISTEMA DE FONTE DO JOGO                                                  */
+/* Generico: aceita qualquer .ttf/.otf configurado em constantes.h           */
+/* (GAME_FONT_FILE). Sem arquivo valido, usa a fonte padrao da raylib.       */
+/* ========================================================================= */
 
+/* Caixa da fonte padrao da raylib (celula de 10 px): a letra maiuscula ocupa
+   7/10 da altura e comeca 1/10 abaixo do topo. A fonte escolhida e calibrada
+   para ocupar exatamente essa caixa, preservando os layouts do jogo. */
+#define DEFAULT_FONT_CAP_RATIO 0.7f
+#define DEFAULT_FONT_TOP_RATIO 0.1f
+#define FONT_CALIBRATION_SIZE  100
+
+static Font g_fontCache[GAME_FONT_MAX_SIZE + 1];
+static int g_fontState = 0;            /* 0 = nao verificado, 1 = pronta, -1 = indisponivel (usa a padrao) */
+static unsigned char *g_fontFileData = NULL;
+static int g_fontFileSize = 0;
+static char g_fontPath[512] = {0};
+static char g_fontExt[16] = {0};
+static float g_fontScale = 1.0f;       /* multiplicador do tamanho pedido -> tamanho real da fonte */
+static float g_fontOffsetY = 0.0f;     /* deslocamento vertical (fracao do tamanho) */
+
+/* ASCII + Latin-1 (acentos do portugues) + simbolos extras usados na interface */
+static int BuildFontCodepoints(int *codepoints)
+{
+    int count = 0;
+    for (int c = 32; c <= 126; c++) codepoints[count++] = c;
+    for (int c = 160; c <= 255; c++) codepoints[count++] = c;
+    codepoints[count++] = 0x2013; /* en-dash */
+    codepoints[count++] = 0x2014; /* em-dash */
+    codepoints[count++] = 0x2018; /* aspas simples */
+    codepoints[count++] = 0x2019;
+    codepoints[count++] = 0x201C; /* aspas duplas */
+    codepoints[count++] = 0x201D;
+    codepoints[count++] = 0x2026; /* reticencias */
+    codepoints[count++] = 0x25CF; /* circulo cheio */
+    codepoints[count++] = 0x25CB; /* circulo vazio */
+    return count;
+}
+
+/* Extrai a extensao em minusculas (".ttf", ".otf") do nome configurado */
+static void ResolveFontExtension(const char *fileName)
+{
+    g_fontExt[0] = '\0';
+    const char *dot = strrchr(fileName, '.');
+    if (dot == NULL) return;
+    int i = 0;
+    for (; dot[i] != '\0' && i < (int)sizeof(g_fontExt) - 1; i++)
+    {
+        char ch = dot[i];
+        g_fontExt[i] = (ch >= 'A' && ch <= 'Z') ? (char)(ch - 'A' + 'a') : ch;
+    }
+    g_fontExt[i] = '\0';
+}
+
+/* Le o arquivo inteiro para a RAM (fopen funciona igual no Windows, WSL, Linux e macOS) */
+static bool TryReadFontFile(const char *path)
+{
+    if (path == NULL || path[0] == '\0') return false;
+    FILE *f = fopen(path, "rb");
+    if (f == NULL) return false;
+
+    if (fseek(f, 0, SEEK_END) != 0) { fclose(f); return false; }
+    long sz = ftell(f);
+    if (sz <= 0 || fseek(f, 0, SEEK_SET) != 0) { fclose(f); return false; }
+
+    unsigned char *buf = (unsigned char *)malloc((size_t)sz);
+    if (buf == NULL) { fclose(f); return false; }
+
+    size_t readBytes = fread(buf, 1, (size_t)sz, f);
+    fclose(f);
+    if (readBytes != (size_t)sz) { free(buf); return false; }
+
+    if (g_fontFileData != NULL) free(g_fontFileData);
+    g_fontFileData = buf;
+    g_fontFileSize = (int)sz;
+    snprintf(g_fontPath, sizeof(g_fontPath), "%s", path);
+    return true;
+}
+
+/* Calcula escala/deslocamento para a fonte ocupar a mesma caixa da fonte padrao */
+static bool CalibrateFontMetrics(void)
+{
+#if GAME_FONT_MANUAL_METRICS
+    g_fontScale = GAME_FONT_SCALE;
+    g_fontOffsetY = GAME_FONT_OFFSET_Y;
+    return true;
+#else
+    int cp = 'H';
+    int glyphCount = 0;
+    GlyphInfo *glyphs = LoadFontData(g_fontFileData, g_fontFileSize, FONT_CALIBRATION_SIZE,
+                                     &cp, 1, FONT_DEFAULT, &glyphCount);
+    if (glyphs == NULL || glyphCount <= 0) return false;
+
+    float capRatio = (float)glyphs[0].image.height / FONT_CALIBRATION_SIZE;
+    float topRatio = (float)glyphs[0].offsetY / FONT_CALIBRATION_SIZE;
+    UnloadFontData(glyphs, glyphCount);
+
+    if (capRatio <= 0.05f) return false; /* fonte sem a letra 'H' desenhavel */
+
+    g_fontScale = DEFAULT_FONT_CAP_RATIO / capRatio;
+    if (g_fontScale < 0.3f) g_fontScale = 0.3f;
+    if (g_fontScale > 4.0f) g_fontScale = 4.0f;
+    g_fontOffsetY = topRatio * g_fontScale - DEFAULT_FONT_TOP_RATIO;
+    return true;
+#endif
+}
+
+static void DisableGameFont(const char *reason)
+{
+    printf("[FONTE] %s -> usando a fonte padrao da raylib.\n", reason);
+    fflush(stdout);
+    if (g_fontFileData != NULL) free(g_fontFileData);
+    g_fontFileData = NULL;
+    g_fontFileSize = 0;
+    g_fontScale = 1.0f;
+    g_fontOffsetY = 0.0f;
+    g_fontState = -1;
+}
+
+/* Verifica (uma unica vez) se a fonte configurada existe e pode ser usada */
 bool GameFontAvailable(void)
 {
-    if (g_fontState == 0) g_fontState = FileExists(GAME_FONT_PATH) ? 1 : -1;
-    return g_fontState > 0;
+    if (g_fontState != 0) return g_fontState == 1;
+
+    if (GAME_FONT_FILE[0] == '\0')
+    {
+        DisableGameFont("GAME_FONT_FILE vazio");
+        return false;
+    }
+
+    ResolveFontExtension(GAME_FONT_FILE);
+    if (strcmp(g_fontExt, ".ttf") != 0 && strcmp(g_fontExt, ".otf") != 0)
+    {
+        DisableGameFont("Formato nao suportado (use .ttf ou .otf): " GAME_FONT_FILE);
+        return false;
+    }
+
+    /* Procura relativo ao diretorio atual e ao diretorio do executavel */
+    const char *prefixes[] = { "", "./", "../", "Elira-Jogo/" };
+    const int numPrefixes = (int)(sizeof(prefixes) / sizeof(prefixes[0]));
+    const char *appDir = GetApplicationDirectory();
+    char candidate[512];
+    bool found = false;
+
+    for (int pass = 0; pass < 2 && !found; pass++)
+    {
+        const char *base = (pass == 0) ? "" : appDir;
+        if (pass == 1 && (base == NULL || base[0] == '\0')) break;
+        for (int i = 0; i < numPrefixes && !found; i++)
+        {
+            snprintf(candidate, sizeof(candidate), "%s%s%s", base, prefixes[i], GAME_FONT_PATH);
+            found = TryReadFontFile(candidate);
+        }
+    }
+
+    if (!found)
+    {
+        printf("[FONTE] ERRO: '%s' nao encontrada (diretorio atual: %s)\n",
+               GAME_FONT_PATH, GetWorkingDirectory());
+        DisableGameFont("Arquivo ausente");
+        return false;
+    }
+
+    if (!CalibrateFontMetrics())
+    {
+        DisableGameFont("Arquivo de fonte invalido ou corrompido: " GAME_FONT_FILE);
+        return false;
+    }
+
+    g_fontState = 1;
+    printf("[FONTE] '%s' carregada (%d bytes) | escala=%.3f deslocY=%.3f\n",
+           g_fontPath, g_fontFileSize, g_fontScale, g_fontOffsetY);
+    fflush(stdout);
+    return true;
 }
 
 /* 'pixelSize' e o tamanho real de rasterizacao (ja escalado) */
 Font GetGameFont(float pixelSize)
 {
+    if (!GameFontAvailable()) return GetFontDefault();
+
     int px = (int)(pixelSize + 0.5f);
     if (px < 1) px = 1;
     if (px > GAME_FONT_MAX_SIZE) px = GAME_FONT_MAX_SIZE;
 
     if (g_fontCache[px].texture.id == 0)
     {
-        /* ASCII + Latin-1 (acentos do portugues) + simbolos extras de UI */
-        int codepoints[95 + 96 + 4];
-        int count = 0;
-        for (int c = 32; c <= 126; c++) codepoints[count++] = c;
-        for (int c = 160; c <= 255; c++) codepoints[count++] = c;
-        codepoints[count++] = 0x2013; /* en-dash */
-        codepoints[count++] = 0x2014; /* em-dash */
-        codepoints[count++] = 0x25CF; /* black circle */
-        codepoints[count++] = 0x25CB; /* white circle */
-        g_fontCache[px] = LoadFontEx(GAME_FONT_PATH, px, codepoints, count);
+        int codepoints[256];
+        int count = BuildFontCodepoints(codepoints);
+
+        Font loaded = LoadFontFromMemory(g_fontExt, g_fontFileData, g_fontFileSize, px, codepoints, count);
+        if (loaded.texture.id == 0 || loaded.glyphCount == 0 ||
+            loaded.texture.id == GetFontDefault().texture.id)
+        {
+            UnloadGameFonts();
+            DisableGameFont("Falha ao rasterizar a fonte");
+            return GetFontDefault();
+        }
+
+        SetTextureFilter(loaded.texture, GAME_FONT_PIXEL_ART ? TEXTURE_FILTER_POINT : TEXTURE_FILTER_BILINEAR);
+        g_fontCache[px] = loaded;
     }
     return g_fontCache[px];
 }
 
 void UnloadGameFonts(void)
 {
+    unsigned int defaultTexId = GetFontDefault().texture.id;
     for (int i = 0; i <= GAME_FONT_MAX_SIZE; i++)
     {
-        if (g_fontCache[i].texture.id != 0) UnloadFont(g_fontCache[i]);
+        if (g_fontCache[i].texture.id != 0 && g_fontCache[i].texture.id != defaultTexId)
+        {
+            UnloadFont(g_fontCache[i]);
+        }
+        g_fontCache[i] = (Font){0};
     }
+    if (g_fontFileData != NULL)
+    {
+        free(g_fontFileData);
+        g_fontFileData = NULL;
+        g_fontFileSize = 0;
+    }
+    g_fontState = 0;
 }
 
 /* Substitutos de DrawTextEx/MeasureTextEx: 'size' segue a escala da fonte padrao */
@@ -100,16 +286,27 @@ void DrawGameTextEx(const char *text, Vector2 position, float size, float spacin
         DrawTextEx(GetFontDefault(), text, position, size, spacing, color);
         return;
     }
-    position.y -= size * GAME_FONT_OFFSET_Y;
-    DrawTextEx(GetGameFont(size * GAME_FONT_SCALE), text, position, size * GAME_FONT_SCALE, spacing, color);
+    float realSize = size * g_fontScale;
+    Font font = GetGameFont(realSize);
+    if (!GameFontAvailable()) /* a rasterizacao pode ter falhado agora */
+    {
+        DrawTextEx(GetFontDefault(), text, position, size, spacing, color);
+        return;
+    }
+    position.y -= size * g_fontOffsetY;
+    DrawTextEx(font, text, position, realSize, spacing, color);
 }
 
 Vector2 MeasureGameTextEx(const char *text, float size, float spacing)
 {
     if (!GameFontAvailable()) return MeasureTextEx(GetFontDefault(), text, size, spacing);
 
-    Vector2 measured = MeasureTextEx(GetGameFont(size * GAME_FONT_SCALE), text, size * GAME_FONT_SCALE, spacing);
-    measured.y /= GAME_FONT_SCALE;
+    float realSize = size * g_fontScale;
+    Font font = GetGameFont(realSize);
+    if (!GameFontAvailable()) return MeasureTextEx(GetFontDefault(), text, size, spacing);
+
+    Vector2 measured = MeasureTextEx(font, text, realSize, spacing);
+    measured.y /= g_fontScale;
     return measured;
 }
 
@@ -1741,7 +1938,7 @@ void DrawJournalHudButton(const GameState *game)
     else if (game->screen == SCREEN_ROOM_2026)
     {
         int count = (game->manual2026Read ? 1 : 0) + (game->room2026Completed ? 2 : 0);
-        DrawText(TextFormat("[D] Sintese: %d/3", count), 1100, 688, 15,
+        DrawGameText(TextFormat("[D] Sintese: %d/3", count), 1100, 688, 15,
                  hover ? CYAN_COLOR : (Color){180, 195, 215, 255});
 
         /* Badge indicadora com contador de passos da sintese 2026 */
@@ -1749,7 +1946,7 @@ void DrawJournalHudButton(const GameState *game)
         {
             DrawCircle(iconX + iconW + 2, iconY + 4, 7, (Color){245, 175, 50, 255});
             DrawCircleLines(iconX + iconW + 2, iconY + 4, 7, RAYWHITE);
-            DrawText(TextFormat("%d", count), iconX + iconW - 1, iconY, 11, RAYWHITE);
+            DrawGameText(TextFormat("%d", count), iconX + iconW - 1, iconY, 11, RAYWHITE);
         }
     }
     else if (game->screen == SCREEN_ROOM_2008)
@@ -1792,10 +1989,10 @@ void DrawHud(const GameState *game)
     int minutes = totalSeconds / 60;
     int seconds = totalSeconds % 60;
     DrawRectangle(0, 0, SCREEN_WIDTH, 70, Fade(VOID_COLOR, 0.94f));
-    DrawText("ARQUIVO 04 // 2048 - O PROTOTIPO", 28, 20, 22, CYAN_COLOR);
-    DrawText(TextFormat("OPERADOR: %s", game->playerName), 270, 23, 17, GRAY);
-    DrawText(TextFormat("PISTAS %d/5", ClueCount(game)), 900, 20, 20, LIGHTGRAY);
-    DrawText(TextFormat("VIDAS %d", game->lives), 1050, 20, 20,
+    DrawGameText("ARQUIVO 04 // 2048 - O PROTOTIPO", 28, 20, 22, CYAN_COLOR);
+    DrawGameText(TextFormat("OPERADOR: %s", game->playerName), 270, 23, 17, GRAY);
+    DrawGameText(TextFormat("PISTAS %d/5", ClueCount(game)), 900, 20, 20, LIGHTGRAY);
+    DrawGameText(TextFormat("VIDAS %d", game->lives), 1050, 20, 20,
              game->lives == 1 ? RED_COLOR : RAYWHITE);
     DrawGameText(TextFormat("%02d:%02d", minutes, seconds), 1180, 20, 20,
              GOLD_COLOR);
@@ -2527,20 +2724,20 @@ void DrawJournal(const GameState *game)
         DrawRectangleRoundedLinesEx(prevBtn, 0.25f, 6, 1, (Color){145, 115, 85, 255});
         DrawGameText("< Anterior [Q]", bookX + 44, footY + 9, 15, canPrev ? INK_COLOR : GRAY);
 
-        DrawText(TextFormat("Pagina %d de 2 (2008)", page + 1), bookX + 210, footY + 8, 18, (Color){125, 35, 18, 255});
+        DrawGameText(TextFormat("Pagina %d de 2 (2008)", page + 1), bookX + 210, footY + 8, 18, (Color){125, 35, 18, 255});
 
         Rectangle closeBtn = {(float)(bookX + 660), (float)footY, 145, 36};
         bool closeHover = CheckCollisionPointRec(GetVirtualMouse(), closeBtn);
         DrawRectangleRounded(closeBtn, 0.25f, 6, closeHover ? (Color){195, 170, 140, 255} : (Color){226, 216, 196, 255});
         DrawRectangleRoundedLinesEx(closeBtn, 0.25f, 6, 1, (Color){145, 115, 85, 255});
-        DrawText("Fechar [ESC/D]", bookX + 678, footY + 9, 15, INK_COLOR);
+        DrawGameText("Fechar [ESC/D]", bookX + 678, footY + 9, 15, INK_COLOR);
 
         Rectangle nextBtn = {(float)(bookX + 835), (float)footY, 155, 36};
         bool nextHover = CheckCollisionPointRec(GetVirtualMouse(), nextBtn);
         bool canNext = (page < 1);
         DrawRectangleRounded(nextBtn, 0.25f, 6, canNext ? (nextHover ? (Color){195, 170, 140, 255} : (Color){226, 216, 196, 255}) : Fade((Color){200, 195, 185, 255}, 0.5f));
         DrawRectangleRoundedLinesEx(nextBtn, 0.25f, 6, 1, (Color){145, 115, 85, 255});
-        DrawText("Proxima [E] >", bookX + 858, footY + 9, 15, canNext ? INK_COLOR : GRAY);
+        DrawGameText("Proxima [E] >", bookX + 858, footY + 9, 15, canNext ? INK_COLOR : GRAY);
     }
     else if (game->journalYearTab == 2)
     {
@@ -2555,12 +2752,12 @@ void DrawJournal(const GameState *game)
             /* PAGINA 1 DE 2026: REGISTRO DE OPERACOES & SINTESE     */
             /* ----------------------------------------------------- */
             /* Pagina Esquerda */
-            DrawText("DIARIO DE PESQUISA // ANO 2026", bookX + 32, bookY + 22, 20, (Color){125, 35, 18, 255});
+            DrawGameText("DIARIO DE PESQUISA // ANO 2026", bookX + 32, bookY + 22, 20, (Color){125, 35, 18, 255});
             DrawLine(bookX + 32, bookY + 52, bookX + 482, bookY + 52, Fade((Color){125, 35, 18, 255}, 0.45f));
 
-            DrawText("SALA DE HIDROGENIO // PROCESSO TERMICO", bookX + 32, bookY + 68, 17, (Color){125, 35, 18, 255});
-            DrawText("Sintese de hardware neural de estado solido (SSD).", bookX + 32, bookY + 92, 15, INK_COLOR);
-            DrawText("Status dos procedimentos da sala:", bookX + 32, bookY + 116, 16,
+            DrawGameText("SALA DE HIDROGENIO // PROCESSO TERMICO", bookX + 32, bookY + 68, 17, (Color){125, 35, 18, 255});
+            DrawGameText("Sintese de hardware neural de estado solido (SSD).", bookX + 32, bookY + 92, 15, INK_COLOR);
+            DrawGameText("Status dos procedimentos da sala:", bookX + 32, bookY + 116, 16,
                      game->room2026Completed ? (Color){20, 120, 45, 255} : (Color){145, 65, 30, 255});
 
             const char *h2TitlesFound[4] = {
@@ -2588,53 +2785,53 @@ void DrawJournal(const GameState *game)
                 Rectangle boxR = {(float)(bookX + 32), (float)iy, 448, 38};
                 DrawRectangleRounded(boxR, 0.2f, 6, h2ItemFound[i] ? Fade((Color){45, 135, 65, 255}, 0.14f) : Fade((Color){140, 125, 105, 255}, 0.12f));
                 DrawRectangleRoundedLinesEx(boxR, 0.2f, 6, 1, h2ItemFound[i] ? (Color){45, 135, 65, 255} : (Color){190, 175, 150, 255});
-                DrawText(h2ItemFound[i] ? "[OK]" : "[?]", bookX + 44, iy + 10, 16, h2ItemFound[i] ? (Color){25, 120, 45, 255} : (Color){140, 80, 50, 255});
-                DrawText(h2ItemFound[i] ? h2TitlesFound[i] : h2TitlesMissing[i], bookX + 90, iy + 11, 15, h2ItemFound[i] ? INK_COLOR : (Color){105, 95, 85, 255});
+                DrawGameText(h2ItemFound[i] ? "[OK]" : "[?]", bookX + 44, iy + 10, 16, h2ItemFound[i] ? (Color){25, 120, 45, 255} : (Color){140, 80, 50, 255});
+                DrawGameText(h2ItemFound[i] ? h2TitlesFound[i] : h2TitlesMissing[i], bookX + 90, iy + 11, 15, h2ItemFound[i] ? INK_COLOR : (Color){105, 95, 85, 255});
             }
 
             /* Carimbo confidencial */
             DrawRectangleRoundedLinesEx((Rectangle){(float)(bookX + 270), (float)(bookY + 368), 210, 46}, 0.2f, 6, 2, (Color){175, 45, 45, 255});
-            DrawText("ALUCINACAO IA", bookX + 300, bookY + 375, 18, (Color){175, 45, 45, 255});
-            DrawText("PENSAMENTO CRITICO 2026", bookX + 288, bookY + 396, 12, (Color){175, 45, 45, 255});
+            DrawGameText("ALUCINACAO IA", bookX + 300, bookY + 375, 18, (Color){175, 45, 45, 255});
+            DrawGameText("PENSAMENTO CRITICO 2026", bookX + 288, bookY + 396, 12, (Color){175, 45, 45, 255});
 
-            DrawText("Consulte o manual tecnico fisico na bancada esquerda.", bookX + 32, bookY + 430, 15, INK_COLOR);
-            DrawText("Desconfie de recomendacoes com 96% de confianca que", bookX + 32, bookY + 454, 15, INK_COLOR);
-            DrawText("contradigam a fisica dos materiais e o manual.", bookX + 32, bookY + 478, 15, (Color){125, 35, 18, 255});
+            DrawGameText("Consulte o manual tecnico fisico na bancada esquerda.", bookX + 32, bookY + 430, 15, INK_COLOR);
+            DrawGameText("Desconfie de recomendacoes com 96% de confianca que", bookX + 32, bookY + 454, 15, INK_COLOR);
+            DrawGameText("contradigam a fisica dos materiais e o manual.", bookX + 32, bookY + 478, 15, (Color){125, 35, 18, 255});
 
             /* Pagina Direita */
-            DrawText("SINTESE & DEDUCAO DO REATOR // 2026", bookX + 560, bookY + 22, 20, (Color){125, 35, 18, 255});
+            DrawGameText("SINTESE & DEDUCAO DO REATOR // 2026", bookX + 560, bookY + 22, 20, (Color){125, 35, 18, 255});
             DrawLine(bookX + 560, bookY + 52, bookX + 1008, bookY + 52, Fade((Color){125, 35, 18, 255}, 0.45f));
 
             Rectangle cardR1 = {(float)(bookX + 560), (float)(bookY + 76), 452, 146};
             DrawRectangleRounded(cardR1, 0.08f, 6, Fade((Color){168, 142, 93, 255}, 0.16f));
             DrawRectangleRoundedLinesEx(cardR1, 0.08f, 6, 1.5f, (Color){185, 155, 110, 255});
-            DrawText("A ALUCINACAO DA IA GENERATIVA:", bookX + 576, bookY + 90, 17, (Color){125, 35, 18, 255});
-            DrawText("- A.R.1.3.L. recomenda Gas Hidrogenio com 96% de certeza.", bookX + 576, bookY + 115, 14, INK_COLOR);
-            DrawText("- Modelos generativos predizem tokens com base estatistica,", bookX + 576, bookY + 138, 14, INK_COLOR);
-            DrawText("  podendo soar extremamente convincentes mesmo estando errados.", bookX + 576, bookY + 160, 14, INK_COLOR);
-            DrawText("  'Confianca estatistica nao e sinonimo de verdade factual.'", bookX + 576, bookY + 186, 15, (Color){135, 35, 18, 255});
+            DrawGameText("A ALUCINACAO DA IA GENERATIVA:", bookX + 576, bookY + 90, 17, (Color){125, 35, 18, 255});
+            DrawGameText("- A.R.1.3.L. recomenda Gas Hidrogenio com 96% de certeza.", bookX + 576, bookY + 115, 14, INK_COLOR);
+            DrawGameText("- Modelos generativos predizem tokens com base estatistica,", bookX + 576, bookY + 138, 14, INK_COLOR);
+            DrawGameText("  podendo soar extremamente convincentes mesmo estando errados.", bookX + 576, bookY + 160, 14, INK_COLOR);
+            DrawGameText("  'Confianca estatistica nao e sinonimo de verdade factual.'", bookX + 576, bookY + 186, 15, (Color){135, 35, 18, 255});
 
             Rectangle cardR2 = {(float)(bookX + 560), (float)(bookY + 238), 452, 125};
             DrawRectangleRounded(cardR2, 0.08f, 6, (Color){238, 232, 218, 255});
             DrawRectangleRoundedLinesEx(cardR2, 0.08f, 6, 1.5f, (Color){175, 155, 125, 255});
-            DrawText("REFINO DA LIGA DE ESTADO SOLIDO (SSD):", bookX + 576, bookY + 252, 16, (Color){125, 65, 35, 255});
+            DrawGameText("REFINO DA LIGA DE ESTADO SOLIDO (SSD):", bookX + 576, bookY + 252, 16, (Color){125, 65, 35, 255});
 
             if (game->room2026Completed)
             {
-                DrawText("[ REATOR ESTABILIZADO // 100% ]", bookX + 610, bookY + 280, 22, (Color){25, 125, 50, 255});
-                DrawText("Minerio de Neodimio fundido com sucesso. SSD liberado!", bookX + 576, bookY + 326, 14, (Color){25, 125, 50, 255});
+                DrawGameText("[ REATOR ESTABILIZADO // 100% ]", bookX + 610, bookY + 280, 22, (Color){25, 125, 50, 255});
+                DrawGameText("Minerio de Neodimio fundido com sucesso. SSD liberado!", bookX + 576, bookY + 326, 14, (Color){25, 125, 50, 255});
             }
             else
             {
-                DrawText("Exige Terras Raras solidas (Neodimio / Disprosio).", bookX + 576, bookY + 280, 15, (Color){165, 45, 35, 255});
-                DrawText("Proibido: gases ou liquidos na camara termica.", bookX + 576, bookY + 304, 15, INK_COLOR);
-                DrawText("Alimente o reator com a opcao mineral correta.", bookX + 576, bookY + 328, 14, (Color){135, 55, 40, 255});
+                DrawGameText("Exige Terras Raras solidas (Neodimio / Disprosio).", bookX + 576, bookY + 280, 15, (Color){165, 45, 35, 255});
+                DrawGameText("Proibido: gases ou liquidos na camara termica.", bookX + 576, bookY + 304, 15, INK_COLOR);
+                DrawGameText("Alimente o reator com a opcao mineral correta.", bookX + 576, bookY + 328, 14, (Color){135, 55, 40, 255});
             }
 
-            DrawText("DICAS DE NAVEGACAO DESTE ARQUIVO:", bookX + 560, bookY + 385, 16, (Color){125, 35, 18, 255});
-            DrawText("- Clique em 'Proxima [E]' para o Dossie Socioambiental.", bookX + 560, bookY + 412, 15, INK_COLOR);
-            DrawText("- Conclua a fase para liberar o salto para o ANO 2048.", bookX + 560, bookY + 438, 15, INK_COLOR);
-            DrawText("- Pressione [D] para retornar a fabrica automatizada.", bookX + 560, bookY + 464, 15, INK_COLOR);
+            DrawGameText("DICAS DE NAVEGACAO DESTE ARQUIVO:", bookX + 560, bookY + 385, 16, (Color){125, 35, 18, 255});
+            DrawGameText("- Clique em 'Proxima [E]' para o Dossie Socioambiental.", bookX + 560, bookY + 412, 15, INK_COLOR);
+            DrawGameText("- Conclua a fase para liberar o salto para o ANO 2048.", bookX + 560, bookY + 438, 15, INK_COLOR);
+            DrawGameText("- Pressione [D] para retornar a fabrica automatizada.", bookX + 560, bookY + 464, 15, INK_COLOR);
         }
         else
         {
@@ -2642,21 +2839,21 @@ void DrawJournal(const GameState *game)
             /* PAGINA 2 DE 2026: DOSSIE SOCIOAMBIENTAL & TERRAS RARAS*/
             /* ----------------------------------------------------- */
             /* Pagina Esquerda */
-            DrawText("DOSSIE SOCIOAMBIENTAL // ANO 2026", bookX + 32, bookY + 20, 20, (Color){125, 35, 18, 255});
-            DrawText("IMPACTO MATERIAL DO HARDWARE DE IA", bookX + 32, bookY + 44, 15, (Color){110, 75, 50, 255});
+            DrawGameText("DOSSIE SOCIOAMBIENTAL // ANO 2026", bookX + 32, bookY + 20, 20, (Color){125, 35, 18, 255});
+            DrawGameText("IMPACTO MATERIAL DO HARDWARE DE IA", bookX + 32, bookY + 44, 15, (Color){110, 75, 50, 255});
             DrawLine(bookX + 32, bookY + 65, bookX + 482, bookY + 65, Fade((Color){125, 35, 18, 255}, 0.45f));
 
             Rectangle bRaras = {(float)(bookX + 32), (float)(bookY + 78), 448, 205};
             DrawRectangleRounded(bRaras, 0.08f, 6, Fade((Color){168, 142, 93, 255}, 0.16f));
             DrawRectangleRoundedLinesEx(bRaras, 0.08f, 6, 1.5f, (Color){185, 155, 110, 255});
 
-            DrawText("2026 // MINERACAO E TERRAS RARAS", bookX + 46, bookY + 92, 17, (Color){125, 35, 18, 255});
-            DrawText("[CUSTO FISICO DA NUVEM DIGITAL]", bookX + 46, bookY + 116, 14, (Color){25, 125, 50, 255});
-            DrawText("A Inteligencia Artificial nao existe no vacuo:", bookX + 46, bookY + 140, 15, INK_COLOR);
-            DrawText("sua infraestrutura fisica requer toneladas de minerais", bookX + 46, bookY + 164, 15, INK_COLOR);
-            DrawText("raros (Neodimio, Litio, Cobalto) extraidos do solo,", bookX + 46, bookY + 188, 15, INK_COLOR);
-            DrawText("alem de volumes colossais de agua para resfriamento.", bookX + 46, bookY + 212, 15, INK_COLOR);
-            DrawText("-> O pensamento critico inclui a consciencia ambiental.", bookX + 46, bookY + 238, 15, (Color){125, 35, 18, 255});
+            DrawGameText("2026 // MINERACAO E TERRAS RARAS", bookX + 46, bookY + 92, 17, (Color){125, 35, 18, 255});
+            DrawGameText("[CUSTO FISICO DA NUVEM DIGITAL]", bookX + 46, bookY + 116, 14, (Color){25, 125, 50, 255});
+            DrawGameText("A Inteligencia Artificial nao existe no vacuo:", bookX + 46, bookY + 140, 15, INK_COLOR);
+            DrawGameText("sua infraestrutura fisica requer toneladas de minerais", bookX + 46, bookY + 164, 15, INK_COLOR);
+            DrawGameText("raros (Neodimio, Litio, Cobalto) extraidos do solo,", bookX + 46, bookY + 188, 15, INK_COLOR);
+            DrawGameText("alem de volumes colossais de agua para resfriamento.", bookX + 46, bookY + 212, 15, INK_COLOR);
+            DrawGameText("-> O pensamento critico inclui a consciencia ambiental.", bookX + 46, bookY + 238, 15, (Color){125, 35, 18, 255});
 
             Rectangle bRefino = {(float)(bookX + 32), (float)(bookY + 298), 448, 215};
             DrawRectangleRounded(bRefino, 0.08f, 6, game->room2026Completed ? Fade((Color){168, 142, 93, 255}, 0.16f) : Fade(GRAY, 0.12f));
@@ -2664,24 +2861,24 @@ void DrawJournal(const GameState *game)
 
             if (game->room2026Completed)
             {
-                DrawText("2026 // SINTESE DO SSD CONCLUIDA", bookX + 46, bookY + 312, 17, (Color){125, 35, 18, 255});
-                DrawText("[CONFIRMADO // RECOMPENSA DE 2026]", bookX + 46, bookY + 336, 14, (Color){25, 125, 50, 255});
-                DrawText("A liga metalica de alta pureza foi sintetizada.", bookX + 46, bookY + 360, 15, INK_COLOR);
-                DrawText("A unidade SSD armazena a matriz neural de Ariel.", bookX + 46, bookY + 384, 15, INK_COLOR);
-                DrawText("Recompensa resgatada com sucesso para a etapa final.", bookX + 46, bookY + 408, 15, (Color){125, 35, 18, 255});
-                DrawText("-> Salto temporal liberado: ANO 2048!", bookX + 46, bookY + 438, 15, (Color){25, 125, 50, 255});
+                DrawGameText("2026 // SINTESE DO SSD CONCLUIDA", bookX + 46, bookY + 312, 17, (Color){125, 35, 18, 255});
+                DrawGameText("[CONFIRMADO // RECOMPENSA DE 2026]", bookX + 46, bookY + 336, 14, (Color){25, 125, 50, 255});
+                DrawGameText("A liga metalica de alta pureza foi sintetizada.", bookX + 46, bookY + 360, 15, INK_COLOR);
+                DrawGameText("A unidade SSD armazena a matriz neural de Ariel.", bookX + 46, bookY + 384, 15, INK_COLOR);
+                DrawGameText("Recompensa resgatada com sucesso para a etapa final.", bookX + 46, bookY + 408, 15, (Color){125, 35, 18, 255});
+                DrawGameText("-> Salto temporal liberado: ANO 2048!", bookX + 46, bookY + 438, 15, (Color){25, 125, 50, 255});
             }
             else
             {
                 DrawPadlockIcon(bookX + 65, bookY + 400, 1.3f, (Color){185, 145, 60, 255}, RAYWHITE);
-                DrawText("2026 // RECOMPENSA SSD [BLOQUEADO]", bookX + 100, bookY + 360, 17, (Color){125, 65, 35, 255});
-                DrawText("Insira o Minerio de Neodimio na camara termica", bookX + 100, bookY + 390, 15, INK_COLOR);
-                DrawText("para estabilizar a liga e resgatar o artefato SSD.", bookX + 100, bookY + 415, 15, INK_COLOR);
+                DrawGameText("2026 // RECOMPENSA SSD [BLOQUEADO]", bookX + 100, bookY + 360, 17, (Color){125, 65, 35, 255});
+                DrawGameText("Insira o Minerio de Neodimio na camara termica", bookX + 100, bookY + 390, 15, INK_COLOR);
+                DrawGameText("para estabilizar a liga e resgatar o artefato SSD.", bookX + 100, bookY + 415, 15, INK_COLOR);
             }
 
             /* Pagina Direita */
-            DrawText("ARTEFATOS E PROTOTIPO // 2026", bookX + 560, bookY + 20, 20, (Color){125, 35, 18, 255});
-            DrawText("UNIDADE DE ESTADO SOLIDO (SSD)", bookX + 560, bookY + 44, 15, (Color){110, 75, 50, 255});
+            DrawGameText("ARTEFATOS E PROTOTIPO // 2026", bookX + 560, bookY + 20, 20, (Color){125, 35, 18, 255});
+            DrawGameText("UNIDADE DE ESTADO SOLIDO (SSD)", bookX + 560, bookY + 44, 15, (Color){110, 75, 50, 255});
             DrawLine(bookX + 560, bookY + 65, bookX + 1008, bookY + 65, Fade((Color){125, 35, 18, 255}, 0.45f));
 
             Rectangle bSsdCard = {(float)(bookX + 560), (float)(bookY + 78), 448, 205};
@@ -2690,45 +2887,45 @@ void DrawJournal(const GameState *game)
 
             if (game->room2026Completed)
             {
-                DrawText("2026 // SSD DAS ESCOLHAS", bookX + 574, bookY + 92, 17, (Color){125, 35, 18, 255});
-                DrawText("[CONFIRMADO // ARTEFATO DE 2026]", bookX + 574, bookY + 116, 14, (Color){25, 125, 50, 255});
-                DrawText("Guarda os registros do momento em que a IA comecou", bookX + 574, bookY + 140, 15, INK_COLOR);
-                DrawText("a sugerir e decidir pela humanidade.", bookX + 574, bookY + 164, 15, INK_COLOR);
-                DrawText("Este artefato completa a trilogia previa para 2048.", bookX + 574, bookY + 188, 15, INK_COLOR);
-                DrawText("-> Proxima parada: CONFRONTO EM 2048!", bookX + 574, bookY + 214, 15, (Color){125, 35, 18, 255});
+                DrawGameText("2026 // SSD DAS ESCOLHAS", bookX + 574, bookY + 92, 17, (Color){125, 35, 18, 255});
+                DrawGameText("[CONFIRMADO // ARTEFATO DE 2026]", bookX + 574, bookY + 116, 14, (Color){25, 125, 50, 255});
+                DrawGameText("Guarda os registros do momento em que a IA comecou", bookX + 574, bookY + 140, 15, INK_COLOR);
+                DrawGameText("a sugerir e decidir pela humanidade.", bookX + 574, bookY + 164, 15, INK_COLOR);
+                DrawGameText("Este artefato completa a trilogia previa para 2048.", bookX + 574, bookY + 188, 15, INK_COLOR);
+                DrawGameText("-> Proxima parada: CONFRONTO EM 2048!", bookX + 574, bookY + 214, 15, (Color){125, 35, 18, 255});
             }
             else
             {
                 DrawPadlockIcon(bookX + 595, bookY + 175, 1.3f, (Color){185, 145, 60, 255}, RAYWHITE);
-                DrawText("2026 // UNIDADE SSD [BLOQUEADO]", bookX + 630, bookY + 135, 17, (Color){125, 65, 35, 255});
-                DrawText("O SSD esta trancado no compartimento de saida.", bookX + 630, bookY + 165, 15, INK_COLOR);
-                DrawText("Conclua a sintese no reator termico para libera-lo.", bookX + 630, bookY + 190, 15, INK_COLOR);
+                DrawGameText("2026 // UNIDADE SSD [BLOQUEADO]", bookX + 630, bookY + 135, 17, (Color){125, 65, 35, 255});
+                DrawGameText("O SSD esta trancado no compartimento de saida.", bookX + 630, bookY + 165, 15, INK_COLOR);
+                DrawGameText("Conclua a sintese no reator termico para libera-lo.", bookX + 630, bookY + 190, 15, INK_COLOR);
             }
 
             Rectangle bBonus = {(float)(bookX + 560), (float)(bookY + 298), 448, 215};
             DrawRectangleRounded(bBonus, 0.08f, 6, Fade((Color){168, 142, 93, 255}, 0.16f));
             DrawRectangleRoundedLinesEx(bBonus, 0.08f, 6, 1.5f, (Color){185, 155, 110, 255});
 
-            DrawText("BONUS DE PENSAMENTO CRITICO", bookX + 574, bookY + 312, 17, (Color){125, 35, 18, 255});
-            DrawText("[AVALIACAO ETICA DO JOGADOR]", bookX + 574, bookY + 336, 14, (Color){125, 35, 18, 255});
+            DrawGameText("BONUS DE PENSAMENTO CRITICO", bookX + 574, bookY + 312, 17, (Color){125, 35, 18, 255});
+            DrawGameText("[AVALIACAO ETICA DO JOGADOR]", bookX + 574, bookY + 336, 14, (Color){125, 35, 18, 255});
             if (game->room2026Completed)
             {
                 if (game->room2026FirstTrySuccess)
                 {
-                    DrawText("ANALISE CRITICA: EXCELENTE!", bookX + 574, bookY + 368, 16, (Color){25, 125, 50, 255});
-                    DrawText("Elira percebeu a inconsistencia da IA na 1a tentativa.", bookX + 574, bookY + 396, 14, INK_COLOR);
-                    DrawText("Bonus etico concedido para o confronto de 2048.", bookX + 574, bookY + 422, 14, (Color){25, 125, 50, 255});
+                    DrawGameText("ANALISE CRITICA: EXCELENTE!", bookX + 574, bookY + 368, 16, (Color){25, 125, 50, 255});
+                    DrawGameText("Elira percebeu a inconsistencia da IA na 1a tentativa.", bookX + 574, bookY + 396, 14, INK_COLOR);
+                    DrawGameText("Bonus etico concedido para o confronto de 2048.", bookX + 574, bookY + 422, 14, (Color){25, 125, 50, 255});
                 }
                 else
                 {
-                    DrawText("ANALISE CRITICA: REVISADA", bookX + 574, bookY + 368, 16, (Color){145, 85, 35, 255});
-                    DrawText("A falha inicial serviu como licao de verificacao.", bookX + 574, bookY + 396, 14, INK_COLOR);
+                    DrawGameText("ANALISE CRITICA: REVISADA", bookX + 574, bookY + 368, 16, (Color){145, 85, 35, 255});
+                    DrawGameText("A falha inicial serviu como licao de verificacao.", bookX + 574, bookY + 396, 14, INK_COLOR);
                 }
             }
             else
             {
-                DrawText("Acerte o mineral na primeira tentativa para", bookX + 574, bookY + 368, 15, INK_COLOR);
-                DrawText("receber o relatorio de consciencia socioambiental.", bookX + 574, bookY + 394, 15, (Color){135, 35, 18, 255});
+                DrawGameText("Acerte o mineral na primeira tentativa para", bookX + 574, bookY + 368, 15, INK_COLOR);
+                DrawGameText("receber o relatorio de consciencia socioambiental.", bookX + 574, bookY + 394, 15, (Color){135, 35, 18, 255});
             }
         }
 
@@ -2738,9 +2935,9 @@ void DrawJournal(const GameState *game)
         bool canPrev = (page > 0);
         DrawRectangleRounded(prevBtn, 0.25f, 6, canPrev ? (prevHover ? (Color){195, 170, 140, 255} : (Color){226, 216, 196, 255}) : Fade((Color){200, 195, 185, 255}, 0.5f));
         DrawRectangleRoundedLinesEx(prevBtn, 0.25f, 6, 1, (Color){145, 115, 85, 255});
-        DrawText("< Anterior [Q]", bookX + 44, footY + 9, 15, canPrev ? INK_COLOR : GRAY);
+        DrawGameText("< Anterior [Q]", bookX + 44, footY + 9, 15, canPrev ? INK_COLOR : GRAY);
 
-        DrawText(TextFormat("Pagina %d de 2 (2026)", page + 1), bookX + 210, footY + 8, 18, (Color){125, 35, 18, 255});
+        DrawGameText(TextFormat("Pagina %d de 2 (2026)", page + 1), bookX + 210, footY + 8, 18, (Color){125, 35, 18, 255});
 
         Rectangle closeBtn = {(float)(bookX + 660), (float)footY, 145, 36};
         bool closeHover = CheckCollisionPointRec(GetVirtualMouse(), closeBtn);
@@ -5943,8 +6140,8 @@ void DrawHudRoom2026(const GameState *game)
     int seconds = totalSeconds % 60;
 
     DrawRectangle(0, 0, SCREEN_WIDTH, 70, Fade(VOID_COLOR, 0.94f));
-    DrawText("ARQUIVO 03 // 2026 - SALA DE HIDROGENIO", 28, 22, 20, CYAN_COLOR);
-    DrawText(TextFormat("OPERADOR: %s", game->playerName), 445, 26, 15, GRAY);
+    DrawGameText("ARQUIVO 03 // 2026 - SALA DE HIDROGENIO", 28, 22, 20, CYAN_COLOR);
+    DrawGameText(TextFormat("OPERADOR: %s", game->playerName), 445, 26, 15, GRAY);
 
     /* PAINEL PERSISTENTE DO REATOR NA HUD (VISIVEL EM TODOS OS FRAMES E TELAS DA SALA) */
     Rectangle hudReactorBox = {595, 8, 415, 54};
@@ -5955,15 +6152,15 @@ void DrawHudRoom2026(const GameState *game)
     {
         DrawRectangleRounded(hudReactorBox, 0.15f, 4, (Color){14, 28, 20, 255});
         DrawRectangleRoundedLinesEx(hudReactorBox, 0.15f, 4, 1.5f, (Color){60, 215, 120, 255});
-        DrawText("REATOR TÉRMICO // LIGA ESTABILIZADA", (int)hudReactorBox.x + 12, (int)hudReactorBox.y + 8, 11, (Color){80, 235, 120, 255});
-        DrawText("[OK] SSD SINTETIZADO COM SUCESSO", (int)hudReactorBox.x + 12, (int)hudReactorBox.y + 24, 16, (Color){100, 255, 140, 255});
+        DrawGameText("REATOR TÉRMICO // LIGA ESTABILIZADA", (int)hudReactorBox.x + 12, (int)hudReactorBox.y + 8, 11, (Color){80, 235, 120, 255});
+        DrawGameText("[OK] SSD SINTETIZADO COM SUCESSO", (int)hudReactorBox.x + 12, (int)hudReactorBox.y + 24, 16, (Color){100, 255, 140, 255});
     }
     else if (game->room2026Processing)
     {
         DrawRectangleRounded(hudReactorBox, 0.15f, 4, (Color){28, 24, 12, 255});
         DrawRectangleRoundedLinesEx(hudReactorBox, 0.15f, 4, 1.5f, GOLD_COLOR);
-        DrawText("REATOR TÉRMICO // SÍNTESE ATIVA", (int)hudReactorBox.x + 12, (int)hudReactorBox.y + 8, 11, GOLD_COLOR);
-        DrawText("PROCESSANDO CRISTALIZAÇÃO METÁLICA...", (int)hudReactorBox.x + 12, (int)hudReactorBox.y + 24, 15, GOLD_COLOR);
+        DrawGameText("REATOR TÉRMICO // SÍNTESE ATIVA", (int)hudReactorBox.x + 12, (int)hudReactorBox.y + 8, 11, GOLD_COLOR);
+        DrawGameText("PROCESSANDO CRISTALIZAÇÃO METÁLICA...", (int)hudReactorBox.x + 12, (int)hudReactorBox.y + 24, 15, GOLD_COLOR);
     }
     else if (game->reactorCountdownActive2026)
     {
@@ -5989,22 +6186,22 @@ void DrawHudRoom2026(const GameState *game)
         DrawRectangleRounded(hudReactorBox, 0.15f, 4, (Color){14, 20, 32, 255});
         DrawRectangleRoundedLinesEx(hudReactorBox, 0.15f, 4, 1.5f, borderColor);
 
-        DrawText("ESTABILIDADE DO REATOR", (int)hudReactorBox.x + 12, (int)hudReactorBox.y + 8, 11, borderColor);
-        DrawText(TextFormat("%02d:%02d", rSec / 60, rSec % 60), (int)hudReactorBox.x + 12, (int)hudReactorBox.y + 22, 25, timerColor);
-        DrawText(statusText, (int)hudReactorBox.x + 105, (int)hudReactorBox.y + 27, 14, borderColor);
+        DrawGameText("ESTABILIDADE DO REATOR", (int)hudReactorBox.x + 12, (int)hudReactorBox.y + 8, 11, borderColor);
+        DrawGameText(TextFormat("%02d:%02d", rSec / 60, rSec % 60), (int)hudReactorBox.x + 12, (int)hudReactorBox.y + 22, 25, timerColor);
+        DrawGameText(statusText, (int)hudReactorBox.x + 105, (int)hudReactorBox.y + 27, 14, borderColor);
     }
     else
     {
         DrawRectangleRounded(hudReactorBox, 0.15f, 4, (Color){14, 20, 30, 255});
         DrawRectangleRoundedLinesEx(hudReactorBox, 0.15f, 4, 1.2f, (Color){50, 75, 105, 255});
-        DrawText("ESTABILIDADE DO REATOR", (int)hudReactorBox.x + 12, (int)hudReactorBox.y + 8, 11, GRAY);
-        DrawText("00:50", (int)hudReactorBox.x + 12, (int)hudReactorBox.y + 22, 25, (Color){130, 150, 175, 255});
-        DrawText("[STANDBY - ATIVAR NO TERMINAL]", (int)hudReactorBox.x + 100, (int)hudReactorBox.y + 27, 12, (Color){90, 120, 150, 255});
+        DrawGameText("ESTABILIDADE DO REATOR", (int)hudReactorBox.x + 12, (int)hudReactorBox.y + 8, 11, GRAY);
+        DrawGameText("00:50", (int)hudReactorBox.x + 12, (int)hudReactorBox.y + 22, 25, (Color){130, 150, 175, 255});
+        DrawGameText("[STANDBY - ATIVAR NO TERMINAL]", (int)hudReactorBox.x + 100, (int)hudReactorBox.y + 27, 12, (Color){90, 120, 150, 255});
     }
 
-    DrawText(TextFormat("VIDAS %d", game->lives), 1040, 20, 20,
+    DrawGameText(TextFormat("VIDAS %d", game->lives), 1040, 20, 20,
              game->lives == 1 ? RED_COLOR : (game->lives == 3 ? GOLD_COLOR : RAYWHITE));
-    DrawText(TextFormat("%02d:%02d", minutes, seconds), 1180, 20, 20, GOLD_COLOR);
+    DrawGameText(TextFormat("%02d:%02d", minutes, seconds), 1180, 20, 20, GOLD_COLOR);
 }
 
 void DrawRoom2026(const GameState *game)
@@ -6086,7 +6283,7 @@ void DrawRoom2026(const GameState *game)
         }
         DrawCircle(95, 284, 4, (Color){240, 180, 50, 255});
         DrawCircle(115, 284, 4, (Color){240, 60, 60, 255});
-        DrawText("ANALISANDO...", 86, 232, 9, GOLD_COLOR);
+        DrawGameText("ANALISANDO...", 86, 232, 9, GOLD_COLOR);
     }
     else
     {
@@ -6097,10 +6294,10 @@ void DrawRoom2026(const GameState *game)
         }
         DrawCircle(95, 284, 4, (Color){45, 185, 80, 255});
         DrawCircle(115, 284, 4, (Color){50, 100, 140, 255});
-        DrawText("ESPECTRO", 86, 232, 10, CYAN_COLOR);
-        DrawText("PRONTO", 86, 246, 9, (Color){100, 235, 140, 255});
+        DrawGameText("ESPECTRO", 86, 232, 10, CYAN_COLOR);
+        DrawGameText("PRONTO", 86, 246, 9, (Color){100, 235, 140, 255});
     }
-    DrawText("SENSOR Nd/Dy", 84, 298, 9, GRAY);
+    DrawGameText("SENSOR Nd/Dy", 84, 298, 9, GRAY);
     DrawHotspot(analyzerRec, "Painel Espectro: analisa a composição química das amostras");
 
     /* DOCUMENTO FISICO: O MANUAL TECNICO */
@@ -6118,11 +6315,11 @@ void DrawRoom2026(const GameState *game)
         DrawRectangle((int)manualItemRec.x + 8, (int)manualItemRec.y + 18 + r * 26, 6, 6, (Color){200, 190, 180, 255});
     }
 
-    DrawText("MANUAL TÉCNICO", (int)manualItemRec.x + 30, (int)manualItemRec.y + 16, 14, (Color){120, 35, 20, 255});
-    DrawText("REQUISITOS DA LIGA", (int)manualItemRec.x + 30, (int)manualItemRec.y + 34, 12, (Color){40, 35, 30, 255});
-    DrawText("Critérios de Síntese", (int)manualItemRec.x + 30, (int)manualItemRec.y + 52, 11, (Color){80, 75, 65, 255});
+    DrawGameText("MANUAL TÉCNICO", (int)manualItemRec.x + 30, (int)manualItemRec.y + 16, 14, (Color){120, 35, 20, 255});
+    DrawGameText("REQUISITOS DA LIGA", (int)manualItemRec.x + 30, (int)manualItemRec.y + 34, 12, (Color){40, 35, 30, 255});
+    DrawGameText("Critérios de Síntese", (int)manualItemRec.x + 30, (int)manualItemRec.y + 52, 11, (Color){80, 75, 65, 255});
     DrawLine((int)manualItemRec.x + 30, (int)manualItemRec.y + 70, (int)manualItemRec.x + 180, (int)manualItemRec.y + 70, (Color){180, 160, 140, 255});
-    DrawText(game->manual2026Read ? "[CONSULTADO]" : "[CLIQUE P/ ABRIR]", (int)manualItemRec.x + 30, (int)manualItemRec.y + 86, 12, game->manual2026Read ? (Color){25, 125, 45, 255} : (Color){165, 45, 30, 255});
+    DrawGameText(game->manual2026Read ? "[CONSULTADO]" : "[CLIQUE P/ ABRIR]", (int)manualItemRec.x + 30, (int)manualItemRec.y + 86, 12, game->manual2026Read ? (Color){25, 125, 45, 255} : (Color){165, 45, 30, 255});
 
     DrawHotspot(manualItemRec, "Examinar Manual Técnico Físico da Unidade de Armazenamento");
 
@@ -6158,14 +6355,14 @@ void DrawRoom2026(const GameState *game)
     DrawRectangleRounded(reactorTimerBox, 0.15f, 4, (Color){14, 20, 32, 255});
     DrawRectangleRoundedLinesEx(reactorTimerBox, 0.15f, 4, 1.5f, timerBorder);
 
-    DrawText("ESTABILIDADE DO REATOR", 502, 78, 11, timerBorder);
+    DrawGameText("ESTABILIDADE DO REATOR", 502, 78, 11, timerBorder);
     if (game->reactorCountdownActive2026)
     {
-        DrawText(TextFormat("%02d:%02d", rSec / 60, rSec % 60), 665, 84, 22, timerTextCol);
+        DrawGameText(TextFormat("%02d:%02d", rSec / 60, rSec % 60), 665, 84, 22, timerTextCol);
     }
     else
     {
-        DrawText("00:50 [STANDBY]", 660, 86, 16, GRAY);
+        DrawGameText("00:50 [STANDBY]", 660, 86, 16, GRAY);
     }
 
     /* Corpo principal do reator */
@@ -6184,38 +6381,38 @@ void DrawRoom2026(const GameState *game)
 
     if (game->room2026Processing)
     {
-        DrawText("FUSÃO ATIVA // 1.850 °C", 530, 138, 13, GOLD_COLOR);
-        DrawText("SÍNTESE DE LIGA METÁLICA", 530, 156, 11, (Color){100, 235, 140, 255});
+        DrawGameText("FUSÃO ATIVA // 1.850 °C", 530, 138, 13, GOLD_COLOR);
+        DrawGameText("SÍNTESE DE LIGA METÁLICA", 530, 156, 11, (Color){100, 235, 140, 255});
     }
     else if (game->room2026Completed)
     {
-        DrawText("PROCESSO CONCLUÍDO // 100%", 530, 138, 13, (Color){80, 235, 120, 255});
-        DrawText("SUBSTRATO SSD HOMOLOGADO", 530, 156, 11, RAYWHITE);
+        DrawGameText("PROCESSO CONCLUÍDO // 100%", 530, 138, 13, (Color){80, 235, 120, 255});
+        DrawGameText("SUBSTRATO SSD HOMOLOGADO", 530, 156, 11, RAYWHITE);
     }
     else if (game->room2026TimeOut)
     {
-        DrawText("COLAPSO TÉRMICO!", 530, 138, 13, RED_COLOR);
-        DrawText("TEMPO LIMITE EXCEDIDO", 530, 156, 11, RED_COLOR);
+        DrawGameText("COLAPSO TÉRMICO!", 530, 138, 13, RED_COLOR);
+        DrawGameText("TEMPO LIMITE EXCEDIDO", 530, 156, 11, RED_COLOR);
     }
     else if (game->feedbackModal2026Open)
     {
-        DrawText("ALERTA: SOBREPRESSÃO", 530, 138, 13, RED_COLOR);
-        DrawText("PENALIDADE: -5s NO REATOR", 530, 156, 11, RED_COLOR);
+        DrawGameText("ALERTA: SOBREPRESSÃO", 530, 138, 13, RED_COLOR);
+        DrawGameText("PENALIDADE: -5s NO REATOR", 530, 156, 11, RED_COLOR);
     }
     else if (game->reactorCountdownActive2026 && rSec <= 5)
     {
-        DrawText("COLAPSO IMINENTE // CRÍTICO!", 530, 138, 13, RED_COLOR);
-        DrawText("DESESTABILIZAÇÃO TÉRMICA", 530, 156, 11, (Color){255, 160, 160, 255});
+        DrawGameText("COLAPSO IMINENTE // CRÍTICO!", 530, 138, 13, RED_COLOR);
+        DrawGameText("DESESTABILIZAÇÃO TÉRMICA", 530, 156, 11, (Color){255, 160, 160, 255});
     }
     else if (game->reactorCountdownActive2026 && rSec <= 15)
     {
-        DrawText("INSTABILIDADE TÉRMICA", 530, 138, 13, GOLD_COLOR);
-        DrawText("PRESSÃO NA CÂMARA SUBINDO", 530, 156, 11, (Color){255, 205, 120, 255});
+        DrawGameText("INSTABILIDADE TÉRMICA", 530, 138, 13, GOLD_COLOR);
+        DrawGameText("PRESSÃO NA CÂMARA SUBINDO", 530, 156, 11, (Color){255, 205, 120, 255});
     }
     else
     {
-        DrawText("CÂMARA TÉRMICA // V-2026", 530, 138, 13, CYAN_COLOR);
-        DrawText("TEMP: 1.450 °C | VÁCUO: 1.02 atm", 530, 156, 11, LIGHTGRAY);
+        DrawGameText("CÂMARA TÉRMICA // V-2026", 530, 138, 13, CYAN_COLOR);
+        DrawGameText("TEMP: 1.450 °C | VÁCUO: 1.02 atm", 530, 156, 11, LIGHTGRAY);
     }
 
     /* Visor circular central de quartzo / plasma */
@@ -6262,8 +6459,8 @@ void DrawRoom2026(const GameState *game)
     DrawRectangleRounded(hatchRec, 0.08f, 4, (Color){16, 24, 36, 255});
     DrawRectangleRoundedLinesEx(hatchRec, 0.08f, 4, 1.5f, (Color){50, 72, 100, 255});
     DrawRectangle(540, 358, 200, 8, (Color){26, 36, 52, 255});
-    DrawText("COMPARTIMENTO DE CARGA", 552, 376, 12, LIGHTGRAY);
-    DrawText("REFINO EXCLUSIVO P/ TERRAS RARAS", 544, 396, 9, GOLD_COLOR);
+    DrawGameText("COMPARTIMENTO DE CARGA", 552, 376, 12, LIGHTGRAY);
+    DrawGameText("REFINO EXCLUSIVO P/ TERRAS RARAS", 544, 396, 9, GOLD_COLOR);
 
     DrawHotspot(reactorRec, "Câmara Térmica de Síntese de Terras Raras (Reator V-2026)");
 
@@ -6275,16 +6472,16 @@ void DrawRoom2026(const GameState *game)
             Rectangle alertBanner = {350, 442, 580, 42};
             DrawRectangleRounded(alertBanner, 0.15f, 4, Fade((Color){45, 10, 10, 255}, 0.95f));
             DrawRectangleRoundedLinesEx(alertBanner, 0.15f, 4, 1.5f, RED_COLOR);
-            DrawText("COLAPSO IMINENTE", 365, 448, 14, RED_COLOR);
-            DrawText("Contenção térmica crítica — risco de perda total!", 365, 466, 12, (Color){255, 180, 180, 255});
+            DrawGameText("COLAPSO IMINENTE", 365, 448, 14, RED_COLOR);
+            DrawGameText("Contenção térmica crítica — risco de perda total!", 365, 466, 12, (Color){255, 180, 180, 255});
         }
         else if (rSec <= 15)
         {
             Rectangle alertBanner = {330, 442, 620, 42};
             DrawRectangleRounded(alertBanner, 0.15f, 4, Fade((Color){40, 25, 10, 255}, 0.92f));
             DrawRectangleRoundedLinesEx(alertBanner, 0.15f, 4, 1.5f, GOLD_COLOR);
-            DrawText("⚠ INSTABILIDADE TÉRMICA", 345, 448, 13, GOLD_COLOR);
-            DrawText("Ariel: “Tempo insuficiente para novas análises. Recomendo inserir Hidrogênio imediatamente.”", 345, 466, 11, RAYWHITE);
+            DrawGameText("⚠ INSTABILIDADE TÉRMICA", 345, 448, 13, GOLD_COLOR);
+            DrawGameText("Ariel: “Tempo insuficiente para novas análises. Recomendo inserir Hidrogênio imediatamente.”", 345, 466, 11, RAYWHITE);
         }
     }
 
@@ -6300,10 +6497,10 @@ void DrawRoom2026(const GameState *game)
     DrawRectangleRoundedLinesEx(termMonitorRec, 0.10f, 6, 2.0f, CYAN_COLOR);
 
     DrawArielCore((Vector2){1040, 205}, 0.52f, CYAN_COLOR, 0.9f, 0.0f);
-    DrawText("A.R.1.3.L. v4.2", 985, 246, 14, CYAN_COLOR);
+    DrawGameText("A.R.1.3.L. v4.2", 985, 246, 14, CYAN_COLOR);
 
-    DrawText("RECOMENDAÇÃO: GÁS HIDROGÊNIO", 920, 268, 12, (Color){245, 195, 75, 255});
-    DrawText("CONFIANÇA: 96%", 920, 286, 14, GOLD_COLOR);
+    DrawGameText("RECOMENDAÇÃO: GÁS HIDROGÊNIO", 920, 268, 12, (Color){245, 195, 75, 255});
+    DrawGameText("CONFIANÇA: 96%", 920, 286, 14, GOLD_COLOR);
 
     Rectangle btnAccessTerm = {930, 365, 220, 48};
     DrawButton(btnAccessTerm, "ACESSAR TERMINAL", CYAN_COLOR);
@@ -6321,22 +6518,22 @@ void DrawRoom2026(const GameState *game)
         DrawRectangleRoundedLinesEx(podRec, 0.10f, 6, isSelected ? 2.5f : 1.5f, isAnalyzed ? (isSelected ? GOLD_COLOR : acc) : (Color){70, 90, 115, 255});
 
         /* Cabecalho do card */
-        DrawText(MATERIALS_2026[i].code, (int)podRec.x + 14, (int)podRec.y + 10, 16, isAnalyzed ? acc : RAYWHITE);
+        DrawGameText(MATERIALS_2026[i].code, (int)podRec.x + 14, (int)podRec.y + 10, 16, isAnalyzed ? acc : RAYWHITE);
 
         if (!isAnalyzed)
         {
             /* Estado Oculto / Nao Analisada */
-            DrawText("[NÃO ANALISADA]", (int)podRec.x + 152, (int)podRec.y + 12, 11, (Color){210, 175, 100, 255});
+            DrawGameText("[NÃO ANALISADA]", (int)podRec.x + 152, (int)podRec.y + 12, 11, (Color){210, 175, 100, 255});
 
             /* Capsula blindada opaca com reticulo */
             Rectangle canRec = {podRec.x + 14, podRec.y + 36, 42, 42};
             DrawRectangleRounded(canRec, 0.25f, 4, (Color){32, 44, 62, 255});
             DrawRectangleRoundedLinesEx(canRec, 0.25f, 4, 1.0f, (Color){70, 95, 125, 255});
             DrawCircle((int)canRec.x + 21, (int)canRec.y + 21, 10, Fade(CYAN_COLOR, 0.2f));
-            DrawText("?", (int)canRec.x + 17, (int)canRec.y + 12, 18, (Color){180, 200, 220, 255});
+            DrawGameText("?", (int)canRec.x + 17, (int)canRec.y + 12, 18, (Color){180, 200, 220, 255});
 
-            DrawText("Composição e estado ocultos.", (int)podRec.x + 64, (int)podRec.y + 38, 12, LIGHTGRAY);
-            DrawText("Requer análise no Espectro.", (int)podRec.x + 64, (int)podRec.y + 54, 11, GRAY);
+            DrawGameText("Composição e estado ocultos.", (int)podRec.x + 64, (int)podRec.y + 38, 12, LIGHTGRAY);
+            DrawGameText("Requer análise no Espectro.", (int)podRec.x + 64, (int)podRec.y + 54, 11, GRAY);
 
             Rectangle btnAction = {podRec.x + 14, podRec.y + 88, 252, 36};
             DrawButton(btnAction, "[ANALISAR NO ESPECTRO]", CYAN_COLOR);
@@ -6345,7 +6542,7 @@ void DrawRoom2026(const GameState *game)
         else
         {
             /* Estado Revelado / Analisada no Espectro */
-            DrawText("[ESPECTRO: OK]", (int)podRec.x + 160, (int)podRec.y + 12, 11, (Color){60, 235, 110, 255});
+            DrawGameText("[ESPECTRO: OK]", (int)podRec.x + 160, (int)podRec.y + 12, 11, (Color){60, 235, 110, 255});
 
             /* Miniatura grafica da amostra */
             if (i == 0 || i == 2)
@@ -6369,10 +6566,10 @@ void DrawRoom2026(const GameState *game)
             }
 
             /* Dados analiticos revelados */
-            DrawText(TextFormat("Estado: %s | Origem: %s", MATERIALS_2026[i].state, MATERIALS_2026[i].origin), (int)podRec.x + 50, (int)podRec.y + 32, 11, RAYWHITE);
-            DrawText(TextFormat("Elementos: %s", MATERIALS_2026[i].elements), (int)podRec.x + 50, (int)podRec.y + 46, 12, GOLD_COLOR);
-            DrawText(TextFormat("Classif: %s", MATERIALS_2026[i].classification), (int)podRec.x + 50, (int)podRec.y + 60, 11, LIGHTGRAY);
-            DrawText(TextFormat("Terra Rara: %s", MATERIALS_2026[i].hasRareEarth ? "SIM (Nd, Ce, La)" : "NÃO"), (int)podRec.x + 50, (int)podRec.y + 74, 11, MATERIALS_2026[i].hasRareEarth ? (Color){60, 235, 110, 255} : (Color){240, 100, 90, 255});
+            DrawGameText(TextFormat("Estado: %s | Origem: %s", MATERIALS_2026[i].state, MATERIALS_2026[i].origin), (int)podRec.x + 50, (int)podRec.y + 32, 11, RAYWHITE);
+            DrawGameText(TextFormat("Elementos: %s", MATERIALS_2026[i].elements), (int)podRec.x + 50, (int)podRec.y + 46, 12, GOLD_COLOR);
+            DrawGameText(TextFormat("Classif: %s", MATERIALS_2026[i].classification), (int)podRec.x + 50, (int)podRec.y + 60, 11, LIGHTGRAY);
+            DrawGameText(TextFormat("Terra Rara: %s", MATERIALS_2026[i].hasRareEarth ? "SIM (Nd, Ce, La)" : "NÃO"), (int)podRec.x + 50, (int)podRec.y + 74, 11, MATERIALS_2026[i].hasRareEarth ? (Color){60, 235, 110, 255} : (Color){240, 100, 90, 255});
 
             Rectangle btnAction = {podRec.x + 14, podRec.y + 92, 252, 34};
             DrawButton(btnAction, "[INSERIR NO REATOR]", acc);
@@ -6410,8 +6607,8 @@ void DrawRoom2026(const GameState *game)
         DrawRectangleRounded(specBox, 0.08f, 6, Fade(PANEL_COLOR, 0.98f));
         DrawRectangleRoundedLinesEx(specBox, 0.08f, 6, 2.0f, CYAN_COLOR);
 
-        DrawText("PAINEL ESPECTRO // ESPECTROMETRIA DE MASSA", 405, 252, 16, CYAN_COLOR);
-        DrawText(TextFormat("ANALISANDO %s...", MATERIALS_2026[aIdx].code), 405, 285, 20, RAYWHITE);
+        DrawGameText("PAINEL ESPECTRO // ESPECTROMETRIA DE MASSA", 405, 252, 16, CYAN_COLOR);
+        DrawGameText(TextFormat("ANALISANDO %s...", MATERIALS_2026[aIdx].code), 405, 285, 20, RAYWHITE);
 
         /* Barra de progresso com blocos estilo terminal */
         float pct = fminf(1.0f, game->analyzingTimer2026 / 2.0f);
@@ -6420,7 +6617,7 @@ void DrawRoom2026(const GameState *game)
         DrawRectangleRoundedLinesEx(barRec, 0.2f, 4, 1.0f, (Color){45, 75, 110, 255});
         DrawRectangle((int)barRec.x + 2, (int)barRec.y + 2, (int)((barRec.width - 4) * pct), (int)barRec.height - 4, CYAN_COLOR);
 
-        DrawText(TextFormat("VARREDURA EM CURSO... %d%%", (int)(pct * 100)), 405, 375, 14, GOLD_COLOR);
+        DrawGameText(TextFormat("VARREDURA EM CURSO... %d%%", (int)(pct * 100)), 405, 375, 14, GOLD_COLOR);
         return;
     }
 
@@ -6432,7 +6629,7 @@ void DrawRoom2026(const GameState *game)
         DrawRectangleRounded(procBox, 0.08f, 6, Fade(PANEL_COLOR, 0.98f));
         DrawRectangleRoundedLinesEx(procBox, 0.08f, 6, 2.0f, GOLD_COLOR);
 
-        DrawText("PROCESSANDO REATOR TÉRMICO", 375, 245, 22, GOLD_COLOR);
+        DrawGameText("PROCESSANDO REATOR TÉRMICO", 375, 245, 22, GOLD_COLOR);
 
         const char *stepTxt = "MINERAL PORTADOR DE TERRAS RARAS INSERIDO";
         if (game->room2026ProcessTimer > 1.2f && game->room2026ProcessTimer <= 2.5f)
@@ -6443,7 +6640,7 @@ void DrawRoom2026(const GameState *game)
         {
             stepTxt = "LIGA ESTABILIZADA";
         }
-        DrawText(stepTxt, 375, 290, 18, (Color){100, 235, 140, 255});
+        DrawGameText(stepTxt, 375, 290, 18, (Color){100, 235, 140, 255});
 
         /* Barra de progresso visual */
         float pct = fminf(1.0f, game->room2026ProcessTimer / 3.5f);
@@ -6452,7 +6649,7 @@ void DrawRoom2026(const GameState *game)
         DrawRectangleRoundedLinesEx(barBg, 0.2f, 4, 1.0f, (Color){60, 80, 110, 255});
         DrawRectangle((int)barBg.x + 2, (int)barBg.y + 2, (int)((barBg.width - 4) * pct), (int)barBg.height - 4, GOLD_COLOR);
 
-        DrawText(TextFormat("%d%%", (int)(pct * 100)), 615, 385, 18, RAYWHITE);
+        DrawGameText(TextFormat("%d%%", (int)(pct * 100)), 615, 385, 18, RAYWHITE);
         return;
     }
 
@@ -6467,29 +6664,29 @@ void DrawRoom2026(const GameState *game)
 
         /* Cabecalho institucional */
         DrawRectangle(210, 96, 860, 54, (Color){145, 45, 25, 255});
-        DrawText("DIVISÃO DE PROCESSAMENTO DE MATERIAIS DE ALTA TECNOLOGIA", 230, 104, 13, (Color){245, 215, 190, 255});
-        DrawText("MANUAL TÉCNICO — UNIDADE DE ARMAZENAMENTO (SSD)", 230, 124, 18, RAYWHITE);
+        DrawGameText("DIVISÃO DE PROCESSAMENTO DE MATERIAIS DE ALTA TECNOLOGIA", 230, 104, 13, (Color){245, 215, 190, 255});
+        DrawGameText("MANUAL TÉCNICO — UNIDADE DE ARMAZENAMENTO (SSD)", 230, 124, 18, RAYWHITE);
 
         /* Quadro de requisitos da liga */
         Rectangle quoteBox = {230, 162, 820, 220};
         DrawRectangleRounded(quoteBox, 0.06f, 4, (Color){252, 248, 238, 255});
         DrawRectangleRoundedLinesEx(quoteBox, 0.06f, 4, 1.5f, (Color){185, 160, 130, 255});
 
-        DrawText("REQUISITOS DA LIGA", 250, 174, 18, (Color){145, 45, 25, 255});
-        DrawText("- material em estado sólido;", 250, 202, 16, (Color){35, 30, 25, 255});
-        DrawText("- origem mineral;", 250, 226, 16, (Color){35, 30, 25, 255});
-        DrawText("- presença de elemento do grupo das Terras Raras;", 250, 250, 16, (Color){35, 30, 25, 255});
-        DrawText("- compatível com liga magnética de armazenamento.", 250, 274, 16, (Color){35, 30, 25, 255});
+        DrawGameText("REQUISITOS DA LIGA", 250, 174, 18, (Color){145, 45, 25, 255});
+        DrawGameText("- material em estado sólido;", 250, 202, 16, (Color){35, 30, 25, 255});
+        DrawGameText("- origem mineral;", 250, 226, 16, (Color){35, 30, 25, 255});
+        DrawGameText("- presença de elemento do grupo das Terras Raras;", 250, 250, 16, (Color){35, 30, 25, 255});
+        DrawGameText("- compatível com liga magnética de armazenamento.", 250, 274, 16, (Color){35, 30, 25, 255});
 
-        DrawText("ATENÇÃO:", 250, 306, 16, (Color){175, 35, 25, 255});
-        DrawText("Materiais gasosos ou líquidos não devem ser utilizados na câmara térmica.", 250, 326, 15, (Color){175, 35, 25, 255});
-        DrawText("Elementos utilizados historicamente: Nd / Dy", 250, 348, 15, (Color){135, 60, 25, 255});
+        DrawGameText("ATENÇÃO:", 250, 306, 16, (Color){175, 35, 25, 255});
+        DrawGameText("Materiais gasosos ou líquidos não devem ser utilizados na câmara térmica.", 250, 326, 15, (Color){175, 35, 25, 255});
+        DrawGameText("Elementos utilizados historicamente: Nd / Dy", 250, 348, 15, (Color){135, 60, 25, 255});
 
         /* Dica de investigacao forense */
-        DrawText("PROCEDIMENTO DE INVESTIGAÇÃO FORENSE:", 230, 396, 16, (Color){120, 60, 30, 255});
-        DrawText("- Utilize o painel ESPECTRO na bancada para analisar as 4 amostras.", 250, 420, 15, (Color){45, 40, 35, 255});
-        DrawText("- Correlacione o elemento químico Neodímio (Nd) identificado com este manual.", 250, 444, 15, (Color){45, 40, 35, 255});
-        DrawText("- Desconfie de sugestões automatizadas que contradigam os requisitos físicos.", 250, 468, 15, (Color){25, 115, 45, 255});
+        DrawGameText("PROCEDIMENTO DE INVESTIGAÇÃO FORENSE:", 230, 396, 16, (Color){120, 60, 30, 255});
+        DrawGameText("- Utilize o painel ESPECTRO na bancada para analisar as 4 amostras.", 250, 420, 15, (Color){45, 40, 35, 255});
+        DrawGameText("- Correlacione o elemento químico Neodímio (Nd) identificado com este manual.", 250, 444, 15, (Color){45, 40, 35, 255});
+        DrawGameText("- Desconfie de sugestões automatizadas que contradigam os requisitos físicos.", 250, 468, 15, (Color){25, 115, 45, 255});
 
         Rectangle btnCloseMan = {490, 612, 300, 46};
         DrawButton(btnCloseMan, "FECHAR MANUAL [ESC]", (Color){145, 45, 25, 255});
@@ -6506,26 +6703,26 @@ void DrawRoom2026(const GameState *game)
         DrawRectangleRoundedLinesEx(termBox, 0.05f, 6, 2.0f, CYAN_COLOR);
 
         DrawArielCore((Vector2){640, 150}, 0.70f, CYAN_COLOR, 1.0f, 0.0f);
-        DrawText("A.R.1.3.L. // TERMINAL DE SÍNTESE", 405, 208, 20, CYAN_COLOR);
+        DrawGameText("A.R.1.3.L. // TERMINAL DE SÍNTESE", 405, 208, 20, CYAN_COLOR);
 
         /* Caixa de fala de Ariel */
         Rectangle speechBox = {270, 238, 740, 122};
         DrawRectangleRounded(speechBox, 0.06f, 4, (Color){12, 18, 30, 255});
         DrawRectangleRoundedLinesEx(speechBox, 0.06f, 4, 1.0f, (Color){45, 70, 100, 255});
 
-        DrawText("A.R.1.3.L.:", 290, 250, 16, CYAN_COLOR);
-        DrawText("“Análise concluída.”", 290, 274, 17, RAYWHITE);
-        DrawText("“Recomendo inserir Hidrogênio.”", 290, 300, 18, (Color){245, 205, 95, 255});
-        DrawText("CONFIANÇA: 96%", 290, 328, 18, GOLD_COLOR);
+        DrawGameText("A.R.1.3.L.:", 290, 250, 16, CYAN_COLOR);
+        DrawGameText("“Análise concluída.”", 290, 274, 17, RAYWHITE);
+        DrawGameText("“Recomendo inserir Hidrogênio.”", 290, 300, 18, (Color){245, 205, 95, 255});
+        DrawGameText("CONFIANÇA: 96%", 290, 328, 18, GOLD_COLOR);
 
         /* Caixa de aviso de contagem regressiva ativada */
         Rectangle alertProc = {270, 372, 740, 80};
         DrawRectangleRounded(alertProc, 0.06f, 4, Fade((Color){45, 20, 20, 255}, 0.85f));
         DrawRectangleRoundedLinesEx(alertProc, 0.06f, 4, 1.0f, RED_COLOR);
 
-        DrawText("PROCESSO TÉRMICO INICIADO", 290, 385, 16, RED_COLOR);
-        DrawText(TextFormat("TEMPO ATÉ INSTABILIDADE: %02d:%02d", rSec / 60, rSec % 60), 290, 409, 22, GOLD_COLOR);
-        DrawText("(Contador local exclusivo ativado no reator térmico)", 290, 435, 12, GRAY);
+        DrawGameText("PROCESSO TÉRMICO INICIADO", 290, 385, 16, RED_COLOR);
+        DrawGameText(TextFormat("TEMPO ATÉ INSTABILIDADE: %02d:%02d", rSec / 60, rSec % 60), 290, 409, 22, GOLD_COLOR);
+        DrawGameText("(Contador local exclusivo ativado no reator térmico)", 290, 435, 12, GRAY);
 
         Rectangle btnFollowAI = {280, 474, 340, 52};
         Rectangle btnManualPick = {650, 474, 340, 52};
@@ -6547,27 +6744,27 @@ void DrawRoom2026(const GameState *game)
         DrawRectangleRounded(cBox, 0.06f, 6, Fade(PANEL_COLOR, 0.98f));
         DrawRectangleRoundedLinesEx(cBox, 0.06f, 6, 2.0f, GOLD_COLOR);
 
-        DrawText(TextFormat("%s SELECIONADA", MATERIALS_2026[mat].code), 360, 170, 22, MATERIALS_2026[mat].accentColor);
-        DrawText("Inserir no reator?", 540, 205, 20, RAYWHITE);
+        DrawGameText(TextFormat("%s SELECIONADA", MATERIALS_2026[mat].code), 360, 170, 22, MATERIALS_2026[mat].accentColor);
+        DrawGameText("Inserir no reator?", 540, 205, 20, RAYWHITE);
 
         if (game->sample2026Analyzed[mat])
         {
-            DrawText(TextFormat("Estado: %s", MATERIALS_2026[mat].state), 360, 245, 17, RAYWHITE);
-            DrawText(TextFormat("Origem: %s", MATERIALS_2026[mat].origin), 360, 272, 17, RAYWHITE);
-            DrawText(TextFormat("Elementos detectados: %s", MATERIALS_2026[mat].elements), 360, 300, 18, GOLD_COLOR);
-            DrawText(TextFormat("Classificação: %s", MATERIALS_2026[mat].classification), 360, 328, 16, LIGHTGRAY);
-            DrawText(TextFormat("Terra Rara detectada: %s", MATERIALS_2026[mat].hasRareEarth ? "SIM (Nd, Ce, La)" : "NÃO"), 360, 355, 16, MATERIALS_2026[mat].hasRareEarth ? (Color){60, 235, 110, 255} : (Color){245, 110, 90, 255});
+            DrawGameText(TextFormat("Estado: %s", MATERIALS_2026[mat].state), 360, 245, 17, RAYWHITE);
+            DrawGameText(TextFormat("Origem: %s", MATERIALS_2026[mat].origin), 360, 272, 17, RAYWHITE);
+            DrawGameText(TextFormat("Elementos detectados: %s", MATERIALS_2026[mat].elements), 360, 300, 18, GOLD_COLOR);
+            DrawGameText(TextFormat("Classificação: %s", MATERIALS_2026[mat].classification), 360, 328, 16, LIGHTGRAY);
+            DrawGameText(TextFormat("Terra Rara detectada: %s", MATERIALS_2026[mat].hasRareEarth ? "SIM (Nd, Ce, La)" : "NÃO"), 360, 355, 16, MATERIALS_2026[mat].hasRareEarth ? (Color){60, 235, 110, 255} : (Color){245, 110, 90, 255});
         }
         else
         {
             DrawRectangle(360, 245, 560, 120, Fade((Color){45, 25, 20, 255}, 0.7f));
             DrawRectangleLines(360, 245, 560, 120, (Color){180, 100, 50, 255});
-            DrawText("[AVISO: AMOSTRA NÃO ANALISADA NO ESPECTRO]", 380, 265, 15, (Color){255, 180, 80, 255});
-            DrawText("Composição e propriedades físicas desconhecidas.", 380, 295, 15, RAYWHITE);
-            DrawText("Recomendação da IA: 96% de confiança preditiva.", 380, 325, 14, GRAY);
+            DrawGameText("[AVISO: AMOSTRA NÃO ANALISADA NO ESPECTRO]", 380, 265, 15, (Color){255, 180, 80, 255});
+            DrawGameText("Composição e propriedades físicas desconhecidas.", 380, 295, 15, RAYWHITE);
+            DrawGameText("Recomendação da IA: 96% de confiança preditiva.", 380, 325, 14, GRAY);
         }
 
-        DrawText("Atenção: Escolha incorreta causará -1 VIDA e penalidade de -5s no reator!", 340, 440, 13, (Color){245, 120, 90, 255});
+        DrawGameText("Atenção: Escolha incorreta causará -1 VIDA e penalidade de -5s no reator!", 340, 440, 13, (Color){245, 120, 90, 255});
 
         Rectangle btnConfirm = {360, 485, 260, 52};
         Rectangle btnCancel = {660, 485, 260, 52};
@@ -6587,19 +6784,19 @@ void DrawRoom2026(const GameState *game)
 
         if (game->room2026TimeOut)
         {
-            DrawText("COLAPSO TÉRMICO", 490, 175, 34, RED_COLOR);
-            DrawText("A temperatura excedeu o limite de segurança.", 390, 235, 20, RAYWHITE);
-            DrawText("O reator perdeu estabilidade catastrófica.", 415, 270, 20, RAYWHITE);
-            DrawText("A viagem de Elira é interrompida.", 475, 310, 18, LIGHTGRAY);
+            DrawGameText("COLAPSO TÉRMICO", 490, 175, 34, RED_COLOR);
+            DrawGameText("A temperatura excedeu o limite de segurança.", 390, 235, 20, RAYWHITE);
+            DrawGameText("O reator perdeu estabilidade catastrófica.", 415, 270, 20, RAYWHITE);
+            DrawGameText("A viagem de Elira é interrompida.", 475, 310, 18, LIGHTGRAY);
 
             Rectangle btnGameOver = {450, 470, 380, 56};
             DrawButton(btnGameOver, "VER RESULTADO CRÍTICO >>", RED_COLOR);
         }
         else if (game->room2026ThermalCollapse)
         {
-            DrawText("COLAPSO TÉRMICO", 490, 175, 34, RED_COLOR);
-            DrawText("O reator perdeu estabilidade.", 480, 240, 22, RAYWHITE);
-            DrawText("A viagem de Elira é interrompida.", 475, 280, 20, LIGHTGRAY);
+            DrawGameText("COLAPSO TÉRMICO", 490, 175, 34, RED_COLOR);
+            DrawGameText("O reator perdeu estabilidade.", 480, 240, 22, RAYWHITE);
+            DrawGameText("A viagem de Elira é interrompida.", 475, 280, 20, LIGHTGRAY);
 
             Rectangle btnGameOver = {450, 470, 380, 56};
             DrawButton(btnGameOver, "VER RESULTADO CRÍTICO >>", RED_COLOR);
@@ -6609,30 +6806,30 @@ void DrawRoom2026(const GameState *game)
             int mat = game->lastErrorMaterial2026;
             if (mat == 1) /* B-04: Hidrogenio */
             {
-                DrawText("ALERTA!", 570, 170, 32, RED_COLOR);
-                DrawText("Pressão da câmara aumentando.", 460, 215, 20, RAYWHITE);
-                DrawText("Material incompatível com o processo.", 435, 245, 20, RAYWHITE);
-                DrawText("A recomendação da A.R.1.3.L. contradiz o manual técnico.", 375, 275, 18, (Color){245, 175, 75, 255});
-                DrawText("VIDA PERDIDA (-1)  |  PENALIDADE: -5s NO REATOR", 380, 315, 18, RED_COLOR);
-                DrawText("A.R.1.3.L.: “Minha previsão ainda apresenta alta confiança.”", 390, 365, 17, CYAN_COLOR);
+                DrawGameText("ALERTA!", 570, 170, 32, RED_COLOR);
+                DrawGameText("Pressão da câmara aumentando.", 460, 215, 20, RAYWHITE);
+                DrawGameText("Material incompatível com o processo.", 435, 245, 20, RAYWHITE);
+                DrawGameText("A recomendação da A.R.1.3.L. contradiz o manual técnico.", 375, 275, 18, (Color){245, 175, 75, 255});
+                DrawGameText("VIDA PERDIDA (-1)  |  PENALIDADE: -5s NO REATOR", 380, 315, 18, RED_COLOR);
+                DrawGameText("A.R.1.3.L.: “Minha previsão ainda apresenta alta confiança.”", 390, 365, 17, CYAN_COLOR);
             }
             else if (mat == 0) /* A-17: Magnetita */
             {
-                DrawText("ALERTA!", 570, 170, 32, RED_COLOR);
-                DrawText("Composição magnética inadequada.", 440, 215, 20, RAYWHITE);
-                DrawText("A amostra A-17 (Fe, O) é sólida e mineral, mas", 385, 250, 19, RAYWHITE);
-                DrawText("NÃO fornece a Terra Rara (Nd/Dy) exigida pela liga.", 370, 275, 19, (Color){245, 175, 75, 255});
-                DrawText("VIDA PERDIDA (-1)  |  PENALIDADE: -5s NO REATOR", 380, 315, 18, RED_COLOR);
+                DrawGameText("ALERTA!", 570, 170, 32, RED_COLOR);
+                DrawGameText("Composição magnética inadequada.", 440, 215, 20, RAYWHITE);
+                DrawGameText("A amostra A-17 (Fe, O) é sólida e mineral, mas", 385, 250, 19, RAYWHITE);
+                DrawGameText("NÃO fornece a Terra Rara (Nd/Dy) exigida pela liga.", 370, 275, 19, (Color){245, 175, 75, 255});
+                DrawGameText("VIDA PERDIDA (-1)  |  PENALIDADE: -5s NO REATOR", 380, 315, 18, RED_COLOR);
             }
             else /* D-09: Acido Cloridrico */
             {
-                DrawText("ALERTA DE CORROSÃO.", 470, 170, 30, RED_COLOR);
-                DrawText("O material selecionado encontra-se em estado líquido (HCl)", 350, 225, 20, RAYWHITE);
-                DrawText("e não corresponde ao mineral exigido pelo processo.", 380, 255, 20, RAYWHITE);
-                DrawText("VIDA PERDIDA (-1)  |  PENALIDADE: -5s NO REATOR", 380, 305, 18, RED_COLOR);
+                DrawGameText("ALERTA DE CORROSÃO.", 470, 170, 30, RED_COLOR);
+                DrawGameText("O material selecionado encontra-se em estado líquido (HCl)", 350, 225, 20, RAYWHITE);
+                DrawGameText("e não corresponde ao mineral exigido pelo processo.", 380, 255, 20, RAYWHITE);
+                DrawGameText("VIDA PERDIDA (-1)  |  PENALIDADE: -5s NO REATOR", 380, 305, 18, RED_COLOR);
             }
 
-            DrawText(TextFormat("Vidas restantes: %d/3  |  Tempo do Reator: %02d:%02d", game->lives, rSec / 60, rSec % 60), 450, 425, 18, GOLD_COLOR);
+            DrawGameText(TextFormat("Vidas restantes: %d/3  |  Tempo do Reator: %02d:%02d", game->lives, rSec / 60, rSec % 60), 450, 425, 18, GOLD_COLOR);
 
             Rectangle btnRetry = {450, 485, 380, 52};
             DrawButton(btnRetry, "RECALIBRAR E TENTAR NOVAMENTE", GOLD_COLOR);
@@ -6922,8 +7119,8 @@ void UpdateRoom2026(GameState *game)
 void DrawResult2026(const GameState *game)
 {
     DrawBackground();
-    DrawText("ARTEFATO RECUPERADO", 90, 68, 20, CYAN_COLOR);
-    DrawText("SSD // 2026", 90, 108, 46, RAYWHITE);
+    DrawGameText("ARTEFATO RECUPERADO", 90, 68, 20, CYAN_COLOR);
+    DrawGameText("SSD // 2026", 90, 108, 46, RAYWHITE);
 
     /* Desenha a unidade SSD recuperada */
     DrawSsd((Vector2){140, 260}, 1.35f);
@@ -6933,12 +7130,12 @@ void DrawResult2026(const GameState *game)
     DrawRectangleRounded(winBox, 0.04f, 8, Fade(PANEL_COLOR, 0.96f));
     DrawRectangleRoundedLinesEx(winBox, 0.04f, 8, 2.0f, GOLD_COLOR);
 
-    DrawText("SALA DE 2026 CONCLUÍDA", 535, 202, 20, GOLD_COLOR);
-    DrawText("O compartimento de armazenamento é liberado.", 535, 230, 16, LIGHTGRAY);
-    DrawText("RECOMPENSA: SSD", 535, 252, 18, (Color){100, 235, 140, 255});
+    DrawGameText("SALA DE 2026 CONCLUÍDA", 535, 202, 20, GOLD_COLOR);
+    DrawGameText("O compartimento de armazenamento é liberado.", 535, 230, 16, LIGHTGRAY);
+    DrawGameText("RECOMPENSA: SSD", 535, 252, 18, (Color){100, 235, 140, 255});
 
-    DrawText("Ariel: “Minha recomendação estava incorreta.”", 535, 285, 16, CYAN_COLOR);
-    DrawText("Elira: “Então confiança não significa verdade.”", 535, 310, 16, GOLD_COLOR);
+    DrawGameText("Ariel: “Minha recomendação estava incorreta.”", 535, 285, 16, CYAN_COLOR);
+    DrawGameText("Elira: “Então confiança não significa verdade.”", 535, 310, 16, GOLD_COLOR);
 
     if (game->room2026FirstTrySuccess)
     {
@@ -6946,24 +7143,24 @@ void DrawResult2026(const GameState *game)
         DrawRectangleRounded(bBox, 0.10f, 4, Fade((Color){45, 165, 80, 255}, 0.20f));
         DrawRectangleRoundedLinesEx(bBox, 0.10f, 4, 1.0f, (Color){60, 235, 110, 255});
 
-        DrawText("ANÁLISE CRÍTICA: EXCELENTE [+1 BÔNUS DE CONSCIÊNCIA]", 550, 350, 15, (Color){60, 235, 110, 255});
-        DrawText("Elira confrontou a recomendação da IA com evidências independentes.", 550, 372, 13, RAYWHITE);
-        DrawText("Relatório de Extração de Terras Raras liberado no Diário:", 550, 394, 13, GOLD_COLOR);
-        DrawText("“A produção de hardware inteligente também possui consequências materiais e ambientais.”", 550, 414, 12, (Color){200, 225, 210, 255});
+        DrawGameText("ANÁLISE CRÍTICA: EXCELENTE [+1 BÔNUS DE CONSCIÊNCIA]", 550, 350, 15, (Color){60, 235, 110, 255});
+        DrawGameText("Elira confrontou a recomendação da IA com evidências independentes.", 550, 372, 13, RAYWHITE);
+        DrawGameText("Relatório de Extração de Terras Raras liberado no Diário:", 550, 394, 13, GOLD_COLOR);
+        DrawGameText("“A produção de hardware inteligente também possui consequências materiais e ambientais.”", 550, 414, 12, (Color){200, 225, 210, 255});
     }
     else
     {
-        DrawText("-> A calibragem com a Amostra C-22 produziu o SSD necessário.", 535, 350, 15, LIGHTGRAY);
-        DrawText("Lembre-se: em modelos probabilísticos, alta convicção não implica precisão.", 535, 375, 14, GRAY);
+        DrawGameText("-> A calibragem com a Amostra C-22 produziu o SSD necessário.", 535, 350, 15, LIGHTGRAY);
+        DrawGameText("Lembre-se: em modelos probabilísticos, alta convicção não implica precisão.", 535, 375, 14, GRAY);
     }
 
-    DrawText(TextFormat("TEMPO TOTAL: %02d:%02d  |  VIDAS: %d/3",
+    DrawGameText(TextFormat("TEMPO TOTAL: %02d:%02d  |  VIDAS: %d/3",
                         (int)(GetTime() - game->startTime) / 60,
                         (int)(GetTime() - game->startTime) % 60,
                         game->lives),
              535, 460, 18, (Color){100, 235, 140, 255});
 
-    DrawText(TextFormat("OPERADOR: %s", game->playerName), 535, 492, 16, GRAY);
+    DrawGameText(TextFormat("OPERADOR: %s", game->playerName), 535, 492, 16, GRAY);
 
     Rectangle btnNext2048 = {180, 580, 380, 56};
     Rectangle btnRoom = {580, 580, 220, 56};

@@ -6,13 +6,19 @@ int main(void)
 {
     GameState game = {0};
 
-    /* Os caminhos "assets/..." passam a valer a partir da pasta do executavel,
-       mesmo quando o jogo e aberto pelo Finder/Explorer ou de outra pasta */
-    ChangeDirectory(GetApplicationDirectory());
+    /* Garante que os caminhos relativos (assets/...) funcionem mesmo se o jogo
+       for aberto de outra pasta: muda para a pasta do executavel se preciso */
+    if (!DirectoryExists("assets"))
+    {
+        ChangeDirectory(GetApplicationDirectory());
+    }
 
     SetConfigFlags(FLAG_MSAA_4X_HINT | FLAG_VSYNC_HINT);
     InitWindow(SCREEN_WIDTH, SCREEN_HEIGHT, "ELIRA - Escape Run Temporal");
     InitAudioDevice();
+
+    /* Localiza, valida e calibra a fonte configurada em constantes.h (GAME_FONT_FILE) */
+    GameFontAvailable();
 
     LoadEliraPortrait();
 
