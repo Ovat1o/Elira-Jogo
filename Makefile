@@ -15,8 +15,9 @@
 -include config.mk
 
 # Diretorios do projeto
-SRC_DIR    := src
-ASSETS_DIR := assets
+SRC_DIR        := src
+SRC_RAYLIB_DIR := $(SRC_DIR)/raylib
+ASSETS_DIR     := assets
 
 # Caminhos padrao da instalacao da Raylib / compilador (para linkagem da libraylib)
 RAYLIB_DIR    ?= C:/raylib
@@ -45,31 +46,33 @@ OBJ := $(SRC:.c=.o)
 PROJECT_HEADERS := $(SRC_DIR)/constantes.h \
                    $(SRC_DIR)/funcoes.h
 
-# Os 3 arquivos .h necessarios da biblioteca Raylib presentes na pasta src/
-RAYLIB_HEADERS  := $(SRC_DIR)/raylib.h \
-                   $(SRC_DIR)/raymath.h \
-                   $(SRC_DIR)/rlgl.h
+# Arquivos de cabecalho da biblioteca Raylib presentes na pasta src/raylib/
+RAYLIB_HEADERS  := $(SRC_RAYLIB_DIR)/raylib.h \
+                   $(SRC_RAYLIB_DIR)/raymath.h \
+                   $(SRC_RAYLIB_DIR)/rlgl.h \
+                   $(SRC_RAYLIB_DIR)/rcamera.h \
+                   $(SRC_RAYLIB_DIR)/rgestures.h
 
 # Todos os cabecalhos monitorados pelo Make
 HEADERS := $(PROJECT_HEADERS) $(RAYLIB_HEADERS)
 
-# Flags de pre-processador e compilacao (busca todos os .h diretamente em src/)
-CPPFLAGS := -I$(SRC_DIR)
+# Flags de pre-processador e compilacao (busca .h em src/ e src/raylib/)
+CPPFLAGS := -I$(SRC_DIR) -I$(SRC_RAYLIB_DIR)
 CFLAGS   ?= -std=c99 -Wall -Wextra
 
 # Configuracoes especificas de cada Sistema Operacional para linkagem
 ifeq ($(OS),Windows_NT)
-    LDLIBS ?= -L$(SRC_DIR) -L$(RAYLIB_DIR)/raylib/src -lraylib -lopengl32 -lgdi32 -lwinmm
+    LDLIBS ?= -L$(SRC_RAYLIB_DIR) -L$(SRC_DIR) -L$(RAYLIB_DIR)/raylib/src -lraylib -lopengl32 -lgdi32 -lwinmm
     OUT    := ELIRA.exe
 else ifneq ($(wildcard /mnt/c/raylib/w64devkit/bin/gcc.exe),)
-    LDLIBS ?= -L$(SRC_DIR) -LC:/raylib/raylib/src -lraylib -lopengl32 -lgdi32 -lwinmm
+    LDLIBS ?= -L$(SRC_RAYLIB_DIR) -L$(SRC_DIR) -LC:/raylib/raylib/src -lraylib -lopengl32 -lgdi32 -lwinmm
     OUT    := ELIRA.exe
 else ifeq ($(shell uname -s),Darwin)
     RAYLIB_PREFIX ?= $(shell brew --prefix raylib 2>/dev/null)
-    LDLIBS ?= -L$(SRC_DIR) $(RAYLIB_PREFIX)/lib/libraylib.a -framework Cocoa -framework IOKit -framework OpenGL -framework CoreVideo
+    LDLIBS ?= -L$(SRC_RAYLIB_DIR) -L$(SRC_DIR) $(RAYLIB_PREFIX)/lib/libraylib.a -framework Cocoa -framework IOKit -framework OpenGL -framework CoreVideo
     OUT    := ELIRA
 else
-    LDLIBS ?= -L$(SRC_DIR) -lraylib -lGL -lm -lpthread -ldl -lrt -lX11
+    LDLIBS ?= -L$(SRC_RAYLIB_DIR) -L$(SRC_DIR) -lraylib -lGL -lm -lpthread -ldl -lrt -lX11
     OUT    := ELIRA
 endif
 
@@ -94,7 +97,7 @@ run: $(OUT)
 WIN_BIN_WSL := /mnt/c/raylib/w64devkit/bin
 WIN_BIN_WIN := C:/raylib/w64devkit/bin
 WIN_CC      := $(WIN_BIN_WSL)/gcc.exe
-WIN_LDLIBS  := -L$(SRC_DIR) -LC:/raylib/raylib/src -lraylib -lopengl32 -lgdi32 -lwinmm
+WIN_LDLIBS  := -L$(SRC_RAYLIB_DIR) -L$(SRC_DIR) -LC:/raylib/raylib/src -lraylib -lopengl32 -lgdi32 -lwinmm
 
 win: $(SRC) $(HEADERS)
 	WSLENV=PATH/l PATH="$(WIN_BIN_WSL):$$PATH" $(WIN_CC) -B$(WIN_BIN_WIN)/ $(CPPFLAGS) $(CFLAGS) $(SRC) -o ELIRA.exe $(WIN_LDLIBS)
@@ -105,9 +108,9 @@ run-win: win
 # Remove o executavel e os arquivos-objeto (.o)
 clean:
 ifeq ($(OS),Windows_NT)
-	-@cmd /c if exist ELIRA.exe del /f /q ELIRA.exe 2>nul
-	-@cmd /c if exist ELIRA del /f /q ELIRA 2>nul
-	-@cmd /c if exist $(SRC_DIR)\*.o del /f /q $(SRC_DIR)\*.o 2>nul
+	-@cmd /c "del /f /q ELIRA.exe 2>nul"
+	-@cmd /c "del /f /q ELIRA 2>nul"
+	-@cmd /c "del /f /q $(SRC_DIR)\*.o 2>nul"
 else
 	-@$(RM) ELIRA ELIRA.exe $(OBJ) 2>/dev/null || true
 endif
