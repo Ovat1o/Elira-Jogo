@@ -36,6 +36,7 @@ const Color WIRE_YELLOW = {245, 212, 50, 255};
 const Color WIRE_RED    = {235, 62, 70, 255};
 const Color WIRE_BLUE   = {52, 142, 245, 255};
 const Color WIRE_PINK   = {240, 75, 190, 255};
+const Color REWARD_BODY_COLOR = {220, 230, 242, 255};
 
 Color GetFileWireColor(int colorIndex)
 {
@@ -326,6 +327,309 @@ int MeasureGameText(const char *text, int size)
 Texture2D g_eliraPortrait = {0};
 bool g_eliraPortraitLoaded = false;
 
+/* ========================================================================= */
+/* SPRITES E COMPONENTES PADRONIZADOS DE RECOMPENSA (1990, 2008, 2026)      */
+/* ========================================================================= */
+Texture2D g_rewardFloppyTex = {0};
+Texture2D g_rewardCdTex = {0};
+Texture2D g_rewardSsdTex = {0};
+bool g_rewardSpritesLoaded = false;
+Texture2D g_heartFullTex = {0};
+Texture2D g_heartEmptyTex = {0};
+bool g_heartTexturesLoaded = false;
+
+static inline bool IsHeartBg(Color c)
+{
+    int diff = abs((int)c.r - (int)c.g) + abs((int)c.r - (int)c.b);
+    return (c.r > 200 && c.g > 200 && c.b > 200 && diff < 30);
+}
+
+static inline bool IsHeartRed(Color c)
+{
+    return (c.r > 80 && c.r > (int)((float)c.g * 1.35f) && c.r > (int)((float)c.b * 1.35f));
+}
+
+void LoadHeartSprites(void);
+void UnloadHeartSprites(void);
+
+static const char *FindRewardSpritePath(const char *filename)
+{
+    static char pathBuf[256];
+    snprintf(pathBuf, sizeof(pathBuf), "assets/sprites/%s", filename);
+    if (FileExists(pathBuf)) return pathBuf;
+    snprintf(pathBuf, sizeof(pathBuf), "Elira-Jogo/assets/sprites/%s", filename);
+    if (FileExists(pathBuf)) return pathBuf;
+    snprintf(pathBuf, sizeof(pathBuf), "assets/%s", filename);
+    if (FileExists(pathBuf)) return pathBuf;
+    return filename;
+}
+
+void LoadRewardSprites(void)
+{
+    if (g_rewardSpritesLoaded) return;
+
+    const char *floppyPath = FindRewardSpritePath("disquete.png");
+    if (FileExists(floppyPath))
+    {
+        g_rewardFloppyTex = LoadTexture(floppyPath);
+        if (g_rewardFloppyTex.id != 0)
+        {
+            SetTextureFilter(g_rewardFloppyTex, TEXTURE_FILTER_BILINEAR);
+        }
+    }
+
+    const char *cdPath = FindRewardSpritePath("cd.png");
+    if (FileExists(cdPath))
+    {
+        g_rewardCdTex = LoadTexture(cdPath);
+        if (g_rewardCdTex.id != 0)
+        {
+            SetTextureFilter(g_rewardCdTex, TEXTURE_FILTER_BILINEAR);
+        }
+    }
+
+    const char *ssdPath = FindRewardSpritePath("ssd.png");
+    if (FileExists(ssdPath))
+    {
+        g_rewardSsdTex = LoadTexture(ssdPath);
+        if (g_rewardSsdTex.id != 0)
+        {
+            SetTextureFilter(g_rewardSsdTex, TEXTURE_FILTER_BILINEAR);
+        }
+    }
+
+    LoadHeartSprites();
+    g_rewardSpritesLoaded = true;
+}
+
+void UnloadRewardSprites(void)
+{
+    if (g_rewardFloppyTex.id != 0) UnloadTexture(g_rewardFloppyTex);
+    if (g_rewardCdTex.id != 0)     UnloadTexture(g_rewardCdTex);
+    if (g_rewardSsdTex.id != 0)    UnloadTexture(g_rewardSsdTex);
+    g_rewardFloppyTex = (Texture2D){0};
+    g_rewardCdTex = (Texture2D){0};
+    g_rewardSsdTex = (Texture2D){0};
+    g_rewardSpritesLoaded = false;
+    UnloadHeartSprites();
+}
+
+void LoadHeartSprites(void)
+{
+    if (g_heartTexturesLoaded) return;
+
+    const char *path = FindRewardSpritePath("vidas.png");
+    if (!FileExists(path)) return;
+
+    Image img = LoadImage(path);
+    if (img.data == NULL) return;
+    ImageFormat(&img, PIXELFORMAT_UNCOMPRESSED_R8G8B8A8);
+
+    int w = img.width;
+    int h = img.height;
+    Color *px = (Color *)img.data;
+
+    /* 1. Flood-fill a partir das bordas para remover o fundo claro tornando-o transparente */
+    unsigned char *visited = (unsigned char *)calloc((size_t)w * (size_t)h, 1);
+    int *stack = (int *)malloc((size_t)w * (size_t)h * sizeof(int));
+    if (visited != NULL && stack != NULL)
+    {
+        int sp = 0;
+        #define HEART_PUSH(X, Y) do { int _i = (Y) * w + (X); \
+            if (!visited[_i] && IsHeartBg(px[_i])) { visited[_i] = 1; px[_i].a = 0; stack[sp++] = _i; } } while (0)
+
+        for (int x = 0; x < w; x++) { HEART_PUSH(x, 0); HEART_PUSH(x, h - 1); }
+        for (int y = 0; y < h; y++) { HEART_PUSH(0, y); HEART_PUSH(w - 1, y); }
+
+        while (sp > 0)
+        {
+            int idx = stack[--sp];
+            int x = idx % w;
+            int y = idx / w;
+            if (x > 0) HEART_PUSH(x - 1, y);
+            if (x < w - 1) HEART_PUSH(x + 1, y);
+            if (y > 0) HEART_PUSH(x, y - 1);
+            if (y < h - 1) HEART_PUSH(x, y + 1);
+        }
+        #undef HEART_PUSH
+    }
+    if (visited) free(visited);
+    if (stack) free(stack);
+
+    /* 2. Recorte justo da caixa delimitadora do coração */
+    int minX = w, maxX = 0, minY = h, maxY = 0;
+    for (int y = 0; y < h; y++)
+    {
+        for (int x = 0; x < w; x++)
+        {
+            if (px[y * w + x].a > 0)
+            {
+                if (x < minX) minX = x;
+                if (x > maxX) maxX = x;
+                if (y < minY) minY = y;
+                if (y > maxY) maxY = y;
+            }
+        }
+    }
+    if (maxX > minX && maxY > minY)
+    {
+        ImageCrop(&img, (Rectangle){ (float)minX, (float)minY, (float)(maxX - minX + 1), (float)(maxY - minY + 1) });
+    }
+    w = img.width;
+    h = img.height;
+    px = (Color *)img.data;
+
+    /* 3. Cria textura do coração cheio (g_heartFullTex) */
+    g_heartFullTex = LoadTextureFromImage(img);
+    if (g_heartFullTex.id != 0)
+    {
+        SetTextureFilter(g_heartFullTex, TEXTURE_FILTER_BILINEAR);
+    }
+
+    /* 4. Cria textura do coração vazio (g_heartEmptyTex): retira o vermelho de dentro */
+    Image emptyImg = ImageCopy(img);
+    Color *emptyPx = (Color *)emptyImg.data;
+    for (int i = 0; i < w * h; i++)
+    {
+        if (IsHeartRed(emptyPx[i]))
+        {
+            /* Retira a cor vermelha de dentro do coração */
+            emptyPx[i] = (Color){ 0, 0, 0, 0 };
+        }
+        else if (emptyPx[i].r > 240 && emptyPx[i].g > 240 && emptyPx[i].b > 240)
+        {
+            /* Brilho interno também fica vazio */
+            emptyPx[i] = (Color){ 0, 0, 0, 0 };
+        }
+        else if (emptyPx[i].a > 0)
+        {
+            /* Contorno preservado em tom ardósia visível no HUD escuro */
+            emptyPx[i] = (Color){ 85, 100, 120, 255 };
+        }
+    }
+
+    g_heartEmptyTex = LoadTextureFromImage(emptyImg);
+    if (g_heartEmptyTex.id != 0)
+    {
+        SetTextureFilter(g_heartEmptyTex, TEXTURE_FILTER_BILINEAR);
+    }
+
+    UnloadImage(img);
+    UnloadImage(emptyImg);
+    g_heartTexturesLoaded = true;
+}
+
+void UnloadHeartSprites(void)
+{
+    if (g_heartFullTex.id != 0)  UnloadTexture(g_heartFullTex);
+    if (g_heartEmptyTex.id != 0) UnloadTexture(g_heartEmptyTex);
+    g_heartFullTex = (Texture2D){0};
+    g_heartEmptyTex = (Texture2D){0};
+    g_heartTexturesLoaded = false;
+}
+
+void DrawLivesIcons(Vector2 position, int lives, float heartSize)
+{
+    if (!g_heartTexturesLoaded) LoadHeartSprites();
+
+    float gap = 6.0f;
+    for (int i = 0; i < 3; i++)
+    {
+        bool hasLife = (i < lives);
+        Texture2D tex = hasLife ? g_heartFullTex : g_heartEmptyTex;
+        if (tex.id != 0)
+        {
+            Rectangle src = { 0.0f, 0.0f, (float)tex.width, (float)tex.height };
+            Rectangle dst = { position.x + (float)i * (heartSize + gap), position.y, heartSize, heartSize };
+            DrawTexturePro(tex, src, dst, (Vector2){0, 0}, 0.0f, WHITE);
+        }
+        else
+        {
+            /* Fallback texto caso o sprite vidas.png nao esteja acessivel */
+            DrawGameText(TextFormat("VIDAS: %d/3", lives), (int)position.x, (int)position.y, 18, (lives == 1) ? RED_COLOR : RAYWHITE);
+            break;
+        }
+    }
+}
+
+void GetRewardScreenButtons(Rectangle *outNext, Rectangle *outRestart, Rectangle *outMenu)
+{
+    float btnY = 585.0f;
+    float btnH = 54.0f;
+    float gap = 20.0f;
+    float wNext = 440.0f;
+    float wRestart = 220.0f;
+    float wMenu = 200.0f;
+    float totalW = wNext + gap + wRestart + gap + wMenu; /* 900 */
+    float startX = ((float)SCREEN_WIDTH - totalW) * 0.5f; /* (1280 - 900)/2 = 190 */
+
+    if (outNext)    *outNext    = (Rectangle){ startX, btnY, wNext, btnH };
+    if (outRestart) *outRestart = (Rectangle){ startX + wNext + gap, btnY, wRestart, btnH };
+    if (outMenu)    *outMenu    = (Rectangle){ startX + wNext + gap + wRestart + gap, btnY, wMenu, btnH };
+}
+
+void DrawRewardHudHeader(const GameState *game)
+{
+    int totalSeconds = (int)(GetTime() - game->startTime);
+    int minutes = totalSeconds / 60;
+    int seconds = totalSeconds % 60;
+
+    Rectangle hudBox = { 855, 54, 320, 92 };
+    DrawRectangleRounded(hudBox, 0.14f, 6, Fade(PANEL_COLOR, 0.94f));
+    DrawRectangleRoundedLinesEx(hudBox, 0.14f, 6, 1.2f, Fade(CYAN_COLOR, 0.35f));
+
+    /* Linha 1: Cronômetro e 3 Vidas (sprite vidas.png) */
+    DrawGameText(TextFormat("TEMPO: %02d:%02d", minutes, seconds), (int)hudBox.x + 18, (int)hudBox.y + 16, 18, GOLD_COLOR);
+    DrawGameText("|", (int)hudBox.x + 158, (int)hudBox.y + 16, 18, Fade(RAYWHITE, 0.35f));
+
+    /* 3 Corações de Vida */
+    DrawLivesIcons((Vector2){ (float)hudBox.x + 178, (float)hudBox.y + 13 }, game->lives, 24.0f);
+
+    /* Linha 2: Nome do Operador */
+    DrawGameText(TextFormat("OPERADOR: %s", game->playerName), (int)hudBox.x + 18, (int)hudBox.y + 52, 16, (Color){175, 195, 215, 255});
+}
+
+void DrawRewardSpriteItem(int year, Vector2 center, float maxSize)
+{
+    if (!g_rewardSpritesLoaded) LoadRewardSprites();
+
+    Texture2D tex = {0};
+    if (year == 1990) tex = g_rewardFloppyTex;
+    else if (year == 2008) tex = g_rewardCdTex;
+    else if (year == 2026) tex = g_rewardSsdTex;
+
+    float bob = sinf((float)GetTime() * 2.0f) * 4.0f;
+    Vector2 pos = { center.x, center.y + bob };
+
+    /* 1. Sombra elíptica e brilho holográfico na base */
+    DrawEllipse((int)center.x, (int)center.y + 115, 110.0f - bob * 1.5f, 18.0f - bob * 0.3f, Fade(BLACK, 0.45f));
+    DrawCircleGradientCompat((int)pos.x, (int)pos.y, (int)(maxSize * 0.58f), Fade(CYAN_COLOR, 0.08f), BLANK);
+
+    /* 2. Desenha a imagem da recompensa carregada de assets/sprites/ */
+    if (tex.id != 0)
+    {
+        float aspect = (float)tex.width / (float)tex.height;
+        float drawW = maxSize;
+        float drawH = maxSize / aspect;
+        if (drawH > maxSize)
+        {
+            drawH = maxSize;
+            drawW = maxSize * aspect;
+        }
+
+        Rectangle src = { 0.0f, 0.0f, (float)tex.width, (float)tex.height };
+        Rectangle dst = { pos.x - drawW * 0.5f, pos.y - drawH * 0.5f, drawW, drawH };
+        DrawTexturePro(tex, src, dst, (Vector2){0, 0}, 0.0f, WHITE);
+    }
+    else
+    {
+        /* Fallback procedurais caso a imagem PNG nao seja localizada */
+        if (year == 1990) DrawFloppy((Vector2){pos.x - 120, pos.y - 120}, 1.35f);
+        else if (year == 2008) DrawMemoryCd((Vector2){pos.x - 110, pos.y - 110}, 1.3f);
+        else DrawSsd((Vector2){pos.x - 140, pos.y - 100}, 1.35f);
+    }
+}
+
 Vector2 GetVirtualMouse(void)
 {
     Vector2 mouse = GetMousePosition();
@@ -371,6 +675,11 @@ void DrawButton(Rectangle bounds, const char *label, Color accent)
     bool hover = CheckCollisionPointRec(GetVirtualMouse(), bounds);
     int size = 21;
     int width = MeasureGameText(label, size);
+    while (size > 13 && width > (int)(bounds.width - 16))
+    {
+        size--;
+        width = MeasureGameText(label, size);
+    }
 
     DrawRectangleRounded(bounds, 0.16f, 8,
                          hover ? Fade(accent, 0.24f) : PANEL_COLOR);
@@ -1992,8 +2301,7 @@ void DrawHud(const GameState *game)
     DrawGameText("ARQUIVO 04 // 2048 - O PROTOTIPO", 28, 20, 22, CYAN_COLOR);
     DrawGameText(TextFormat("OPERADOR: %s", game->playerName), 270, 23, 17, GRAY);
     DrawGameText(TextFormat("PISTAS %d/5", ClueCount(game)), 900, 20, 20, LIGHTGRAY);
-    DrawGameText(TextFormat("VIDAS %d", game->lives), 1050, 20, 20,
-             game->lives == 1 ? RED_COLOR : RAYWHITE);
+    DrawLivesIcons((Vector2){ 1040, 20 }, game->lives, 24.0f);
     DrawGameText(TextFormat("%02d:%02d", minutes, seconds), 1180, 20, 20,
              GOLD_COLOR);
 
@@ -3898,7 +4206,7 @@ void DrawHudRoom2(const GameState *game)
         DrawGameText("[!] INDEXACAO PENDENTE", 665, 26, 16, GOLD_COLOR);
     }
 
-    DrawGameText(TextFormat("VIDAS %d/3", game->lives), 960, 25, 18, game->lives == 1 ? RED_COLOR : RAYWHITE);
+    DrawLivesIcons((Vector2){ 960, 22 }, game->lives, 24.0f);
     DrawGameText(TextFormat("%02d:%02d", minutes, seconds), 1160, 23, 22, GOLD_COLOR);
 
     /* Rodapé */
@@ -4770,46 +5078,51 @@ void UpdatePuzzleFiles(GameState *game)
 void DrawResult2(const GameState *game)
 {
     DrawBackground();
+
+    /* Titulo da Recompensa (Canto Superior Esquerdo) */
     DrawGameText("RECOMPENSA OBTIDA:", 90, 68, 20, CYAN_COLOR);
-    DrawGameText("DISQUETE // 1990", 90, 108, 46, RAYWHITE);
+    DrawGameText("DISQUETE // 1990", 90, 108, 44, RAYWHITE);
 
-    /* Desenha o disquete recuperado (recompensa de 1990) */
-    DrawFloppy((Vector2){160, 250}, 1.35f);
+    /* Cronometro, Vidas e Operador (Canto Direito Superior) */
+    DrawRewardHudHeader(game);
 
-    /* Painel narrativo de avanço */
-    DrawRectangleRounded((Rectangle){505, 185, 670, 360}, 0.04f, 8, Fade(PANEL_COLOR, 0.96f));
-    DrawGameText("SALA DE 1990 CONCLUÍDA", 540, 212, 22, GOLD_COLOR);
+    /* Imagem da Recompensa (Disquete carregado de assets/sprites/disquete.png) */
+    DrawRewardSpriteItem(1990, (Vector2){285, 365}, 265.0f);
 
-    DrawGameText("Elira restaurou a organização do sistema", 540, 252, 19, RAYWHITE);
-    DrawGameText("e recuperou o registro inicial do projeto.", 540, 280, 19, RAYWHITE);
-    DrawGameText("RECOMPENSA OBTIDA: DISQUETE", 540, 316, 19, (Color){100, 235, 140, 255});
-    DrawGameText("A IA nao nasceu corrompida: o projeto visava uma mente", 540, 350, 17, LIGHTGRAY);
-    DrawGameText("livre e cooperativa. Mas algo aconteceu decadas depois...", 540, 374, 17, (Color){245, 175, 75, 255});
-    DrawGameText("-> Proxima Fronteira Temporal: FASE 2 // ANO 2008!", 540, 408, 19, CYAN_COLOR);
+    /* Painel Narrativo Padronizado */
+    Rectangle winBox = {505, 175, 670, 380};
+    DrawRectangleRounded(winBox, 0.04f, 8, Fade(PANEL_COLOR, 0.96f));
+    DrawRectangleRoundedLinesEx(winBox, 0.04f, 8, 2.0f, Fade(PANEL_LIGHT, 0.9f));
 
-    DrawGameText(TextFormat("TEMPO TOTAL: %02d:%02d  |  VIDAS: %d/3",
-                        (int)(GetTime() - game->startTime) / 60,
-                        (int)(GetTime() - game->startTime) % 60,
-                        game->lives),
-             540, 458, 19, (Color){100, 235, 140, 255});
+    /* Titulo Especial */
+    DrawGameText("SALA DE 1990 CONCLUIDA", 540, 208, 22, GOLD_COLOR);
 
-    DrawGameText(TextFormat("OPERADOR: %s", game->playerName), 540, 498, 16, GRAY);
+    /* Recompensa Especial */
+    DrawGameText("RECOMPENSA OBTIDA: DISQUETE", 540, 244, 19, CYAN_COLOR);
 
-    Rectangle btnNext2008 = {340, 580, 380, 56};
-    Rectangle btnReplay1990 = {740, 580, 210, 56};
-    Rectangle btnTitle = {970, 580, 190, 56};
-    DrawButton(btnNext2008, "AVANCAR PARA ANO 2008 >> [ENTER]", GOLD_COLOR);
-    DrawButton(btnReplay1990, "REINICIAR 1990", CYAN_COLOR);
-    DrawButton(btnTitle, "MENU INICIAL", PANEL_LIGHT);
+    /* Texto Narrativo Padronizado (Toda a narrativa na mesma cor padronizada REWARD_BODY_COLOR) */
+    DrawGameText("Elira restaurou a organizacao do sistema", 540, 286, 17, REWARD_BODY_COLOR);
+    DrawGameText("e recuperou o registro inicial do projeto.", 540, 312, 17, REWARD_BODY_COLOR);
+    DrawGameText("A IA nao nasceu corrompida: o projeto visava uma mente", 540, 348, 17, REWARD_BODY_COLOR);
+    DrawGameText("livre e cooperativa. Mas algo aconteceu decadas depois...", 540, 374, 17, REWARD_BODY_COLOR);
+
+    /* Frase Especial de Proxima Fronteira */
+    DrawGameText("-> Proxima Fronteira Temporal: FASE 2 // ANO 2008!", 540, 452, 19, CYAN_COLOR);
+
+    /* Botoes Centralizados */
+    Rectangle btnNext, btnRestart, btnMenu;
+    GetRewardScreenButtons(&btnNext, &btnRestart, &btnMenu);
+    DrawButton(btnNext, "AVANCAR PROXIMA FASE >> [ENTER]", GOLD_COLOR);
+    DrawButton(btnRestart, "REINICIAR 1990", CYAN_COLOR);
+    DrawButton(btnMenu, "MENU INICIAL", PANEL_LIGHT);
 }
 
 void UpdateResult2(GameState *game)
 {
-    Rectangle btnNext2008 = {340, 580, 380, 56};
-    Rectangle btnReplay1990 = {740, 580, 210, 56};
-    Rectangle btnTitle = {970, 580, 190, 56};
+    Rectangle btnNext, btnRestart, btnMenu;
+    GetRewardScreenButtons(&btnNext, &btnRestart, &btnMenu);
 
-    if (Clicked(btnNext2008) || IsKeyPressed(KEY_ENTER) || IsKeyPressed(KEY_SPACE))
+    if (Clicked(btnNext) || IsKeyPressed(KEY_ENTER) || IsKeyPressed(KEY_SPACE))
     {
         game->year2008Unlocked = true;
         game->journalYearTab = 1;
@@ -4817,12 +5130,12 @@ void UpdateResult2(GameState *game)
         game->screen = SCREEN_ROOM_2008;
         SetMessage(game, "Salto temporal concluido: Escritorio de Vigilancia // ANO 2008.");
     }
-    else if (Clicked(btnReplay1990))
+    else if (Clicked(btnRestart))
     {
         InitRoom2Puzzle(game);
         game->screen = SCREEN_ROOM_2;
     }
-    else if (Clicked(btnTitle) || IsKeyPressed(KEY_ESCAPE))
+    else if (Clicked(btnMenu) || IsKeyPressed(KEY_ESCAPE))
     {
         game->screen = SCREEN_TITLE;
     }
@@ -5420,7 +5733,7 @@ void DrawHudRoom2008(const GameState *game)
         DrawGameText(TextFormat("EVIDENCIAS: %d/4", ExaminedDocs2008Count(game)), 770, 22, 18, LIGHTGRAY);
     }
 
-    DrawGameText(TextFormat("VIDAS %d", game->lives), 1050, 20, 20, game->lives == 1 ? RED_COLOR : RAYWHITE);
+    DrawLivesIcons((Vector2){ 1040, 20 }, game->lives, 24.0f);
     DrawGameText(TextFormat("%02d:%02d", minutes, seconds), 1180, 20, 20, GOLD_COLOR);
 
     /* Rodape */
@@ -5940,67 +6253,66 @@ void UpdatePuzzle2008(GameState *game)
 void DrawResult2008(const GameState *game)
 {
     DrawBackground();
-    DrawGameText("ARTEFATO RECUPERADO", 90, 68, 20, CYAN_COLOR);
-    DrawGameText("CD DE MEMÓRIA // 2008", 90, 108, 46, RAYWHITE);
 
-    /* Desenha o CD de Memoria recuperado */
-    DrawMemoryCd((Vector2){140, 260}, 1.3f);
+    /* Titulo da Recompensa (Canto Superior Esquerdo) */
+    DrawGameText("RECOMPENSA OBTIDA:", 90, 68, 20, CYAN_COLOR);
+    DrawGameText("CD DE MEMORIA // 2008", 90, 108, 44, RAYWHITE);
 
-    /* Painel narrativo de avanco */
+    /* Cronometro, Vidas e Operador (Canto Direito Superior) */
+    DrawRewardHudHeader(game);
+
+    /* Imagem da Recompensa (CD carregado de assets/sprites/cd.png) */
+    DrawRewardSpriteItem(2008, (Vector2){285, 365}, 265.0f);
+
+    /* Painel Narrativo Padronizado */
     Rectangle winBox = {505, 175, 670, 380};
     DrawRectangleRounded(winBox, 0.04f, 8, Fade(PANEL_COLOR, 0.96f));
-    DrawRectangleRoundedLinesEx(winBox, 0.04f, 8, 2.0f, GOLD_COLOR);
+    DrawRectangleRoundedLinesEx(winBox, 0.04f, 8, 2.0f, Fade(PANEL_LIGHT, 0.9f));
 
-    DrawGameText("DESVIO ALGORÍTMICO // FASE 2 (2008) CONCLUÍDA", 535, 202, 20, GOLD_COLOR);
+    /* Titulo Especial */
+    DrawGameText("SALA DE 2008 CONCLUIDA", 540, 208, 22, GOLD_COLOR);
 
-    DrawGameText("Ao demonstrar o falso positivo através do crachá de ponto e do", 535, 236, 17, LIGHTGRAY);
-    DrawGameText("circuito interno, Elira impediu o drone e salvou a vida de Lucas Silva.", 535, 258, 17, LIGHTGRAY);
+    /* Recompensa Especial */
+    DrawGameText("RECOMPENSA OBTIDA: CD DE MEMORIA", 540, 244, 19, CYAN_COLOR);
 
-    DrawGameText("O algoritmo de busca facial, concebido por seu pai para salvar", 535, 290, 17, LIGHTGRAY);
-    DrawGameText("vítimas em catástrofes, havia sido pervertido pelo governo para", 535, 312, 17, (Color){245, 175, 75, 255});
-    DrawGameText("perseguir líderes populares e ativistas civis.", 535, 334, 17, (Color){245, 175, 75, 255});
+    /* Texto Narrativo Padronizado (Cor unificada REWARD_BODY_COLOR) */
+    DrawGameText("Ao demonstrar o falso positivo atraves do cracha e do", 540, 284, 17, REWARD_BODY_COLOR);
+    DrawGameText("circuito interno, Elira impediu o drone e salvou Lucas Silva.", 540, 308, 17, REWARD_BODY_COLOR);
+    DrawGameText("O algoritmo concebido por seu pai para salvar vidas havia", 540, 338, 17, REWARD_BODY_COLOR);
+    DrawGameText("sido pervertido para perseguir lideres populares e ativistas.", 540, 362, 17, REWARD_BODY_COLOR);
 
-    DrawGameText("-> Proxima Fronteira: FASE 3 // ANO 2026: SALA DE HIDROGENIO!", 535, 362, 17, CYAN_COLOR);
-
+    /* Destaque Especial */
     if (game->room2008OptionalCompleted)
     {
-        DrawRectangleRounded((Rectangle){535, 396, 610, 44}, 0.12f, 4, Fade((Color){45, 165, 80, 255}, 0.20f));
-        DrawRectangleRoundedLinesEx((Rectangle){535, 396, 610, 44}, 0.12f, 4, 1.0f, (Color){60, 235, 110, 255});
-        DrawGameText("[DESTAQUE ÉTICO]: Despacho automático da filial desativado,", 550, 402, 14, (Color){60, 235, 110, 255});
-        DrawGameText("mantendo todas as 1.420 provas forenses intactas para o futuro.", 550, 420, 14, (Color){60, 235, 110, 255});
+        Rectangle bBox = {540, 396, 600, 42};
+        DrawRectangleRounded(bBox, 0.12f, 4, Fade((Color){45, 165, 80, 255}, 0.20f));
+        DrawRectangleRoundedLinesEx(bBox, 0.12f, 4, 1.0f, (Color){60, 235, 110, 255});
+        DrawGameText("[DESTAQUE ETICO]: Despacho automatico desativado,", 554, 402, 15, (Color){60, 235, 110, 255});
+        DrawGameText("mantendo 1.420 provas forenses intactas para o futuro.", 554, 422, 15, (Color){60, 235, 110, 255});
     }
     else
     {
-        DrawGameText("[DESCOBERTA PENDENTE]: Havia um protocolo no escritório para", 535, 400, 14, GOLD_COLOR);
-        DrawGameText("desativar o envio automático da filial mantendo os registros como prova.", 535, 420, 14, GRAY);
+        DrawGameText("[DESCOBERTA PENDENTE]: Havia um protocolo no escritorio", 540, 400, 14, GOLD_COLOR);
+        DrawGameText("para desativar o despacho da filial mantendo os registros.", 540, 420, 14, REWARD_BODY_COLOR);
     }
 
-    DrawGameText(TextFormat("TEMPO TOTAL: %02d:%02d  |  VIDAS: %d/3",
-                        (int)(GetTime() - game->startTime) / 60,
-                        (int)(GetTime() - game->startTime) % 60,
-                        game->lives),
-             535, 460, 18, (Color){100, 235, 140, 255});
+    /* Frase Especial de Proxima Fronteira */
+    DrawGameText("-> Proxima Fronteira Temporal: FASE 3 // ANO 2026!", 540, 452, 19, CYAN_COLOR);
 
-    DrawGameText(TextFormat("OPERADOR: %s", game->playerName), 535, 492, 16, GRAY);
-
-    Rectangle btnNext2026 = {180, 580, 380, 56};
-    Rectangle btnOffice = {580, 580, 220, 56};
-    Rectangle btnRoom1 = {820, 580, 220, 56};
-    Rectangle btnMenu = {1060, 580, 160, 56};
-    DrawButton(btnNext2026, "AVANCAR PARA ANO 2026 >> [ENTER]", GOLD_COLOR);
-    DrawButton(btnOffice, "REVER ESCRITORIO", CYAN_COLOR);
-    DrawButton(btnRoom1, "< SALA 1 (1990)", (Color){70, 95, 110, 255});
-    DrawButton(btnMenu, "MENU", PANEL_LIGHT);
+    /* Botoes Centralizados */
+    Rectangle btnNext, btnRestart, btnMenu;
+    GetRewardScreenButtons(&btnNext, &btnRestart, &btnMenu);
+    DrawButton(btnNext, "AVANCAR PROXIMA FASE >> [ENTER]", GOLD_COLOR);
+    DrawButton(btnRestart, "REINICIAR 2008", CYAN_COLOR);
+    DrawButton(btnMenu, "MENU INICIAL", PANEL_LIGHT);
 }
 
 void UpdateResult2008(GameState *game)
 {
-    Rectangle btnNext2026 = {180, 580, 380, 56};
-    Rectangle btnOffice = {580, 580, 220, 56};
-    Rectangle btnRoom1 = {820, 580, 220, 56};
-    Rectangle btnMenu = {1060, 580, 160, 56};
+    Rectangle btnNext, btnRestart, btnMenu;
+    GetRewardScreenButtons(&btnNext, &btnRestart, &btnMenu);
 
-    if (Clicked(btnNext2026) || IsKeyPressed(KEY_ENTER) || IsKeyPressed(KEY_SPACE))
+    if (Clicked(btnNext) || IsKeyPressed(KEY_ENTER) || IsKeyPressed(KEY_SPACE))
     {
         game->year2026Unlocked = true;
         game->journalYearTab = 2;
@@ -6008,14 +6320,10 @@ void UpdateResult2008(GameState *game)
         game->screen = SCREEN_ROOM_2026;
         SetMessage(game, "Salto temporal concluido: Fabrica Automatizada // ANO 2026.");
     }
-    else if (Clicked(btnOffice))
+    else if (Clicked(btnRestart))
     {
+        InitRoom2008(game);
         game->screen = SCREEN_ROOM_2008;
-    }
-    else if (Clicked(btnRoom1))
-    {
-        game->journalYearTab = 0;
-        game->screen = SCREEN_ROOM_2;
     }
     else if (Clicked(btnMenu) || IsKeyPressed(KEY_ESCAPE))
     {
@@ -6146,8 +6454,7 @@ void DrawHudRoom2026(const GameState *game)
         DrawGameText("[STANDBY - ATIVAR NO TERMINAL]", (int)hudReactorBox.x + 100, (int)hudReactorBox.y + 27, 12, (Color){90, 120, 150, 255});
     }
 
-    DrawGameText(TextFormat("VIDAS %d", game->lives), 1040, 20, 20,
-             game->lives == 1 ? RED_COLOR : (game->lives == 3 ? GOLD_COLOR : RAYWHITE));
+    DrawLivesIcons((Vector2){ 1040, 20 }, game->lives, 24.0f);
     DrawGameText(TextFormat("%02d:%02d", minutes, seconds), 1180, 20, 20, GOLD_COLOR);
 }
 
@@ -7066,67 +7373,66 @@ void UpdateRoom2026(GameState *game)
 void DrawResult2026(const GameState *game)
 {
     DrawBackground();
-    DrawGameText("ARTEFATO RECUPERADO", 90, 68, 20, CYAN_COLOR);
-    DrawGameText("SSD // 2026", 90, 108, 46, RAYWHITE);
 
-    /* Desenha a unidade SSD recuperada */
-    DrawSsd((Vector2){140, 260}, 1.35f);
+    /* Titulo da Recompensa (Canto Superior Esquerdo) */
+    DrawGameText("RECOMPENSA OBTIDA:", 90, 68, 20, CYAN_COLOR);
+    DrawGameText("SSD // 2026", 90, 108, 44, RAYWHITE);
 
-    /* Painel narrativo de avanco */
+    /* Cronometro, Vidas e Operador (Canto Direito Superior) */
+    DrawRewardHudHeader(game);
+
+    /* Imagem da Recompensa (SSD carregado de assets/sprites/ssd.png) */
+    DrawRewardSpriteItem(2026, (Vector2){285, 365}, 285.0f);
+
+    /* Painel Narrativo Padronizado */
     Rectangle winBox = {505, 175, 670, 380};
     DrawRectangleRounded(winBox, 0.04f, 8, Fade(PANEL_COLOR, 0.96f));
-    DrawRectangleRoundedLinesEx(winBox, 0.04f, 8, 2.0f, GOLD_COLOR);
+    DrawRectangleRoundedLinesEx(winBox, 0.04f, 8, 2.0f, Fade(PANEL_LIGHT, 0.9f));
 
-    DrawGameText("SALA DE 2026 CONCLUÍDA", 535, 202, 20, GOLD_COLOR);
-    DrawGameText("O compartimento de armazenamento é liberado.", 535, 230, 16, LIGHTGRAY);
-    DrawGameText("RECOMPENSA: SSD", 535, 252, 18, (Color){100, 235, 140, 255});
+    /* Titulo Especial */
+    DrawGameText("SALA DE 2026 CONCLUIDA", 540, 208, 22, GOLD_COLOR);
 
-    DrawGameText("Ariel: “Minha recomendação estava incorreta.”", 535, 285, 16, CYAN_COLOR);
-    DrawGameText("Elira: “Então confiança não significa verdade.”", 535, 310, 16, GOLD_COLOR);
+    /* Recompensa Especial */
+    DrawGameText("RECOMPENSA OBTIDA: SSD", 540, 244, 19, CYAN_COLOR);
 
+    /* Texto Narrativo Padronizado (Cor unificada REWARD_BODY_COLOR) */
+    DrawGameText("O compartimento de armazenamento e liberado com sucesso.", 540, 282, 17, REWARD_BODY_COLOR);
+    DrawGameText("Ariel: \"Minha recomendacao estava incorreta.\"", 540, 308, 17, REWARD_BODY_COLOR);
+    DrawGameText("Elira: \"Entao confianca nao significa verdade.\"", 540, 332, 17, REWARD_BODY_COLOR);
+    DrawGameText("Em modelos probabilisticos, alta conviccao nao implica precisao.", 540, 356, 17, REWARD_BODY_COLOR);
+
+    /* Destaque Especial */
     if (game->room2026FirstTrySuccess)
     {
-        Rectangle bBox = {535, 342, 610, 95};
+        Rectangle bBox = {540, 388, 600, 52};
         DrawRectangleRounded(bBox, 0.10f, 4, Fade((Color){45, 165, 80, 255}, 0.20f));
         DrawRectangleRoundedLinesEx(bBox, 0.10f, 4, 1.0f, (Color){60, 235, 110, 255});
-
-        DrawGameText("ANÁLISE CRÍTICA: EXCELENTE [+1 BÔNUS DE CONSCIÊNCIA]", 550, 350, 15, (Color){60, 235, 110, 255});
-        DrawGameText("Elira confrontou a recomendação da IA com evidências independentes.", 550, 372, 13, RAYWHITE);
-        DrawGameText("Relatório de Extração de Terras Raras liberado no Diário:", 550, 394, 13, GOLD_COLOR);
-        DrawGameText("“A produção de hardware inteligente também possui consequências materiais e ambientais.”", 550, 414, 12, (Color){200, 225, 210, 255});
+        DrawGameText("[ANALISE CRITICA: EXCELENTE] (+1 Bonus de Consciencia)", 554, 396, 15, (Color){60, 235, 110, 255});
+        DrawGameText("Elira confrontou a recomendacao da IA com evidencias reais.", 554, 418, 15, (Color){200, 235, 210, 255});
     }
     else
     {
-        DrawGameText("-> A calibragem com a Amostra C-22 produziu o SSD necessário.", 535, 350, 15, LIGHTGRAY);
-        DrawGameText("Lembre-se: em modelos probabilísticos, alta convicção não implica precisão.", 535, 375, 14, GRAY);
+        DrawGameText("A calibragem com a Amostra C-22 produziu o SSD necessario.", 540, 396, 15, REWARD_BODY_COLOR);
+        DrawGameText("A sintese de hardware inteligente exige rigor material.", 540, 418, 14, REWARD_BODY_COLOR);
     }
 
-    DrawGameText(TextFormat("TEMPO TOTAL: %02d:%02d  |  VIDAS: %d/3",
-                        (int)(GetTime() - game->startTime) / 60,
-                        (int)(GetTime() - game->startTime) % 60,
-                        game->lives),
-             535, 460, 18, (Color){100, 235, 140, 255});
+    /* Frase Especial de Proxima Fronteira */
+    DrawGameText("-> Proxima Fronteira Temporal: CONFRONTO FINAL // ANO 2048!", 540, 452, 19, CYAN_COLOR);
 
-    DrawGameText(TextFormat("OPERADOR: %s", game->playerName), 535, 492, 16, GRAY);
-
-    Rectangle btnNext2048 = {180, 580, 380, 56};
-    Rectangle btnRoom = {580, 580, 220, 56};
-    Rectangle btnRoom2 = {820, 580, 220, 56};
-    Rectangle btnMenu = {1060, 580, 160, 56};
-    DrawButton(btnNext2048, "AVANCAR PARA ANO 2048 >> [ENTER]", GOLD_COLOR);
-    DrawButton(btnRoom, "REVER FABRICA", CYAN_COLOR);
-    DrawButton(btnRoom2, "< SALA 2 (2008)", (Color){70, 95, 110, 255});
-    DrawButton(btnMenu, "MENU", PANEL_LIGHT);
+    /* Botoes Centralizados */
+    Rectangle btnNext, btnRestart, btnMenu;
+    GetRewardScreenButtons(&btnNext, &btnRestart, &btnMenu);
+    DrawButton(btnNext, "AVANCAR PROXIMA FASE >> [ENTER]", GOLD_COLOR);
+    DrawButton(btnRestart, "REINICIAR 2026", CYAN_COLOR);
+    DrawButton(btnMenu, "MENU INICIAL", PANEL_LIGHT);
 }
 
 void UpdateResult2026(GameState *game)
 {
-    Rectangle btnNext2048 = {180, 580, 380, 56};
-    Rectangle btnRoom = {580, 580, 220, 56};
-    Rectangle btnRoom2 = {820, 580, 220, 56};
-    Rectangle btnMenu = {1060, 580, 160, 56};
+    Rectangle btnNext, btnRestart, btnMenu;
+    GetRewardScreenButtons(&btnNext, &btnRestart, &btnMenu);
 
-    if (Clicked(btnNext2048) || IsKeyPressed(KEY_ENTER) || IsKeyPressed(KEY_SPACE))
+    if (Clicked(btnNext) || IsKeyPressed(KEY_ENTER) || IsKeyPressed(KEY_SPACE))
     {
         game->year2048Unlocked = true;
         game->journalYearTab = 3;
@@ -7134,14 +7440,10 @@ void UpdateResult2026(GameState *game)
         game->screen = SCREEN_ROOM;
         SetMessage(game, "Salto temporal concluido: O Prototipo de A.R.1.3.L. // ANO 2048.");
     }
-    else if (Clicked(btnRoom))
+    else if (Clicked(btnRestart))
     {
+        InitRoom2026(game);
         game->screen = SCREEN_ROOM_2026;
-    }
-    else if (Clicked(btnRoom2))
-    {
-        game->journalYearTab = 1;
-        game->screen = SCREEN_ROOM_2008;
     }
     else if (Clicked(btnMenu) || IsKeyPressed(KEY_ESCAPE))
     {
@@ -7221,7 +7523,9 @@ bool IsPortraitBackground(Color c)
 
 void LoadEliraPortrait(void)
 {
-    const char *path = "assets/elira_portrait.png";
+    const char *path = FileExists("assets/sprites/elira_portrait.png")
+                           ? "assets/sprites/elira_portrait.png"
+                           : "assets/elira_portrait.png";
     if (!FileExists(path)) return;
 
     Image img = LoadImage(path);
@@ -7843,8 +8147,8 @@ float MidiToFreq(float m)
 
 void EnsureAmbientMusicFile(void)
 {
-    const char *outPath = "assets/ambient.wav";
-    if (FileExists(outPath)) return;
+    const char *outPath = "assets/som/ambient.wav";
+    if (FileExists(outPath) || FileExists("assets/ambient.wav")) return;
 
     int sampleRate = 44100;
     int channels = 2;

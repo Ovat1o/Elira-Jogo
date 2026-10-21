@@ -218,11 +218,19 @@ extern const Color WIRE_YELLOW;
 extern const Color WIRE_RED;
 extern const Color WIRE_BLUE;
 extern const Color WIRE_PINK;
+extern const Color REWARD_BODY_COLOR;
 
 extern int g_currentRes;
 extern float g_musicVolume;
 extern Texture2D g_eliraPortrait;
 extern bool g_eliraPortraitLoaded;
+extern Texture2D g_rewardFloppyTex;
+extern Texture2D g_rewardCdTex;
+extern Texture2D g_rewardSsdTex;
+extern bool g_rewardSpritesLoaded;
+extern Texture2D g_heartFullTex;
+extern Texture2D g_heartEmptyTex;
+extern bool g_heartTexturesLoaded;
 
 /* ========================================================================= */
 /* HEADERS DE TODAS AS FUNCOES USADAS NO CODIGO                              */
@@ -294,6 +302,16 @@ void DrawFloppy(Vector2 position, float scale);
 void DrawSsd(Vector2 position, float scale);
 void DrawResult(const GameState *game);
 void DrawFailure(void);
+
+/* Recompensas Padronizadas (1990, 2008, 2026) e Vidas (Sprite Heart) */
+void LoadRewardSprites(void);
+void UnloadRewardSprites(void);
+void LoadHeartSprites(void);
+void UnloadHeartSprites(void);
+void DrawLivesIcons(Vector2 position, int lives, float heartSize);
+void GetRewardScreenButtons(Rectangle *outNext, Rectangle *outRestart, Rectangle *outMenu);
+void DrawRewardHudHeader(const GameState *game);
+void DrawRewardSpriteItem(int year, Vector2 center, float maxSize);
 
 /* Quarto 2 (Ano 1990) - Sala de Arquivos, Minigame de Memoria e Puzzle de Pastas */
 void DrawTapeCassette(Vector2 position, float scale);

@@ -21,14 +21,16 @@ int main(void)
     GameFontAvailable();
 
     LoadEliraPortrait();
+    LoadRewardSprites();
 
     EnsureAmbientMusicFile();
 
     Music ambientBgm = {0};
     bool bgmLoaded = false;
-    if (FileExists("assets/ambient.wav"))
+    const char *bgmFile = FileExists("assets/som/ambient.wav") ? "assets/som/ambient.wav" : "assets/ambient.wav";
+    if (FileExists(bgmFile))
     {
-        ambientBgm = LoadMusicStream("assets/ambient.wav");
+        ambientBgm = LoadMusicStream(bgmFile);
         if (ambientBgm.stream.buffer != NULL)
         {
             ambientBgm.looping = true;
@@ -289,6 +291,7 @@ int main(void)
     {
         UnloadTexture(g_eliraPortrait);
     }
+    UnloadRewardSprites();
     if (bgmLoaded)
     {
         UnloadMusicStream(ambientBgm);
