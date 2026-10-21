@@ -22,12 +22,16 @@ ASSETS_DIR := assets
 RAYLIB_DIR    ?= C:/raylib
 TOOLCHAIN_DIR ?= $(RAYLIB_DIR)/w64devkit/bin
 
-# Selecao automatica do compilador GCC
-ifeq ($(wildcard $(TOOLCHAIN_DIR)/gcc.exe),)
-    CC ?= gcc
-else
+# Selecao automatica do compilador GCC (Windows nativo, WSL com w64devkit, ou Linux/macOS)
+ifneq ($(wildcard $(TOOLCHAIN_DIR)/gcc.exe),)
     export PATH := $(TOOLCHAIN_DIR);$(PATH)
-    CC ?= $(TOOLCHAIN_DIR)/gcc.exe
+    CC := $(TOOLCHAIN_DIR)/gcc.exe
+else ifneq ($(wildcard /mnt/c/raylib/w64devkit/bin/gcc.exe),)
+    export PATH := /mnt/c/raylib/w64devkit/bin:$(PATH)
+    export WSLENV := PATH/l
+    CC := WSLENV=PATH/l PATH="/mnt/c/raylib/w64devkit/bin:$$PATH" /mnt/c/raylib/w64devkit/bin/gcc.exe -BC:/raylib/w64devkit/bin/
+else
+    CC ?= gcc
 endif
 
 # Arquivos-fonte (.c) do projeto
@@ -57,6 +61,9 @@ CFLAGS   ?= -std=c99 -Wall -Wextra
 ifeq ($(OS),Windows_NT)
     LDLIBS ?= -L$(SRC_DIR) -L$(RAYLIB_DIR)/raylib/src -lraylib -lopengl32 -lgdi32 -lwinmm
     OUT    := ELIRA.exe
+else ifneq ($(wildcard /mnt/c/raylib/w64devkit/bin/gcc.exe),)
+    LDLIBS ?= -L$(SRC_DIR) -LC:/raylib/raylib/src -lraylib -lopengl32 -lgdi32 -lwinmm
+    OUT    := ELIRA.exe
 else ifeq ($(shell uname -s),Darwin)
     RAYLIB_PREFIX ?= $(shell brew --prefix raylib 2>/dev/null)
     LDLIBS ?= -L$(SRC_DIR) $(RAYLIB_PREFIX)/lib/libraylib.a -framework Cocoa -framework IOKit -framework OpenGL -framework CoreVideo
@@ -66,7 +73,7 @@ else
     OUT    := ELIRA
 endif
 
-.PHONY: all run clean
+.PHONY: all run win run-win clean
 
 # Alvo padrao: compila o executavel do jogo
 all: $(OUT)
@@ -83,11 +90,24 @@ $(SRC_DIR)/%.o: $(SRC_DIR)/%.c $(HEADERS)
 run: $(OUT)
 	./$(OUT)
 
+# Compila e executa a versao nativa de Windows (ELIRA.exe) mesmo a partir do WSL
+WIN_BIN_WSL := /mnt/c/raylib/w64devkit/bin
+WIN_BIN_WIN := C:/raylib/w64devkit/bin
+WIN_CC      := $(WIN_BIN_WSL)/gcc.exe
+WIN_LDLIBS  := -L$(SRC_DIR) -LC:/raylib/raylib/src -lraylib -lopengl32 -lgdi32 -lwinmm
+
+win: $(SRC) $(HEADERS)
+	WSLENV=PATH/l PATH="$(WIN_BIN_WSL):$$PATH" $(WIN_CC) -B$(WIN_BIN_WIN)/ $(CPPFLAGS) $(CFLAGS) $(SRC) -o ELIRA.exe $(WIN_LDLIBS)
+
+run-win: win
+	./ELIRA.exe
+
 # Remove o executavel e os arquivos-objeto (.o)
 clean:
 ifeq ($(OS),Windows_NT)
-	-@cmd /c if exist $(OUT) del /f /q $(OUT) 2>nul
+	-@cmd /c if exist ELIRA.exe del /f /q ELIRA.exe 2>nul
+	-@cmd /c if exist ELIRA del /f /q ELIRA 2>nul
 	-@cmd /c if exist $(SRC_DIR)\*.o del /f /q $(SRC_DIR)\*.o 2>nul
 else
-	-@$(RM) $(OUT) $(OBJ) 2>/dev/null || true
+	-@$(RM) ELIRA ELIRA.exe $(OBJ) 2>/dev/null || true
 endif
