@@ -1915,7 +1915,7 @@ void DrawRoom(const GameState *game)
 
     /* Textos do cabeçalho */
     DrawGameText("OUTUBRO", 84, 131, 16, RAYWHITE);
-    DrawGameText("2048", 188, 131, 16, GOLD_COLOR);
+    DrawGameText("2026", 188, 131, 16, GOLD_COLOR);
 
     /* Faixa sutil dos dias da semana */
     Rectangle daysBar = {75, 157, 160, 16};
@@ -2235,16 +2235,9 @@ void DrawRoom(const GameState *game)
     DrawHotspot(tape, "Ouvir gravacao");
     DrawHotspot(computer, "Usar terminal");
 
-    Rectangle btnBack2026 = {70, 600, 210, 42};
-    Rectangle btnBack2008 = {295, 600, 210, 42};
-    DrawButton(btnBack2026, "< SALA 3 (2026)", (Color){45, 115, 75, 255});
-    DrawHotspot(btnBack2026, "Retornar a fabrica de processamento 2026");
+    Rectangle btnBack2008 = {70, 600, 240, 42};
     DrawButton(btnBack2008, "< SALA 2 (2008)", (Color){70, 95, 110, 255});
     DrawHotspot(btnBack2008, "Retornar ao escritorio de vigilancia 2008");
-
-    Rectangle btnConfront = {SCREEN_WIDTH - 290, 600, 260, 42};
-    DrawButton(btnConfront, "CONFRONTAR ARIEL >", GOLD_COLOR);
-    DrawHotspot(btnConfront, "Acessar a camara de Ariel (Confronto Final)");
 }
 
 void DrawJournalHudButton(const GameState *game)
@@ -2370,7 +2363,7 @@ void DrawHud(const GameState *game)
     int minutes = totalSeconds / 60;
     int seconds = totalSeconds % 60;
     DrawRectangle(0, 0, SCREEN_WIDTH, 70, Fade(VOID_COLOR, 0.94f));
-    DrawGameText("ARQUIVO 04 // 2048 - O PROTOTIPO", 28, 20, 22, CYAN_COLOR);
+    DrawGameText("ARQUIVO 03 // 2026 - O PROTOTIPO", 28, 20, 22, CYAN_COLOR);
     DrawGameText(TextFormat("OPERADOR: %s", game->playerName), 270, 23, 17, GRAY);
     DrawGameText(TextFormat("PISTAS %d/5", ClueCount(game)), 900, 20, 20, LIGHTGRAY);
     DrawLivesIcons((Vector2){ 1040, 20 }, game->lives, 24.0f);
@@ -2430,8 +2423,8 @@ void DrawPadlockIcon(int centerX, int centerY, float scale, Color bodyColor, Col
 
 void DrawJournalTabs(const GameState *game, int bookX, int bookY)
 {
-    static const char *tabLabels[4] = {
-        "1990", "2008", "2026", "2048"
+    static const char *tabLabels[3] = {
+        "1990", "2008", "2026"
     };
 
     int tabX = bookX + 1040;
@@ -2439,12 +2432,13 @@ void DrawJournalTabs(const GameState *game, int bookX, int bookY)
     int tabH = 54;
     int tabGap = 66;
 
-    for (int i = 0; i < 4; i++)
+    for (int i = 0; i < 3; i++)
     {
         int tabY = bookY + 42 + i * tabGap;
         Rectangle tabRect = {(float)tabX, (float)tabY, (float)tabW, (float)tabH};
         bool isCurrent = (game->journalYearTab == i);
-        bool isUnlocked = (i == 0) || (i == 1 && game->year2008Unlocked) || (i == 3 && game->year2048Unlocked);
+        bool isUnlocked = (i == 0) || (i == 1 && game->year2008Unlocked) ||
+                          (i == 2 && game->year2026Unlocked);
         bool hover = CheckCollisionPointRec(GetVirtualMouse(), tabRect);
 
         Color tabBg;
@@ -2610,26 +2604,23 @@ void DrawJournal(const GameState *game)
                  (Color){68, 38, 22, 255});
 
     int footY = bookY + 542;
-    static const char *tabLabels[4] = { "1990", "2008", "2026", "2048" };
+    static const char *tabLabels[3] = { "1990", "2008", "2026" };
 
     bool isTabLocked = (game->journalYearTab == 1 && !game->year2008Unlocked) ||
-                       (game->journalYearTab == 2 && !game->year2026Unlocked) ||
-                       (game->journalYearTab == 3 && !game->year2048Unlocked);
+                       (game->journalYearTab == 2 && !game->year2026Unlocked);
 
     if (isTabLocked)
     {
         /* ========================================================= */
-        /* TELA DE ANO BLOQUEADO (2008, 2026, OU 2048 ANTES DA HORA) */
+        /* TELA DE ANO BLOQUEADO (2008 OU 2026 ANTES DA HORA) */
         /* ========================================================= */
         const char *lockedYear = tabLabels[game->journalYearTab];
         int phaseNumber = game->journalYearTab + 1;
         const char *activeYear = "1990";
         if (game->screen == SCREEN_ROOM_2008 || game->screen == SCREEN_PUZZLE_2008 || game->screen == SCREEN_RESULT_2008)
             activeYear = "2008";
-        else if (game->screen == SCREEN_ROOM_2026 || game->screen == SCREEN_RESULT_2026)
+        else if (game->screen == SCREEN_ROOM || game->screen == SCREEN_ROOM_2026 || game->screen == SCREEN_RESULT_2026)
             activeYear = "2026";
-        else if (game->screen == SCREEN_ROOM && game->year2048Unlocked)
-            activeYear = "2048";
 
         /* --- Pagina Esquerda --- */
         DrawGameText(TextFormat("ARQUIVO CRONOLOGICO // %s", lockedYear), bookX + 35, bookY + 22, 22, (Color){125, 35, 18, 255});
@@ -2789,7 +2780,7 @@ void DrawJournal(const GameState *game)
 
             DrawGameText("DICAS DE NAVEGACAO DESTE ARQUIVO:", bookX + 560, bookY + 385, 16, (Color){125, 35, 18, 255});
             DrawGameText("- Clique em 'Proxima [E]' para acessar o Dossie de 1990.", bookX + 560, bookY + 412, 15, INK_COLOR);
-            DrawGameText("- Conclua a indexacao para destravar o salto para 2048.", bookX + 560, bookY + 438, 15, INK_COLOR);
+            DrawGameText("- Conclua a indexacao para destravar o salto para 2008.", bookX + 560, bookY + 438, 15, INK_COLOR);
             DrawGameText("- Pressione [D] para retornar ao setor de arquivos.", bookX + 560, bookY + 464, 15, INK_COLOR);
         }
         else
@@ -2835,7 +2826,7 @@ void DrawJournal(const GameState *game)
                 DrawGameText("Os parametros de peso sinaptico foram organizados.", bookX + 46, bookY + 360, 15, INK_COLOR);
                 DrawGameText("A porta do setor foi destrancada pelo sistema central.", bookX + 46, bookY + 384, 15, INK_COLOR);
                 DrawGameText("Ao atravessar a saida, o artefato de 1990 sera resgatado,", bookX + 46, bookY + 408, 15, (Color){125, 35, 18, 255});
-                DrawGameText("permitindo a Elira viajar para a proxima era: ANO 2048.", bookX + 46, bookY + 432, 15, INK_COLOR);
+                DrawGameText("permitindo a Elira viajar para a proxima era: ANO 2008.", bookX + 46, bookY + 432, 15, INK_COLOR);
                 DrawGameText("-> Disquete de dados pronto para recuperacao!", bookX + 46, bookY + 458, 15, (Color){25, 125, 50, 255});
             }
             else
@@ -2863,7 +2854,7 @@ void DrawJournal(const GameState *game)
                 DrawGameText("Guarda as instrucoes primordiais da Dra. Elira Ramos.", bookX + 574, bookY + 164, 15, INK_COLOR);
                 DrawGameText("Este artefato conecta a origem ao prototipo do futuro.", bookX + 574, bookY + 188, 15, INK_COLOR);
                 DrawGameText("-> Artefato recuperavel ao sair pela porta destrancada.", bookX + 574, bookY + 214, 15, (Color){125, 35, 18, 255});
-                DrawGameText("-> Proxima parada: ANO 2048!", bookX + 574, bookY + 238, 15, (Color){25, 125, 50, 255});
+                DrawGameText("-> Proxima parada: ANO 2008!", bookX + 574, bookY + 238, 15, (Color){25, 125, 50, 255});
             }
             else
             {
@@ -2877,13 +2868,13 @@ void DrawJournal(const GameState *game)
             DrawRectangleRounded(bDestino, 0.08f, 6, Fade((Color){168, 142, 93, 255}, 0.16f));
             DrawRectangleRoundedLinesEx(bDestino, 0.08f, 6, 1.5f, (Color){185, 155, 110, 255});
 
-            DrawGameText("DIRETRIZ DE SALTO TEMPORAL // 2048", bookX + 574, bookY + 312, 17, (Color){125, 35, 18, 255});
+            DrawGameText("DIRETRIZ DE SALTO TEMPORAL // 2008", bookX + 574, bookY + 312, 17, (Color){125, 35, 18, 255});
             DrawGameText("[COOPERACAO E CONFLITO FUTURO]", bookX + 574, bookY + 336, 14, (Color){125, 35, 18, 255});
             DrawGameText("Apos destravar a porta de 1990, Elira saltara", bookX + 574, bookY + 360, 15, INK_COLOR);
-            DrawGameText("diretamente para o Laboratorio Central do ano 2048.", bookX + 574, bookY + 384, 15, INK_COLOR);
-            DrawGameText("La estara o prototipo de A.R.1.3.L. e o terminal", bookX + 574, bookY + 408, 15, INK_COLOR);
-            DrawGameText("com as ultimas pistas sobre o nascimento da IA.", bookX + 574, bookY + 432, 15, INK_COLOR);
-            DrawGameText("-> FASE 1: 1990 (Atual)  |  FASE 2: 2048 (Proxima)", bookX + 574, bookY + 458, 15, (Color){25, 125, 50, 255});
+            DrawGameText("diretamente para o Escritorio de Vigilancia do ano 2008.", bookX + 574, bookY + 384, 15, INK_COLOR);
+            DrawGameText("La, um sistema de reconhecimento facial automatizado", bookX + 574, bookY + 408, 15, INK_COLOR);
+            DrawGameText("exigira evidencias para impedir uma decisao injusta.", bookX + 574, bookY + 432, 15, INK_COLOR);
+            DrawGameText("-> FASE 1: 1990 (Atual)  |  FASE 2: 2008 (Proxima)", bookX + 574, bookY + 458, 15, (Color){25, 125, 50, 255});
         }
 
         /* ========================================================= */
@@ -3119,7 +3110,7 @@ void DrawJournal(const GameState *game)
         DrawRectangleRoundedLinesEx(nextBtn, 0.25f, 6, 1, (Color){145, 115, 85, 255});
         DrawGameText("Proxima [E] >", bookX + 858, footY + 9, 15, canNext ? INK_COLOR : GRAY);
     }
-    else if (game->journalYearTab == 2)
+    else if (game->journalYearTab == 3)
     {
         /* ========================================================= */
         /* ANO 2026 (FASE 3: SALA DE HIDROGENIO & TERRAS RARAS)      */
@@ -3335,20 +3326,20 @@ void DrawJournal(const GameState *game)
     else
     {
         /* ========================================================= */
-        /* ANO 2048 (FASE 2: O PROTOTIPO & TERMINAL DE MEMORIA)      */
+        /* ANO 2026 (FASE 3: O PROTOTIPO & TERMINAL DE MEMORIA)      */
         /* ========================================================= */
         int page = game->journalPage;
 
         if (page == 0)
         {
             /* ----------------------------------------------------- */
-            /* PAGINA 1 DE 2048: REGISTRO DE OPERACOES & SINTESE     */
+            /* PAGINA 1 DE 2026: REGISTRO DE OPERACOES & SINTESE     */
             /* ----------------------------------------------------- */
             /* Pagina Esquerda */
             DrawGameText("DIARIO DE PESQUISA // PROJETO A.R.1.3.L.", bookX + 32, bookY + 22, 20, (Color){125, 35, 18, 255});
             DrawLine(bookX + 32, bookY + 52, bookX + 482, bookY + 52, Fade((Color){125, 35, 18, 255}, 0.45f));
 
-            DrawGameText("REGISTRO DE OPERACOES - ANO 2048", bookX + 32, bookY + 68, 18, (Color){125, 35, 18, 255});
+            DrawGameText("REGISTRO DE OPERACOES - ANO 2026", bookX + 32, bookY + 68, 18, (Color){125, 35, 18, 255});
             DrawGameText("Acesso ao terminal protegido por chave cronologica.", bookX + 32, bookY + 92, 15, INK_COLOR);
             DrawGameText("Pistas no laboratorio:", bookX + 32, bookY + 116, 16,
                      ClueCount(game) == 5 ? (Color){20, 120, 45, 255} : (Color){145, 65, 30, 255});
@@ -3357,9 +3348,9 @@ void DrawJournal(const GameState *game)
             const char *itemTitlesFound[5] = {
                 "Calendario: Marco Fundamental da IA (1950)",
                 "Livros: Batismo da IA em Dartmouth (1956)",
-                "Gaveta: SSD de Armazenamento (2048)",
+                "Gaveta: SSD de Armazenamento (2026)",
                 "Esquema: O Perceptron de Rosenblatt (1958)",
-                "Gravador: Fita com Voz da Dra. Ramos (2048)"
+                "Gravador: Fita com Voz da Dra. Ramos (2026)"
             };
             const char *itemTitlesMissing[5] = {
                 "1. (Nao inspecionado)",
@@ -3386,10 +3377,10 @@ void DrawJournal(const GameState *game)
             /* Carimbo confidencial vintage */
             DrawRectangleRoundedLinesEx((Rectangle){(float)(bookX + 270), (float)(bookY + 368), 210, 46}, 0.2f, 6, 2, (Color){175, 45, 45, 255});
             DrawGameText("CONFIDENCIAL", bookX + 295, bookY + 375, 18, (Color){175, 45, 45, 255});
-            DrawGameText("ARQUIVO HISTORICO 2048", bookX + 288, bookY + 396, 12, (Color){175, 45, 45, 255});
+            DrawGameText("ARQUIVO HISTORICO 2026", bookX + 288, bookY + 396, 12, (Color){175, 45, 45, 255});
 
             DrawGameText("Investigue os objetos do laboratorio para preencher", bookX + 32, bookY + 430, 15, INK_COLOR);
-            DrawGameText("as folhas do diario com os dados do prototipo de 2048.", bookX + 32, bookY + 454, 15, INK_COLOR);
+            DrawGameText("as folhas do diario com os dados do prototipo de 2026.", bookX + 32, bookY + 454, 15, INK_COLOR);
             DrawGameText("Avance para a Pagina 2 para o dossie completo.", bookX + 32, bookY + 480, 15, (Color){125, 35, 18, 255});
 
             /* Pagina Direita */
@@ -3426,18 +3417,18 @@ void DrawJournal(const GameState *game)
 
             /* Dica de navegacao */
             DrawGameText("DICAS DE NAVEGACAO DESTE ARQUIVO:", bookX + 560, bookY + 385, 16, (Color){125, 35, 18, 255});
-            DrawGameText("- Clique em 'Proxima [E]' para acessar a Pagina 2 de 2048.", bookX + 560, bookY + 412, 15, INK_COLOR);
+            DrawGameText("- Clique em 'Proxima [E]' para acessar a Pagina 2 de 2026.", bookX + 560, bookY + 412, 15, INK_COLOR);
             DrawGameText("- As abas com cadeado pertencem a fases bloqueadas.", bookX + 560, bookY + 438, 15, INK_COLOR);
             DrawGameText("- Pressione [D] para retornar ao laboratorio.", bookX + 560, bookY + 464, 15, INK_COLOR);
         }
         else
         {
             /* ----------------------------------------------------- */
-            /* PAGINA 2 DE 2048: DOSSIE HISTORICO & ARTEFATOS        */
+            /* PAGINA 2 DE 2026: DOSSIE HISTORICO & ARTEFATOS        */
             /* ----------------------------------------------------- */
             /* Pagina Esquerda: 1950 Turing & 1956 Dartmouth */
             DrawGameText("DOSSIE HISTORICO // MARCOS DA IA", bookX + 32, bookY + 20, 20, (Color){125, 35, 18, 255});
-            DrawGameText("DRA. ELIRA RAMOS - NOTAS CIENTIFICAS (2048)", bookX + 32, bookY + 44, 15, (Color){110, 75, 50, 255});
+            DrawGameText("DRA. ELIRA RAMOS - NOTAS CIENTIFICAS (2026)", bookX + 32, bookY + 44, 15, (Color){110, 75, 50, 255});
             DrawLine(bookX + 32, bookY + 65, bookX + 482, bookY + 65, Fade((Color){125, 35, 18, 255}, 0.45f));
 
             /* Bloco 1950 Turing */
@@ -3486,8 +3477,8 @@ void DrawJournal(const GameState *game)
                 DrawGameText("desbloquear os registros sobre o batismo da IA.", bookX + 100, bookY + 415, 15, INK_COLOR);
             }
 
-            /* Pagina Direita: 1958 Perceptron & 2048 Midias / Gravacao */
-            DrawGameText("ARTEFATOS E PROTOTIPO // 2048", bookX + 560, bookY + 20, 20, (Color){125, 35, 18, 255});
+            /* Pagina Direita: 1958 Perceptron & 2026 Midias / Gravacao */
+            DrawGameText("ARTEFATOS E PROTOTIPO // 2026", bookX + 560, bookY + 20, 20, (Color){125, 35, 18, 255});
             DrawGameText("REDES NEURAIS, DADOS E VOZ DA CRIADORA", bookX + 560, bookY + 44, 15, (Color){110, 75, 50, 255});
             DrawLine(bookX + 560, bookY + 65, bookX + 1008, bookY + 65, Fade((Color){125, 35, 18, 255}, 0.45f));
 
@@ -3514,16 +3505,16 @@ void DrawJournal(const GameState *game)
                 DrawGameText("para registrar a arquitetura da rede neural.", bookX + 630, bookY + 190, 15, INK_COLOR);
             }
 
-            /* Bloco 2048 Midias e Gravacao */
+            /* Bloco 2026 Midias e Gravacao */
             Rectangle bAudio = {(float)(bookX + 560), (float)(bookY + 298), 448, 215};
-            bool has2048Media = (game->foundDrawer || game->foundTape);
-            DrawRectangleRounded(bAudio, 0.08f, 6, has2048Media ? Fade((Color){168, 142, 93, 255}, 0.16f) : Fade(GRAY, 0.12f));
-            DrawRectangleRoundedLinesEx(bAudio, 0.08f, 6, 1.5f, has2048Media ? (Color){45, 135, 65, 255} : GRAY);
+            bool has2026Media = (game->foundDrawer || game->foundTape);
+            DrawRectangleRounded(bAudio, 0.08f, 6, has2026Media ? Fade((Color){168, 142, 93, 255}, 0.16f) : Fade(GRAY, 0.12f));
+            DrawRectangleRoundedLinesEx(bAudio, 0.08f, 6, 1.5f, has2026Media ? (Color){45, 135, 65, 255} : GRAY);
 
-            if (has2048Media)
+            if (has2026Media)
             {
-                DrawGameText("2048 // DADOS, MEMORIA E GRAVACAO", bookX + 574, bookY + 312, 17, (Color){125, 35, 18, 255});
-                DrawGameText("[CONFIRMADO // ARTEFATOS DE 2048]", bookX + 574, bookY + 336, 14, (Color){25, 125, 50, 255});
+                DrawGameText("2026 // DADOS, MEMORIA E GRAVACAO", bookX + 574, bookY + 312, 17, (Color){125, 35, 18, 255});
+                DrawGameText("[CONFIRMADO // ARTEFATOS DE 2026]", bookX + 574, bookY + 336, 14, (Color){25, 125, 50, 255});
                 DrawGameText("Unidade SSD: armazena os pesos e regras neurais de A.R.1.3.L.", bookX + 574, bookY + 360, 15, INK_COLOR);
                 DrawGameText("Gravacao da Dra. Ramos: 'Para despertar o prototipo,", bookX + 574, bookY + 384, 15, (Color){125, 35, 18, 255});
                 DrawGameText("o operador deve inserir o ano inaugural do Teste de Turing:'", bookX + 574, bookY + 408, 15, (Color){125, 35, 18, 255});
@@ -3537,14 +3528,14 @@ void DrawJournal(const GameState *game)
             else
             {
                 DrawPadlockIcon(bookX + 595, bookY + 400, 1.3f, (Color){185, 145, 60, 255}, RAYWHITE);
-                DrawGameText("2048 // ARTEFATOS DA SALA [BLOQUEADOS]", bookX + 630, bookY + 360, 17, (Color){125, 65, 35, 255});
+                DrawGameText("2026 // ARTEFATOS DA SALA [BLOQUEADOS]", bookX + 630, bookY + 360, 17, (Color){125, 65, 35, 255});
                 DrawGameText("Abra a gaveta da mesa e ouca a fita no gravador", bookX + 630, bookY + 390, 15, INK_COLOR);
                 DrawGameText("para registrar a transcricao da Dra. Ramos.", bookX + 630, bookY + 415, 15, INK_COLOR);
             }
         }
 
         /* ========================================================= */
-        /* BARRA DE NAVEGACAO INFERIOR (PAGINACAO DE 2048: 2 PAGINAS) */
+        /* BARRA DE NAVEGACAO INFERIOR (PAGINACAO DE 2026: 2 PAGINAS) */
         /* ========================================================= */
         Rectangle prevBtn = {(float)(bookX + 32), (float)footY, 155, 36};
         bool prevHover = CheckCollisionPointRec(GetVirtualMouse(), prevBtn);
@@ -3553,7 +3544,7 @@ void DrawJournal(const GameState *game)
         DrawRectangleRoundedLinesEx(prevBtn, 0.25f, 6, 1, (Color){145, 115, 85, 255});
         DrawGameText("< Anterior [Q]", bookX + 44, footY + 9, 15, canPrev ? INK_COLOR : GRAY);
 
-        DrawGameText(TextFormat("Pagina %d de 2 (2048)", page + 1), bookX + 210, footY + 8, 18, (Color){125, 35, 18, 255});
+        DrawGameText(TextFormat("Pagina %d de 2 (2026)", page + 1), bookX + 210, footY + 8, 18, (Color){125, 35, 18, 255});
 
         Rectangle closeBtn = {(float)(bookX + 660), (float)footY, 145, 36};
         bool closeHover = CheckCollisionPointRec(GetVirtualMouse(), closeBtn);
@@ -3595,11 +3586,10 @@ void UpdateRoom(GameState *game)
             return;
         }
 
-        /* Se estiver em ano ativo (1990, 2008, 2026 ou 2048) */
+        /* Se estiver em um dos anos ativos (1990, 2008 ou 2026) */
         bool isActiveYearUnlocked = (game->journalYearTab == 0) ||
                                     (game->journalYearTab == 1 && game->year2008Unlocked) ||
-                                    (game->journalYearTab == 2 && game->year2026Unlocked) ||
-                                    (game->journalYearTab == 3 && game->year2048Unlocked);
+                                    (game->journalYearTab == 2 && game->year2026Unlocked);
 
         if (isActiveYearUnlocked)
         {
@@ -3639,8 +3629,7 @@ void UpdateRoom(GameState *game)
             if (Clicked(retBtnL))
             {
                 int defaultTab = 0;
-                if (game->screen == SCREEN_ROOM && game->year2048Unlocked) defaultTab = 3;
-                else if ((game->screen == SCREEN_ROOM_2026 || game->screen == SCREEN_RESULT_2026) && game->year2026Unlocked) defaultTab = 2;
+                if ((game->screen == SCREEN_ROOM || game->screen == SCREEN_ROOM_2026 || game->screen == SCREEN_RESULT_2026) && game->year2026Unlocked) defaultTab = 2;
                 else if ((game->screen == SCREEN_ROOM_2008 || game->screen == SCREEN_PUZZLE_2008 || game->screen == SCREEN_RESULT_2008) && game->year2008Unlocked) defaultTab = 1;
                 game->journalYearTab = defaultTab;
                 game->journalPage = 0;
@@ -3652,10 +3641,10 @@ void UpdateRoom(GameState *game)
             game->journalOpen = false;
         }
 
-        /* Clique nas abas laterais a direita (1990, 2008, 2026, 2048) */
+        /* Clique nas abas laterais a direita (1990, 2008, 2026) */
         int tabX = bookX + 1040;
         int tabGap = 66;
-        for (int i = 0; i < 4; i++)
+        for (int i = 0; i < 3; i++)
         {
             int tabY = bookY + 42 + i * tabGap;
             Rectangle tabRect = {(float)tabX, (float)tabY, 86, 54};
@@ -3670,60 +3659,45 @@ void UpdateRoom(GameState *game)
         return;
     }
 
-    Rectangle btnBack2026 = {70, 600, 210, 42};
-    Rectangle btnBack2008 = {295, 600, 210, 42};
-    if (Clicked(btnBack2026))
-    {
-        game->journalYearTab = 2;
-        game->screen = SCREEN_ROOM_2026;
-        return;
-    }
+    Rectangle btnBack2008 = {70, 600, 240, 42};
     if (Clicked(btnBack2008))
     {
         game->journalYearTab = 1;
         game->screen = SCREEN_ROOM_2008;
         return;
     }
-    Rectangle btnConfront = {SCREEN_WIDTH - 290, 600, 260, 42};
-    if (Clicked(btnConfront))
-    {
-        InitFinalDialogue(game);
-        game->screen = SCREEN_FINAL_DIALOGUE;
-        return;
-    }
-
     if (Clicked(calendar))
     {
         game->foundCalendar = true;
-        game->journalYearTab = 3;
+        game->journalYearTab = 2;
         game->journalPage = 1;
         SetMessage(game, "Pista: o Teste de Turing foi proposto em 1950.");
     }
     else if (Clicked(books))
     {
         game->foundBooks = true;
-        game->journalYearTab = 3;
+        game->journalYearTab = 2;
         game->journalPage = 1;
         SetMessage(game, "Registro: a IA recebeu seu nome em 1956.");
     }
     else if (Clicked(drawer))
     {
         game->foundDrawer = true;
-        game->journalYearTab = 3;
+        game->journalYearTab = 2;
         game->journalPage = 1;
-        SetMessage(game, "A gaveta contem a unidade SSD com dados do prototipo de 2048.");
+        SetMessage(game, "A gaveta contem a unidade SSD com dados do prototipo de 2026.");
     }
     else if (Clicked(blueprint))
     {
         game->foundBlueprint = true;
-        game->journalYearTab = 3;
+        game->journalYearTab = 2;
         game->journalPage = 1;
         SetMessage(game, "Esquema: o Perceptron foi apresentado em 1958.");
     }
     else if (Clicked(tape))
     {
         game->foundTape = true;
-        game->journalYearTab = 3;
+        game->journalYearTab = 2;
         game->journalPage = 1;
         SetMessage(game, "Gravacao: o terminal exige o marco fundamental (1950).");
     }
@@ -3769,7 +3743,7 @@ void DrawTerminal(const GameState *game)
                          (Color){14, 27, 26, 255});
     DrawRectangleRoundedLinesEx((Rectangle){90, 100, 650, 520}, 0.035f, 10, 3,
                                 (Color){68, 115, 88, 255});
-    DrawGameText("> BOOT MEMORY_NODE_2048", 130, 145, 20,
+    DrawGameText("> BOOT MEMORY_NODE_2026", 130, 145, 20,
              (Color){101, 232, 151, 255});
     DrawGameText("> SECURITY PROTOCOL ACTIVE", 130, 185, 20,
              (Color){101, 232, 151, 255});
@@ -3940,7 +3914,7 @@ void DrawSsd(Vector2 position, float scale)
     /* 6. Rotulos a laser e grafismos high-tech */
     DrawGameText("A.R.1.3.L.", (int)(plateRec.x + 22 * scale), (int)(plateRec.y + 24 * scale), (int)(16 * scale), (Color){35, 48, 65, 255});
     DrawGameText("SOLID STATE DRIVE", (int)(plateRec.x + 22 * scale), (int)(plateRec.y + 43 * scale), (int)(9 * scale), (Color){75, 88, 105, 255});
-    DrawGameText("NEURAL CORE // 2048", (int)(plateRec.x + 22 * scale), (int)(plateRec.y + 58 * scale), (int)(10 * scale), (Color){24, 75, 140, 255});
+    DrawGameText("NEURAL CORE // 2026", (int)(plateRec.x + 22 * scale), (int)(plateRec.y + 58 * scale), (int)(10 * scale), (Color){24, 75, 140, 255});
     DrawGameText("NVMe Gen5 - 2048 TB", (int)(plateRec.x + 22 * scale), (int)(plateRec.y + 74 * scale), (int)(8 * scale), (Color){90, 102, 118, 255});
 
     Rectangle strip = {plateRec.x + 22 * scale, plateRec.y + 92 * scale, 58 * scale, 5 * scale};
@@ -3956,14 +3930,14 @@ void DrawResult(const GameState *game)
 {
     DrawBackground();
     DrawGameText("ARTEFATO RECUPERADO", 90, 68, 20, CYAN_COLOR);
-    DrawGameText("SSD // 2048", 90, 108, 46, RAYWHITE);
-    DrawSsd((Vector2){140, 260}, 1.35f);
+    DrawGameText("SSD // 2026", 90, 108, 46, RAYWHITE);
+    DrawRewardSpriteItem(2026, (Vector2){285, 365}, 285.0f);
     DrawRectangleRounded((Rectangle){505, 205, 670, 320}, 0.04f, 8,
                          Fade(PANEL_COLOR, 0.96f));
-    DrawGameText("PROTOTIPO DE A.R.1.3.L. DESBLOQUEADO // SALA 2048", 545, 240, 20, GOLD_COLOR);
-    DrawGameText("A unidade SSD de 2048 contem os pesos neurais finais.", 545,
+    DrawGameText("PROTOTIPO DE A.R.1.3.L. DESBLOQUEADO // SALA 2026", 545, 240, 20, GOLD_COLOR);
+    DrawGameText("A unidade SSD de 2026 contem os pesos neurais finais.", 545,
              285, 19, LIGHTGRAY);
-    DrawGameText("Combinando o Disquete de 1990, o CD de 2008 e o SSD de 2048,", 545,
+    DrawGameText("Combinando o Disquete de 1990, o CD de 2008 e o SSD de 2026,", 545,
              318, 19, LIGHTGRAY);
     DrawGameText("Elira reconstituiu a mente e os limites originais da IA.", 545, 351,
              19, LIGHTGRAY);
@@ -3976,13 +3950,11 @@ void DrawResult(const GameState *game)
              game->lives == 3 ? GOLD_COLOR : RAYWHITE);
     DrawGameText(TextFormat("PERFIL: %s", game->playerName), 545, 480, 17, GRAY);
     DrawButton((Rectangle){800, 466, 350, 48}, "CONFRONTAR ARIEL >> [ENTER]", GOLD_COLOR);
-    Rectangle btnBack2026 = {120, 588, 250, 56};
     Rectangle btnBack2008 = {390, 588, 230, 56};
-    Rectangle btnReplay2048 = {640, 588, 260, 56};
+    Rectangle btnReplay2026 = {640, 588, 260, 56};
     Rectangle btnMenu = {920, 588, 220, 56};
-    DrawButton(btnBack2026, "< SALA 3 (2026)", CYAN_COLOR);
     DrawButton(btnBack2008, "< SALA 2 (2008)", (Color){70, 95, 110, 255});
-    DrawButton(btnReplay2048, "REINICIAR SALA 2048", GOLD_COLOR);
+    DrawButton(btnReplay2026, "REINICIAR SALA 2026", GOLD_COLOR);
     DrawButton(btnMenu, "MENU INICIAL", PANEL_LIGHT);
 }
 
@@ -4353,7 +4325,7 @@ void UpdateRoom2(GameState *game)
         if (Clicked(closeBtn)) game->journalOpen = false;
 
         /* Abas laterais */
-        for (int i = 0; i < 4; i++)
+        for (int i = 0; i < 3; i++)
         {
             Rectangle tabRect = {(float)(bookX + 1040), (float)(bookY + 42 + i * 66), 86, 54};
             if (Clicked(tabRect)) { game->journalYearTab = i; break; }
@@ -5777,7 +5749,7 @@ void DrawRoom2008(const GameState *game)
     DrawHotspot(btnVoltar1990, "Retornar ao Setor de Arquivos (1990)");
     if (game->year2026Unlocked)
     {
-        DrawHotspot(btnGo2026, "Avancar para a Fabrica de Materiais de 2026");
+        DrawHotspot(btnGo2026, "Avancar para o Laboratorio do Prototipo de 2026");
     }
 }
 
@@ -5881,7 +5853,7 @@ void UpdateRoom2008(GameState *game)
         if (Clicked(closeBtn)) game->journalOpen = false;
 
         /* Abas laterais */
-        for (int i = 0; i < 4; i++)
+        for (int i = 0; i < 3; i++)
         {
             Rectangle tabRect = {(float)(bookX + 1040), (float)(bookY + 42 + i * 66), 86, 54};
             if (Clicked(tabRect)) { game->journalYearTab = i; game->journalPage = 0; break; }
@@ -5948,8 +5920,8 @@ void UpdateRoom2008(GameState *game)
     {
         game->journalYearTab = 2;
         game->journalPage = 0;
-        game->screen = SCREEN_ROOM_2026;
-        SetMessage(game, "Fabrica de Processamento de Materiais // ANO 2026.");
+        game->screen = SCREEN_ROOM;
+        SetMessage(game, "Laboratorio do Prototipo A.R.1.3.L. // ANO 2026.");
     }
 }
 
@@ -6389,8 +6361,8 @@ void UpdateResult2008(GameState *game)
         game->year2026Unlocked = true;
         game->journalYearTab = 2;
         game->journalPage = 0;
-        game->screen = SCREEN_ROOM_2026;
-        SetMessage(game, "Salto temporal concluido: Fabrica Automatizada // ANO 2026.");
+        game->screen = SCREEN_ROOM;
+        SetMessage(game, "Salto temporal concluido: Laboratorio do Prototipo // ANO 2026.");
     }
     else if (Clicked(btnRestart))
     {
