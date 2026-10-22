@@ -1,2 +1,5 @@
 .deps/
 .DS_Store
+ELIRA
+ELIRA.exe
+*.o
