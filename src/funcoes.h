@@ -32,7 +32,10 @@ typedef enum GameScreen
     SCREEN_RESULT_2026,
     SCREEN_FINAL_DIALOGUE,
     SCREEN_FINAL_ENDING,
-    SCREEN_FAILURE
+    SCREEN_FAILURE,
+    SCREEN_INTRO_2008,
+    SCREEN_INTRO_2026,
+    SCREEN_INTRO_2048
 } GameScreen;
 
 typedef struct GameState
@@ -279,7 +282,11 @@ void DrawTitle(void);
 void DrawSettings(const GameState *game);
 void UpdateSettings(GameState *game, Music *bgm, bool bgmLoaded);
 void DrawPlayerName(const GameState *game);
+void DrawMissionBriefing(const GameState *game, int missionIndex);
 void DrawIntro(const GameState *game);
+void DrawIntro2008(const GameState *game);
+void DrawIntro2026(const GameState *game);
+void DrawIntro2048(const GameState *game);
 void InitCinematicIntro(GameState *game);
 void UpdateCinematicIntro(GameState *game);
 void DrawCinematicIntro(const GameState *game);
