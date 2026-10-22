@@ -3931,7 +3931,7 @@ void DrawResult(const GameState *game)
     DrawBackground();
     DrawGameText("ARTEFATO RECUPERADO", 90, 68, 20, CYAN_COLOR);
     DrawGameText("SSD // 2026", 90, 108, 46, RAYWHITE);
-    DrawSsd((Vector2){140, 260}, 1.35f);
+    DrawRewardSpriteItem(2026, (Vector2){285, 365}, 285.0f);
     DrawRectangleRounded((Rectangle){505, 205, 670, 320}, 0.04f, 8,
                          Fade(PANEL_COLOR, 0.96f));
     DrawGameText("PROTOTIPO DE A.R.1.3.L. DESBLOQUEADO // SALA 2026", 545, 240, 20, GOLD_COLOR);
