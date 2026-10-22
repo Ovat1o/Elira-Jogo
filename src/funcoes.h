@@ -32,6 +32,7 @@ typedef enum GameScreen
     SCREEN_RESULT_2026,
     SCREEN_FINAL_DIALOGUE,
     SCREEN_FINAL_ENDING,
+    SCREEN_RANKING,
     SCREEN_FAILURE,
     SCREEN_INTRO_2008,
     SCREEN_INTRO_2026,
@@ -57,6 +58,10 @@ typedef struct GameState
     int codeLength;
     double startTime;
     double elapsedTime;
+    bool runTimeRecorded;              /* UH18: tempo total da partida ja gravado no desfecho */
+    int finalScore;                    /* UH19: pontuacao final da partida */
+    int rankingPlace;                  /* UH19: posicao (0-based) desta partida no ranking, -1 = fora/erro */
+    bool rankingSaveOk;                /* UH19: gravacao no TXT funcionou */
     char message[160];
     float messageTimer;
 
@@ -141,6 +146,14 @@ typedef struct GameState
     float cinematicTimer;
     int cinematicPhase;
 } GameState;
+
+typedef struct RankingEntry
+{
+    char name[PLAYER_NAME_MAX + 1];
+    int score;
+    int seconds;        /* tempo de conclusao em segundos */
+    char date[20];      /* "DD/MM/AAAA HH:MM" */
+} RankingEntry;
 
 typedef struct CrawlEntry
 {
@@ -264,6 +277,19 @@ void DrawTitleSpaceBackground(void);
 void SetMessage(GameState *game, const char *message);
 int ClueCount(const GameState *game);
 int ExaminedDocs2008Count(const GameState *game);
+
+/* UH18 - Medicao de tempo de conclusao */
+void RecordRunTime(GameState *game);
+const char *FormatRunTime(double seconds);
+
+/* UH19 - Ranking (arquivo TXT: Nome | Pontuacao | MM:SS - DD/MM/AAAA HH:MM) */
+int CalculateScore(const GameState *game);
+bool SaveRankingEntry(const char *name, int score, int seconds);
+int LoadRanking(void);
+const RankingEntry *GetRankingEntries(int *count);
+void FinalizeRun(GameState *game);
+void DrawRanking(const GameState *game);
+void UpdateRanking(GameState *game);
 
 /* Inicializacao e Controle de Estado */
 void GenerateMemory1990Sequence(GameState *game);

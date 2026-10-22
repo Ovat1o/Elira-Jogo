@@ -223,6 +223,9 @@ int main(void)
             case SCREEN_FINAL_ENDING:
                 UpdateFinalEnding(&game);
                 break;
+            case SCREEN_RANKING:
+                UpdateRanking(&game);
+                break;
             case SCREEN_FAILURE:
                 if (Clicked((Rectangle){490, 460, 300, 60}) || IsKeyPressed(KEY_ENTER))
                 {
@@ -296,6 +299,9 @@ int main(void)
                 break;
             case SCREEN_FINAL_ENDING:
                 DrawFinalEnding(&game);
+                break;
+            case SCREEN_RANKING:
+                DrawRanking(&game);
                 break;
             case SCREEN_FAILURE: DrawFailure(); break;
         }
