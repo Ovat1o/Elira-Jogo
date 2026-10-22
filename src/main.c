@@ -114,10 +114,43 @@ int main(void)
                 break;
             case SCREEN_INTRO:
                 if (Clicked((Rectangle){490, 575, 300, 58}) ||
-                    IsKeyPressed(KEY_ENTER))
+                    IsKeyPressed(KEY_ENTER) || IsKeyPressed(KEY_SPACE))
                 {
                     ResetDemo(&game);
                     game.screen = SCREEN_ROOM_2;
+                }
+                break;
+            case SCREEN_INTRO_2008:
+                if (Clicked((Rectangle){490, 575, 300, 58}) ||
+                    IsKeyPressed(KEY_ENTER) || IsKeyPressed(KEY_SPACE))
+                {
+                    game.year2008Unlocked = true;
+                    game.journalYearTab = 1;
+                    game.journalPage = 0;
+                    game.screen = SCREEN_ROOM_2008;
+                    SetMessage(&game, "Salto temporal concluido: Escritorio de Vigilancia // ANO 2008.");
+                }
+                break;
+            case SCREEN_INTRO_2026:
+                if (Clicked((Rectangle){490, 575, 300, 58}) ||
+                    IsKeyPressed(KEY_ENTER) || IsKeyPressed(KEY_SPACE))
+                {
+                    game.year2026Unlocked = true;
+                    game.journalYearTab = 2;
+                    game.journalPage = 0;
+                    game.screen = SCREEN_ROOM;
+                    SetMessage(&game, "Salto temporal concluido: Laboratorio do Prototipo // ANO 2026.");
+                }
+                break;
+            case SCREEN_INTRO_2048:
+                if (Clicked((Rectangle){490, 575, 300, 58}) ||
+                    IsKeyPressed(KEY_ENTER) || IsKeyPressed(KEY_SPACE))
+                {
+                    game.year2048Unlocked = true;
+                    game.journalYearTab = 3;
+                    game.journalPage = 0;
+                    InitFinalDialogue(&game);
+                    game.screen = SCREEN_FINAL_DIALOGUE;
                 }
                 break;
             case SCREEN_ROOM:
@@ -129,8 +162,10 @@ int main(void)
             case SCREEN_RESULT:
                 if (Clicked((Rectangle){800, 466, 350, 48}) || IsKeyPressed(KEY_ENTER) || IsKeyPressed(KEY_SPACE))
                 {
-                    InitFinalDialogue(&game);
-                    game.screen = SCREEN_FINAL_DIALOGUE;
+                    game.year2048Unlocked = true;
+                    game.journalYearTab = 3;
+                    game.journalPage = 0;
+                    game.screen = SCREEN_INTRO_2048;
                 }
                 else if (Clicked((Rectangle){390, 588, 230, 56}) || IsKeyPressed(KEY_BACKSPACE))
                 {
@@ -212,6 +247,9 @@ int main(void)
             case SCREEN_PLAYER_NAME: DrawPlayerName(&game); break;
             case SCREEN_CINEMATIC_INTRO: DrawCinematicIntro(&game); break;
             case SCREEN_INTRO: DrawIntro(&game); break;
+            case SCREEN_INTRO_2008: DrawIntro2008(&game); break;
+            case SCREEN_INTRO_2026: DrawIntro2026(&game); break;
+            case SCREEN_INTRO_2048: DrawIntro2048(&game); break;
             case SCREEN_ROOM:
                 DrawRoom(&game);
                 DrawHud(&game);
