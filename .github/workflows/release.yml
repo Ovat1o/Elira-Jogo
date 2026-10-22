@@ -142,7 +142,7 @@ jobs:
             ASSETS="package-check/lib/elira/assets"
             (cd "$RUNNER_TEMP" && "$GITHUB_WORKSPACE/package-check/lib/elira/ELIRA" --verify-assets)
             dpkg-deb --info "release-assets/${{ matrix.installer_name }}" >/dev/null
-            dpkg-deb --contents "release-assets/${{ matrix.installer_name }}" | grep -q 'GeistPixel-Square.ttf'
+            (set +o pipefail; dpkg-deb --contents "release-assets/${{ matrix.installer_name }}" | grep -q 'GeistPixel-Square.ttf')
           fi
           test -f "$ASSETS/fonts/GeistPixel-Square.ttf"
           test -f "$ASSETS/sprites/disquete.png"
