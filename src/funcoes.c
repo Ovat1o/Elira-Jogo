@@ -6921,7 +6921,7 @@ static const Material2026Def MATERIALS_2026[4] = {
         "Magnetita",
         false,
         false,
-        (Color){160, 180, 205, 255}
+        {160, 180, 205, 255}
     },
     {
         "B-04",
@@ -6933,7 +6933,7 @@ static const Material2026Def MATERIALS_2026[4] = {
         "Hidrogênio",
         false,
         false,
-        (Color){75, 195, 245, 255}
+        {75, 195, 245, 255}
     },
     {
         "C-22",
@@ -6945,7 +6945,7 @@ static const Material2026Def MATERIALS_2026[4] = {
         "Mineral portador de Terras Raras",
         true,
         true,
-        (Color){60, 215, 125, 255}
+        {60, 215, 125, 255}
     },
     {
         "D-09",
@@ -6957,7 +6957,7 @@ static const Material2026Def MATERIALS_2026[4] = {
         "Solução corrosiva",
         false,
         false,
-        (Color){245, 135, 60, 255}
+        {245, 135, 60, 255}
     }
 };
 
