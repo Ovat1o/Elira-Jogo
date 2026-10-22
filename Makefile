@@ -18,10 +18,20 @@
 SRC_DIR        := src
 SRC_RAYLIB_DIR := $(SRC_DIR)/raylib
 ASSETS_DIR     := assets
+DEPS_DIR       := .deps
+LOCAL_RAYLIB   := $(DEPS_DIR)/raylib/src/libraylib.a
+LOCAL_TOOLCHAIN_DIR := $(DEPS_DIR)/w64devkit/bin
+UNAME_S        ?= $(shell uname -s)
 
 # Caminhos padrao da instalacao da Raylib / compilador (para linkagem da libraylib)
 RAYLIB_DIR    ?= C:/raylib
 TOOLCHAIN_DIR ?= $(RAYLIB_DIR)/w64devkit/bin
+
+# Os scripts de preparacao instalam dependencias locais em .deps/.
+# Quando o w64devkit local existe, ele tem prioridade sobre C:/raylib.
+ifneq ($(wildcard $(LOCAL_TOOLCHAIN_DIR)/gcc.exe),)
+    TOOLCHAIN_DIR := $(LOCAL_TOOLCHAIN_DIR)
+endif
 
 # Selecao automatica do compilador GCC (Windows nativo, WSL com w64devkit, ou Linux/macOS)
 ifneq ($(wildcard $(TOOLCHAIN_DIR)/gcc.exe),)
@@ -67,12 +77,17 @@ ifeq ($(OS),Windows_NT)
 else ifneq ($(wildcard /mnt/c/raylib/w64devkit/bin/gcc.exe),)
     LDLIBS ?= -L$(SRC_RAYLIB_DIR) -L$(SRC_DIR) -LC:/raylib/raylib/src -lraylib -lopengl32 -lgdi32 -lwinmm
     OUT    := ELIRA.exe
-else ifeq ($(shell uname -s),Darwin)
+else ifeq ($(UNAME_S),Darwin)
     RAYLIB_PREFIX ?= $(shell brew --prefix raylib 2>/dev/null)
-    LDLIBS ?= -L$(SRC_RAYLIB_DIR) -L$(SRC_DIR) $(RAYLIB_PREFIX)/lib/libraylib.a -framework Cocoa -framework IOKit -framework OpenGL -framework CoreVideo
+    LDLIBS ?= $(RAYLIB_PREFIX)/lib/libraylib.a -framework Cocoa -framework IOKit -framework OpenGL -framework CoreVideo
     OUT    := ELIRA
 else
-    LDLIBS ?= -L$(SRC_RAYLIB_DIR) -L$(SRC_DIR) -lraylib -lGL -lm -lpthread -ldl -lrt -lX11
+    ifneq ($(wildcard $(LOCAL_RAYLIB)),)
+        RAYLIB_LINUX_LIB := $(LOCAL_RAYLIB)
+    else
+        RAYLIB_LINUX_LIB := -lraylib
+    endif
+    LDLIBS ?= $(RAYLIB_LINUX_LIB) -lGL -lm -lpthread -ldl -lrt -lX11
     OUT    := ELIRA
 endif
 

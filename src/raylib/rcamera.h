@@ -135,6 +135,7 @@
 //----------------------------------------------------------------------------------
 
 #if defined(__cplusplus)
+#include "raylib.h"
 extern "C" {            // Prevents name mangling of functions
 #endif
 

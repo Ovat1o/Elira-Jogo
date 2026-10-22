@@ -68,6 +68,81 @@ Na progressão planejada, cada salto temporal revela uma peça da história de A
 
 ## **8. Instalação, compilação e execução**
 
+Os scripts do projeto instalam as dependências, configuram a raylib e compilam o jogo automaticamente. Em uma máquina nova, siga apenas o bloco do seu sistema.
+
+### Windows 10 ou 11
+
+Abra o PowerShell e execute:
+
+```powershell
+winget install --id Git.Git -e --source winget
+$env:Path = "$env:ProgramFiles\Git\cmd;$env:Path"
+git clone https://github.com/Ovat1o/Elira-Jogo.git
+cd Elira-Jogo
+powershell -ExecutionPolicy Bypass -File .\scripts\setup-windows.ps1
+.\ELIRA.exe
+```
+
+Depois da primeira preparação, compile e jogue novamente com:
+
+```powershell
+powershell -ExecutionPolicy Bypass -File .\scripts\run-windows.ps1
+```
+
+### macOS
+
+No Terminal, instale primeiro as ferramentas da Apple. Aguarde a janela de instalação terminar antes de continuar:
+
+```bash
+xcode-select --install
+```
+
+Depois execute:
+
+```bash
+git clone https://github.com/Ovat1o/Elira-Jogo.git
+cd Elira-Jogo
+./scripts/setup-macos.sh
+./ELIRA
+```
+
+### Linux
+
+Instale apenas o Git usando o comando da sua distribuição:
+
+```bash
+# Ubuntu ou Debian
+sudo apt update
+sudo apt install -y git
+
+# Fedora
+sudo dnf install -y git
+
+# Arch Linux
+sudo pacman -Syu --needed git
+```
+
+Em seguida, em qualquer uma dessas distribuições:
+
+```bash
+git clone https://github.com/Ovat1o/Elira-Jogo.git
+cd Elira-Jogo
+./scripts/setup-linux.sh
+./ELIRA
+```
+
+No macOS e Linux, depois da primeira preparação, basta entrar na pasta do projeto e executar:
+
+```bash
+make run
+```
+
+> [!IMPORTANT]
+> Execute o jogo a partir da raiz do repositório para que imagens, fontes e áudio sejam encontrados.
+
+<details>
+<summary><strong>Instalação manual e solução de problemas</strong></summary>
+
 Este guia parte de uma máquina sem ferramentas de desenvolvimento instaladas. Não é necessário instalar Jira, Haskell, Visual Studio Code ou uma IDE para compilar o jogo. Para executar os comandos abaixo são necessários:
 
 - conexão com a internet durante a instalação e o download do projeto;
@@ -297,11 +372,11 @@ cd Elira-Jogo
 
 #### 4. Compile
 
-O repositório contém uma `libraylib.a` preparada para o ambiente Windows. No Linux, substitua as opções de linkagem para usar a biblioteca instalada em `/usr/local/lib`:
+O `Makefile` ignora a biblioteca de Windows incluída no repositório e usa automaticamente a raylib instalada no Linux:
 
 ```bash
 make clean
-make LDLIBS="-L/usr/local/lib -lraylib -lGL -lm -lpthread -ldl -lrt -lX11"
+make
 ```
 
 #### 5. Execute
@@ -313,7 +388,7 @@ make LDLIBS="-L/usr/local/lib -lraylib -lGL -lm -lpthread -ldl -lrt -lX11"
 Para compilar e executar novamente com um único comando:
 
 ```bash
-make run LDLIBS="-L/usr/local/lib -lraylib -lGL -lm -lpthread -ldl -lrt -lX11"
+make run
 ```
 
 ### Linux — Fedora
@@ -332,7 +407,7 @@ cd "$HOME/Projetos"
 git clone https://github.com/Ovat1o/Elira-Jogo.git
 cd Elira-Jogo
 make clean
-make LDLIBS="-lraylib -lGL -lm -lpthread -ldl -lrt -lX11"
+make
 ./ELIRA
 ```
 
@@ -352,7 +427,7 @@ cd "$HOME/Projetos"
 git clone https://github.com/Ovat1o/Elira-Jogo.git
 cd Elira-Jogo
 make clean
-make LDLIBS="-lraylib -lGL -lm -lpthread -ldl -lrt -lX11"
+make
 ./ELIRA
 ```
 
@@ -374,7 +449,7 @@ $env:Path = "C:\raylib\w64devkit\bin;$env:Path"
 
 #### Erro `file format not recognized` ou `wrong architecture`
 
-Arquivos compilados para outro sistema foram reutilizados. Execute `make clean` antes de compilar. No Linux, não omita a variável `LDLIBS`, pois ela impede o uso da biblioteca Windows incluída no repositório.
+Arquivos compilados para outro sistema foram reutilizados. Execute `make clean` antes de compilar. No Linux, o `Makefile` usa automaticamente a raylib local preparada pelo script.
 
 #### O jogo abre sem imagens, fonte ou áudio
 
@@ -394,9 +469,11 @@ make clean
 make
 ```
 
-No Linux, acrescente novamente o parâmetro `LDLIBS` correspondente à sua distribuição.
+No Linux, o `Makefile` encontra automaticamente a biblioteca preparada em `.deps/raylib`.
 
 Fontes oficiais de referência: [instalação do Git](https://git-scm.com/install/), [raylib no Windows](https://github.com/raysan5/raylib/wiki/Working-on-Windows), [raylib no macOS](https://github.com/raysan5/raylib/wiki/Working-on-macOS), [raylib no GNU/Linux](https://github.com/raysan5/raylib/wiki/Working-on-GNU-Linux) e [fórmula da raylib no Homebrew](https://formulae.brew.sh/formula/raylib.html).
+
+</details>
 
 ***
 
