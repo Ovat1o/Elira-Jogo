@@ -72,21 +72,19 @@ Na progressão planejada, cada salto temporal revela uma peça da história de A
 
 ## **8. Download e execução**
 
-Para apenas jogar, acesse a página de [Releases](https://github.com/Ovat1o/Elira-Jogo/releases/latest), baixe o pacote completo correspondente à sua máquina e extraia o arquivo:
+Para jogar, acesse a página de [Releases](https://github.com/Ovat1o/Elira-Jogo/releases/latest) e baixe o instalador correspondente à sua máquina:
 
-| Sistema | Executável nativo | Pacote completo recomendado |
-| --- | --- | --- |
-| Windows 64 bits | `ELIRA-Windows-x64.exe` | `ELIRA-Windows-x64.zip` |
-| Linux 64 bits | `ELIRA-Linux-x64` | `ELIRA-Linux-x64.tar.gz` |
-| Mac com Apple Silicon | `ELIRA-macOS-Apple-Silicon` | `ELIRA-macOS-Apple-Silicon.tar.gz` |
-| Mac com processador Intel | `ELIRA-macOS-Intel` | `ELIRA-macOS-Intel.tar.gz` |
+| Sistema | Instalador |
+| --- | --- |
+| Windows 64 bits | `ELIRA-Windows-x64-Setup.exe` |
+| Ubuntu/Debian 64 bits | `ELIRA-Linux-x64.deb` |
+| Mac com Apple Silicon | `ELIRA-macOS-Apple-Silicon.pkg` |
+| Mac com processador Intel | `ELIRA-macOS-Intel.pkg` |
 
-O pacote já contém o jogo e os recursos necessários. Não é preciso instalar compilador, Make, Homebrew ou raylib. No Windows, abra `ELIRA.exe`; no macOS, abra `JOGAR.command`; no Linux, abra `JOGAR.sh`.
-
-Os executáveis nativos também são publicados separadamente para testes e integrações. Para jogar corretamente, eles ainda precisam ficar ao lado da pasta `assets/`; por isso, o pacote completo é a opção indicada ao usuário final. No macOS e Linux, um binário baixado separadamente pode precisar da permissão `chmod +x`.
+Os instaladores incluem o executável, a fonte Geist Pixel, imagens, sprites, áudio e as bibliotecas distribuíveis do jogo. Não é preciso instalar compilador, Make, Homebrew ou raylib.
 
 > [!NOTE]
-> Como a versão para macOS ainda não possui assinatura Apple, na primeira execução pode ser necessário clicar com o botão direito em `JOGAR.command`, selecionar **Abrir** e confirmar.
+> Como a versão para macOS ainda não possui assinatura Apple, o sistema pode exibir um aviso ao instalar ou abrir `ELIRA.app` pela primeira vez.
 
 As instruções abaixo são destinadas a quem deseja compilar ou desenvolver o projeto.
 

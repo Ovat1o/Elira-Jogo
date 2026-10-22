@@ -17,7 +17,7 @@ concurrency:
 
 jobs:
   build:
-    name: ${{ matrix.package_name }}
+    name: ${{ matrix.installer_name }}
     runs-on: ${{ matrix.os }}
     timeout-minutes: 35
     strategy:
@@ -25,20 +25,20 @@ jobs:
       matrix:
         include:
           - os: windows-2022
-            package_name: ELIRA-Windows-x64
-            binary_name: ELIRA-Windows-x64.exe
+            package_suffix: Windows-x64
+            installer_name: ELIRA-Windows-x64-Setup.exe
             cmake_extra_args: ""
           - os: ubuntu-22.04
-            package_name: ELIRA-Linux-x64
-            binary_name: ELIRA-Linux-x64
+            package_suffix: Linux-x64
+            installer_name: ELIRA-Linux-x64.deb
             cmake_extra_args: ""
           - os: macos-14
-            package_name: ELIRA-macOS-Apple-Silicon
-            binary_name: ELIRA-macOS-Apple-Silicon
+            package_suffix: macOS-Apple-Silicon
+            installer_name: ELIRA-macOS-Apple-Silicon.pkg
             cmake_extra_args: -DCMAKE_OSX_DEPLOYMENT_TARGET=12.0
           - os: macos-15-intel
-            package_name: ELIRA-macOS-Intel
-            binary_name: ELIRA-macOS-Intel
+            package_suffix: macOS-Intel
+            installer_name: ELIRA-macOS-Intel.pkg
             cmake_extra_args: -DCMAKE_OSX_DEPLOYMENT_TARGET=12.0
 
     steps:
@@ -50,61 +50,112 @@ jobs:
         run: |
           sudo apt-get update
           sudo apt-get install -y --no-install-recommends \
+            dpkg-dev \
             libasound2-dev libx11-dev libxrandr-dev libxi-dev \
             libgl1-mesa-dev libglu1-mesa-dev libxcursor-dev libxinerama-dev
+
+      - name: Instalar gerador do instalador no Windows
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: choco install nsis --yes --no-progress
+
+      - name: Definir versao dos instaladores
+        shell: bash
+        run: |
+          VERSION="${GITHUB_REF_NAME#v}"
+          if [[ ! "$VERSION" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
+            VERSION="1.0.0"
+          fi
+          echo "ELIRA_VERSION=$VERSION" >> "$GITHUB_ENV"
 
       - name: Configurar build de producao
         run: >-
           cmake -S . -B build
           -DCMAKE_BUILD_TYPE=Release
           -DELIRA_USE_SYSTEM_RAYLIB=OFF
+          -DELIRA_PACKAGE_SUFFIX=${{ matrix.package_suffix }}
+          -DELIRA_PACKAGE_VERSION=${{ env.ELIRA_VERSION }}
           ${{ matrix.cmake_extra_args }}
 
       - name: Compilar jogo e raylib estatica
         run: cmake --build build --config Release --parallel
 
-      - name: Montar pasta portavel
-        run: cmake --install build --config Release --prefix "dist/${{ matrix.package_name }}"
+      - name: Montar arvore instalavel
+        run: cmake --install build --config Release --prefix "package-check"
 
-      - name: Validar pacote no Windows
-        if: runner.os == 'Windows'
-        shell: pwsh
-        run: |
-          $Package = "dist/${{ matrix.package_name }}"
-          if (-not (Test-Path "$Package/ELIRA.exe")) { throw "ELIRA.exe nao foi gerado" }
-          if (-not (Test-Path "$Package/assets")) { throw "assets nao foi empacotado" }
+      - name: Gerar instalador no Windows e Linux
+        if: runner.os != 'macOS'
+        run: cpack --config build/CPackConfig.cmake -C Release -B release-assets
 
-      - name: Validar pacote no macOS e Linux
-        if: runner.os != 'Windows'
-        shell: bash
-        run: |
-          test -x "dist/${{ matrix.package_name }}/ELIRA"
-          test -d "dist/${{ matrix.package_name }}/assets"
-
-      - name: Compactar pacote do Windows
-        if: runner.os == 'Windows'
-        shell: pwsh
-        run: |
-          New-Item -ItemType Directory -Force -Path "release-assets" | Out-Null
-          Copy-Item "dist/${{ matrix.package_name }}/ELIRA.exe" "release-assets/${{ matrix.binary_name }}"
-          Compress-Archive -Path "dist/${{ matrix.package_name }}" -DestinationPath "release-assets/${{ matrix.package_name }}.zip" -CompressionLevel Optimal
-
-      - name: Compactar pacote do macOS ou Linux
-        if: runner.os != 'Windows'
+      - name: Gerar instalador no macOS
+        if: runner.os == 'macOS'
         shell: bash
         run: |
           mkdir -p release-assets
-          cp "dist/${{ matrix.package_name }}/ELIRA" \
-            "release-assets/${{ matrix.binary_name }}"
-          chmod +x "release-assets/${{ matrix.binary_name }}"
-          tar -C dist -czf "release-assets/${{ matrix.package_name }}.tar.gz" \
-            "${{ matrix.package_name }}"
+          pkgbuild \
+            --root package-check \
+            --install-location /Applications \
+            --identifier br.edu.elira.game \
+            --version "${ELIRA_VERSION}" \
+            "release-assets/${{ matrix.installer_name }}"
 
-      - name: Guardar executavel e pacote da plataforma
+      - name: Validar instalador e recursos no Windows
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: |
+          $Required = @(
+            "package-check/ELIRA.exe",
+            "package-check/assets/fonts/GeistPixel-Square.ttf",
+            "package-check/assets/sprites/disquete.png",
+            "package-check/assets/sprites/cd.png",
+            "package-check/assets/sprites/ssd.png",
+            "package-check/assets/sprites/elira_portrait.png"
+          )
+          foreach ($File in $Required) {
+            if (-not (Test-Path $File)) { throw "Recurso obrigatorio ausente: $File" }
+          }
+          Push-Location $env:RUNNER_TEMP
+          try {
+            & "$env:GITHUB_WORKSPACE/package-check/ELIRA.exe" --verify-assets
+            if ($LASTEXITCODE -ne 0) { throw "O executavel nao localizou os recursos instalados" }
+          } finally {
+            Pop-Location
+          }
+          if (-not (Test-Path "release-assets/${{ matrix.installer_name }}")) {
+            throw "Instalador nao foi gerado: ${{ matrix.installer_name }}"
+          }
+
+      - name: Validar instalador e recursos no macOS e Linux
+        if: runner.os != 'Windows'
+        shell: bash
+        run: |
+          if [ "${RUNNER_OS}" = "macOS" ]; then
+            APP="package-check/ELIRA.app"
+            test -x "$APP/Contents/MacOS/ELIRA"
+            ASSETS="$APP/Contents/Resources/assets"
+            (cd "$RUNNER_TEMP" && "$GITHUB_WORKSPACE/$APP/Contents/MacOS/ELIRA" --verify-assets)
+            pkgutil --check-signature "release-assets/${{ matrix.installer_name }}" || true
+            pkgutil --payload-files "release-assets/${{ matrix.installer_name }}" | grep -q 'GeistPixel-Square.ttf'
+          else
+            test -x "package-check/lib/elira/ELIRA"
+            test -x "package-check/bin/elira"
+            ASSETS="package-check/lib/elira/assets"
+            (cd "$RUNNER_TEMP" && "$GITHUB_WORKSPACE/package-check/lib/elira/ELIRA" --verify-assets)
+            dpkg-deb --info "release-assets/${{ matrix.installer_name }}" >/dev/null
+            dpkg-deb --contents "release-assets/${{ matrix.installer_name }}" | grep -q 'GeistPixel-Square.ttf'
+          fi
+          test -f "$ASSETS/fonts/GeistPixel-Square.ttf"
+          test -f "$ASSETS/sprites/disquete.png"
+          test -f "$ASSETS/sprites/cd.png"
+          test -f "$ASSETS/sprites/ssd.png"
+          test -f "$ASSETS/sprites/elira_portrait.png"
+          test -f "release-assets/${{ matrix.installer_name }}"
+
+      - name: Guardar instalador da plataforma
         uses: actions/upload-artifact@v7
         with:
-          name: ${{ matrix.package_name }}
-          path: release-assets/*
+          name: ${{ matrix.package_suffix }}
+          path: release-assets/${{ matrix.installer_name }}
           if-no-files-found: error
           retention-days: 14
 
@@ -118,7 +169,7 @@ jobs:
       contents: write
 
     steps:
-      - name: Baixar todos os executaveis e pacotes
+      - name: Baixar todos os instaladores
         uses: actions/download-artifact@v8
         with:
           path: release-assets
@@ -130,13 +181,18 @@ jobs:
           cd release-assets
           sha256sum ELIRA-* > SHA256SUMS.txt
 
-      - name: Criar release e anexar executaveis
+      - name: Criar ou atualizar release e anexar instaladores
         shell: bash
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
-          gh release create "${GITHUB_REF_NAME}" release-assets/* \
-            --repo "${GITHUB_REPOSITORY}" \
-            --verify-tag \
-            --generate-notes \
-            --title "ELIRA ${GITHUB_REF_NAME}"
+          if gh release view "${GITHUB_REF_NAME}" --repo "${GITHUB_REPOSITORY}" >/dev/null 2>&1; then
+            gh release upload "${GITHUB_REF_NAME}" release-assets/* \
+              --repo "${GITHUB_REPOSITORY}" --clobber
+          else
+            gh release create "${GITHUB_REF_NAME}" release-assets/* \
+              --repo "${GITHUB_REPOSITORY}" \
+              --verify-tag \
+              --generate-notes \
+              --title "ELIRA ${GITHUB_REF_NAME}"
+          fi

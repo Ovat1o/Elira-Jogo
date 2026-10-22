@@ -34,10 +34,17 @@ else()
     FetchContent_MakeAvailable(raylib)
 endif()
 
-add_executable(ELIRA
-    src/main.c
-    src/funcoes.c
-)
+if(APPLE)
+    add_executable(ELIRA MACOSX_BUNDLE
+        src/main.c
+        src/funcoes.c
+    )
+else()
+    add_executable(ELIRA
+        src/main.c
+        src/funcoes.c
+    )
+endif()
 
 target_include_directories(ELIRA PRIVATE
     "${CMAKE_CURRENT_SOURCE_DIR}/src"
@@ -62,6 +69,12 @@ set_target_properties(ELIRA PROPERTIES
 )
 
 if(APPLE)
+    set_target_properties(ELIRA PROPERTIES
+        MACOSX_BUNDLE_BUNDLE_NAME "ELIRA"
+        MACOSX_BUNDLE_GUI_IDENTIFIER "br.edu.elira.game"
+        MACOSX_BUNDLE_BUNDLE_VERSION "${PROJECT_VERSION}"
+        MACOSX_BUNDLE_SHORT_VERSION_STRING "${PROJECT_VERSION}"
+    )
     target_link_libraries(ELIRA PRIVATE
         "-framework Cocoa"
         "-framework IOKit"
@@ -70,14 +83,66 @@ if(APPLE)
     )
 endif()
 
-# Layout portavel usado pelos pacotes publicados no GitHub Releases.
-install(TARGETS ELIRA RUNTIME DESTINATION .)
-install(DIRECTORY "${CMAKE_CURRENT_SOURCE_DIR}/assets" DESTINATION .)
-install(FILES "${CMAKE_CURRENT_SOURCE_DIR}/LEIA-ME-RELEASE.txt"
-        DESTINATION . RENAME "LEIA-ME.txt")
-
-if(APPLE)
-    install(PROGRAMS "${CMAKE_CURRENT_SOURCE_DIR}/packaging/JOGAR.command" DESTINATION .)
+# Cada plataforma recebe um layout instalavel com todos os recursos do jogo.
+if(WIN32)
+    install(TARGETS ELIRA RUNTIME DESTINATION .)
+    install(DIRECTORY "${CMAKE_CURRENT_SOURCE_DIR}/assets" DESTINATION .)
+    install(FILES "${CMAKE_CURRENT_SOURCE_DIR}/LEIA-ME-RELEASE.txt"
+            DESTINATION . RENAME "LEIA-ME.txt")
+elseif(APPLE)
+    install(TARGETS ELIRA BUNDLE DESTINATION .)
+    install(DIRECTORY "${CMAKE_CURRENT_SOURCE_DIR}/assets"
+            DESTINATION "ELIRA.app/Contents/Resources")
+    install(FILES "${CMAKE_CURRENT_SOURCE_DIR}/LEIA-ME-RELEASE.txt"
+            DESTINATION "ELIRA.app/Contents/Resources" RENAME "LEIA-ME.txt")
 elseif(UNIX)
-    install(PROGRAMS "${CMAKE_CURRENT_SOURCE_DIR}/packaging/JOGAR.sh" DESTINATION .)
+    install(TARGETS ELIRA RUNTIME DESTINATION "lib/elira")
+    install(DIRECTORY "${CMAKE_CURRENT_SOURCE_DIR}/assets" DESTINATION "lib/elira")
+    install(PROGRAMS "${CMAKE_CURRENT_SOURCE_DIR}/packaging/elira-launcher"
+            DESTINATION "bin" RENAME "elira")
+    install(FILES "${CMAKE_CURRENT_SOURCE_DIR}/packaging/elira.desktop"
+            DESTINATION "share/applications")
+    install(FILES "${CMAKE_CURRENT_SOURCE_DIR}/assets/sprites/elira_sorrindo.png"
+            DESTINATION "share/pixmaps" RENAME "elira.png")
+    install(FILES "${CMAKE_CURRENT_SOURCE_DIR}/LEIA-ME-RELEASE.txt"
+            DESTINATION "share/doc/elira" RENAME "LEIA-ME.txt")
 endif()
+
+set(ELIRA_PACKAGE_SUFFIX "${CMAKE_SYSTEM_NAME}-${CMAKE_SYSTEM_PROCESSOR}"
+    CACHE STRING "Sufixo do instalador gerado")
+set(ELIRA_PACKAGE_VERSION "${PROJECT_VERSION}"
+    CACHE STRING "Versao gravada no instalador")
+set(CPACK_PACKAGE_NAME "ELIRA")
+set(CPACK_PACKAGE_VENDOR "Equipe ELIRA")
+set(CPACK_PACKAGE_VERSION "${ELIRA_PACKAGE_VERSION}")
+set(CPACK_PACKAGE_DESCRIPTION_SUMMARY
+    "Jogo de ficcao cientifica sobre letramento digital e inteligencia artificial")
+
+if(WIN32)
+    set(CPACK_GENERATOR "NSIS")
+    set(CPACK_PACKAGE_FILE_NAME "ELIRA-${ELIRA_PACKAGE_SUFFIX}-Setup")
+    set(CPACK_PACKAGE_INSTALL_DIRECTORY "ELIRA")
+    set(CPACK_NSIS_DISPLAY_NAME "ELIRA - Escape Run Temporal")
+    set(CPACK_NSIS_PACKAGE_NAME "ELIRA")
+    set(CPACK_NSIS_ENABLE_UNINSTALL_BEFORE_INSTALL ON)
+    set(CPACK_NSIS_MUI_FINISHPAGE_RUN "ELIRA.exe")
+    set(CPACK_NSIS_CREATE_ICONS_EXTRA
+        "CreateShortCut '$DESKTOP\\\\ELIRA.lnk' '$INSTDIR\\\\ELIRA.exe'")
+    set(CPACK_NSIS_DELETE_ICONS_EXTRA
+        "Delete '$DESKTOP\\\\ELIRA.lnk'")
+elseif(APPLE)
+    set(CPACK_GENERATOR "productbuild")
+    set(CPACK_PACKAGE_FILE_NAME "ELIRA-${ELIRA_PACKAGE_SUFFIX}")
+elseif(UNIX)
+    set(CPACK_GENERATOR "DEB")
+    set(CPACK_PACKAGE_FILE_NAME "ELIRA-${ELIRA_PACKAGE_SUFFIX}")
+    set(CPACK_PACKAGING_INSTALL_PREFIX "/usr")
+    set(CPACK_DEBIAN_PACKAGE_NAME "elira")
+    set(CPACK_DEBIAN_PACKAGE_MAINTAINER "Equipe ELIRA")
+    set(CPACK_DEBIAN_PACKAGE_SECTION "games")
+    set(CPACK_DEBIAN_PACKAGE_SHLIBDEPS ON)
+    set(CPACK_DEBIAN_PACKAGE_DEPENDS
+        "libc6, libasound2, libgl1, libx11-6, libxrandr2, libxi6, libxcursor1, libxinerama1")
+endif()
+
+include(CPack)
