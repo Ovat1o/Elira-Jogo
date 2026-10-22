@@ -1,0 +1,4 @@
+#!/bin/sh
+set -e
+cd /usr/lib/elira
+exec ./ELIRA "$@"

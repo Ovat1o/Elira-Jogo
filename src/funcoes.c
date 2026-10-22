@@ -1268,12 +1268,57 @@ const char *FormatRunTime(double seconds)
 /* Formato de cada linha:  Nome | Pontuacao | MM:SS - DD/MM/AAAA HH:MM       */
 /* ========================================================================= */
 
-#define RANKING_FILE        "ranking.txt"
 #define RANKING_MAX_ENTRIES 200
 #define RANKING_SHOWN       8
 
 static RankingEntry g_ranking[RANKING_MAX_ENTRIES];
 static int g_rankingCount = 0;
+
+static const char *GetRankingFilePath(void)
+{
+    static char path[1024] = {0};
+    if (path[0] != '\0') return path;
+
+    const char *base = NULL;
+#if defined(_WIN32)
+    base = getenv("APPDATA");
+    if (base != NULL && base[0] != '\0')
+    {
+        snprintf(path, sizeof(path), "%s/ELIRA", base);
+    }
+#elif defined(__APPLE__)
+    base = getenv("HOME");
+    if (base != NULL && base[0] != '\0')
+    {
+        snprintf(path, sizeof(path), "%s/Library/Application Support/ELIRA", base);
+    }
+#else
+    base = getenv("XDG_DATA_HOME");
+    if (base != NULL && base[0] != '\0')
+    {
+        snprintf(path, sizeof(path), "%s/elira", base);
+    }
+    else
+    {
+        base = getenv("HOME");
+        if (base != NULL && base[0] != '\0')
+        {
+            snprintf(path, sizeof(path), "%s/.local/share/elira", base);
+        }
+    }
+#endif
+
+    if (path[0] == '\0')
+    {
+        snprintf(path, sizeof(path), "ranking.txt");
+        return path;
+    }
+
+    MakeDirectory(path);
+    size_t length = strlen(path);
+    snprintf(path + length, sizeof(path) - length, "/ranking.txt");
+    return path;
+}
 
 /* Pontuacao: conclusao + vidas + compreensao final + bonus + bonus de tempo (max 3200) */
 int CalculateScore(const GameState *game)
@@ -1293,7 +1338,7 @@ int CalculateScore(const GameState *game)
 /* Escreve uma linha no final do TXT. Retorna false se nao conseguir abrir o arquivo. */
 bool SaveRankingEntry(const char *name, int score, int seconds)
 {
-    FILE *f = fopen(RANKING_FILE, "a");
+    FILE *f = fopen(GetRankingFilePath(), "a");
     if (!f) return false;
 
     time_t now = time(NULL);
@@ -1318,7 +1363,7 @@ static int CompareRanking(const void *a, const void *b)
 int LoadRanking(void)
 {
     g_rankingCount = 0;
-    FILE *f = fopen(RANKING_FILE, "r");
+    FILE *f = fopen(GetRankingFilePath(), "r");
     if (!f) return 0;
 
     char line[256];
@@ -1430,7 +1475,7 @@ void DrawRanking(const GameState *game)
     /* Resumo da partida atual (mesmo que fique fora do top exibido) */
     if (!game->rankingSaveOk)
     {
-        DrawGameText("Nao foi possivel gravar ranking.txt (verifique permissao da pasta).", 170, 538, 16, RED_COLOR);
+        DrawGameText("Nao foi possivel gravar o ranking nos dados do usuario.", 170, 538, 16, RED_COLOR);
     }
     else if (game->rankingPlace >= 0)
     {

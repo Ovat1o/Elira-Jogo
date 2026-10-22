@@ -1,33 +1,29 @@
 # Distribuição e releases
 
-O projeto usa GitHub Actions para compilar a raylib estaticamente e gerar quatro
-executáveis nativos:
+O projeto usa GitHub Actions para compilar a raylib estaticamente e gerar
+instaladores que incluem o executável e todos os recursos do jogo:
 
-- `ELIRA-Windows-x64.exe`;
-- `ELIRA-Linux-x64`;
-- `ELIRA-macOS-Apple-Silicon`;
-- `ELIRA-macOS-Intel`.
+- `ELIRA-Windows-x64-Setup.exe`;
+- `ELIRA-Linux-x64.deb`;
+- `ELIRA-macOS-Apple-Silicon.pkg`;
+- `ELIRA-macOS-Intel.pkg`.
 
-Também são gerados quatro pacotes completos prontos para uso:
+A pipeline verifica a presença da fonte `GeistPixel-Square.ttf`, do retrato da
+Elira e dos sprites de disquete, CD e SSD antes de publicar. Se algum desses
+arquivos não entrar no instalador, o build falha.
 
-- `ELIRA-Windows-x64.zip`;
-- `ELIRA-Linux-x64.tar.gz`;
-- `ELIRA-macOS-Apple-Silicon.tar.gz`;
-- `ELIRA-macOS-Intel.tar.gz`.
-
-Cada pacote contém o executável, a pasta `assets/`, instruções de uso e, no
-macOS/Linux, um lançador. O jogador não precisa instalar compilador, Make,
-Homebrew ou raylib. Os binários avulsos são úteis para testes, mas o jogo ainda
-depende da pasta `assets/`; portanto, os pacotes completos são a distribuição
-recomendada para usuários finais.
+No Windows, o instalador cria a pasta do jogo e um atalho na área de trabalho.
+No macOS, o PKG instala `ELIRA.app` em Aplicativos, com os recursos dentro do
+bundle. No Linux, o pacote DEB instala o jogo, registra uma entrada no menu de
+aplicativos e declara as bibliotecas de sistema necessárias para Ubuntu/Debian
+64 bits.
 
 ## Quando a automação roda
 
 - Pull request para `main`: valida a compilação nas quatro plataformas.
-- Push em `main`: valida e disponibiliza os pacotes temporariamente na execução.
+- Push em `main`: valida e disponibiliza os instaladores temporariamente na execução.
 - Tag iniciada por `v`: além de compilar, cria um GitHub Release público com os
-  quatro executáveis, os quatro pacotes, notas automáticas e
-  `SHA256SUMS.txt`.
+  quatro instaladores, notas automáticas e `SHA256SUMS.txt`.
 - `workflow_dispatch`: permite testar manualmente os builds pela aba Actions.
 
 ## Como publicar uma versão
@@ -38,12 +34,13 @@ passado. Depois crie e envie uma tag semântica:
 ```bash
 git checkout main
 git pull --ff-only
-git tag -a v1.0.0 -m "ELIRA v1.0.0"
-git push origin v1.0.0
+git tag -a v1.0.1 -m "ELIRA v1.0.1"
+git push origin v1.0.1
 ```
 
 Acompanhe a execução **Build e Release** na aba Actions. Quando os quatro builds
-terminarem, a versão aparecerá em **Releases**.
+terminarem, a versão aparecerá em **Releases**. Se a Release da tag já existir,
+uma nova execução substitui os instaladores pelos arquivos recém-gerados.
 
 Não é necessário cadastrar token ou segredo: o job de publicação solicita apenas
 `contents: write` para o `GITHUB_TOKEN` temporário da própria execução.
@@ -55,7 +52,7 @@ Se a raylib 6.0 estiver instalada no computador:
 ```bash
 cmake -S . -B build -DELIRA_USE_SYSTEM_RAYLIB=ON -DCMAKE_BUILD_TYPE=Release
 cmake --build build --config Release
-cmake --install build --config Release --prefix dist/ELIRA-local
+cpack --config build/CPackConfig.cmake -C Release -B dist
 ```
 
 Sem `ELIRA_USE_SYSTEM_RAYLIB=ON`, o CMake baixa e compila a raylib 6.0, da mesma
@@ -63,9 +60,8 @@ forma utilizada pela pipeline.
 
 ## Limitações conhecidas
 
-- Os pacotes de macOS ainda não são assinados nem notarizados. Para remover o
+- Os aplicativos de macOS ainda não são assinados nem notarizados. Para remover o
   aviso do Gatekeeper será necessário um certificado Apple Developer e segredos
   de assinatura configurados no repositório.
-- O pacote Linux usa como base Ubuntu 22.04 x64 e pressupõe um ambiente desktop
-  com drivers gráficos e bibliotecas de sistema usuais. Nenhum pacote de
-  desenvolvimento é exigido do jogador.
+- O instalador Linux usa o formato DEB e tem como base Ubuntu 22.04 x64. Ele é
+  destinado a Ubuntu, Debian e distribuições compatíveis com pacotes DEB.

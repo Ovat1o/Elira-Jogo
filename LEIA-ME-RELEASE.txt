@@ -1,22 +1,24 @@
 ELIRA - Escape Run Temporal
 ===========================
 
-Este pacote ja contem o jogo compilado e todos os recursos necessarios.
-Mantenha o executavel e a pasta assets juntos.
+O instalador inclui o jogo, a fonte Geist Pixel, imagens, sprites, audio e as
+bibliotecas do jogo que podem ser distribuidas junto com ele.
 
 WINDOWS
-  Extraia o ZIP e abra ELIRA.exe.
+  Execute ELIRA-Windows-x64-Setup.exe e use o atalho ELIRA criado na area de
+  trabalho.
 
 macOS
-  Extraia o TAR.GZ e abra JOGAR.command.
-  Na primeira execucao, talvez seja necessario clicar com o botao direito em
-  JOGAR.command, escolher "Abrir" e confirmar. Esse aviso ocorre porque o jogo
-  ainda nao possui assinatura/notarizacao da Apple.
+  Execute o arquivo PKG para instalar ELIRA.app em Aplicativos. Na primeira
+  execucao, talvez seja necessario clicar com o botao direito em ELIRA.app,
+  escolher "Abrir" e confirmar. Esse aviso ocorre porque o instalador e o jogo
+  ainda nao possuem assinatura/notarizacao da Apple.
 
-LINUX
-  Extraia o TAR.GZ e abra JOGAR.sh. Se o gerenciador de arquivos nao executar
-  scripts, abra um terminal na pasta e rode: ./JOGAR.sh
+LINUX (Ubuntu/Debian 64 bits)
+  Instale o arquivo .deb pela loja do sistema ou execute:
+    sudo apt install ./ELIRA-Linux-x64.deb
+  Depois, abra ELIRA pelo menu de aplicativos ou execute: elira
 
-O ranking da partida sera criado como ranking.txt dentro desta pasta.
+O ranking da partida sera salvo na pasta de dados do usuario do sistema.
 Para verificar a integridade do download, compare o arquivo com SHA256SUMS.txt
 disponivel na mesma pagina do GitHub Release.

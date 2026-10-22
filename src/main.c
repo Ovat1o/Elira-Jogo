@@ -1,16 +1,78 @@
 #include <math.h>
+#include <stdio.h>
 #include <string.h>
 #include "funcoes.h"
 
-int main(void)
+static bool TryUseAssetBase(const char *baseDirectory)
+{
+    if (baseDirectory == NULL || baseDirectory[0] == '\0') return false;
+
+    char assetsDirectory[1024];
+    snprintf(assetsDirectory, sizeof(assetsDirectory), "%s/assets", baseDirectory);
+    if (!DirectoryExists(assetsDirectory)) return false;
+
+    return ChangeDirectory(baseDirectory) && DirectoryExists("assets");
+}
+
+static bool ConfigureAssetDirectory(void)
+{
+    if (DirectoryExists("assets")) return true;
+
+    const char *applicationDirectory = GetApplicationDirectory();
+    if (applicationDirectory == NULL || applicationDirectory[0] == '\0') return false;
+
+    char candidate[1024];
+
+    /* Pacotes portaveis e instalador do Windows. */
+    if (TryUseAssetBase(applicationDirectory)) return true;
+
+    /* Bundle do macOS: ELIRA.app/Contents/MacOS -> Contents/Resources/assets. */
+    snprintf(candidate, sizeof(candidate), "%s/../Resources", applicationDirectory);
+    if (TryUseAssetBase(candidate)) return true;
+
+    /* Build local: build/bin -> raiz ou pasta instalada adjacente. */
+    snprintf(candidate, sizeof(candidate), "%s/..", applicationDirectory);
+    if (TryUseAssetBase(candidate)) return true;
+
+    fprintf(stderr, "[ASSETS] Pasta assets nao encontrada. Executavel: %s\n",
+            applicationDirectory);
+    return false;
+}
+
+static bool ValidateRequiredAssets(void)
+{
+    const char *required[] = {
+        "assets/fonts/GeistPixel-Square.ttf",
+        "assets/sprites/disquete.png",
+        "assets/sprites/cd.png",
+        "assets/sprites/ssd.png",
+        "assets/sprites/elira_portrait.png",
+        "assets/som/ambient.wav"
+    };
+    bool valid = true;
+
+    for (int i = 0; i < (int)(sizeof(required) / sizeof(required[0])); i++)
+    {
+        if (!FileExists(required[i]))
+        {
+            fprintf(stderr, "[ASSETS] Recurso obrigatorio ausente: %s\n", required[i]);
+            valid = false;
+        }
+    }
+
+    if (valid) printf("[ASSETS] Todos os recursos obrigatorios foram encontrados.\n");
+    return valid;
+}
+
+int main(int argc, char **argv)
 {
     GameState game = {0};
 
-    /* Garante que os caminhos relativos (assets/...) funcionem mesmo se o jogo
-       for aberto de outra pasta: muda para a pasta do executavel se preciso */
-    if (!DirectoryExists("assets"))
+    /* Mantem assets/... valido em pacotes portaveis, instaladores e .app. */
+    bool assetsReady = ConfigureAssetDirectory();
+    if (argc > 1 && strcmp(argv[1], "--verify-assets") == 0)
     {
-        ChangeDirectory(GetApplicationDirectory());
+        return assetsReady && ValidateRequiredAssets() ? 0 : 1;
     }
 
     SetConfigFlags(FLAG_MSAA_4X_HINT | FLAG_VSYNC_HINT);

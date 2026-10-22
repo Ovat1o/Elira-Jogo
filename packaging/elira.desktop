@@ -1,0 +1,8 @@
+[Desktop Entry]
+Type=Application
+Name=ELIRA
+Comment=Escape Run Temporal
+Exec=elira
+Icon=elira
+Terminal=false
+Categories=Game;Education;
