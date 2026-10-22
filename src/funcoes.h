@@ -284,7 +284,7 @@ void InitCinematicIntro(GameState *game);
 void UpdateCinematicIntro(GameState *game);
 void DrawCinematicIntro(const GameState *game);
 
-/* Sala 2048 (O Prototipo), HUD, Diario e Terminal 2048 */
+/* Sala 2026 (O Prototipo), HUD, Diario e Terminal 2026 */
 void DrawHotspot(Rectangle bounds, const char *label);
 void DrawRoomWindow(void);
 void DrawRoom(const GameState *game);

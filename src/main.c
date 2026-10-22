@@ -132,12 +132,6 @@ int main(void)
                     InitFinalDialogue(&game);
                     game.screen = SCREEN_FINAL_DIALOGUE;
                 }
-                else if (Clicked((Rectangle){120, 588, 250, 56}))
-                {
-                    game.journalYearTab = 2;
-                    game.screen = SCREEN_ROOM_2026;
-                    SetMessage(&game, "Retornando a Fabrica de Materiais // 2026.");
-                }
                 else if (Clicked((Rectangle){390, 588, 230, 56}) || IsKeyPressed(KEY_BACKSPACE))
                 {
                     game.journalYearTab = 1;
@@ -153,6 +147,7 @@ int main(void)
                     game.foundTape = false;
                     game.codeLength = 0;
                     game.code[0] = '\0';
+                    game.journalYearTab = 2;
                     game.screen = SCREEN_ROOM;
                 }
                 else if (Clicked((Rectangle){920, 588, 220, 56}))
