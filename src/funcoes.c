@@ -769,6 +769,211 @@ bool Clicked(Rectangle bounds)
            CheckCollisionPointRec(GetVirtualMouse(), bounds);
 }
 
+/* ========================================================================= */
+/* CONTROLES GLOBAIS DAS FASES: MENU DE PAUSA E ATALHO DE ADMINISTRADOR       */
+/* ========================================================================= */
+
+static Rectangle PhaseMenuButton(void)
+{
+    return (Rectangle){SCREEN_WIDTH - 92.0f, 14.0f, 76.0f, 36.0f};
+}
+
+static Rectangle AdminSkipButton(void)
+{
+    return (Rectangle){SCREEN_WIDTH - 326.0f, 14.0f, 224.0f, 36.0f};
+}
+
+static bool IsAdminSkippableScreen(GameScreen screen)
+{
+    switch (screen)
+    {
+        case SCREEN_ROOM_2:
+        case SCREEN_MEMORY_1990:
+        case SCREEN_PUZZLE_FILES:
+        case SCREEN_ROOM_2008:
+        case SCREEN_PUZZLE_2008:
+        case SCREEN_ROOM:
+        case SCREEN_TERMINAL:
+        case SCREEN_ROOM_2026:
+            return true;
+        default:
+            return false;
+    }
+}
+
+bool IsAdminPlayer(const GameState *game)
+{
+    static const char adminName[] = "admin";
+    if (game == NULL || strlen(game->playerName) != 5) return false;
+
+    for (int i = 0; i < 5; i++)
+    {
+        char c = game->playerName[i];
+        if (c >= 'A' && c <= 'Z') c = (char)(c - 'A' + 'a');
+        if (c != adminName[i]) return false;
+    }
+    return true;
+}
+
+bool IsPhaseScreen(GameScreen screen)
+{
+    switch (screen)
+    {
+        case SCREEN_INTRO:
+        case SCREEN_ROOM:
+        case SCREEN_TERMINAL:
+        case SCREEN_RESULT:
+        case SCREEN_ROOM_2:
+        case SCREEN_MEMORY_1990:
+        case SCREEN_PUZZLE_FILES:
+        case SCREEN_RESULT_2:
+        case SCREEN_ROOM_2008:
+        case SCREEN_PUZZLE_2008:
+        case SCREEN_RESULT_2008:
+        case SCREEN_ROOM_2026:
+        case SCREEN_RESULT_2026:
+        case SCREEN_FINAL_DIALOGUE:
+        case SCREEN_FINAL_ENDING:
+        case SCREEN_FAILURE:
+        case SCREEN_INTRO_2008:
+        case SCREEN_INTRO_2026:
+        case SCREEN_INTRO_2048:
+            return true;
+        default:
+            return false;
+    }
+}
+
+static void ClosePhaseOverlays(GameState *game)
+{
+    game->journalOpen = false;
+    game->activeDocument2008 = -1;
+    game->manual2026Open = false;
+    game->terminal2026Open = false;
+    game->confirmModal2026Open = false;
+    game->feedbackModal2026Open = false;
+}
+
+static void SkipCurrentPhase(GameState *game)
+{
+    ClosePhaseOverlays(game);
+
+    switch (game->screen)
+    {
+        case SCREEN_ROOM_2:
+        case SCREEN_MEMORY_1990:
+        case SCREEN_PUZZLE_FILES:
+            game->memory1990Completed = true;
+            game->puzzleFilesCompleted = true;
+            game->draggingFileIndex = -1;
+            game->screen = SCREEN_RESULT_2;
+            break;
+
+        case SCREEN_ROOM_2008:
+        case SCREEN_PUZZLE_2008:
+            game->puzzle2008Contested = true;
+            game->puzzle2008OrderSuspended = true;
+            game->screen = SCREEN_RESULT_2008;
+            break;
+
+        case SCREEN_ROOM:
+        case SCREEN_TERMINAL:
+            game->foundCalendar = true;
+            game->foundBooks = true;
+            game->foundDrawer = true;
+            game->foundBlueprint = true;
+            game->foundTape = true;
+            game->elapsedTime = GetTime() - game->startTime;
+            game->screen = SCREEN_RESULT;
+            break;
+
+        case SCREEN_ROOM_2026:
+            game->room2026Processing = false;
+            game->reactorCountdownActive2026 = false;
+            game->room2026Completed = true;
+            game->year2026Unlocked = true;
+            game->screen = SCREEN_RESULT_2026;
+            break;
+
+        default:
+            break;
+    }
+}
+
+bool UpdatePhaseControls(GameState *game)
+{
+    if (!IsPhaseScreen(game->screen))
+    {
+        game->phaseMenuOpen = false;
+        return false;
+    }
+
+    Rectangle resumeBtn = {440, 300, 400, 54};
+    Rectangle titleBtn = {440, 370, 400, 54};
+    Rectangle exitBtn = {440, 440, 400, 54};
+
+    if (game->phaseMenuOpen)
+    {
+        if (IsKeyPressed(KEY_ESCAPE) || Clicked(resumeBtn))
+        {
+            game->phaseMenuOpen = false;
+        }
+        else if (Clicked(titleBtn))
+        {
+            ClosePhaseOverlays(game);
+            game->phaseMenuOpen = false;
+            game->screen = SCREEN_TITLE;
+        }
+        else if (Clicked(exitBtn))
+        {
+            game->exitRequested = true;
+        }
+        return true;
+    }
+
+    if (IsKeyPressed(KEY_ESCAPE) || Clicked(PhaseMenuButton()))
+    {
+        game->phaseMenuOpen = true;
+        return true;
+    }
+
+    if (IsAdminPlayer(game) && IsAdminSkippableScreen(game->screen) &&
+        Clicked(AdminSkipButton()))
+    {
+        SkipCurrentPhase(game);
+        return true;
+    }
+
+    return false;
+}
+
+void DrawPhaseControls(const GameState *game)
+{
+    if (!IsPhaseScreen(game->screen)) return;
+
+    if (!game->phaseMenuOpen)
+    {
+        if (IsAdminPlayer(game) && IsAdminSkippableScreen(game->screen))
+        {
+            DrawButton(AdminSkipButton(), "ADMIN: PULAR FASE", GOLD_COLOR);
+        }
+        DrawButton(PhaseMenuButton(), "MENU", CYAN_COLOR);
+        return;
+    }
+
+    DrawRectangle(0, 0, SCREEN_WIDTH, SCREEN_HEIGHT, Fade(BLACK, 0.78f));
+    Rectangle panel = {390, 165, 500, 380};
+    DrawRectangleRounded(panel, 0.05f, 8, Fade(PANEL_COLOR, 0.99f));
+    DrawRectangleRoundedLinesEx(panel, 0.05f, 8, 2.0f, CYAN_COLOR);
+
+    CenterText("MENU DA FASE", 200, 30, RAYWHITE);
+    CenterText("Escolha como deseja continuar", 244, 17, LIGHTGRAY);
+
+    DrawButton((Rectangle){440, 300, 400, 54}, "CONTINUAR [ESC]", CYAN_COLOR);
+    DrawButton((Rectangle){440, 370, 400, 54}, "VOLTAR AO MENU INICIAL", GOLD_COLOR);
+    DrawButton((Rectangle){440, 440, 400, 54}, "FECHAR O JOGO", RED_COLOR);
+}
+
 void DrawBackground(void)
 {
     ClearBackground(VOID_COLOR);
@@ -1254,6 +1459,7 @@ void UpdateRanking(GameState *game)
 void ResetDemo(GameState *game)
 {
     game->lives = 3;
+    game->phaseMenuOpen = false;
     game->foundCalendar = false;
     game->foundBooks = false;
     game->foundDrawer = false;
