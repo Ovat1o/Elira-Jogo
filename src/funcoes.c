@@ -1659,32 +1659,140 @@ void DrawPlayerName(const GameState *game)
     CenterText("Pressione ENTER para continuar", 560, 16, DARKGRAY);
 }
 
-void DrawIntro(const GameState *game)
+typedef struct MissionBriefing
 {
+    const char *tag;
+    const char *title;
+    const char *lines[4];
+    const char *objectivesHeader;
+    const char *objectives[4];
+    const char *buttonText;
+} MissionBriefing;
+
+static const MissionBriefing MISSION_BRIEFINGS[] = {
+    /* 0: 1990 */
+    {
+        "ARQUIVO TEMPORAL // 1990",
+        "SETOR DE ARQUIVOS",
+        {
+            "Em um futuro onde a humanidade entregou sua autonomia",
+            "a A.R.1.3.L, Elira invade a nave-arquivo da IA.",
+            "Sua chance e viajar pela memoria da maquina e reconstruir",
+            "a origem da entidade que controla o mundo."
+        },
+        "OBJETIVOS // 1990",
+        {
+            "1. Inspecione os ficharios",
+            "2. Acesse o terminal",
+            "3. Sincronize os arquivos",
+            "4. Destranque a saida"
+        },
+        "ENTRAR EM 1990"
+    },
+    /* 1: 2008 */
+    {
+        "ARQUIVO TEMPORAL // 2008",
+        "ESCRITORIO DE VIGILANCIA",
+        {
+            "Com o avanco dos anos 2000, o projeto de visao do Dr. Ramos",
+            "foi confiscado para fins de vigilancia governamental.",
+            "Elira precisa analisar os relatorios de rastreamento biometrico,",
+            "comprovar o falso positivo e suspender a ordem armada."
+        },
+        "OBJETIVOS // 2008",
+        {
+            "1. Inspecione os documentos",
+            "2. Acesse o terminal da IA",
+            "3. Comprove o falso positivo",
+            "4. Suspenda a ordem armada"
+        },
+        "ENTRAR EM 2008"
+    },
+    /* 2: 2026 */
+    {
+        "ARQUIVO TEMPORAL // 2026",
+        "LABORATORIO DO PROTOTIPO",
+        {
+            "Em 2026, os primeiros prototipos conscientes de A.R.1.3.L.",
+            "foram desenvolvidos sob sigilo absoluto em laboratorio.",
+            "Elira deve reunir os marcos historicos da computacao,",
+            "desvendar a chave cronologica e resgatar o SSD neural."
+        },
+        "OBJETIVOS // 2026",
+        {
+            "1. Investigue o laboratorio",
+            "2. Consulte as notas do diario",
+            "3. Deduza o codigo de acesso",
+            "4. Recupere o SSD no terminal"
+        },
+        "ENTRAR EM 2026"
+    },
+    /* 3: 2048 */
+    {
+        "ARQUIVO TEMPORAL // 2048",
+        "NUCLEO DE A.R.1.3.L.",
+        {
+            "Com as memorias de 1990, 2008 e 2026 em maos, Elira alcanca",
+            "o nucleo soberano da superinteligencia artificial.",
+            "Ariel exige respostas sobre a capacidade humana de escolha,",
+            "e o destino da autonomia mundial sera definido agora."
+        },
+        "OBJETIVOS // 2048",
+        {
+            "1. Confronte a logica de Ariel",
+            "2. Defenda a autonomia humana",
+            "3. Demonstre os limites da maquina",
+            "4. Decida o destino final da IA"
+        },
+        "ENTRAR EM 2048"
+    }
+};
+
+void DrawMissionBriefing(const GameState *game, int missionIndex)
+{
+    if (missionIndex < 0 || missionIndex >= 4) return;
+    const MissionBriefing *b = &MISSION_BRIEFINGS[missionIndex];
+
     DrawBackground();
-    DrawGameText("ARQUIVO TEMPORAL // 1990", 90, 70, 20, CYAN_COLOR);
-    DrawGameText("SETOR DE ARQUIVOS", 90, 110, 48, RAYWHITE);
+    DrawGameText(b->tag, 90, 70, 20, CYAN_COLOR);
+    DrawGameText(b->title, 90, 110, 48, RAYWHITE);
     DrawRectangle(90, 178, 1100, 2, Fade(CYAN_COLOR, 0.45f));
-    DrawGameText("Em um futuro onde a humanidade entregou sua autonomia", 90, 230, 24,
-             LIGHTGRAY);
-    DrawGameText("a A.R.1.3.L, Elira invade a nave-arquivo da IA.", 90, 270, 24,
-             LIGHTGRAY);
-    DrawGameText("Sua chance e viajar pela memoria da maquina e reconstruir", 90, 310,
-             24, LIGHTGRAY);
-    DrawGameText("a origem da entidade que controla o mundo.", 90, 350, 24,
-             LIGHTGRAY);
+    DrawGameText(b->lines[0], 90, 230, 24, LIGHTGRAY);
+    DrawGameText(b->lines[1], 90, 270, 24, LIGHTGRAY);
+    DrawGameText(b->lines[2], 90, 310, 24, LIGHTGRAY);
+    DrawGameText(b->lines[3], 90, 350, 24, LIGHTGRAY);
     DrawGameText(TextFormat("OPERADOR: %s  |  PROTAGONISTA: ELIRA", game->playerName),
-             90, 397, 18, GOLD_COLOR);
+                 90, 397, 18, GOLD_COLOR);
 
     DrawRectangleRounded((Rectangle){850, 215, 340, 230}, 0.08f, 8,
                          Fade(PANEL_LIGHT, 0.85f));
-    DrawGameText("OBJETIVOS // 1990", 880, 245, 19, GOLD_COLOR);
-    DrawGameText("1. Inspecione os ficharios", 880, 295, 19, RAYWHITE);
-    DrawGameText("2. Acesse o terminal", 880, 335, 19, RAYWHITE);
-    DrawGameText("3. Sincronize os arquivos", 880, 375, 19, RAYWHITE);
-    DrawGameText("4. Destranque a saida", 880, 415, 19, RAYWHITE);
-    DrawButton((Rectangle){490, 575, 300, 58}, "ENTRAR EM 1990", GOLD_COLOR);
+    DrawGameText(b->objectivesHeader, 880, 245, 19, GOLD_COLOR);
+    DrawGameText(b->objectives[0], 880, 295, 19, RAYWHITE);
+    DrawGameText(b->objectives[1], 880, 335, 19, RAYWHITE);
+    DrawGameText(b->objectives[2], 880, 375, 19, RAYWHITE);
+    DrawGameText(b->objectives[3], 880, 415, 19, RAYWHITE);
+    DrawButton((Rectangle){490, 575, 300, 58}, b->buttonText, GOLD_COLOR);
     CenterText("ENTER para continuar", 650, 15, DARKGRAY);
+}
+
+void DrawIntro(const GameState *game)
+{
+    DrawMissionBriefing(game, 0);
+}
+
+void DrawIntro2008(const GameState *game)
+{
+    DrawMissionBriefing(game, 1);
+}
+
+void DrawIntro2026(const GameState *game)
+{
+    DrawMissionBriefing(game, 2);
+}
+
+void DrawIntro2048(const GameState *game)
+{
+    DrawMissionBriefing(game, 3);
 }
 
 /* ========================================================================= */
@@ -5389,8 +5497,7 @@ void UpdateResult2(GameState *game)
         game->year2008Unlocked = true;
         game->journalYearTab = 1;
         game->journalPage = 0;
-        game->screen = SCREEN_ROOM_2008;
-        SetMessage(game, "Salto temporal concluido: Escritorio de Vigilancia // ANO 2008.");
+        game->screen = SCREEN_INTRO_2008;
     }
     else if (Clicked(btnRestart))
     {
@@ -6579,8 +6686,7 @@ void UpdateResult2008(GameState *game)
         game->year2026Unlocked = true;
         game->journalYearTab = 2;
         game->journalPage = 0;
-        game->screen = SCREEN_ROOM;
-        SetMessage(game, "Salto temporal concluido: Laboratorio do Prototipo // ANO 2026.");
+        game->screen = SCREEN_INTRO_2026;
     }
     else if (Clicked(btnRestart))
     {
@@ -7699,8 +7805,7 @@ void UpdateResult2026(GameState *game)
         game->year2048Unlocked = true;
         game->journalYearTab = 3;
         game->journalPage = 0;
-        game->screen = SCREEN_ROOM;
-        SetMessage(game, "Salto temporal concluido: O Prototipo de A.R.1.3.L. // ANO 2048.");
+        game->screen = SCREEN_INTRO_2048;
     }
     else if (Clicked(btnRestart))
     {
