@@ -6,6 +6,7 @@
 #include <stdlib.h>
 #include <stdint.h>
 #include <string.h>
+#include <time.h>
 
 /* Compatibilidade entre versoes da raylib (5.0 no Windows, 5.5/6.0 no macOS/Linux) */
 #if RAYLIB_VERSION_MAJOR < 5 || (RAYLIB_VERSION_MAJOR == 5 && RAYLIB_VERSION_MINOR < 5)
@@ -1037,6 +1038,219 @@ void InitRoom2026(GameState *game)
     game->room2026TimeOut = false;
 }
 
+/* UH18: grava o tempo total (inicio da partida -> desfecho final) uma unica vez.
+   Chamada ao entrar na tela de desfecho; "Rever confronto" nao sobrescreve. */
+void RecordRunTime(GameState *game)
+{
+    if (game->runTimeRecorded) return;
+    game->elapsedTime = GetTime() - game->startTime;
+    game->runTimeRecorded = true;
+}
+
+/* Formata segundos como MM:SS (ou H:MM:SS se passar de 1 hora) */
+const char *FormatRunTime(double seconds)
+{
+    int total = (seconds > 0.0) ? (int)seconds : 0;
+    int h = total / 3600;
+    int m = (total % 3600) / 60;
+    int s = total % 60;
+    if (h > 0) return TextFormat("%d:%02d:%02d", h, m, s);
+    return TextFormat("%02d:%02d", m, s);
+}
+
+/* ========================================================================= */
+/* UH19 - RANKING (ARQUIVO TXT)                                              */
+/* Formato de cada linha:  Nome | Pontuacao | MM:SS - DD/MM/AAAA HH:MM       */
+/* ========================================================================= */
+
+#define RANKING_FILE        "ranking.txt"
+#define RANKING_MAX_ENTRIES 200
+#define RANKING_SHOWN       8
+
+static RankingEntry g_ranking[RANKING_MAX_ENTRIES];
+static int g_rankingCount = 0;
+
+/* Pontuacao: conclusao + vidas + compreensao final + bonus + bonus de tempo (max 3200) */
+int CalculateScore(const GameState *game)
+{
+    int score = 1000;                              /* concluiu a jornada */
+    score += game->lives * 200;                    /* ate 600 */
+    score += game->finalPoints * 300;              /* ate 600 */
+    if (game->room2008OptionalCompleted) score += 200;                          /* provas preservadas em 2008 */
+    if (game->room2026Completed && game->room2026MistakesCount == 0) score += 200; /* 2026 sem erros */
+
+    int timeBonus = (1800 - (int)game->elapsedTime) / 3;  /* 30 min ou menos: bonus proporcional, max 600 */
+    if (timeBonus < 0) timeBonus = 0;
+    if (timeBonus > 600) timeBonus = 600;
+    return score + timeBonus;
+}
+
+/* Escreve uma linha no final do TXT. Retorna false se nao conseguir abrir o arquivo. */
+bool SaveRankingEntry(const char *name, int score, int seconds)
+{
+    FILE *f = fopen(RANKING_FILE, "a");
+    if (!f) return false;
+
+    time_t now = time(NULL);
+    struct tm *lt = localtime(&now);
+    char date[20] = "--/--/---- --:--";
+    if (lt) strftime(date, sizeof(date), "%d/%m/%Y %H:%M", lt);
+
+    fprintf(f, "%s | %d | %02d:%02d - %s\n", name, score, seconds / 60, seconds % 60, date);
+    fclose(f);
+    return true;
+}
+
+static int CompareRanking(const void *a, const void *b)
+{
+    const RankingEntry *ra = (const RankingEntry *)a;
+    const RankingEntry *rb = (const RankingEntry *)b;
+    if (ra->score != rb->score) return rb->score - ra->score;   /* maior pontuacao primeiro */
+    return ra->seconds - rb->seconds;                            /* empate: menor tempo primeiro */
+}
+
+/* Le o TXT, ignora linhas invalidas e ordena. Retorna a quantidade de entradas. */
+int LoadRanking(void)
+{
+    g_rankingCount = 0;
+    FILE *f = fopen(RANKING_FILE, "r");
+    if (!f) return 0;
+
+    char line[256];
+    while (g_rankingCount < RANKING_MAX_ENTRIES && fgets(line, sizeof(line), f))
+    {
+        line[strcspn(line, "\r\n")] = '\0';
+
+        char *sep1 = strstr(line, " | ");
+        if (!sep1) continue;
+        char *sep2 = strstr(sep1 + 3, " | ");
+        if (!sep2) continue;
+
+        RankingEntry e;
+        memset(&e, 0, sizeof(e));
+
+        int nameLen = (int)(sep1 - line);
+        if (nameLen <= 0 || nameLen > PLAYER_NAME_MAX) continue;
+        memcpy(e.name, line, (size_t)nameLen);
+        e.name[nameLen] = '\0';
+
+        e.score = atoi(sep1 + 3);
+
+        int mm = 0, ss = 0;
+        if (sscanf(sep2 + 3, "%d:%d", &mm, &ss) != 2) continue;
+        e.seconds = mm * 60 + ss;
+
+        char *dash = strstr(sep2 + 3, " - ");
+        if (dash) snprintf(e.date, sizeof(e.date), "%s", dash + 3);
+        else snprintf(e.date, sizeof(e.date), "-");
+
+        g_ranking[g_rankingCount++] = e;
+    }
+    fclose(f);
+
+    qsort(g_ranking, (size_t)g_rankingCount, sizeof(RankingEntry), CompareRanking);
+    return g_rankingCount;
+}
+
+const RankingEntry *GetRankingEntries(int *count)
+{
+    if (count) *count = g_rankingCount;
+    return g_ranking;
+}
+
+/* Chamada ao chegar no desfecho: grava tempo, calcula pontuacao, salva no TXT e acha a posicao. */
+void FinalizeRun(GameState *game)
+{
+    if (game->runTimeRecorded) return;   /* "Rever confronto" nao grava de novo */
+
+    RecordRunTime(game);
+    game->finalScore = CalculateScore(game);
+    game->rankingSaveOk = SaveRankingEntry(game->playerName, game->finalScore, (int)game->elapsedTime);
+    LoadRanking();
+
+    game->rankingPlace = -1;
+    for (int i = 0; i < g_rankingCount; i++)
+    {
+        if (strcmp(g_ranking[i].name, game->playerName) == 0 &&
+            g_ranking[i].score == game->finalScore &&
+            g_ranking[i].seconds == (int)game->elapsedTime)
+        {
+            game->rankingPlace = i;
+            break;
+        }
+    }
+}
+
+void DrawRanking(const GameState *game)
+{
+    DrawBackground();
+    CenterText("RANKING // MELHORES OPERADORES", 50, 34, CYAN_COLOR);
+    CenterText("Ordenado por pontuacao; em caso de empate, vence o menor tempo.", 96, 17, GRAY);
+
+    Rectangle panel = {140, 135, 1000, 440};
+    DrawRectangleRounded(panel, 0.03f, 8, Fade(PANEL_COLOR, 0.96f));
+    DrawRectangleRoundedLinesEx(panel, 0.03f, 8, 2.0f, CYAN_COLOR);
+
+    int colPos = 170, colName = 240, colScore = 580, colTime = 720, colDate = 850;
+    DrawGameText("#", colPos, 152, 18, GOLD_COLOR);
+    DrawGameText("OPERADOR", colName, 152, 18, GOLD_COLOR);
+    DrawGameText("PONTOS", colScore, 152, 18, GOLD_COLOR);
+    DrawGameText("TEMPO", colTime, 152, 18, GOLD_COLOR);
+    DrawGameText("DATA", colDate, 152, 18, GOLD_COLOR);
+    DrawLine(165, 182, 1115, 182, Fade(CYAN_COLOR, 0.4f));
+
+    if (g_rankingCount == 0)
+    {
+        CenterText("Nenhuma partida registrada ainda.", 330, 22, LIGHTGRAY);
+    }
+
+    int shown = (g_rankingCount < RANKING_SHOWN) ? g_rankingCount : RANKING_SHOWN;
+    for (int i = 0; i < shown; i++)
+    {
+        int y = 195 + i * 40;
+        bool mine = (i == game->rankingPlace);
+        Color col = mine ? GOLD_COLOR : RAYWHITE;
+
+        if (mine)
+        {
+            DrawRectangleRounded((Rectangle){160, (float)(y - 6), 960, 34}, 0.2f, 6, Fade(GOLD_COLOR, 0.16f));
+        }
+        DrawGameText(TextFormat("%d", i + 1), colPos, y, 20, col);
+        DrawGameText(g_ranking[i].name, colName, y, 20, col);
+        DrawGameText(TextFormat("%d", g_ranking[i].score), colScore, y, 20, col);
+        DrawGameText(FormatRunTime((double)g_ranking[i].seconds), colTime, y, 20, col);
+        DrawGameText(g_ranking[i].date, colDate, y, 18, mine ? GOLD_COLOR : LIGHTGRAY);
+    }
+
+    /* Resumo da partida atual (mesmo que fique fora do top exibido) */
+    if (!game->rankingSaveOk)
+    {
+        DrawGameText("Nao foi possivel gravar ranking.txt (verifique permissao da pasta).", 170, 538, 16, RED_COLOR);
+    }
+    else if (game->rankingPlace >= 0)
+    {
+        DrawGameText(TextFormat("Sua partida: %d pontos em %s  |  posicao #%d de %d",
+                                game->finalScore, FormatRunTime(game->elapsedTime),
+                                game->rankingPlace + 1, g_rankingCount),
+                     170, 538, 17, GOLD_COLOR);
+    }
+
+    DrawButton((Rectangle){330, 610, 300, 56}, "< VOLTAR AO DESFECHO", CYAN_COLOR);
+    DrawButton((Rectangle){650, 610, 300, 56}, "MENU INICIAL [ENTER]", GOLD_COLOR);
+}
+
+void UpdateRanking(GameState *game)
+{
+    if (Clicked((Rectangle){330, 610, 300, 56}) || IsKeyPressed(KEY_ESCAPE))
+    {
+        game->screen = SCREEN_FINAL_ENDING;
+    }
+    else if (Clicked((Rectangle){650, 610, 300, 56}) || IsKeyPressed(KEY_ENTER))
+    {
+        game->screen = SCREEN_TITLE;
+    }
+}
+
 void ResetDemo(GameState *game)
 {
     game->lives = 3;
@@ -1052,6 +1266,10 @@ void ResetDemo(GameState *game)
     game->codeLength = 0;
     game->startTime = GetTime();
     game->elapsedTime = 0.0;
+    game->runTimeRecorded = false;
+    game->finalScore = 0;
+    game->rankingPlace = -1;
+    game->rankingSaveOk = true;
     game->message[0] = '\0';
     game->messageTimer = 0.0f;
 
@@ -8019,6 +8237,7 @@ void AdvanceFinalStage(GameState *game)
     if (game->finalStage >= FINAL_STAGE_COUNT)
     {
         game->finalStage = FINAL_STAGE_COUNT - 1;
+        FinalizeRun(game);
         game->screen = SCREEN_FINAL_ENDING;
     }
 }
@@ -8139,6 +8358,11 @@ void DrawFinalEnding(const GameState *game)
     DrawRectangleRoundedLinesEx(panel, 0.04f, 8, 2.0f, accent);
 
     DrawGameText("DESFECHO // CONFRONTO FINAL", 485, 96, 18, CYAN_COLOR);
+
+    /* UH18: tempo total da partida, alinhado a direita do cabecalho do painel */
+    const char *runTimeText = TextFormat("TEMPO TOTAL: %s (%d s)",
+                                         FormatRunTime(game->elapsedTime), (int)game->elapsedTime);
+    DrawGameText(runTimeText, 1205 - MeasureGameText(runTimeText, 18), 96, 18, GOLD_COLOR);
     DrawGameText(title, 485, 126, 34, accent);
     DrawLine(485, 172, 1205, 172, Fade(accent, 0.4f));
 
@@ -8160,6 +8384,13 @@ void DrawFinalEnding(const GameState *game)
     DrawGameText(TextFormat("PONTOS DE COMPREENSÃO: %d/2", game->finalPoints), 485, y, 20, accent);
     y += 34;
 
+    DrawGameText(TextFormat("PONTUAÇÃO FINAL: %d", game->finalScore), 485, y, 20, GOLD_COLOR);
+    if (game->rankingPlace >= 0)
+    {
+        DrawGameText(TextFormat("RANKING: #%d", game->rankingPlace + 1), 900, y, 20, GOLD_COLOR);
+    }
+    y += 34;
+
     if (game->room2008OptionalCompleted)
     {
         DrawGameText("Registro de 2008: as provas preservadas mostram como a tecnologia foi desviada.", 485, y, 15, (Color){100, 235, 140, 255});
@@ -8167,18 +8398,24 @@ void DrawFinalEnding(const GameState *game)
 
     DrawGameText(TextFormat("OPERADOR: %s", game->playerName), 485, (int)(panel.y + panel.height - 30), 16, GRAY);
 
-    DrawButton((Rectangle){450, 600, 380, 56}, "REVER CONFRONTO", CYAN_COLOR);
-    DrawButton((Rectangle){860, 600, 380, 56}, "MENU INICIAL [ENTER]", GOLD_COLOR);
+    DrawButton((Rectangle){450, 600, 250, 56}, "REVER CONFRONTO", CYAN_COLOR);
+    DrawButton((Rectangle){715, 600, 250, 56}, "VER RANKING [ENTER]", GOLD_COLOR);
+    DrawButton((Rectangle){980, 600, 250, 56}, "MENU INICIAL", PANEL_LIGHT);
 }
 
 void UpdateFinalEnding(GameState *game)
 {
-    if (Clicked((Rectangle){450, 600, 380, 56}))
+    if (Clicked((Rectangle){450, 600, 250, 56}))
     {
         InitFinalDialogue(game);
         game->screen = SCREEN_FINAL_DIALOGUE;
     }
-    else if (Clicked((Rectangle){860, 600, 380, 56}) || IsKeyPressed(KEY_ENTER))
+    else if (Clicked((Rectangle){715, 600, 250, 56}) || IsKeyPressed(KEY_ENTER))
+    {
+        LoadRanking();
+        game->screen = SCREEN_RANKING;
+    }
+    else if (Clicked((Rectangle){980, 600, 250, 56}))
     {
         game->screen = SCREEN_TITLE;
     }
