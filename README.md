@@ -21,6 +21,19 @@ Na progressão planejada, cada salto temporal revela uma peça da história de A
 | <img src="assets/sprites/disquete.png" alt="Sprite do disquete de 1990" width="100"> | **Disquete - 1990.** Pequeno por fora, decisivo por dentro: guarda os primeiros rastros de A.R.1.3.L., de uma época em que a IA ainda era uma promessa. |
 | <img src="assets/sprites/cd.png" alt="Sprite do CD de memória de 2008" width="100"> | **CD - 2008.** Recuperado depois que Elira demonstra o erro do reconhecimento facial e impede uma ordem injusta. Lembra que decisões automatizadas também precisam ser questionadas. |
 | <img src="assets/sprites/ssd.png" alt="Sprite do SSD de 2026" width="100"> | **SSD - 2026.** Representa os registros de uma sociedade cada vez mais guiada por algoritmos. O que essas memórias revelarão sobre o momento em que a conveniência virou controle? |
+***
+
+## Programação em pares
+
+Durante o desenvolvimento do projeto, os integrantes foram organizados em duplas, com cada par responsável por uma das salas do jogo.
+
+| Dupla | Responsabilidade | Conteúdo
+|---|---|---|
+| Victor + Tezzolini | Quarto de 1990 | Simulação de riscos no uso de dados sigilosos
+| Otávio + Maria Vitória | Quarto de 2008 | Riscos de falsos positivos em sistemas de reconhecimento facial
+| Beatriz + Luisa | Quarto de 2026 | Análise de viés algorítmico
+| Carlos + Tales | Quarto de 2048 | Mitigação do viés de alucinação
+
 
 ***
 
