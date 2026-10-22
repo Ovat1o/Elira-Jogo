@@ -1,0 +1,142 @@
+name: Build e Release
+
+on:
+  push:
+    branches: [main]
+    tags: ["v*"]
+  pull_request:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: release-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: ${{ !startsWith(github.ref, 'refs/tags/') }}
+
+jobs:
+  build:
+    name: ${{ matrix.package_name }}
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 35
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: windows-2022
+            package_name: ELIRA-Windows-x64
+            binary_name: ELIRA-Windows-x64.exe
+            cmake_extra_args: ""
+          - os: ubuntu-22.04
+            package_name: ELIRA-Linux-x64
+            binary_name: ELIRA-Linux-x64
+            cmake_extra_args: ""
+          - os: macos-14
+            package_name: ELIRA-macOS-Apple-Silicon
+            binary_name: ELIRA-macOS-Apple-Silicon
+            cmake_extra_args: -DCMAKE_OSX_DEPLOYMENT_TARGET=12.0
+          - os: macos-15-intel
+            package_name: ELIRA-macOS-Intel
+            binary_name: ELIRA-macOS-Intel
+            cmake_extra_args: -DCMAKE_OSX_DEPLOYMENT_TARGET=12.0
+
+    steps:
+      - name: Baixar codigo-fonte
+        uses: actions/checkout@v7
+
+      - name: Instalar dependencias de compilacao no Linux
+        if: runner.os == 'Linux'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends \
+            libasound2-dev libx11-dev libxrandr-dev libxi-dev \
+            libgl1-mesa-dev libglu1-mesa-dev libxcursor-dev libxinerama-dev
+
+      - name: Configurar build de producao
+        run: >-
+          cmake -S . -B build
+          -DCMAKE_BUILD_TYPE=Release
+          -DELIRA_USE_SYSTEM_RAYLIB=OFF
+          ${{ matrix.cmake_extra_args }}
+
+      - name: Compilar jogo e raylib estatica
+        run: cmake --build build --config Release --parallel
+
+      - name: Montar pasta portavel
+        run: cmake --install build --config Release --prefix "dist/${{ matrix.package_name }}"
+
+      - name: Validar pacote no Windows
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: |
+          $Package = "dist/${{ matrix.package_name }}"
+          if (-not (Test-Path "$Package/ELIRA.exe")) { throw "ELIRA.exe nao foi gerado" }
+          if (-not (Test-Path "$Package/assets")) { throw "assets nao foi empacotado" }
+
+      - name: Validar pacote no macOS e Linux
+        if: runner.os != 'Windows'
+        shell: bash
+        run: |
+          test -x "dist/${{ matrix.package_name }}/ELIRA"
+          test -d "dist/${{ matrix.package_name }}/assets"
+
+      - name: Compactar pacote do Windows
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: |
+          New-Item -ItemType Directory -Force -Path "release-assets" | Out-Null
+          Copy-Item "dist/${{ matrix.package_name }}/ELIRA.exe" "release-assets/${{ matrix.binary_name }}"
+          Compress-Archive -Path "dist/${{ matrix.package_name }}" -DestinationPath "release-assets/${{ matrix.package_name }}.zip" -CompressionLevel Optimal
+
+      - name: Compactar pacote do macOS ou Linux
+        if: runner.os != 'Windows'
+        shell: bash
+        run: |
+          mkdir -p release-assets
+          cp "dist/${{ matrix.package_name }}/ELIRA" \
+            "release-assets/${{ matrix.binary_name }}"
+          chmod +x "release-assets/${{ matrix.binary_name }}"
+          tar -C dist -czf "release-assets/${{ matrix.package_name }}.tar.gz" \
+            "${{ matrix.package_name }}"
+
+      - name: Guardar executavel e pacote da plataforma
+        uses: actions/upload-artifact@v7
+        with:
+          name: ${{ matrix.package_name }}
+          path: release-assets/*
+          if-no-files-found: error
+          retention-days: 14
+
+  release:
+    name: Publicar GitHub Release
+    if: startsWith(github.ref, 'refs/tags/v')
+    needs: build
+    runs-on: ubuntu-22.04
+    timeout-minutes: 10
+    permissions:
+      contents: write
+
+    steps:
+      - name: Baixar todos os executaveis e pacotes
+        uses: actions/download-artifact@v8
+        with:
+          path: release-assets
+          merge-multiple: true
+
+      - name: Gerar checksums SHA-256
+        shell: bash
+        run: |
+          cd release-assets
+          sha256sum ELIRA-* > SHA256SUMS.txt
+
+      - name: Criar release e anexar executaveis
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh release create "${GITHUB_REF_NAME}" release-assets/* \
+            --repo "${GITHUB_REPOSITORY}" \
+            --verify-tag \
+            --generate-notes \
+            --title "ELIRA ${GITHUB_REF_NAME}"

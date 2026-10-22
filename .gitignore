@@ -1,4 +1,6 @@
 .deps/
+/build/
+/dist/
 .DS_Store
 ELIRA
 ELIRA.exe
