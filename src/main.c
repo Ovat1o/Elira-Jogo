@@ -15,6 +15,8 @@ int main(void)
 
     SetConfigFlags(FLAG_MSAA_4X_HINT | FLAG_VSYNC_HINT);
     InitWindow(SCREEN_WIDTH, SCREEN_HEIGHT, "ELIRA - Escape Run Temporal");
+    /* ESC e tratado pela interface do jogo, nunca como encerramento imediato. */
+    SetExitKey(KEY_NULL);
     InitAudioDevice();
 
     /* Localiza, valida e calibra a fonte configurada em constantes.h (GAME_FONT_FILE) */
@@ -48,7 +50,7 @@ int main(void)
     game.screen = SCREEN_TITLE;
     ResetDemo(&game);
 
-    while (!WindowShouldClose())
+    while (!WindowShouldClose() && !game.exitRequested)
     {
         float delta = GetFrameTime();
         if (game.messageTimer > 0) game.messageTimer -= delta;
@@ -66,7 +68,11 @@ int main(void)
 
         /* Alternar audio com tecla M ou clique no HUD */
         Rectangle audioHudBtn = {840, 665, 175, 40};
-        bool toggleAudio = IsKeyPressed(KEY_M) || ((game.screen == SCREEN_ROOM || game.screen == SCREEN_ROOM_2 || game.screen == SCREEN_ROOM_2008 || game.screen == SCREEN_ROOM_2026) && Clicked(audioHudBtn));
+        bool toggleAudio = !game.phaseMenuOpen &&
+                           (IsKeyPressed(KEY_M) ||
+                            ((game.screen == SCREEN_ROOM || game.screen == SCREEN_ROOM_2 ||
+                              game.screen == SCREEN_ROOM_2008 || game.screen == SCREEN_ROOM_2026) &&
+                             Clicked(audioHudBtn)));
         if (toggleAudio)
         {
             game.musicMuted = !game.musicMuted;
@@ -78,7 +84,9 @@ int main(void)
                                               : "Musica ambiente ativada.");
         }
 
-        switch (game.screen)
+        /* O modal pausa completamente a tela atual e impede cliques por baixo dele. */
+        bool phaseControlsCapturedInput = UpdatePhaseControls(&game);
+        if (!phaseControlsCapturedInput) switch (game.screen)
         {
             case SCREEN_TITLE:
                 if (Clicked((Rectangle){86, 436, 350, 56}) ||
@@ -305,6 +313,7 @@ int main(void)
                 break;
             case SCREEN_FAILURE: DrawFailure(); break;
         }
+        DrawPhaseControls(&game);
         EndTextureMode();
 
         /* 2. Desenha a textura escalonada para a janela atual / tela cheia */

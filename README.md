@@ -66,7 +66,27 @@ Na progressão planejada, cada salto temporal revela uma peça da história de A
 
 ***
 
-## **8. Instalação, compilação e execução**
+## **8. Download e execução**
+
+Para apenas jogar, acesse a página de [Releases](https://github.com/Ovat1o/Elira-Jogo/releases/latest), baixe o pacote completo correspondente à sua máquina e extraia o arquivo:
+
+| Sistema | Executável nativo | Pacote completo recomendado |
+| --- | --- | --- |
+| Windows 64 bits | `ELIRA-Windows-x64.exe` | `ELIRA-Windows-x64.zip` |
+| Linux 64 bits | `ELIRA-Linux-x64` | `ELIRA-Linux-x64.tar.gz` |
+| Mac com Apple Silicon | `ELIRA-macOS-Apple-Silicon` | `ELIRA-macOS-Apple-Silicon.tar.gz` |
+| Mac com processador Intel | `ELIRA-macOS-Intel` | `ELIRA-macOS-Intel.tar.gz` |
+
+O pacote já contém o jogo e os recursos necessários. Não é preciso instalar compilador, Make, Homebrew ou raylib. No Windows, abra `ELIRA.exe`; no macOS, abra `JOGAR.command`; no Linux, abra `JOGAR.sh`.
+
+Os executáveis nativos também são publicados separadamente para testes e integrações. Para jogar corretamente, eles ainda precisam ficar ao lado da pasta `assets/`; por isso, o pacote completo é a opção indicada ao usuário final. No macOS e Linux, um binário baixado separadamente pode precisar da permissão `chmod +x`.
+
+> [!NOTE]
+> Como a versão para macOS ainda não possui assinatura Apple, na primeira execução pode ser necessário clicar com o botão direito em `JOGAR.command`, selecionar **Abrir** e confirmar.
+
+As instruções abaixo são destinadas a quem deseja compilar ou desenvolver o projeto.
+
+## **9. Compilação para desenvolvimento**
 
 Os scripts do projeto instalam as dependências, configuram a raylib e compilam o jogo automaticamente. Em uma máquina nova, siga apenas o bloco do seu sistema.
 
