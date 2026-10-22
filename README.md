@@ -54,6 +54,10 @@ Na progressão planejada, cada salto temporal revela uma peça da história de A
 
 ![Backlog](https://pub-181bb6168cd04f80bd48d53b914eecab.r2.dev/WhatsApp%20Image%202026-09-03%20at%2022.54.24.jpeg)
 
+**4- SPRINT 1**
+
+![Backlog](https://pub-181bb6168cd04f80bd48d53b914eecab.r2.dev/WhatsApp%20Image%202026-10-22%20at%2018.29.08.jpeg)
+
 ***
 
 ### **4 - [Protótipo de Telas](https://drive.google.com/drive/folders/1jbDYsVpSI9EwF0LDQyAzZWooYsANEepP)**
