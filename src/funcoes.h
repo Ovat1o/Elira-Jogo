@@ -52,6 +52,8 @@ typedef struct GameState
     int journalPage;
     int journalYearTab;
     bool musicMuted;
+    bool phaseMenuOpen;
+    bool exitRequested;
     char playerName[PLAYER_NAME_MAX + 1];
     int playerNameLength;
     char code[5];
@@ -277,6 +279,10 @@ void DrawTitleSpaceBackground(void);
 void SetMessage(GameState *game, const char *message);
 int ClueCount(const GameState *game);
 int ExaminedDocs2008Count(const GameState *game);
+bool IsAdminPlayer(const GameState *game);
+bool IsPhaseScreen(GameScreen screen);
+bool UpdatePhaseControls(GameState *game);
+void DrawPhaseControls(const GameState *game);
 
 /* UH18 - Medicao de tempo de conclusao */
 void RecordRunTime(GameState *game);
