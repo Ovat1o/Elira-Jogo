@@ -67,6 +67,8 @@ float g_musicVolume = 0.45f;
 #define FONT_CALIBRATION_SIZE  100
 
 static Font g_fontCache[GAME_FONT_MAX_SIZE + 1];
+static Font g_crawlFont = {0};          /* atlas unico para a abertura cinematografica */
+static int g_crawlFontState = 0;        /* 0 = nao carregada, 1 = pronta, -1 = fallback */
 static int g_fontState = 0;            /* 0 = nao verificado, 1 = pronta, -1 = indisponivel (usa a padrao) */
 static unsigned char *g_fontFileData = NULL;
 static int g_fontFileSize = 0;
@@ -259,9 +261,79 @@ Font GetGameFont(float pixelSize)
     return g_fontCache[px];
 }
 
+/* O crawl muda de escala continuamente. Usar o cache normal faria a fonte
+   alternar entre atlases rasterizados em tamanhos inteiros, alterando as
+   metricas dos glifos durante o movimento. Esta versao carrega um unico atlas
+   no maior tamanho necessario e deixa DrawTextEx cuidar apenas da escala. */
+static Font GetCrawlFont(void)
+{
+    if (!GameFontAvailable()) return GetFontDefault();
+    if (g_crawlFontState == 1) return g_crawlFont;
+    if (g_crawlFontState == -1) return GetFontDefault();
+
+    int pixelSize = (int)ceilf(CRAWL_FONT_SIZE_TITLE * CRAWL_MAX_SCALE * g_fontScale);
+    if (pixelSize < 1) pixelSize = 1;
+    if (pixelSize > GAME_FONT_MAX_SIZE) pixelSize = GAME_FONT_MAX_SIZE;
+
+    int codepoints[256];
+    int count = BuildFontCodepoints(codepoints);
+    Font loaded = LoadFontFromMemory(g_fontExt, g_fontFileData, g_fontFileSize,
+                                     pixelSize, codepoints, count);
+    if (loaded.texture.id == 0 || loaded.glyphCount == 0 ||
+        loaded.texture.id == GetFontDefault().texture.id)
+    {
+        g_crawlFontState = -1;
+        return GetFontDefault();
+    }
+
+    SetTextureFilter(loaded.texture, TEXTURE_FILTER_BILINEAR);
+    g_crawlFont = loaded;
+    g_crawlFontState = 1;
+    return g_crawlFont;
+}
+
+static void DrawCrawlTextEx(const char *text, Vector2 position, float size,
+                            float spacing, Color color)
+{
+    if (!GameFontAvailable())
+    {
+        DrawTextEx(GetFontDefault(), text, position, size, spacing, color);
+        return;
+    }
+
+    Font font = GetCrawlFont();
+    if (g_crawlFontState != 1)
+    {
+        DrawGameTextEx(text, position, size, spacing, color);
+        return;
+    }
+
+    float realSize = size * g_fontScale;
+    position.y -= size * g_fontOffsetY;
+    DrawTextEx(font, text, position, realSize, spacing, color);
+}
+
+static Vector2 MeasureCrawlTextEx(const char *text, float size, float spacing)
+{
+    if (!GameFontAvailable()) return MeasureTextEx(GetFontDefault(), text, size, spacing);
+
+    Font font = GetCrawlFont();
+    if (g_crawlFontState != 1) return MeasureGameTextEx(text, size, spacing);
+
+    Vector2 measured = MeasureTextEx(font, text, size * g_fontScale, spacing);
+    measured.y /= g_fontScale;
+    return measured;
+}
+
 void UnloadGameFonts(void)
 {
     unsigned int defaultTexId = GetFontDefault().texture.id;
+    if (g_crawlFont.texture.id != 0 && g_crawlFont.texture.id != defaultTexId)
+    {
+        UnloadFont(g_crawlFont);
+    }
+    g_crawlFont = (Font){0};
+    g_crawlFontState = 0;
     for (int i = 0; i <= GAME_FONT_MAX_SIZE; i++)
     {
         if (g_fontCache[i].texture.id != 0 && g_fontCache[i].texture.id != defaultTexId)
@@ -1537,7 +1609,7 @@ void DrawCinematicIntro(const GameState *game)
                 float fontSize = baseSize * scale;
                 float spacing = 1.8f * scale;
 
-                Vector2 size = MeasureGameTextEx(entry.text, fontSize, spacing);
+                Vector2 size = MeasureCrawlTextEx(entry.text, fontSize, spacing);
                 float screenX = ((float)SCREEN_WIDTH - size.x) * 0.5f;
 
                 /* Fade suave nas extremidades (dissolve no horizonte espacial) */
@@ -1558,12 +1630,12 @@ void DrawCinematicIntro(const GameState *game)
                     if (entry.type == 0 || entry.type == 3)
                     {
                         float o = 1.4f * scale;
-                        DrawGameTextEx(entry.text, (Vector2){screenX - o, screenY}, fontSize, spacing, Fade(baseColor, alpha * 0.35f));
-                        DrawGameTextEx(entry.text, (Vector2){screenX + o, screenY}, fontSize, spacing, Fade(baseColor, alpha * 0.35f));
-                        DrawGameTextEx(entry.text, (Vector2){screenX, screenY - o}, fontSize, spacing, Fade(baseColor, alpha * 0.35f));
-                        DrawGameTextEx(entry.text, (Vector2){screenX, screenY + o}, fontSize, spacing, Fade(baseColor, alpha * 0.35f));
+                        DrawCrawlTextEx(entry.text, (Vector2){screenX - o, screenY}, fontSize, spacing, Fade(baseColor, alpha * 0.35f));
+                        DrawCrawlTextEx(entry.text, (Vector2){screenX + o, screenY}, fontSize, spacing, Fade(baseColor, alpha * 0.35f));
+                        DrawCrawlTextEx(entry.text, (Vector2){screenX, screenY - o}, fontSize, spacing, Fade(baseColor, alpha * 0.35f));
+                        DrawCrawlTextEx(entry.text, (Vector2){screenX, screenY + o}, fontSize, spacing, Fade(baseColor, alpha * 0.35f));
                     }
-                    DrawGameTextEx(entry.text, (Vector2){screenX, screenY}, fontSize, spacing, Fade(baseColor, alpha));
+                    DrawCrawlTextEx(entry.text, (Vector2){screenX, screenY}, fontSize, spacing, Fade(baseColor, alpha));
                 }
             }
         }
