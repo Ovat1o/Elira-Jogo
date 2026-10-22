@@ -29,7 +29,7 @@ Durante o desenvolvimento do projeto, os integrantes foram organizados em duplas
 
 | Dupla | Responsabilidade | Conteúdo
 |---|---|---|
-| Victor + Tezzolini | Quarto de 1990 | Simulação de riscos no uso de dados sigilosos
+| Victor + Tezolini | Quarto de 1990 | Simulação de riscos no uso de dados sigilosos
 | Otávio + Maria Vitória | Quarto de 2008 | Riscos de falsos positivos em sistemas de reconhecimento facial
 | Beatriz + Luisa | Quarto de 2026 | Análise de viés algorítmico
 | Carlos + Tales | Quarto de 2048 | Mitigação do viés de alucinação
