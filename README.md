@@ -81,9 +81,10 @@ Durante o desenvolvimento do projeto, os integrantes foram organizados em duplas
 
 ### **7 - [Diagrama das UHs](https://docs.google.com/document/d/1DT3npOZVw_-bCEAFb01KWhnt9JGE5SIf2Vkzfs2q1mk/edit?tab=t.0#heading=h.ld230wkn1wjo)**
 
+### **8 - [Screencasts](https://drive.google.com/drive/u/0/folders/1hVoj6906UAAfICDy8Nctcq1-WCDUPrub)**
 ***
 
-## **8. Download e execução**
+## **9. Download e execução**
 
 Para jogar, acesse a página de [Releases](https://github.com/Ovat1o/Elira-Jogo/releases/latest) e baixe o instalador correspondente à sua máquina:
 
