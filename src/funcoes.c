@@ -6104,217 +6104,678 @@ void DrawRoom2008(const GameState *game)
 {
     float time = (float)GetTime();
 
-    ClearBackground((Color){18, 24, 32, 255});
+    /* Hitboxes dos objetos interativos (sincronizados com UpdateRoom2008) */
+    Rectangle flyerRec      = {102, 192, 148, 128};
+    Rectangle cctvMonitor   = {736, 132, 196, 140};
+    Rectangle monitorRec    = {490, 226, 250, 182};
+    Rectangle doc0Rec       = {284, 418, 162, 76};
+    Rectangle doc2Rec       = {794, 418, 154, 76};
+    Rectangle fatherBookRec = {992, 410, 168, 68};
+    Rectangle govMemoRec    = {992, 492, 168, 68};
 
-    /* Piso corporativo com carpete e perspectiva */
-    DrawRectangle(0, 460, SCREEN_WIDTH, 260, (Color){26, 32, 38, 255});
-    for (int x = -100; x <= SCREEN_WIDTH + 100; x += 110)
+    ClearBackground((Color){222, 218, 208, 255});
+
+    /* ===================================================================== */
+    /* 1. ARQUITETURA EM PERSPECTIVA 3D (AMBIENTE EMPRESARIAL CLARO 2008)    */
+    /* ===================================================================== */
+
+    /* Teto corporativo em forro mineral acustico claro */
+    Color ceilCol = (Color){236, 239, 244, 255};
+    DrawTriangle((Vector2){0, 70}, (Vector2){1090, 124}, (Vector2){1280, 70}, ceilCol);
+    DrawTriangle((Vector2){0, 70}, (Vector2){190, 124}, (Vector2){1090, 124}, ceilCol);
+    /* Grelha modular do forro de gesso/mineral */
+    for (int cx = 230; cx <= 1050; cx += 164)
     {
-        DrawLine(640, 380, x, 720, Fade((Color){45, 55, 65, 255}, 0.35f));
+        float topX = 640.0f + (cx - 640.0f) * 1.22f;
+        DrawLineEx((Vector2){topX, 70}, (Vector2){(float)cx, 124}, 1.5f, (Color){206, 212, 220, 255});
     }
-    DrawLine(0, 510, SCREEN_WIDTH, 510, Fade((Color){50, 62, 75, 255}, 0.25f));
-    DrawLine(0, 580, SCREEN_WIDTH, 580, Fade((Color){50, 62, 75, 255}, 0.20f));
+    DrawLine(95, 97, 1185, 97, (Color){210, 216, 224, 255});
 
-    /* Paredes corporativas modulares com acabamento azul-aco */
-    DrawRectangle(0, 70, SCREEN_WIDTH, 390, (Color){22, 30, 40, 255});
-    for (int px = 80; px < SCREEN_WIDTH; px += 190)
+    /* Parede de fundo empresarial clara (marfim/alabastro corporativo uniforme) */
+    Color backWallCol = (Color){234, 230, 220, 255};
+    DrawTriangle((Vector2){190, 124}, (Vector2){1010, 515}, (Vector2){1090, 124}, backWallCol);
+    DrawTriangle((Vector2){190, 124}, (Vector2){270, 515}, (Vector2){1010, 515}, backWallCol);
+
+    /* Paredes laterais esquerda e direita em perspectiva (tom areia suave uniforme) */
+    Color sideWallCol = (Color){216, 210, 198, 255};
+    DrawTriangle((Vector2){0, 70}, (Vector2){270, 515}, (Vector2){190, 124}, sideWallCol);
+    DrawTriangle((Vector2){0, 70}, (Vector2){0, 535}, (Vector2){270, 515}, sideWallCol);
+    DrawTriangle((Vector2){1280, 70}, (Vector2){1090, 124}, (Vector2){1010, 515}, sideWallCol);
+    DrawTriangle((Vector2){1280, 70}, (Vector2){1010, 515}, (Vector2){1280, 535}, sideWallCol);
+
+    /* Lambris / revestimento inferior corporativo (meia-parede em tom areia/taupe claro) */
+    Color wainscotBack = (Color){212, 205, 192, 255};
+    DrawTriangle((Vector2){243, 385}, (Vector2){1010, 515}, (Vector2){1037, 385}, wainscotBack);
+    DrawTriangle((Vector2){243, 385}, (Vector2){270, 515}, (Vector2){1010, 515}, wainscotBack);
+
+    Color wainscotSide = (Color){198, 191, 178, 255};
+    DrawTriangle((Vector2){0, 402}, (Vector2){270, 515}, (Vector2){243, 385}, wainscotSide);
+    DrawTriangle((Vector2){0, 402}, (Vector2){0, 535}, (Vector2){270, 515}, wainscotSide);
+    DrawTriangle((Vector2){1280, 402}, (Vector2){1037, 385}, (Vector2){1010, 515}, wainscotSide);
+    DrawTriangle((Vector2){1280, 402}, (Vector2){1010, 515}, (Vector2){1280, 535}, wainscotSide);
+
+    /* Faixa divisoria de madeira clara e aluminio na meia-parede */
+    DrawLineEx((Vector2){243, 384}, (Vector2){1037, 384}, 4.0f, (Color){168, 152, 130, 255});
+    DrawLineEx((Vector2){243, 381}, (Vector2){1037, 381}, 2.0f, (Color){196, 202, 208, 255});
+    DrawLineEx((Vector2){0, 402}, (Vector2){243, 384}, 3.5f, (Color){156, 140, 118, 255});
+    DrawLineEx((Vector2){1037, 384}, (Vector2){1280, 402}, 3.5f, (Color){156, 140, 118, 255});
+
+    /* Juntas arquitetonicas dos paineis corporativos da parede de fundo */
+    DrawLine(206, 210, 1074, 210, Fade((Color){170, 164, 152, 255}, 0.30f));
+    DrawLine(224, 298, 1056, 298, Fade((Color){170, 164, 152, 255}, 0.30f));
+    DrawLine(300, 124, 330, 515, Fade((Color){165, 158, 146, 255}, 0.28f));
+    DrawLine(716, 124, 704, 515, Fade((Color){165, 158, 146, 255}, 0.28f));
+    DrawLine(948, 124, 916, 515, Fade((Color){165, 158, 146, 255}, 0.28f));
+
+    /* Piso em porcelanato polido claro uniforme com linhas de fuga em perspectiva */
+    Color floorCol = (Color){194, 188, 177, 255};
+    DrawTriangle((Vector2){0, 650}, (Vector2){1010, 515}, (Vector2){270, 515}, floorCol);
+    DrawTriangle((Vector2){0, 650}, (Vector2){1280, 650}, (Vector2){1010, 515}, floorCol);
+    DrawTriangle((Vector2){0, 535}, (Vector2){0, 650}, (Vector2){270, 515}, floorCol);
+    DrawTriangle((Vector2){1280, 535}, (Vector2){1010, 515}, (Vector2){1280, 650}, floorCol);
+
+    for (int x = -80; x <= SCREEN_WIDTH + 80; x += 145)
     {
-        DrawLine(px, 70, px, 460, Fade((Color){38, 50, 65, 255}, 0.40f));
+        DrawLine(640, 505, x, 650, Fade((Color){154, 147, 136, 255}, 0.42f));
     }
+    DrawLine(0, 548, 1280, 548, Fade((Color){154, 147, 136, 255}, 0.38f));
+    DrawLine(0, 584, 1280, 584, Fade((Color){154, 147, 136, 255}, 0.36f));
+    DrawLine(0, 622, 1280, 622, Fade((Color){154, 147, 136, 255}, 0.34f));
 
-    /* Janela ampla para a cidade noturna de 2008 */
-    Rectangle winRec = {440, 95, 380, 185};
-    DrawRectangleRounded(winRec, 0.04f, 6, (Color){8, 14, 24, 255});
-    DrawRectangleRoundedLinesEx(winRec, 0.04f, 6, 2.5f, (Color){50, 68, 85, 255});
+    /* Molduras de acabamento do teto, quinas e rodapes */
+    DrawLineEx((Vector2){0, 70}, (Vector2){190, 124}, 4.0f, (Color){168, 175, 184, 255});
+    DrawLineEx((Vector2){1280, 70}, (Vector2){1090, 124}, 4.0f, (Color){168, 175, 184, 255});
+    DrawLineEx((Vector2){190, 124}, (Vector2){1090, 124}, 4.0f, (Color){158, 165, 174, 255});
+    DrawLineEx((Vector2){190, 124}, (Vector2){270, 515}, 5.5f, (Color){172, 166, 155, 255});
+    DrawLineEx((Vector2){1090, 124}, (Vector2){1010, 515}, 5.5f, (Color){172, 166, 155, 255});
+    /* Rodape executivo */
+    DrawLineEx((Vector2){270, 513}, (Vector2){1010, 513}, 7.0f, (Color){138, 126, 110, 255});
+    DrawLineEx((Vector2){0, 533}, (Vector2){270, 513}, 6.0f, (Color){128, 116, 100, 255});
+    DrawLineEx((Vector2){1010, 513}, (Vector2){1280, 533}, 6.0f, (Color){128, 116, 100, 255});
 
-    /* Predios e luzes da cidade */
-    DrawRectangle(460, 160, 60, 115, (Color){14, 22, 32, 255});
-    DrawRectangle(530, 130, 75, 145, (Color){18, 26, 38, 255});
-    DrawRectangle(615, 175, 55, 100, (Color){12, 19, 28, 255});
-    DrawRectangle(680, 140, 85, 135, (Color){16, 24, 36, 255});
-    DrawRectangle(775, 165, 35, 110, (Color){14, 20, 30, 255});
-    /* Janelinhas brilhando */
-    for (int b = 0; b < 18; b++)
+    /* Luminarias corporativas embutidas no forro com aletas reflexivas e cone de luz */
+    int lightXs[2] = {330, 770};
+    for (int li = 0; li < 2; li++)
     {
-        int bx = 470 + (b * 19) % 320;
-        int by = 145 + (b * 13) % 110;
-        DrawCircle(bx, by, 1.8f, Fade(GOLD_COLOR, 0.40f + 0.20f * sinf(time * 2.0f + b)));
+        int lx = lightXs[li];
+        DrawTriangle((Vector2){(float)(lx + 10), 104}, (Vector2){(float)(lx - 60), 470}, (Vector2){(float)(lx + 240), 470},
+                     Fade((Color){255, 252, 235, 255}, 0.10f));
+        DrawRectangleRounded((Rectangle){(float)lx, 78, 180, 24}, 0.18f, 6, (Color){172, 180, 190, 255});
+        DrawRectangleRoundedLinesEx((Rectangle){(float)lx, 78, 180, 24}, 0.18f, 6, 1.5f, (Color){135, 144, 154, 255});
+        DrawRectangleRounded((Rectangle){(float)(lx + 10), 83, 160, 14}, 0.18f, 6, (Color){248, 252, 255, 255});
+        for (int lv = 24; lv < 160; lv += 22)
+        {
+            DrawLine(lx + lv, 83, lx + lv, 97, (Color){195, 205, 215, 255});
+        }
     }
-    /* Chuvisco noturno sutil na vidraca */
-    for (int r = 0; r < 14; r++)
+
+    /* ===================================================================== */
+    /* 2. PAREDE LATERAL ESQUERDA: PORTA CORPORATIVA, LEITOR E PLANTA        */
+    /* ===================================================================== */
+    /* Porta executiva em perspectiva na parede lateral esquerda */
+    Vector2 dTL = {12, 152};
+    Vector2 dTR = {66, 168};
+    Vector2 dBR = {66, 526};
+    Vector2 dBL = {12, 534};
+    DrawTriangle(dTL, dBL, dTR, (Color){164, 126, 90, 255});
+    DrawTriangle(dTR, dBL, dBR, (Color){164, 126, 90, 255});
+    DrawLineEx(dTL, dTR, 4.0f, (Color){118, 88, 60, 255});
+    DrawLineEx(dTR, dBR, 4.0f, (Color){118, 88, 60, 255});
+    DrawLineEx(dTL, dBL, 4.0f, (Color){118, 88, 60, 255});
+    /* Faixas de vidro jateado na porta corporativa */
+    for (int pg = 0; pg < 3; pg++)
     {
-        int rx = 450 + (int)(r * 27 + time * 40.0f) % 360;
-        int ry = 100 + (int)(r * 31 + time * 90.0f) % 170;
-        DrawLine(rx, ry, rx - 3, ry + 12, Fade(CYAN_COLOR, 0.18f));
+        int py = 195 + pg * 72;
+        DrawRectangle(24, py, 28, 48, (Color){196, 216, 228, 255});
+        DrawRectangleLines(24, py, 28, 48, (Color){132, 100, 72, 255});
     }
+    /* Macaneta cromada */
+    DrawCircle(56, 362, 4, (Color){210, 216, 222, 255});
+    DrawRectangle(44, 360, 12, 4, (Color){185, 192, 200, 255});
 
-    /* Luminarias de teto fluorescentes */
-    DrawRectangleRounded((Rectangle){240, 76, 200, 14}, 0.2f, 4, (Color){60, 75, 90, 255});
-    DrawRectangleRounded((Rectangle){840, 76, 200, 14}, 0.2f, 4, (Color){60, 75, 90, 255});
-    DrawRectangleRec((Rectangle){250, 80, 180, 6}, Fade(RAYWHITE, 0.85f));
-    DrawRectangleRec((Rectangle){850, 80, 180, 6}, Fade(RAYWHITE, 0.85f));
+    /* Leitor de cracha eletronico ao lado da porta */
+    Rectangle badgeReader = {70, 344, 16, 28};
+    DrawRectangleRounded(badgeReader, 0.2f, 4, (Color){48, 56, 66, 255});
+    DrawRectangleLinesEx(badgeReader, 1.0f, (Color){95, 105, 118, 255});
+    DrawCircle(78, 352, 2.2f, (Color){65, 230, 115, 255});
+    DrawRectangle(74, 358, 8, 9, (Color){82, 92, 104, 255});
 
-    /* --- LADO ESQUERDO: QUADRO DE CORTICA COM PANFLETO DA REVOLTA (DOC 1) --- */
-    Rectangle corkBoard = {90, 140, 160, 180};
-    DrawRectangleRounded(corkBoard, 0.04f, 6, (Color){165, 125, 85, 255});
-    DrawRectangleRoundedLinesEx(corkBoard, 0.04f, 6, 3.0f, (Color){105, 75, 45, 255});
+    /* Vaso corporativo com planta ornamental no canto esquerdo */
+    DrawEllipse(216, 520, 26, 7, Fade(BLACK, 0.20f));
+    DrawTriangle((Vector2){196, 470}, (Vector2){203, 518}, (Vector2){236, 470}, (Color){228, 223, 214, 255});
+    DrawTriangle((Vector2){236, 470}, (Vector2){203, 518}, (Vector2){229, 518}, (Color){228, 223, 214, 255});
+    DrawRectangleRounded((Rectangle){193, 464, 46, 8}, 0.3f, 4, (Color){238, 233, 224, 255});
+    DrawRectangleLinesEx((Rectangle){193, 464, 46, 8}, 1.0f, (Color){168, 160, 148, 255});
+    /* Folhagem da planta */
+    DrawEllipse(216, 442, 10, 24, (Color){62, 128, 74, 255});
+    DrawEllipse(203, 448, 14, 18, (Color){48, 108, 60, 255});
+    DrawEllipse(229, 448, 14, 18, (Color){74, 142, 84, 255});
+    DrawEllipse(209, 432, 8, 20, (Color){82, 152, 90, 255});
+    DrawEllipse(224, 434, 9, 19, (Color){54, 118, 66, 255});
 
-    /* Post-its no quadro */
-    DrawRectangle(105, 155, 36, 36, (Color){245, 235, 120, 255});
-    DrawRectangle(200, 155, 36, 36, (Color){140, 220, 245, 255});
+    /* ===================================================================== */
+    /* 3. JANELA PANORAMICA EMPRESARIAL (SKYLINE DIURNO/ENTARDECER 2008)     */
+    /* ===================================================================== */
+    Rectangle winOuter = {318, 132, 390, 150};
+    Rectangle winInner = {330, 144, 366, 126};
 
-    /* Panfleto apreendido central com tachinha vermelha */
-    Rectangle flyerRec = {115, 200, 110, 105};
-    DrawRectangleRounded(flyerRec, 0.03f, 4, PAPER_COLOR);
-    DrawRectangleRoundedLinesEx(flyerRec, 0.03f, 4, 1.5f, (Color){150, 135, 110, 255});
-    DrawCircle(170, 205, 4, RED_COLOR);
-    DrawGameText("MANIFESTO", 125, 218, 11, (Color){175, 35, 25, 255});
-    DrawGameText("LUCAS SILVA", 125, 236, 12, INK_COLOR);
-    DrawGameText("10h as 13h", 125, 258, 10, DARKGRAY);
-    DrawGameText("[DOC 2]", 150, 285, 10, RED_COLOR);
+    /* Sombra e moldura de aluminio anodizado da janela */
+    DrawRectangle((int)winOuter.x + 4, (int)winOuter.y + 4, (int)winOuter.width, (int)winOuter.height, Fade(BLACK, 0.16f));
+    DrawRectangleRounded(winOuter, 0.04f, 6, (Color){168, 176, 184, 255});
+    DrawRectangleRoundedLinesEx(winOuter, 0.04f, 6, 2.5f, (Color){122, 130, 140, 255});
+    DrawRectangle((int)winOuter.x - 4, (int)(winOuter.y + winOuter.height - 4), (int)winOuter.width + 8, 8, (Color){185, 192, 200, 255});
 
-    /* --- FUNDO DIREITA: RACK DE SERVIDORES --- */
-    Rectangle rackRec = {980, 120, 150, 370};
-    DrawRectangleRounded(rackRec, 0.03f, 6, (Color){22, 28, 34, 255});
-    DrawRectangleRoundedLinesEx(rackRec, 0.03f, 6, 2.5f, (Color){50, 62, 75, 255});
-    for (int u = 0; u < 8; u++)
+    BeginScissorMode((int)winInner.x, (int)winInner.y, (int)winInner.width, (int)winInner.height);
+
+    /* Ceu empresarial claro (gradiente azul celeste para horizonte claro) */
+    DrawRectangleGradientV((int)winInner.x, (int)winInner.y, (int)winInner.width, (int)winInner.height,
+                           (Color){122, 172, 218, 255}, (Color){218, 232, 244, 255});
+
+    /* Nuvens suaves se movendo lentamente */
+    for (int cl = 0; cl < 4; cl++)
     {
-        Rectangle uSlot = {rackRec.x + 10, rackRec.y + 16 + u * 42, rackRec.width - 20, 34};
-        DrawRectangleRec(uSlot, (Color){15, 20, 25, 255});
-        DrawRectangleLinesEx(uSlot, 1.0f, (Color){40, 50, 60, 255});
-        float blink = sinf(time * (5.0f + u * 1.3f));
-        DrawCircle((int)(uSlot.x + 14), (int)(uSlot.y + 17), 3, (blink > 0) ? (Color){60, 235, 110, 255} : (Color){20, 85, 40, 255});
-        DrawCircle((int)(uSlot.x + 28), (int)(uSlot.y + 17), 3, (blink < 0) ? CYAN_COLOR : (Color){15, 65, 80, 255});
+        float cx = winInner.x + fmodf(cl * 105.0f + time * 4.5f, winInner.width + 70.0f) - 35.0f;
+        float cy = winInner.y + 26.0f + (cl % 2) * 16.0f;
+        DrawEllipse((int)cx, (int)cy, 34, 9, Fade(RAYWHITE, 0.65f));
+        DrawEllipse((int)(cx + 14), (int)(cy - 4), 22, 8, Fade(RAYWHITE, 0.70f));
     }
-    DrawGameText("BLOCO SERVIDORES", (int)rackRec.x + 14, (int)(rackRec.y + rackRec.height - 24), 11, GRAY);
 
-    /* --- PAREDE SUPERIOR CENTRAL/DIREITA: MONITOR CFTV (DOC 3) --- */
-    Rectangle cctvMonitor = {760, 125, 175, 125};
-    DrawRectangleRounded(cctvMonitor, 0.05f, 6, (Color){30, 38, 45, 255});
-    DrawRectangleRoundedLinesEx(cctvMonitor, 0.05f, 6, 2.0f, (Color){65, 80, 95, 255});
+    /* Edificios corporativos espelhados ao fundo (Skyline 2008) */
+    int bldX[7] = {336, 386, 442, 496, 558, 612, 658};
+    int bldW[7] = {44,  50,  48,  56,  48,  42,  40};
+    int bldY[7] = {190, 168, 198, 158, 176, 192, 172};
+    for (int b = 0; b < 7; b++)
+    {
+        Color bCol = (b % 2 == 0) ? (Color){118, 144, 172, 255} : (Color){96, 124, 154, 255};
+        DrawRectangle(bldX[b], bldY[b], bldW[b], 275 - bldY[b], bCol);
+        /* Lateral iluminada pelo sol nos predios */
+        DrawRectangle(bldX[b], bldY[b], 8, 275 - bldY[b], Fade(RAYWHITE, 0.24f));
+        DrawRectangleLines(bldX[b], bldY[b], bldW[b], 275 - bldY[b], (Color){78, 102, 130, 255});
+        /* Antena no topo de alguns predios */
+        if (b == 1 || b == 3 || b == 4)
+        {
+            int ax = bldX[b] + bldW[b] / 2;
+            DrawLine(ax, bldY[b] - 14, ax, bldY[b], (Color){90, 110, 130, 255});
+            DrawCircle(ax, bldY[b] - 14, 2.0f, Fade(RED_COLOR, 0.5f + 0.5f * sinf(time * 3.0f + b)));
+        }
+        /* Grade de janelas espelhadas dos edificios */
+        for (int wy = bldY[b] + 8; wy < 268; wy += 10)
+        {
+            for (int wx = bldX[b] + 6; wx < bldX[b] + bldW[b] - 6; wx += 9)
+            {
+                DrawRectangle(wx, wy, 6, 6, Fade((Color){210, 232, 250, 255}, 0.55f));
+            }
+        }
+    }
 
-    Rectangle cctvScr = {cctvMonitor.x + 8, cctvMonitor.y + 8, cctvMonitor.width - 16, cctvMonitor.height - 16};
-    DrawRectangleRounded(cctvScr, 0.03f, 4, (Color){8, 22, 14, 255});
-    DrawGameText("CFTV CAM-03 [14:30]", (int)cctvScr.x + 6, (int)cctvScr.y + 6, 11, (Color){80, 245, 120, 255});
-    /* Silhueta no monitor de seguranca */
-    DrawCircle((int)(cctvScr.x + 80), (int)(cctvScr.y + 55), 15, (Color){45, 115, 75, 255});
-    DrawRectangle((int)(cctvScr.x + 68), (int)(cctvScr.y + 70), 24, 34, (Color){35, 95, 60, 255});
-    DrawGameText("[DOC 4: CFTV]", (int)cctvScr.x + 50, (int)(cctvScr.y + cctvScr.height - 18), 10, (Color){80, 245, 120, 255});
+    /* Pequeno drone de vigilancia patrulhando ao longe no ceu */
+    float droneX = winInner.x + 65.0f + sinf(time * 0.7f) * 45.0f;
+    float droneY = winInner.y + 34.0f + cosf(time * 1.1f) * 6.0f;
+    DrawLineEx((Vector2){droneX - 9, droneY}, (Vector2){droneX + 9, droneY}, 2.0f, (Color){55, 65, 78, 255});
+    DrawCircle((int)droneX, (int)droneY, 3.0f, (Color){42, 50, 60, 255});
+    DrawCircle((int)droneX, (int)(droneY + 1), 1.5f, RED_COLOR);
 
-    /* --- CENTRO: MESA CORPORATIVA PRINCIPAL (L-SHAPE) --- */
-    Rectangle deskRec = {270, 335, 620, 280};
-    DrawRectangleRounded(deskRec, 0.05f, 6, (Color){38, 48, 58, 255});
-    DrawRectangleRoundedLinesEx(deskRec, 0.05f, 6, 3.0f, (Color){65, 82, 98, 255});
-    DrawRectangle(290, 350, 580, 14, (Color){28, 36, 45, 255});
+    /* Persianas horizontais claras recolhidas na parte superior */
+    for (int sl = 0; sl < 5; sl++)
+    {
+        int sy = (int)winInner.y + sl * 5;
+        DrawRectangle((int)winInner.x, sy, (int)winInner.width, 4, (Color){238, 236, 228, 255});
+        DrawLine((int)winInner.x, sy + 4, (int)(winInner.x + winInner.width), sy + 4, (Color){188, 184, 174, 255});
+    }
+    /* Cordao da persiana na direita */
+    DrawLine((int)(winInner.x + winInner.width - 14), (int)winInner.y, (int)(winInner.x + winInner.width - 14), (int)winInner.y + 62, (Color){170, 166, 156, 255});
+    DrawCircle((int)(winInner.x + winInner.width - 14), (int)winInner.y + 64, 3.0f, (Color){220, 216, 206, 255});
 
-    /* Pés metálicos da mesa */
-    DrawRectangle(285, 595, 24, 85, (Color){65, 75, 85, 255});
-    DrawRectangle(850, 595, 24, 85, (Color){65, 75, 85, 255});
+    /* Reflexos diagonais de vidro */
+    DrawLineEx((Vector2){355, 146}, (Vector2){415, 268}, 10.0f, Fade(RAYWHITE, 0.18f));
+    DrawLineEx((Vector2){375, 146}, (Vector2){435, 268}, 4.0f, Fade(RAYWHITE, 0.14f));
+    DrawLineEx((Vector2){555, 146}, (Vector2){615, 268}, 8.0f, Fade(RAYWHITE, 0.15f));
 
-    /* --- COMPUTADOR DE VIGILANCIA CENTRAL --- */
-    /* Base e suporte prateado LCD 2008 */
-    DrawRectangleRounded((Rectangle){530, 410, 80, 16}, 0.3f, 4, (Color){165, 175, 185, 255});
-    DrawRectangle(562, 380, 16, 32, (Color){145, 155, 165, 255});
+    EndScissorMode();
 
-    /* Monitor LCD 4:3 com borda prateada */
-    Rectangle monitorRec = {455, 225, 230, 170};
-    DrawRectangleRounded(monitorRec, 0.06f, 6, (Color){180, 190, 200, 255});
-    DrawRectangleRoundedLinesEx(monitorRec, 0.06f, 6, 2.5f, (Color){130, 140, 150, 255});
+    /* Esquadrias metalicas divisorias da janela */
+    DrawLineEx((Vector2){452, 144}, (Vector2){452, 270}, 3.5f, (Color){152, 160, 170, 255});
+    DrawLineEx((Vector2){574, 144}, (Vector2){574, 270}, 3.5f, (Color){152, 160, 170, 255});
+    DrawLineEx((Vector2){330, 220}, (Vector2){696, 220}, 3.0f, (Color){152, 160, 170, 255});
+
+    /* ===================================================================== */
+    /* 4. QUADRO DE CORTICA E AVISOS + PANFLETO DA REVOLTA (DOC 2)           */
+    /* ===================================================================== */
+    Rectangle corkBoard = {80, 132, 192, 202};
+    /* Sombra projetada na parede clara */
+    DrawRectangle((int)corkBoard.x + 5, (int)corkBoard.y + 5, (int)corkBoard.width, (int)corkBoard.height, Fade(BLACK, 0.18f));
+    /* Moldura de madeira clara e aluminio */
+    DrawRectangleRounded(corkBoard, 0.04f, 6, (Color){184, 142, 98, 255});
+    DrawRectangleRoundedLinesEx(corkBoard, 0.04f, 6, 4.0f, (Color){138, 102, 68, 255});
+    Rectangle corkInner = {corkBoard.x + 8, corkBoard.y + 8, corkBoard.width - 16, corkBoard.height - 16};
+    DrawRectangleRec(corkInner, (Color){174, 130, 86, 255});
+    DrawRectangleLinesEx(corkInner, 1.5f, (Color){122, 88, 54, 255});
+
+    /* Textura granulada da cortica */
+    for (int cp = 0; cp < 34; cp++)
+    {
+        int cpx = (int)corkInner.x + 6 + (cp * 37) % ((int)corkInner.width - 12);
+        int cpy = (int)corkInner.y + 6 + (cp * 23) % ((int)corkInner.height - 12);
+        DrawCircle(cpx, cpy, 1.2f, (cp % 2 == 0) ? (Color){148, 106, 66, 255} : (Color){196, 152, 108, 255});
+    }
+
+    /* Cantoneiras metalicas do quadro */
+    DrawRectangle((int)corkBoard.x, (int)corkBoard.y, 12, 12, (Color){180, 188, 196, 255});
+    DrawRectangle((int)(corkBoard.x + corkBoard.width - 12), (int)corkBoard.y, 12, 12, (Color){180, 188, 196, 255});
+    DrawRectangle((int)corkBoard.x, (int)(corkBoard.y + corkBoard.height - 12), 12, 12, (Color){180, 188, 196, 255});
+    DrawRectangle((int)(corkBoard.x + corkBoard.width - 12), (int)(corkBoard.y + corkBoard.height - 12), 12, 12, (Color){180, 188, 196, 255});
+
+    /* Post-it amarelo (esquerda superior) com tachinha azul */
+    DrawRectangle(96, 148, 48, 38, Fade(BLACK, 0.16f));
+    DrawRectangle(94, 146, 48, 38, (Color){252, 238, 122, 255});
+    DrawRectangle(94, 146, 48, 6, (Color){236, 218, 92, 255});
+    DrawLine(100, 160, 134, 160, (Color){165, 150, 70, 255});
+    DrawLine(100, 168, 128, 168, (Color){165, 150, 70, 255});
+    DrawCircle(118, 150, 3.0f, (Color){45, 125, 210, 255});
+
+    /* Post-it azul (direita superior) com tachinha verde */
+    DrawRectangle(212, 148, 48, 38, Fade(BLACK, 0.16f));
+    DrawRectangle(210, 146, 48, 38, (Color){156, 224, 248, 255});
+    DrawRectangle(210, 146, 48, 6, (Color){126, 198, 228, 255});
+    DrawLine(216, 160, 250, 160, (Color){75, 130, 155, 255});
+    DrawLine(216, 168, 242, 168, (Color){75, 130, 155, 255});
+    DrawCircle(234, 150, 3.0f, (Color){45, 175, 95, 255});
+
+    /* Fio vermelho de investigacao ligando post-it ao panfleto */
+    DrawLineEx((Vector2){118, 150}, (Vector2){176, 198}, 1.2f, Fade((Color){195, 40, 35, 255}, 0.65f));
+
+    /* Panfleto apreendido central detalhado (flyerRec) */
+    DrawRectangle((int)flyerRec.x + 4, (int)flyerRec.y + 4, (int)flyerRec.width, (int)flyerRec.height, Fade(BLACK, 0.25f));
+    DrawRectangleRounded(flyerRec, 0.03f, 4, (Color){248, 242, 226, 255});
+    DrawRectangleRoundedLinesEx(flyerRec, 0.03f, 4, 1.5f, game->doc2008FlyerExamined ? (Color){45, 165, 85, 255} : (Color){165, 148, 120, 255});
+    /* Faixa vermelha de cabecalho do manifesto */
+    DrawRectangle((int)flyerRec.x + 8, (int)flyerRec.y + 12, (int)flyerRec.width - 16, 20, (Color){185, 42, 34, 255});
+    DrawGameText("MANIFESTO", (int)flyerRec.x + 34, (int)flyerRec.y + 16, 12, RAYWHITE);
+    /* Tachinha 3D vermelha no topo */
+    DrawCircle((int)(flyerRec.x + flyerRec.width / 2 + 1), (int)flyerRec.y + 7, 5.0f, Fade(BLACK, 0.30f));
+    DrawCircle((int)(flyerRec.x + flyerRec.width / 2), (int)flyerRec.y + 6, 5.0f, RED_COLOR);
+    DrawCircle((int)(flyerRec.x + flyerRec.width / 2 - 1), (int)flyerRec.y + 5, 1.8f, Fade(RAYWHITE, 0.75f));
+    /* Conteudo do panfleto */
+    DrawGameText("LUCAS SILVA", (int)flyerRec.x + 26, (int)flyerRec.y + 40, 13, INK_COLOR);
+    DrawLine((int)flyerRec.x + 14, (int)flyerRec.y + 58, (int)(flyerRec.x + flyerRec.width - 14), (int)flyerRec.y + 58, (Color){195, 182, 160, 255});
+    DrawGameText(" Ato: 10h as 13h", (int)flyerRec.x + 18, (int)flyerRec.y + 66, 11, (Color){75, 65, 55, 255});
+    DrawLine((int)flyerRec.x + 18, (int)flyerRec.y + 84, (int)(flyerRec.x + flyerRec.width - 24), (int)flyerRec.y + 84, (Color){205, 195, 175, 255});
+    DrawLine((int)flyerRec.x + 18, (int)flyerRec.y + 90, (int)(flyerRec.x + flyerRec.width - 38), (int)flyerRec.y + 90, (Color){205, 195, 175, 255});
+    /* Etiqueta [DOC 2] */
+    DrawRectangleRounded((Rectangle){flyerRec.x + 38, flyerRec.y + 100, 72, 20}, 0.25f, 4, Fade((Color){185, 42, 34, 255}, 0.14f));
+    DrawGameText("[DOC 2]", (int)flyerRec.x + 50, (int)flyerRec.y + 104, 11, (Color){175, 35, 25, 255});
+
+    /* ===================================================================== */
+    /* 5. MONITOR CFTV DE SEGURANCA NA PAREDE (DOC 4)                        */
+    /* ===================================================================== */
+    /* Suporte articulado de parede e conduite de cabos */
+    DrawRectangle(822, 118, 22, 18, (Color){120, 128, 138, 255});
+    DrawLineEx((Vector2){833, 272}, (Vector2){833, 384}, 3.0f, (Color){145, 150, 158, 255});
+    /* Sombra projetada do monitor na parede */
+    DrawRectangle((int)cctvMonitor.x + 5, (int)cctvMonitor.y + 5, (int)cctvMonitor.width, (int)cctvMonitor.height, Fade(BLACK, 0.22f));
+    /* Moldura metalica prateada/grafite 2008 */
+    DrawRectangleRounded(cctvMonitor, 0.06f, 6, (Color){74, 84, 96, 255});
+    DrawRectangleRoundedLinesEx(cctvMonitor, 0.06f, 6, 2.5f, (Color){125, 136, 148, 255});
+    DrawRectangleRounded((Rectangle){cctvMonitor.x + 4, cctvMonitor.y + 4, cctvMonitor.width - 8, cctvMonitor.height - 16}, 0.04f, 4, (Color){44, 52, 60, 255});
+
+    Rectangle cctvScr = {cctvMonitor.x + 9, cctvMonitor.y + 9, cctvMonitor.width - 18, cctvMonitor.height - 28};
+    DrawRectangleRec(cctvScr, (Color){10, 26, 18, 255});
+
+    BeginScissorMode((int)cctvScr.x, (int)cctvScr.y, (int)cctvScr.width, (int)cctvScr.height);
+    /* Racks de fundo na imagem da camera */
+    for (int rk = 0; rk < 3; rk++)
+    {
+        int rkx = (int)cctvScr.x + 14 + rk * 56;
+        DrawRectangle(rkx, (int)cctvScr.y + 22, 42, 74, (Color){16, 40, 28, 255});
+        DrawRectangleLines(rkx, (int)cctvScr.y + 22, 42, 74, (Color){28, 68, 46, 255});
+        for (int rl = 0; rl < 4; rl++)
+        {
+            DrawCircle(rkx + 8, (int)cctvScr.y + 30 + rl * 15, 1.5f, (Color){70, 220, 120, 255});
+        }
+    }
+    /* Silhueta detalhada de Lucas trabalhando no servidor as 14:30 */
+    int silX = (int)cctvScr.x + 92;
+    int silY = (int)cctvScr.y + 48;
+    DrawCircle(silX, silY, 12, (Color){58, 152, 96, 255}); /* cabeca */
+    DrawRectangleRounded((Rectangle){(float)(silX - 16), (float)(silY + 12), 32, 38}, 0.25f, 4, (Color){46, 126, 78, 255}); /* tronco */
+    DrawLineEx((Vector2){(float)(silX + 12), (float)(silY + 20)}, (Vector2){(float)(silX + 30), (float)(silY + 14)}, 5.0f, (Color){58, 152, 96, 255}); /* braco no rack */
+    /* Cracha no peito da silhueta */
+    DrawRectangle(silX - 4, silY + 22, 8, 10, (Color){140, 245, 175, 255});
+
+    /* Scanlines de CFTV */
+    for (int sy = (int)cctvScr.y; sy < (int)(cctvScr.y + cctvScr.height); sy += 4)
+    {
+        DrawLine((int)cctvScr.x, sy, (int)(cctvScr.x + cctvScr.width), sy, Fade(BLACK, 0.22f));
+    }
+
+    /* HUD da camera CFTV */
+    float recBlink = 0.5f + 0.5f * sinf(time * 5.0f);
+    DrawCircle((int)cctvScr.x + 12, (int)cctvScr.y + 11, 3.5f, Fade(RED_COLOR, recBlink));
+    DrawGameText("CAM-03 [14:30]", (int)cctvScr.x + 20, (int)cctvScr.y + 5, 11, (Color){95, 250, 135, 255});
+    DrawRectangle((int)cctvScr.x, (int)(cctvScr.y + cctvScr.height - 18), (int)cctvScr.width, 18, Fade((Color){6, 16, 10, 255}, 0.82f));
+    DrawGameText("[DOC 4: CFTV]", (int)cctvScr.x + 44, (int)(cctvScr.y + cctvScr.height - 15), 11, (Color){110, 255, 150, 255});
+    EndScissorMode();
+
+    DrawRectangleLinesEx(cctvScr, 1.5f, (Color){55, 165, 95, 255});
+    /* Botoes fisicos e LED no painel inferior do monitor CFTV */
+    for (int mb = 0; mb < 4; mb++)
+    {
+        DrawRectangle((int)cctvMonitor.x + 115 + mb * 14, (int)(cctvMonitor.y + cctvMonitor.height - 13), 8, 4, (Color){130, 140, 150, 255});
+    }
+    DrawCircle((int)(cctvMonitor.x + cctvMonitor.width - 14), (int)(cctvMonitor.y + cctvMonitor.height - 11), 2.5f, (Color){70, 235, 115, 255});
+
+    /* ===================================================================== */
+    /* 6. MODULO CORPORATIVO DIREITO: RACK DE SERVIDORES + CREDENZA 3D       */
+    /* ===================================================================== */
+    /* Sombra projetada no piso pelo modulo direito */
+    DrawEllipse(1072, 594, 122, 14, Fade(BLACK, 0.26f));
+
+    /* Lateral esquerda 3D em perspectiva do gabinete/armario executivo */
+    DrawRectangle(962, 130, 22, 456, (Color){142, 148, 156, 255});
+    DrawLineEx((Vector2){962, 130}, (Vector2){962, 586}, 2.0f, (Color){108, 114, 122, 255});
+
+    /* Corpo frontal do armario integrado (Rack superior + Credenza inferior) */
+    Rectangle unitFront = {984, 130, 192, 458};
+    DrawRectangleRec(unitFront, (Color){176, 182, 190, 255});
+    DrawRectangleLinesEx(unitFront, 2.0f, (Color){118, 126, 136, 255});
+    /* Topo e rodape do modulo */
+    DrawRectangle(960, 124, 218, 10, (Color){128, 136, 146, 255});
+    DrawRectangle(962, 576, 214, 14, (Color){104, 110, 118, 255});
+
+    /* --- Parte Superior: Baia de Servidores (Rack 19") --- */
+    Rectangle rackBay = {994, 142, 172, 232};
+    DrawRectangleRec(rackBay, (Color){26, 34, 42, 255});
+    DrawRectangleLinesEx(rackBay, 2.0f, (Color){88, 98, 110, 255});
+    DrawGameText("SERVIDORES // RACK-03", 1012, 148, 11, (Color){165, 195, 215, 255});
+
+    for (int u = 0; u < 5; u++)
+    {
+        Rectangle uSlot = {1002, (float)(168 + u * 39), 156, 32};
+        DrawRectangleRec(uSlot, (Color){36, 46, 56, 255});
+        DrawRectangleLinesEx(uSlot, 1.0f, (Color){68, 82, 96, 255});
+        /* Alcas laterais do blade server */
+        DrawRectangle((int)uSlot.x + 3, (int)uSlot.y + 4, 4, 24, (Color){130, 140, 150, 255});
+        DrawRectangle((int)(uSlot.x + uSlot.width - 7), (int)uSlot.y + 4, 4, 24, (Color){130, 140, 150, 255});
+        /* Grade de ventilacao do servidor */
+        for (int gx = (int)uSlot.x + 52; gx < (int)uSlot.x + 122; gx += 8)
+        {
+            DrawLine(gx, (int)uSlot.y + 8, gx, (int)uSlot.y + 24, (Color){20, 26, 32, 255});
+        }
+        /* LEDs de atividade piscando */
+        float blink = sinf(time * (4.5f + u * 1.3f));
+        DrawCircle((int)uSlot.x + 18, (int)uSlot.y + 16, 3.0f, (blink > 0) ? (Color){65, 235, 115, 255} : (Color){22, 90, 42, 255});
+        DrawCircle((int)uSlot.x + 30, (int)uSlot.y + 16, 3.0f, (blink < 0) ? CYAN_COLOR : (Color){20, 75, 95, 255});
+        DrawCircle((int)uSlot.x + 42, (int)uSlot.y + 16, 2.2f, GOLD_COLOR);
+    }
+
+    /* --- Parte Inferior: Nicho Executivo em Madeira Clara (Documentos 5 e 6) --- */
+    Rectangle credenzaBay = {986, 384, 188, 190};
+    DrawRectangleRec(credenzaBay, (Color){194, 164, 126, 255});
+    DrawRectangleLinesEx(credenzaBay, 2.0f, (Color){138, 108, 76, 255});
+    /* Divisoria interna de madeira */
+    DrawRectangle(988, 482, 184, 6, (Color){148, 116, 82, 255});
+
+    /* DOCUMENTO DO PAI: Caderno de Pesquisa Dr. Ramos (fatherBookRec) */
+    DrawRectangle((int)fatherBookRec.x + 3, (int)fatherBookRec.y + 4, (int)fatherBookRec.width, (int)fatherBookRec.height, Fade(BLACK, 0.25f));
+    DrawRectangleRounded(fatherBookRec, 0.10f, 4, (Color){104, 62, 36, 255});
+    DrawRectangleRoundedLinesEx(fatherBookRec, 0.10f, 4, 2.0f, game->doc2008FatherOriginExamined ? (Color){60, 220, 110, 255} : GOLD_COLOR);
+    /* Lombada de couro com nervuras e fita marcadora dourada */
+    DrawRectangle((int)fatherBookRec.x, (int)fatherBookRec.y, 18, (int)fatherBookRec.height, (Color){74, 42, 22, 255});
+    for (int rb = 12; rb < (int)fatherBookRec.height - 8; rb += 14)
+    {
+        DrawLine((int)fatherBookRec.x + 2, (int)fatherBookRec.y + rb, (int)fatherBookRec.x + 16, (int)fatherBookRec.y + rb, GOLD_COLOR);
+    }
+    /* Folhas de papel visiveis na borda e etiqueta dourada */
+    DrawRectangle((int)(fatherBookRec.x + fatherBookRec.width - 8), (int)fatherBookRec.y + 5, 5, (int)fatherBookRec.height - 10, (Color){242, 236, 218, 255});
+    DrawRectangleRounded((Rectangle){fatherBookRec.x + 24, fatherBookRec.y + 8, 130, 22}, 0.2f, 4, (Color){68, 38, 20, 255});
+    DrawGameText("CADERNO DR. RAMOS", (int)fatherBookRec.x + 28, (int)fatherBookRec.y + 13, 10, GOLD_COLOR);
+    DrawGameText("Projeto Humanitario", (int)fatherBookRec.x + 26, (int)fatherBookRec.y + 38, 11, (Color){245, 235, 215, 255});
+
+    /* DOCUMENTO DO GOVERNO: Memorando Confidencial 2008 (govMemoRec) */
+    DrawRectangle((int)govMemoRec.x + 3, (int)govMemoRec.y + 4, (int)govMemoRec.width, (int)govMemoRec.height, Fade(BLACK, 0.25f));
+    DrawRectangleRounded(govMemoRec, 0.10f, 4, (Color){128, 38, 38, 255});
+    DrawRectangleRoundedLinesEx(govMemoRec, 0.10f, 4, 2.0f, game->doc2008GovContractExamined ? (Color){60, 220, 110, 255} : RED_COLOR);
+    /* Aba de pasta confidencial, selo e grampo metalico */
+    DrawRectangle((int)govMemoRec.x, (int)govMemoRec.y, 18, (int)govMemoRec.height, (Color){88, 24, 24, 255});
+    DrawCircle((int)govMemoRec.x + 9, (int)(govMemoRec.y + govMemoRec.height / 2), 4.5f, GOLD_COLOR);
+    DrawRectangleRounded((Rectangle){govMemoRec.x + 24, govMemoRec.y + 8, 132, 22}, 0.2f, 4, (Color){78, 20, 20, 255});
+    DrawGameText("MEMORANDO GOV 2008", (int)govMemoRec.x + 27, (int)govMemoRec.y + 13, 10, (Color){255, 165, 155, 255});
+    DrawGameText("Uso Militar / Drones", (int)govMemoRec.x + 26, (int)govMemoRec.y + 38, 11, (Color){242, 228, 225, 255});
+
+    /* ===================================================================== */
+    /* 7. TAPETE CORPORATIVO E MESA EXECUTIVA EM PERSPECTIVA 3D              */
+    /* ===================================================================== */
+    /* Tapete corporativo azul-ardosia sob a mesa acompanhando a perspectiva */
+    Color rugCol = (Color){118, 134, 150, 255};
+    DrawTriangle((Vector2){355, 650}, (Vector2){825, 558}, (Vector2){455, 558}, rugCol);
+    DrawTriangle((Vector2){355, 650}, (Vector2){925, 650}, (Vector2){825, 558}, rugCol);
+    DrawLineEx((Vector2){355, 650}, (Vector2){925, 650}, 4.0f, (Color){82, 98, 114, 255});
+    DrawLineEx((Vector2){455, 558}, (Vector2){825, 558}, 3.0f, (Color){92, 108, 124, 255});
+    DrawLineEx((Vector2){455, 558}, (Vector2){355, 650}, 3.0f, (Color){88, 104, 120, 255});
+    DrawLineEx((Vector2){825, 558}, (Vector2){925, 650}, 3.0f, (Color){88, 104, 120, 255});
+
+    /* Sombra projetada da mesa executiva no piso */
+    DrawEllipse(618, 618, 375, 20, Fade(BLACK, 0.24f));
+
+    /* Vao central da mesa (painel de modestia em madeira escura) */
+    DrawRectangle(495, 502, 250, 100, (Color){115, 88, 62, 255});
+    DrawRectangleGradientV(495, 502, 250, 34, (Color){78, 58, 40, 255}, (Color){115, 88, 62, 255});
+
+    /* Pedestal esquerdo (gaveteiro executivo em carvalho claro) */
+    DrawRectangle(280, 502, 215, 104, (Color){178, 144, 104, 255});
+    DrawRectangle(280, 600, 215, 6, (Color){118, 92, 64, 255});
+    /* Duas gavetas com puxadores de aluminio escovado */
+    for (int dr = 0; dr < 2; dr++)
+    {
+        Rectangle dBox = {296, (float)(512 + dr * 43), 182, 37};
+        DrawRectangleRec(dBox, (Color){192, 158, 116, 255});
+        DrawRectangleLinesEx(dBox, 1.5f, (Color){138, 108, 76, 255});
+        DrawRectangleRounded((Rectangle){dBox.x + 62, dBox.y + 15, 58, 8}, 0.4f, 4, (Color){205, 212, 220, 255});
+        DrawCircle((int)(dBox.x + dBox.width - 14), (int)(dBox.y + 12), 2.5f, (Color){110, 116, 124, 255});
+    }
+
+    /* Pedestal direito (armario da mesa em carvalho claro) */
+    DrawRectangle(745, 502, 205, 104, (Color){178, 144, 104, 255});
+    DrawRectangle(745, 600, 205, 6, (Color){118, 92, 64, 255});
+    Rectangle rDoor = {762, 512, 170, 80};
+    DrawRectangleRec(rDoor, (Color){192, 158, 116, 255});
+    DrawRectangleLinesEx(rDoor, 1.5f, (Color){138, 108, 76, 255});
+    DrawRectangleRounded((Rectangle){rDoor.x + 14, rDoor.y + 28, 8, 28}, 0.4f, 4, (Color){205, 212, 220, 255});
+
+    /* Tampo da mesa executiva com perspectiva 3D real (mais profundo para acomodar todos os itens) */
+    Vector2 tTopL = {268, 412};
+    Vector2 tTopR = {962, 412};
+    Vector2 tBotR = {982, 500};
+    Vector2 tBotL = {248, 500};
+    Color deskTopCol = (Color){214, 182, 140, 255};
+    DrawTriangle(tTopL, tBotL, tTopR, deskTopCol);
+    DrawTriangle(tTopR, tBotL, tBotR, deskTopCol);
+    DrawLineEx(tTopL, tTopR, 2.0f, (Color){236, 210, 174, 255});
+    DrawLineEx(tTopL, tBotL, 2.0f, (Color){184, 150, 110, 255});
+    DrawLineEx(tTopR, tBotR, 2.0f, (Color){184, 150, 110, 255});
+
+    /* Borda frontal chanfrada do tampo (madeira + friso de aluminio) */
+    DrawRectangle(248, 500, 734, 10, (Color){162, 128, 92, 255});
+    DrawRectangle(248, 508, 734, 3, (Color){190, 198, 206, 255});
+
+    /* Desk pad (mata-borrao executivo em couro grafite no centro da mesa) */
+    Vector2 pTL = {472, 434};
+    Vector2 pTR = {758, 434};
+    Vector2 pBR = {768, 494};
+    Vector2 pBL = {462, 494};
+    Color padCol = (Color){52, 60, 70, 255};
+    DrawTriangle(pTL, pBL, pTR, padCol);
+    DrawTriangle(pTR, pBL, pBR, padCol);
+    DrawLineEx(pTL, pTR, 1.5f, (Color){88, 98, 110, 255});
+
+    /* ===================================================================== */
+    /* 8. COMPUTADOR CENTRAL DE VIGILANCIA, TECLADO, MOUSE E DOCUMENTOS      */
+    /* ===================================================================== */
+    /* Caneca de cafe executiva sobre porta-copos a esquerda do monitor */
+    DrawEllipse(466, 444, 13, 4, (Color){145, 110, 75, 255});
+    DrawRectangleRounded((Rectangle){456, 419, 20, 24}, 0.2f, 4, (Color){245, 246, 250, 255});
+    DrawRectangleLinesEx((Rectangle){456, 419, 20, 24}, 1.2f, (Color){175, 182, 192, 255});
+    DrawRing((Vector2){476, 431}, 3.0f, 5.5f, -90, 90, 8, (Color){225, 230, 238, 255});
+
+    /* Base e coluna articulada do monitor LCD 2008 sobre a mesa */
+    DrawEllipse(615, 446, 68, 6, Fade(BLACK, 0.25f));
+    DrawRectangle(597, 402, 36, 38, (Color){152, 160, 170, 255});
+    DrawRectangle(603, 402, 10, 38, (Color){182, 190, 200, 255});
+    DrawRectangleRounded((Rectangle){555, 434, 120, 14}, 0.35f, 6, (Color){174, 182, 192, 255});
+    DrawRectangleRoundedLinesEx((Rectangle){555, 434, 120, 14}, 0.35f, 6, 1.5f, (Color){128, 136, 146, 255});
+
+    /* Gabinete do Monitor LCD widescreen/4:3 corporativo 2008 */
+    DrawRectangle((int)monitorRec.x + 5, (int)monitorRec.y + 5, (int)monitorRec.width, (int)monitorRec.height, Fade(BLACK, 0.22f));
+    DrawRectangleRounded(monitorRec, 0.06f, 8, (Color){194, 202, 210, 255});
+    DrawRectangleRoundedLinesEx(monitorRec, 0.06f, 8, 2.5f, (Color){126, 136, 148, 255});
+    /* Webcam biometrica acoplada no topo do monitor 2008 */
+    DrawRectangleRounded((Rectangle){603, 218, 24, 10}, 0.4f, 4, (Color){58, 66, 76, 255});
+    DrawCircle(615, 223, 3.0f, (Color){24, 32, 42, 255});
+    DrawCircle(615, 223, 1.2f, CYAN_COLOR);
+    /* Moldura interna escura e barra de alto-falante inferior */
+    DrawRectangleRounded((Rectangle){monitorRec.x + 8, monitorRec.y + 8, monitorRec.width - 16, monitorRec.height - 26}, 0.04f, 6, (Color){42, 50, 60, 255});
+    DrawRectangle((int)monitorRec.x + 16, (int)(monitorRec.y + monitorRec.height - 14), (int)monitorRec.width - 32, 8, (Color){148, 156, 166, 255});
+    DrawCircle((int)(monitorRec.x + monitorRec.width - 18), (int)(monitorRec.y + monitorRec.height - 10), 3.0f, (Color){70, 235, 120, 255});
 
     /* Tela LCD acesa */
-    Rectangle lcdScr = {monitorRec.x + 10, monitorRec.y + 10, monitorRec.width - 20, monitorRec.height - 20};
-    Color lcdBg = game->puzzle2008Contested ? (Color){12, 32, 22, 255} : (Color){12, 25, 38, 255};
+    Rectangle lcdScr = {monitorRec.x + 12, monitorRec.y + 12, monitorRec.width - 24, monitorRec.height - 34};
+    Color lcdBg = game->puzzle2008Contested ? (Color){12, 34, 24, 255} : (Color){12, 26, 40, 255};
     Color lcdBorder = game->puzzle2008Contested ? (Color){60, 220, 110, 255} : CYAN_COLOR;
     DrawRectangleRounded(lcdScr, 0.04f, 4, lcdBg);
     DrawRectangleRoundedLinesEx(lcdScr, 0.04f, 4, 1.5f, lcdBorder);
 
-    DrawGameText("IA VIGILANCIA // 2008", (int)lcdScr.x + 12, (int)lcdScr.y + 12, 13, lcdBorder);
-    DrawLine((int)lcdScr.x + 12, (int)lcdScr.y + 28, (int)(lcdScr.x + lcdScr.width - 12), (int)lcdScr.y + 28, Fade(lcdBorder, 0.4f));
+    DrawGameText("IA VIGILANCIA // 2008", (int)lcdScr.x + 14, (int)lcdScr.y + 12, 13, lcdBorder);
+    DrawLine((int)lcdScr.x + 14, (int)lcdScr.y + 30, (int)(lcdScr.x + lcdScr.width - 14), (int)lcdScr.y + 30, Fade(lcdBorder, 0.45f));
 
     if (game->puzzle2008OrderSuspended)
     {
-        DrawGameText("[OK] ORDEM SUSPENSA", (int)lcdScr.x + 12, (int)lcdScr.y + 44, 14, (Color){60, 235, 110, 255});
-        DrawGameText("CD ejetado no drive!", (int)lcdScr.x + 12, (int)lcdScr.y + 68, 12, RAYWHITE);
+        DrawGameText("[OK] ORDEM SUSPENSA", (int)lcdScr.x + 14, (int)lcdScr.y + 46, 14, (Color){60, 235, 110, 255});
+        DrawGameText("CD ejetado no drive!", (int)lcdScr.x + 14, (int)lcdScr.y + 72, 12, RAYWHITE);
         float pB = 0.5f + 0.5f * sinf(time * 6.0f);
-        DrawGameText("> COLETAR CD [ENTER] <", (int)lcdScr.x + 12, (int)lcdScr.y + 98, 13, Fade(GOLD_COLOR, pB));
+        DrawGameText("> COLETAR CD [ENTER] <", (int)lcdScr.x + 14, (int)lcdScr.y + 104, 13, Fade(GOLD_COLOR, pB));
     }
     else if (game->puzzle2008Contested)
     {
-        DrawGameText("[!] FALSO POSITIVO", (int)lcdScr.x + 12, (int)lcdScr.y + 44, 14, GOLD_COLOR);
-        DrawGameText("Identificacao rejeitada.", (int)lcdScr.x + 12, (int)lcdScr.y + 68, 12, RAYWHITE);
-        DrawGameText("> SUSPENDER ORDEM <", (int)lcdScr.x + 12, (int)lcdScr.y + 98, 13, (Color){60, 235, 110, 255});
+        DrawGameText("[!] FALSO POSITIVO", (int)lcdScr.x + 14, (int)lcdScr.y + 46, 14, GOLD_COLOR);
+        DrawGameText("Identificacao rejeitada.", (int)lcdScr.x + 14, (int)lcdScr.y + 72, 12, RAYWHITE);
+        DrawGameText("> SUSPENDER ORDEM <", (int)lcdScr.x + 14, (int)lcdScr.y + 104, 13, (Color){60, 235, 110, 255});
     }
     else
     {
-        DrawGameText("ALVO: LUCAS SILVA", (int)lcdScr.x + 12, (int)lcdScr.y + 44, 14, RED_COLOR);
-        DrawGameText("ORDEM DE DRONE: 14:30", (int)lcdScr.x + 12, (int)lcdScr.y + 68, 12, GOLD_COLOR);
+        DrawGameText("ALVO: LUCAS SILVA", (int)lcdScr.x + 14, (int)lcdScr.y + 46, 14, RED_COLOR);
+        DrawGameText("ORDEM DE DRONE: 14:30", (int)lcdScr.x + 14, (int)lcdScr.y + 72, 12, GOLD_COLOR);
         float pB = 0.5f + 0.5f * sinf(time * 4.0f);
-        DrawGameText("> CONTESTAR NO TERMINAL <", (int)lcdScr.x + 8, (int)lcdScr.y + 98, 13, Fade(CYAN_COLOR, pB));
+        DrawGameText("> CONTESTAR NO TERMINAL <", (int)lcdScr.x + 10, (int)lcdScr.y + 104, 13, Fade(CYAN_COLOR, pB));
     }
 
-    /* Teclado e mouse na mesa */
-    Rectangle kb = {475, 440, 190, 20};
-    DrawRectangleRounded(kb, 0.15f, 4, (Color){145, 155, 165, 255});
-    for (int k = 0; k < 9; k++)
-        DrawRectangle((int)kb.x + 6 + k * 20, (int)kb.y + 4, 14, 11, (Color){45, 52, 60, 255});
+    /* Teclado corporativo detalhado (multiplas fileiras + barra de espaco) */
+    Rectangle kbRec = {495, 454, 224, 30};
+    DrawRectangleRounded((Rectangle){kbRec.x + 2, kbRec.y + 3, kbRec.width, kbRec.height}, 0.14f, 6, Fade(BLACK, 0.28f));
+    DrawRectangleRounded(kbRec, 0.14f, 6, (Color){184, 192, 200, 255});
+    DrawRectangleRoundedLinesEx(kbRec, 0.14f, 6, 1.5f, (Color){126, 134, 144, 255});
+    for (int col = 0; col < 11; col++)
+    {
+        DrawRectangle((int)kbRec.x + 8 + col * 19, (int)kbRec.y + 4, 15, 5, (Color){52, 58, 66, 255});
+        DrawRectangle((int)kbRec.x + 8 + col * 19, (int)kbRec.y + 11, 15, 5, (Color){52, 58, 66, 255});
+    }
+    DrawRectangle((int)kbRec.x + 8, (int)kbRec.y + 19, 34, 6, (Color){52, 58, 66, 255});
+    DrawRectangle((int)kbRec.x + 48, (int)kbRec.y + 19, 96, 6, (Color){42, 48, 56, 255}); /* espaco */
+    DrawRectangle((int)kbRec.x + 150, (int)kbRec.y + 19, 64, 6, (Color){52, 58, 66, 255});
+    DrawCircle((int)(kbRec.x + kbRec.width - 8), (int)kbRec.y + 6, 1.8f, (Color){80, 235, 120, 255});
 
-    Rectangle mousePad = {685, 435, 34, 40};
-    DrawRectangleRounded(mousePad, 0.15f, 4, (Color){20, 28, 38, 255});
-    DrawRectangleRounded((Rectangle){694, 444, 16, 24}, 0.4f, 4, (Color){160, 170, 180, 255});
+    /* Mouse optico 2008 sobre o deskpad */
+    Rectangle mouseRec = {734, 456, 22, 28};
+    DrawRectangleRounded(mouseRec, 0.45f, 6, (Color){190, 198, 206, 255});
+    DrawRectangleRoundedLinesEx(mouseRec, 0.45f, 6, 1.2f, (Color){118, 126, 136, 255});
+    DrawRectangle((int)mouseRec.x + 9, (int)mouseRec.y + 4, 4, 7, (Color){52, 58, 66, 255});
 
-    /* --- LADO ESQUERDO DA MESA: DOSSIE FOTO DRONE (DOC 0) --- */
-    Rectangle doc0Rec = {305, 410, 130, 85};
-    DrawRectangleRounded(doc0Rec, 0.05f, 4, (Color){175, 145, 105, 255});
-    DrawRectangleRoundedLinesEx(doc0Rec, 0.05f, 4, 1.5f, (Color){125, 95, 65, 255});
-    /* Foto anexada */
-    DrawRectangle((int)doc0Rec.x + 12, (int)doc0Rec.y + 12, 45, 55, (Color){15, 22, 32, 255});
-    DrawRectangleLines((int)doc0Rec.x + 12, (int)doc0Rec.y + 12, 45, 55, RED_COLOR);
-    DrawGameText("DRONE 78%", (int)doc0Rec.x + 65, (int)doc0Rec.y + 20, 11, RED_COLOR);
-    DrawGameText("LUCAS S.", (int)doc0Rec.x + 65, (int)doc0Rec.y + 38, 12, INK_COLOR);
-    DrawGameText("[DOC 1]", (int)doc0Rec.x + 65, (int)doc0Rec.y + 58, 11, (Color){125, 35, 18, 255});
+    /* --- LADO ESQUERDO DA MESA: DOSSIE FOTO DRONE (DOC 1 / doc0Rec) --- */
+    /* Pasta parda de investigacao apoiada 100% sobre o tampo da mesa */
+    DrawRectangle((int)doc0Rec.x + 3, (int)doc0Rec.y + 4, (int)doc0Rec.width, (int)doc0Rec.height, Fade(BLACK, 0.22f));
+    DrawRectangleRounded((Rectangle){doc0Rec.x + 8, doc0Rec.y - 5, 54, 8}, 0.25f, 4, (Color){216, 186, 136, 255});
+    DrawRectangleRounded(doc0Rec, 0.06f, 4, (Color){232, 204, 154, 255});
+    DrawRectangleRoundedLinesEx(doc0Rec, 0.06f, 4, 2.0f, game->doc2008FaceExamined ? (Color){45, 165, 85, 255} : (Color){158, 124, 82, 255});
+    /* Folha branca interna sobressaindo */
+    DrawRectangle((int)doc0Rec.x + 5, (int)doc0Rec.y + 5, (int)doc0Rec.width - 10, (int)doc0Rec.height - 10, (Color){250, 248, 242, 255});
+    /* Fotografia aerea do drone anexada com mira biometrica */
+    Rectangle photoBox = {doc0Rec.x + 10, doc0Rec.y + 10, 52, 56};
+    DrawRectangleRec(photoBox, (Color){18, 26, 36, 255});
+    DrawCircle((int)photoBox.x + 26, (int)photoBox.y + 21, 9, (Color){78, 118, 145, 255});
+    DrawRectangle((int)photoBox.x + 15, (int)photoBox.y + 31, 22, 20, (Color){58, 92, 118, 255});
+    DrawRectangleLinesEx((Rectangle){photoBox.x + 13, photoBox.y + 9, 26, 25}, 1.5f, RED_COLOR);
+    DrawRectangleLinesEx(photoBox, 1.5f, RED_COLOR);
+    /* Clipe metalico no topo da foto */
+    DrawRectangle((int)photoBox.x + 19, (int)doc0Rec.y + 3, 12, 9, (Color){180, 188, 198, 255});
+    /* Textos do Dossie */
+    DrawGameText("DRONE 78%", (int)doc0Rec.x + 70, (int)doc0Rec.y + 12, 12, RED_COLOR);
+    DrawGameText("LUCAS S.", (int)doc0Rec.x + 70, (int)doc0Rec.y + 31, 12, INK_COLOR);
+    DrawRectangleRounded((Rectangle){doc0Rec.x + 70, doc0Rec.y + 49, 70, 18}, 0.25f, 4, Fade(RED_COLOR, 0.15f));
+    DrawGameText("[DOC 1]", (int)doc0Rec.x + 82, (int)doc0Rec.y + 52, 11, (Color){165, 32, 22, 255});
 
-    /* --- LADO DIREITO DA MESA: PRANCHETA ENTRADA/CATRACA (DOC 2) --- */
-    Rectangle doc2Rec = {735, 410, 125, 85};
-    DrawRectangleRounded(doc2Rec, 0.05f, 4, (Color){155, 125, 85, 255});
-    DrawRectangleRoundedLinesEx(doc2Rec, 0.05f, 4, 1.5f, (Color){105, 75, 45, 255});
-    /* Folha da prancheta */
-    DrawRectangle((int)doc2Rec.x + 10, (int)doc2Rec.y + 10, (int)doc2Rec.width - 20, 65, (Color){245, 248, 252, 255});
-    DrawRectangle((int)doc2Rec.x + 40, (int)doc2Rec.y + 6, 45, 8, (Color){180, 190, 200, 255}); /* clipe metalico */
-    DrawGameText("PONTO 14:15", (int)doc2Rec.x + 16, (int)doc2Rec.y + 24, 12, (Color){25, 115, 45, 255});
-    DrawGameText("CRACHA #0842", (int)doc2Rec.x + 16, (int)doc2Rec.y + 42, 11, INK_COLOR);
-    DrawGameText("[DOC 3]", (int)doc2Rec.x + 16, (int)doc2Rec.y + 58, 11, (Color){25, 115, 45, 255});
+    /* --- LADO DIREITO DA MESA: PRANCHETA ENTRADA/CATRACA (DOC 3 / doc2Rec) --- */
+    DrawRectangle((int)doc2Rec.x + 3, (int)doc2Rec.y + 4, (int)doc2Rec.width, (int)doc2Rec.height, Fade(BLACK, 0.22f));
+    DrawRectangleRounded(doc2Rec, 0.06f, 4, (Color){168, 128, 86, 255});
+    DrawRectangleRoundedLinesEx(doc2Rec, 0.06f, 4, 2.0f, game->doc2008EntryExamined ? (Color){45, 165, 85, 255} : (Color){116, 84, 52, 255});
+    /* Folha timbrada da prancheta */
+    DrawRectangle((int)doc2Rec.x + 7, (int)doc2Rec.y + 7, (int)doc2Rec.width - 14, (int)doc2Rec.height - 12, (Color){248, 250, 254, 255});
+    /* Cabecalho azul corporativo na folha e clipe metalico cromado */
+    DrawRectangle((int)doc2Rec.x + 11, (int)doc2Rec.y + 12, (int)doc2Rec.width - 22, 7, (Color){45, 85, 128, 255});
+    DrawRectangleRounded((Rectangle){doc2Rec.x + 48, doc2Rec.y + 2, 58, 9}, 0.3f, 4, (Color){192, 200, 210, 255});
+    DrawRectangleLinesEx((Rectangle){doc2Rec.x + 48, doc2Rec.y + 2, 58, 9}, 1.0f, (Color){130, 138, 148, 255});
+    DrawGameText("PONTO 14:15", (int)doc2Rec.x + 15, (int)doc2Rec.y + 22, 12, (Color){25, 125, 52, 255});
+    DrawGameText("CRACHA #0842", (int)doc2Rec.x + 15, (int)doc2Rec.y + 38, 11, INK_COLOR);
+    DrawRectangleRounded((Rectangle){doc2Rec.x + 15, doc2Rec.y + 52, 72, 17}, 0.25f, 4, Fade((Color){25, 135, 55, 255}, 0.16f));
+    DrawGameText("[DOC 3]", (int)doc2Rec.x + 27, (int)doc2Rec.y + 55, 11, (Color){25, 125, 52, 255});
 
-    /* --- MESA LATERAL EXECUTIVA (DIREITA): ANOTACOES DO PAI & MEMORANDO --- */
-    Rectangle sideDesk = {970, 420, 170, 175};
-    DrawRectangleRounded(sideDesk, 0.04f, 6, (Color){32, 40, 50, 255});
-    DrawRectangleRoundedLinesEx(sideDesk, 0.04f, 6, 2.0f, (Color){60, 75, 90, 255});
+    /* ===================================================================== */
+    /* 9. CADEIRA EXECUTIVA ERGONOMICA EM PRIMEIRO PLANO                     */
+    /* ===================================================================== */
+    DrawEllipse(615, 640, 64, 11, Fade(BLACK, 0.30f));
+    /* Base aranha cromada de 5 pontas com rodizios */
+    DrawLineEx((Vector2){615, 620}, (Vector2){580, 636}, 4.0f, (Color){145, 152, 162, 255});
+    DrawCircle(578, 637, 3.5f, (Color){42, 46, 52, 255});
+    DrawLineEx((Vector2){615, 620}, (Vector2){615, 640}, 4.0f, (Color){160, 168, 178, 255});
+    DrawCircle(615, 641, 3.5f, (Color){42, 46, 52, 255});
+    DrawLineEx((Vector2){615, 620}, (Vector2){650, 636}, 4.0f, (Color){145, 152, 162, 255});
+    DrawCircle(652, 637, 3.5f, (Color){42, 46, 52, 255});
+    DrawLineEx((Vector2){615, 620}, (Vector2){592, 612}, 3.5f, (Color){125, 132, 142, 255});
+    DrawLineEx((Vector2){615, 620}, (Vector2){638, 612}, 3.5f, (Color){125, 132, 142, 255});
+    DrawCircle(615, 620, 6.0f, (Color){175, 182, 192, 255});
 
-    /* Documento do Pai: Caderno de pesquisa */
-    Rectangle fatherBookRec = {990, 440, 130, 45};
-    DrawRectangleRounded(fatherBookRec, 0.10f, 4, (Color){85, 50, 30, 255});
-    DrawRectangleRoundedLinesEx(fatherBookRec, 0.10f, 4, 1.5f, GOLD_COLOR);
-    DrawGameText("CADERNO DR. RAMOS", (int)fatherBookRec.x + 8, (int)fatherBookRec.y + 10, 10, GOLD_COLOR);
-    DrawGameText("Projeto Humanitario", (int)fatherBookRec.x + 8, (int)fatherBookRec.y + 24, 10, RAYWHITE);
+    /* Pistao a gas e assento estofado */
+    DrawRectangle(610, 576, 10, 44, (Color){90, 96, 106, 255});
+    DrawRectangleRounded((Rectangle){568, 562, 94, 18}, 0.4f, 6, (Color){54, 64, 76, 255});
+    DrawRectangleRoundedLinesEx((Rectangle){568, 562, 94, 18}, 0.4f, 6, 1.5f, (Color){82, 94, 108, 255});
 
-    /* Documento do Governo: Memorando confidencial */
-    Rectangle govMemoRec = {990, 505, 130, 45};
-    DrawRectangleRounded(govMemoRec, 0.10f, 4, (Color){45, 28, 28, 255});
-    DrawRectangleRoundedLinesEx(govMemoRec, 0.10f, 4, 1.5f, RED_COLOR);
-    DrawGameText("MEMORANDO GOV 2008", (int)govMemoRec.x + 8, (int)govMemoRec.y + 10, 10, RED_COLOR);
-    DrawGameText("Uso Militar / Drones", (int)govMemoRec.x + 8, (int)govMemoRec.y + 24, 10, LIGHTGRAY);
+    /* Bracos da cadeira executiva */
+    DrawLineEx((Vector2){570, 568}, (Vector2){558, 540}, 4.0f, (Color){135, 142, 152, 255});
+    DrawRectangleRounded((Rectangle){548, 534, 22, 8}, 0.4f, 4, (Color){44, 52, 62, 255});
+    DrawLineEx((Vector2){660, 568}, (Vector2){672, 540}, 4.0f, (Color){135, 142, 152, 255});
+    DrawRectangleRounded((Rectangle){660, 534, 22, 8}, 0.4f, 4, (Color){44, 52, 62, 255});
 
-    /* Botao de retorno a Sala 1 (1990) */
+    /* Encosto ergonomico com estrutura prateada e apoio de cabeca */
+    Rectangle chairBack = {570, 486, 90, 78};
+    DrawRectangleRounded(chairBack, 0.25f, 8, (Color){62, 74, 88, 255});
+    DrawRectangleRoundedLinesEx(chairBack, 0.25f, 8, 2.0f, (Color){96, 110, 126, 255});
+    DrawRectangleRounded((Rectangle){609, 490, 12, 74}, 0.35f, 4, (Color){148, 156, 166, 255});
+    DrawRectangleRounded((Rectangle){582, 522, 66, 13}, 0.3f, 4, (Color){48, 58, 70, 255});
+    DrawRectangle(611, 478, 8, 9, (Color){135, 142, 152, 255});
+    Rectangle chairHead = {588, 464, 54, 16};
+    DrawRectangleRounded(chairHead, 0.45f, 6, (Color){54, 64, 76, 255});
+    DrawRectangleRoundedLinesEx(chairHead, 0.45f, 6, 1.5f, (Color){88, 102, 118, 255});
+
+    /* ===================================================================== */
+    /* 10. BOTOES DE NAVEGACAO E HOTSPOTS INTERATIVOS                        */
+    /* ===================================================================== */
     Rectangle btnVoltar1990 = {70, 600, 240, 42};
     DrawButton(btnVoltar1990, "< SALA 1 (1990)", (Color){70, 95, 110, 255});
 
-    /* Botao de avanco para Sala 3 (2026) se destravada */
     Rectangle btnGo2026 = {SCREEN_WIDTH - 280, 600, 240, 42};
     if (game->year2026Unlocked)
     {
         DrawButton(btnGo2026, "SALA 3 (2026) >", (Color){45, 115, 75, 255});
     }
 
-    /* Hotspots interativos ao passar o mouse */
     DrawHotspot(flyerRec, "Inspecionar Panfleto da Revolta [Doc 2]");
     DrawHotspot(cctvMonitor, "Analisar Monitor CFTV dos Servidores [Doc 4]");
     DrawHotspot(monitorRec, "Acessar Terminal de Vigilancia da IA [COMPUTADOR]");
@@ -6336,21 +6797,21 @@ void DrawHudRoom2008(const GameState *game)
     int seconds = totalSeconds % 60;
 
     DrawRectangle(0, 0, SCREEN_WIDTH, 70, Fade(VOID_COLOR, 0.94f));
-    DrawGameText("ARQUIVO 02 // 2008 - ESCRITORIO DE VIGILANCIA", 28, 20, 22, CYAN_COLOR);
-    DrawGameText(TextFormat("OPERADOR: %s", game->playerName), 450, 23, 17, GRAY);
+    DrawGameText("ARQUIVO 02 // 2008 - VIGILANCIA", 28, 22, 20, CYAN_COLOR);
+    DrawGameText(TextFormat("OPERADOR: %s", game->playerName), 425, 24, 16, LIGHTGRAY);
 
     /* Status das evidencias e da ordem */
     if (game->puzzle2008OrderSuspended)
     {
-        DrawGameText("[OK] ORDEM DE DRONE SUSPENSA", 750, 22, 18, (Color){80, 235, 120, 255});
+        DrawGameText("[OK] ORDEM DE DRONE SUSPENSA", 650, 23, 16, (Color){80, 235, 120, 255});
     }
     else if (game->puzzle2008Contested)
     {
-        DrawGameText("[!] FALSO POSITIVO COMPROVADO", 750, 22, 18, GOLD_COLOR);
+        DrawGameText("[!] FALSO POSITIVO COMPROVADO", 650, 23, 16, GOLD_COLOR);
     }
     else
     {
-        DrawGameText(TextFormat("EVIDENCIAS: %d/4", ExaminedDocs2008Count(game)), 770, 22, 18, LIGHTGRAY);
+        DrawGameText(TextFormat("EVIDENCIAS: %d/4", ExaminedDocs2008Count(game)), 690, 23, 17, LIGHTGRAY);
     }
 
     DrawLivesIcons((Vector2){ 1040, 20 }, game->lives, 24.0f);
@@ -6385,13 +6846,13 @@ void DrawHudRoom2008(const GameState *game)
 
 void UpdateRoom2008(GameState *game)
 {
-    Rectangle flyerRec = {115, 200, 110, 105};
-    Rectangle cctvMonitor = {760, 125, 175, 125};
-    Rectangle monitorRec = {455, 225, 230, 170};
-    Rectangle doc0Rec = {305, 410, 130, 85};
-    Rectangle doc2Rec = {735, 410, 125, 85};
-    Rectangle fatherBookRec = {990, 440, 130, 45};
-    Rectangle govMemoRec = {990, 505, 130, 45};
+    Rectangle flyerRec      = {102, 192, 148, 128};
+    Rectangle cctvMonitor   = {736, 132, 196, 140};
+    Rectangle monitorRec    = {490, 226, 250, 182};
+    Rectangle doc0Rec       = {284, 418, 162, 76};
+    Rectangle doc2Rec       = {794, 418, 154, 76};
+    Rectangle fatherBookRec = {992, 410, 168, 68};
+    Rectangle govMemoRec    = {992, 492, 168, 68};
     Rectangle btnVoltar1990 = {70, 600, 240, 42};
     Rectangle journalHudBtn = {1040, 658, 215, 54};
 
