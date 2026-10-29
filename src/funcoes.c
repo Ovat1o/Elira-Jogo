@@ -5817,20 +5817,71 @@ void DrawMemoryCd(Vector2 position, float scale)
     DrawCircleLines((int)center.x, (int)center.y, 14.0f * scale, (Color){90, 105, 120, 255});
 }
 
+static void DrawCorpButton2008(Rectangle bounds, const char *label, Color baseCol, bool enabled)
+{
+    Vector2 mouse = GetVirtualMouse();
+    bool hover = enabled && CheckCollisionPointRec(mouse, bounds);
+
+    Color topCol = baseCol;
+    if (hover)
+    {
+        topCol = (Color){
+            (unsigned char)fminf(255.0f, baseCol.r + 26.0f),
+            (unsigned char)fminf(255.0f, baseCol.g + 26.0f),
+            (unsigned char)fminf(255.0f, baseCol.b + 26.0f),
+            255
+        };
+    }
+    Color botCol = (Color){
+        (unsigned char)fmaxf(0.0f, topCol.r - 28.0f),
+        (unsigned char)fmaxf(0.0f, topCol.g - 28.0f),
+        (unsigned char)fmaxf(0.0f, topCol.b - 28.0f),
+        255
+    };
+    Color borderCol = hover ? RAYWHITE : (Color){
+        (unsigned char)fmaxf(0.0f, baseCol.r - 45.0f),
+        (unsigned char)fmaxf(0.0f, baseCol.g - 45.0f),
+        (unsigned char)fmaxf(0.0f, baseCol.b - 45.0f),
+        255
+    };
+
+    /* Sombra 3D suave */
+    DrawRectangleRounded((Rectangle){bounds.x + 2, bounds.y + 3, bounds.width, bounds.height}, 0.20f, 6, Fade(BLACK, 0.22f));
+
+    /* Corpo principal do botao e reflexo superior estilo Aero 2008 */
+    DrawRectangleRounded(bounds, 0.20f, 6, botCol);
+    DrawRectangleRounded((Rectangle){bounds.x + 2, bounds.y + 2, bounds.width - 4, bounds.height * 0.48f}, 0.20f, 6, Fade(RAYWHITE, hover ? 0.28f : 0.16f));
+    DrawRectangleRoundedLinesEx(bounds, 0.20f, 6, hover ? 2.2f : 1.5f, borderCol);
+
+    int fontSize = (bounds.height >= 42) ? 16 : 15;
+    int textW = MeasureGameText(label, fontSize);
+    int tx = (int)(bounds.x + (bounds.width - textW) / 2);
+    int ty = (int)(bounds.y + (bounds.height - fontSize) / 2);
+
+    DrawGameText(label, tx + 1, ty + 1, fontSize, Fade(BLACK, 0.45f));
+    DrawGameText(label, tx, ty, fontSize, enabled ? RAYWHITE : (Color){225, 230, 238, 255});
+}
+
 void DrawDocumentViewer2008(const GameState *game)
 {
     if (game->activeDocument2008 < 0) return;
 
-    DrawRectangle(0, 0, SCREEN_WIDTH, SCREEN_HEIGHT, Fade(BLACK, 0.82f));
+    DrawRectangle(0, 0, SCREEN_WIDTH, SCREEN_HEIGHT, Fade((Color){12, 18, 28, 255}, 0.72f));
 
+    /* Janela estilo Sistema Corporativo 2008 (Clara e detalhada) */
     Rectangle panel = {220, 50, 840, 620};
-    DrawRectangleRounded(panel, 0.04f, 8, (Color){20, 28, 38, 255});
-    DrawRectangleRoundedLinesEx(panel, 0.04f, 8, 2.5f, CYAN_COLOR);
+    DrawRectangleRounded((Rectangle){panel.x + 8, panel.y + 10, panel.width, panel.height}, 0.03f, 8, Fade(BLACK, 0.38f));
+    DrawRectangleRounded(panel, 0.03f, 8, (Color){228, 234, 242, 255});
+    DrawRectangleRoundedLinesEx(panel, 0.03f, 8, 3.0f, (Color){52, 92, 142, 255});
 
     int doc = game->activeDocument2008;
 
-    /* Cabecalho do modal */
-    DrawRectangleRounded((Rectangle){panel.x + 18, panel.y + 16, panel.width - 36, 44}, 0.12f, 6, (Color){28, 38, 52, 255});
+    /* Barra de Titulo Aero-Blue 2008 */
+    Rectangle headerBar = {panel.x + 6, panel.y + 6, panel.width - 12, 46};
+    DrawRectangleRounded(headerBar, 0.12f, 6, (Color){36, 86, 148, 255});
+    DrawRectangleRounded((Rectangle){headerBar.x + 2, headerBar.y + 2, headerBar.width - 4, 20}, 0.12f, 6, Fade(RAYWHITE, 0.22f));
+    DrawRectangleRoundedLinesEx(headerBar, 0.12f, 6, 1.5f, (Color){22, 58, 104, 255});
+
     const char *headerTitles[6] = {
         "EVIDÊNCIA 01 // COMPARAÇÃO BIOMÉTRICA (DRONE)",
         "EVIDÊNCIA 02 // PANFLETO DA REVOLTA POPULAR",
@@ -5839,55 +5890,65 @@ void DrawDocumentViewer2008(const GameState *game)
         "ARQUIVO HISTÓRICO // ANOTAÇÕES DO DR. RAMOS (2004)",
         "CONFIDENCIAL // MEMORANDO MINISTÉRIO DA SEGURANÇA (2008)"
     };
-    DrawGameText(headerTitles[doc], (int)(panel.x + 36), (int)(panel.y + 28), 19, GOLD_COLOR);
+    DrawCircle((int)headerBar.x + 22, (int)headerBar.y + 23, 6.0f, GOLD_COLOR);
+    DrawGameText(headerTitles[doc], (int)(headerBar.x + 38), (int)(headerBar.y + 14), 18, RAYWHITE);
 
-    /* Area visual do documento */
-    Rectangle contentBox = {panel.x + 30, panel.y + 75, panel.width - 60, 490};
-    DrawRectangleRounded(contentBox, 0.03f, 6, (Color){14, 20, 28, 255});
-    DrawRectangleRoundedLinesEx(contentBox, 0.03f, 6, 1.5f, (Color){55, 75, 95, 255});
+    /* Area visual interna do dossie (Folha clara corporativa) */
+    Rectangle contentBox = {panel.x + 24, panel.y + 66, panel.width - 48, 486};
+    DrawRectangleRounded((Rectangle){contentBox.x + 3, contentBox.y + 4, contentBox.width, contentBox.height}, 0.03f, 6, Fade(BLACK, 0.10f));
+    DrawRectangleRounded(contentBox, 0.03f, 6, (Color){248, 250, 254, 255});
+    DrawRectangleRoundedLinesEx(contentBox, 0.03f, 6, 1.8f, (Color){172, 184, 202, 255});
+
+    /* Grade tecnica sutil no fundo da folha */
+    for (int gx = (int)contentBox.x + 24; gx < (int)(contentBox.x + contentBox.width); gx += 32)
+        DrawLine(gx, (int)contentBox.y + 4, gx, (int)(contentBox.y + contentBox.height - 4), Fade((Color){190, 204, 222, 255}, 0.28f));
+    for (int gy = (int)contentBox.y + 24; gy < (int)(contentBox.y + contentBox.height); gy += 32)
+        DrawLine((int)contentBox.x + 4, gy, (int)(contentBox.x + contentBox.width - 4), gy, Fade((Color){190, 204, 222, 255}, 0.28f));
 
     if (doc == 0)
     {
         /* --- DOC 0: COMPARACAO FACIAL (DRONE) --- */
         Rectangle imgRec = {contentBox.x + 25, contentBox.y + 25, 240, 260};
-        DrawRectangleRounded(imgRec, 0.04f, 6, (Color){10, 16, 24, 255});
-        DrawRectangleRoundedLinesEx(imgRec, 0.04f, 6, 2.0f, (Color){70, 95, 120, 255});
+        DrawRectangleRounded(imgRec, 0.04f, 6, (Color){18, 28, 40, 255});
+        DrawRectangleRoundedLinesEx(imgRec, 0.04f, 6, 2.5f, (Color){70, 95, 120, 255});
         /* Grade e silhueta facial */
-        DrawCircle((int)(imgRec.x + 120), (int)(imgRec.y + 110), 55, Fade((Color){85, 130, 160, 255}, 0.45f));
-        DrawRectangleLinesEx((Rectangle){imgRec.x + 80, imgRec.y + 70, 80, 85}, 1.5f, RED_COLOR);
+        DrawCircle((int)(imgRec.x + 120), (int)(imgRec.y + 110), 55, Fade((Color){110, 155, 188, 255}, 0.55f));
+        DrawRectangleLinesEx((Rectangle){imgRec.x + 80, imgRec.y + 70, 80, 85}, 2.0f, RED_COLOR);
         DrawCircle((int)(imgRec.x + 100), (int)(imgRec.y + 100), 4, RED_COLOR);
         DrawCircle((int)(imgRec.x + 140), (int)(imgRec.y + 100), 4, RED_COLOR);
         DrawLine((int)(imgRec.x + 120), (int)(imgRec.y + 105), (int)(imgRec.x + 120), (int)(imgRec.y + 125), RED_COLOR);
         DrawLine((int)(imgRec.x + 105), (int)(imgRec.y + 138), (int)(imgRec.x + 135), (int)(imgRec.y + 138), RED_COLOR);
         for (int gy = (int)imgRec.y + 10; gy < (int)(imgRec.y + imgRec.height); gy += 14)
-            DrawLine((int)imgRec.x, gy, (int)(imgRec.x + imgRec.width), gy, Fade(BLACK, 0.35f));
+            DrawLine((int)imgRec.x, gy, (int)(imgRec.x + imgRec.width), gy, Fade(BLACK, 0.30f));
 
-        DrawRectangle((int)imgRec.x, (int)(imgRec.y + imgRec.height - 34), (int)imgRec.width, 34, Fade(RED_COLOR, 0.25f));
-        DrawGameText("SIMILARIDADE: 78%", (int)imgRec.x + 40, (int)(imgRec.y + imgRec.height - 24), 16, RED_COLOR);
+        DrawRectangle((int)imgRec.x, (int)(imgRec.y + imgRec.height - 34), (int)imgRec.width, 34, (Color){185, 42, 36, 255});
+        DrawGameText("SIMILARIDADE: 78%", (int)imgRec.x + 40, (int)(imgRec.y + imgRec.height - 24), 16, RAYWHITE);
 
         int tx = (int)(imgRec.x + imgRec.width + 30);
         int ty = (int)(contentBox.y + 30);
-        DrawGameText("RELATÓRIO DE RECONHECIMENTO FACIAL - DRONE ALPHA-4", tx, ty, 17, CYAN_COLOR);
-        DrawLine(tx, ty + 24, tx + 460, ty + 24, Fade(CYAN_COLOR, 0.4f));
+        DrawGameText("RELATÓRIO DE RECONHECIMENTO FACIAL - DRONE ALPHA-4", tx, ty, 17, (Color){28, 72, 128, 255});
+        DrawLine(tx, ty + 24, tx + 460, ty + 24, (Color){145, 168, 196, 255});
 
-        DrawGameText("ALVO DETECTADO: Lucas Silva (Registro #AR-2008-09)", tx, ty + 38, 15, RAYWHITE);
-        DrawGameText("LOCAL DO AVISTAMENTO: Praca Central (Setor Leste)", tx, ty + 64, 15, LIGHTGRAY);
-        DrawGameText("HORÁRIO INFORMADO: 14:30:00", tx, ty + 90, 15, GOLD_COLOR);
-        DrawGameText("ÍNDICE DE CONFIANÇA: 78% (Grau de incerteza elevado)", tx, ty + 116, 15, RED_COLOR);
+        DrawGameText("ALVO DETECTADO: Lucas Silva (Registro #AR-2008-09)", tx, ty + 38, 15, (Color){24, 32, 44, 255});
+        DrawGameText("LOCAL DO AVISTAMENTO: Praça Central (Setor Leste)", tx, ty + 64, 15, (Color){55, 68, 84, 255});
+        DrawGameText("HORÁRIO INFORMADO: 14:30:00", tx, ty + 90, 15, (Color){185, 105, 12, 255});
+        DrawGameText("ÍNDICE DE CONFIANÇA: 78% (Grau de incerteza elevado)", tx, ty + 116, 15, (Color){195, 42, 35, 255});
 
-        DrawRectangleRounded((Rectangle){(float)tx, (float)(ty + 150), 470, 120}, 0.08f, 6, (Color){24, 32, 44, 255});
-        DrawRectangleRoundedLinesEx((Rectangle){(float)tx, (float)(ty + 150), 470, 120}, 0.08f, 6, 1.0f, (Color){60, 80, 105, 255});
-        DrawGameText("PARECER PERICIAL:", tx + 14, ty + 162, 14, GOLD_COLOR);
-        DrawGameText("- Imagem aerea com forte granulacao e desfoque de movimento.", tx + 14, ty + 186, 14, LIGHTGRAY);
-        DrawGameText("- O algoritmo assume correspondencia aproximada sem prova cabal.", tx + 14, ty + 208, 14, LIGHTGRAY);
-        DrawGameText("- Sozinha, esta imagem NAO comprova que o alvo estava no local.", tx + 14, ty + 230, 14, (Color){235, 120, 110, 255});
+        Rectangle noteBox = {(float)tx, (float)(ty + 150), 470, 124};
+        DrawRectangleRounded(noteBox, 0.06f, 6, (Color){252, 242, 240, 255});
+        DrawRectangleRoundedLinesEx(noteBox, 0.06f, 6, 1.5f, (Color){210, 120, 115, 255});
+        DrawGameText("PARECER PERICIAL:", tx + 14, ty + 162, 14, (Color){175, 38, 32, 255});
+        DrawGameText("- Imagem aérea com forte granulação e desfoque de movimento.", tx + 14, ty + 186, 14, (Color){45, 55, 68, 255});
+        DrawGameText("- O algoritmo assume correspondência aproximada sem prova cabal.", tx + 14, ty + 208, 14, (Color){45, 55, 68, 255});
+        DrawGameText("- Sozinha, esta imagem NÃO comprova que o alvo estava no local.", tx + 14, ty + 232, 14, (Color){185, 35, 30, 255});
 
-        DrawGameText("Obs: Necessita de contraprova cronologica para demonstrar o erro.", (int)contentBox.x + 30, (int)(contentBox.y + 320), 15, GRAY);
+        DrawGameText("Obs: Necessita de contraprova cronológica para demonstrar o erro.", (int)contentBox.x + 30, (int)(contentBox.y + 320), 15, (Color){85, 98, 115, 255});
     }
     else if (doc == 1)
     {
         /* --- DOC 1: PANFLETO DA REVOLTA --- */
         Rectangle flyerPaper = {contentBox.x + 35, contentBox.y + 25, 260, 310};
+        DrawRectangleRounded((Rectangle){flyerPaper.x + 4, flyerPaper.y + 5, flyerPaper.width, flyerPaper.height}, 0.04f, 6, Fade(BLACK, 0.15f));
         DrawRectangleRounded(flyerPaper, 0.04f, 6, PAPER_COLOR);
         DrawRectangleRoundedLinesEx(flyerPaper, 0.04f, 6, 2.0f, (Color){160, 145, 115, 255});
 
@@ -5896,73 +5957,74 @@ void DrawDocumentViewer2008(const GameState *game)
         DrawGameText("MANIFESTO POPULAR", (int)flyerPaper.x + 28, (int)flyerPaper.y + 28, 16, RAYWHITE);
         DrawGameText("\"NÃO À VIGILÂNCIA\"", (int)flyerPaper.x + 46, (int)flyerPaper.y + 70, 18, INK_COLOR);
         DrawGameText("Exigimos o fim dos drones", (int)flyerPaper.x + 28, (int)flyerPaper.y + 110, 14, INK_COLOR);
-        DrawGameText("biometricos sobre civis!", (int)flyerPaper.x + 28, (int)flyerPaper.y + 130, 14, INK_COLOR);
+        DrawGameText("biométricos sobre civis!", (int)flyerPaper.x + 28, (int)flyerPaper.y + 130, 14, INK_COLOR);
         DrawGameText("Porta-voz: Lucas Silva", (int)flyerPaper.x + 28, (int)flyerPaper.y + 175, 16, (Color){145, 35, 25, 255});
-        DrawGameText("Marcha Matutina: 10h as 13h", (int)flyerPaper.x + 28, (int)flyerPaper.y + 215, 14, (Color){85, 75, 60, 255});
-        DrawGameText("[APREENDIDO PELA POLÍCIA]", (int)flyerPaper.x + 24, (int)flyerPaper.y + 265, 13, RED_COLOR);
+        DrawGameText("Marcha Matutina: 10h às 13h", (int)flyerPaper.x + 28, (int)flyerPaper.y + 215, 14, (Color){85, 75, 60, 255});
+        DrawGameText("[APREENDIDO PELA POLÍCIA]", (int)flyerPaper.x + 24, (int)flyerPaper.y + 265, 13, (Color){185, 38, 32, 255});
 
         int tx = (int)(flyerPaper.x + flyerPaper.width + 35);
         int ty = (int)(contentBox.y + 30);
-        DrawGameText("DOCUMENTO APREENDIDO: PANFLETO DE ATIVISMO", tx, ty, 17, CYAN_COLOR);
-        DrawLine(tx, ty + 24, tx + 440, ty + 24, Fade(CYAN_COLOR, 0.4f));
+        DrawGameText("DOCUMENTO APREENDIDO: PANFLETO DE ATIVISMO", tx, ty, 17, (Color){28, 72, 128, 255});
+        DrawLine(tx, ty + 24, tx + 440, ty + 24, (Color){145, 168, 196, 255});
 
-        DrawGameText("LOCAL DA APREENSÃO: Praca Central (Manha do protesto)", tx, ty + 38, 15, RAYWHITE);
-        DrawGameText("HORÁRIO INFORMADO NO PANFLETO: 10:00 as 13:00", tx, ty + 64, 15, GOLD_COLOR);
+        DrawGameText("LOCAL DA APREENSÃO: Praça Central (Manhã do protesto)", tx, ty + 38, 15, (Color){24, 32, 44, 255});
+        DrawGameText("HORÁRIO INFORMADO NO PANFLETO: 10:00 às 13:00", tx, ty + 64, 15, (Color){185, 105, 12, 255});
 
         Rectangle boxP = {(float)tx, (float)(ty + 105), 450, 160};
-        DrawRectangleRounded(boxP, 0.08f, 6, (Color){24, 32, 44, 255});
-        DrawRectangleRoundedLinesEx(boxP, 0.08f, 6, 1.0f, (Color){60, 80, 105, 255});
-        DrawGameText("ANÁLISE PERICIAL:", tx + 14, ty + 120, 14, GOLD_COLOR);
-        DrawGameText("- O panfleto cita nominalmente Lucas Silva como lider civil.", tx + 14, ty + 148, 14, LIGHTGRAY);
-        DrawGameText("- Explica o motivo pelo qual a IA o inseriu na lista de alvos.", tx + 14, ty + 172, 14, LIGHTGRAY);
-        DrawGameText("- POREM, a marcha terminou as 13:00. O panfleto NAO prova", tx + 14, ty + 198, 14, (Color){245, 180, 70, 255});
-        DrawGameText("  onde ele estava as 14:30 (horario do suposto disparo).", tx + 14, ty + 220, 14, (Color){245, 180, 70, 255});
+        DrawRectangleRounded(boxP, 0.06f, 6, (Color){252, 246, 228, 255});
+        DrawRectangleRoundedLinesEx(boxP, 0.06f, 6, 1.5f, (Color){210, 165, 75, 255});
+        DrawGameText("ANÁLISE PERICIAL:", tx + 14, ty + 120, 14, (Color){165, 95, 12, 255});
+        DrawGameText("- O panfleto cita nominalmente Lucas Silva como líder civil.", tx + 14, ty + 148, 14, (Color){45, 55, 68, 255});
+        DrawGameText("- Explica o motivo pelo qual a IA o inseriu na lista de alvos.", tx + 14, ty + 172, 14, (Color){45, 55, 68, 255});
+        DrawGameText("- PORÉM, a marcha terminou às 13:00. O panfleto NÃO prova", tx + 14, ty + 198, 14, (Color){185, 85, 15, 255});
+        DrawGameText("  onde ele estava às 14:30 (horário do suposto disparo).", tx + 14, ty + 220, 14, (Color){185, 85, 15, 255});
     }
     else if (doc == 2)
     {
         /* --- DOC 2: REGISTRO DE ENTRADA (CATRACA) --- */
         Rectangle cardRec = {contentBox.x + 35, contentBox.y + 25, 300, 280};
-        DrawRectangleRounded(cardRec, 0.04f, 6, (Color){235, 240, 245, 255});
-        DrawRectangleRoundedLinesEx(cardRec, 0.04f, 6, 2.0f, (Color){85, 120, 155, 255});
+        DrawRectangleRounded((Rectangle){cardRec.x + 4, cardRec.y + 5, cardRec.width, cardRec.height}, 0.04f, 6, Fade(BLACK, 0.14f));
+        DrawRectangleRounded(cardRec, 0.04f, 6, (Color){238, 244, 250, 255});
+        DrawRectangleRoundedLinesEx(cardRec, 0.04f, 6, 2.0f, (Color){75, 115, 155, 255});
 
-        DrawRectangle((int)cardRec.x + 15, (int)cardRec.y + 15, (int)cardRec.width - 30, 28, (Color){35, 65, 95, 255});
+        DrawRectangle((int)cardRec.x + 15, (int)cardRec.y + 15, (int)cardRec.width - 30, 28, (Color){35, 72, 112, 255});
         DrawGameText("TECH-CORP // CONTROLE DE ACESSO", (int)cardRec.x + 24, (int)cardRec.y + 22, 13, RAYWHITE);
 
         DrawGameText("COLABORADOR: Lucas Silva", (int)cardRec.x + 20, (int)cardRec.y + 60, 15, (Color){25, 35, 45, 255});
         DrawGameText("FUNÇÃO: Engenheiro de Infraestrutura", (int)cardRec.x + 20, (int)cardRec.y + 85, 13, (Color){65, 75, 85, 255});
         DrawGameText("CRACHÁ DE ACESSO: #0842", (int)cardRec.x + 20, (int)cardRec.y + 110, 14, (Color){35, 45, 55, 255});
 
-        DrawRectangle((int)cardRec.x + 15, (int)cardRec.y + 140, (int)cardRec.width - 30, 60, Fade((Color){45, 155, 75, 255}, 0.20f));
+        DrawRectangle((int)cardRec.x + 15, (int)cardRec.y + 140, (int)cardRec.width - 30, 60, Fade((Color){45, 165, 75, 255}, 0.22f));
         DrawRectangleLines((int)cardRec.x + 15, (int)cardRec.y + 140, (int)cardRec.width - 30, 60, (Color){35, 145, 65, 255});
-        DrawGameText("ENTRADA: 14:15:08", (int)cardRec.x + 24, (int)cardRec.y + 150, 16, (Color){25, 115, 45, 255});
+        DrawGameText("ENTRADA: 14:15:08", (int)cardRec.x + 24, (int)cardRec.y + 150, 16, (Color){22, 118, 48, 255});
         DrawGameText("Catraca Portaria Principal - Biometria Digital", (int)cardRec.x + 24, (int)cardRec.y + 174, 12, (Color){45, 75, 55, 255});
 
         DrawGameText("SAÍDA: [EM ABERTO / EXPEDIENTE EM CURSO]", (int)cardRec.x + 20, (int)cardRec.y + 220, 12, (Color){165, 45, 35, 255});
-        DrawGameText("Carimbo do Servidor Central // Nao alterado", (int)cardRec.x + 20, (int)cardRec.y + 245, 11, GRAY);
+        DrawGameText("Carimbo do Servidor Central // Não alterado", (int)cardRec.x + 20, (int)cardRec.y + 245, 11, (Color){95, 105, 118, 255});
 
         int tx = (int)(cardRec.x + cardRec.width + 35);
         int ty = (int)(contentBox.y + 30);
-        DrawGameText("REGISTRO FORMAL: LOG DA CATRACA ELETRÔNICA", tx, ty, 17, CYAN_COLOR);
-        DrawLine(tx, ty + 24, tx + 400, ty + 24, Fade(CYAN_COLOR, 0.4f));
+        DrawGameText("REGISTRO FORMAL: LOG DA CATRACA ELETRÔNICA", tx, ty, 17, (Color){28, 72, 128, 255});
+        DrawLine(tx, ty + 24, tx + 400, ty + 24, (Color){145, 168, 196, 255});
 
-        DrawGameText("LOCAL DO REGISTRO: Sede da Empresa (a 12 km da Praca)", tx, ty + 42, 15, RAYWHITE);
-        DrawGameText("HORÁRIO DO ACESSO: 14:15:08", tx, ty + 68, 15, (Color){60, 235, 110, 255});
+        DrawGameText("LOCAL DO REGISTRO: Sede da Empresa (a 12 km da Praça)", tx, ty + 42, 15, (Color){24, 32, 44, 255});
+        DrawGameText("HORÁRIO DO ACESSO: 14:15:08", tx, ty + 68, 15, (Color){25, 138, 62, 255});
 
         Rectangle boxE = {(float)tx, (float)(ty + 105), 415, 160};
-        DrawRectangleRounded(boxE, 0.08f, 6, (Color){24, 32, 44, 255});
-        DrawRectangleRoundedLinesEx(boxE, 0.08f, 6, 1.0f, (Color){60, 80, 105, 255});
-        DrawGameText("IMPORTÂNCIA PARA A CONTESTAÇÃO:", tx + 14, ty + 120, 14, GOLD_COLOR);
-        DrawGameText("- Comprova formalmente a entrada de Lucas no predio as 14:15.", tx + 14, ty + 148, 14, LIGHTGRAY);
-        DrawGameText("- O predio fica a 12 km de distancia da manifestacao.", tx + 14, ty + 172, 14, LIGHTGRAY);
-        DrawGameText("- POREM, sozinho, o registro de ponto requer comprovacao de", tx + 14, ty + 198, 14, GOLD_COLOR);
-        DrawGameText("  que ele permaneceu dentro no momento exato do disparo (14:30).", tx + 14, ty + 220, 14, GOLD_COLOR);
+        DrawRectangleRounded(boxE, 0.06f, 6, (Color){235, 248, 238, 255});
+        DrawRectangleRoundedLinesEx(boxE, 0.06f, 6, 1.5f, (Color){75, 168, 102, 255});
+        DrawGameText("IMPORTÂNCIA PARA A CONTESTAÇÃO:", tx + 14, ty + 120, 14, (Color){22, 122, 52, 255});
+        DrawGameText("- Comprova formalmente a entrada de Lucas no prédio às 14:15.", tx + 14, ty + 148, 14, (Color){40, 52, 65, 255});
+        DrawGameText("- O prédio fica a 12 km de distância da manifestação.", tx + 14, ty + 172, 14, (Color){40, 52, 65, 255});
+        DrawGameText("- PORÉM, sozinho, o registro de ponto requer comprovação de", tx + 14, ty + 198, 14, (Color){165, 95, 12, 255});
+        DrawGameText("  que ele permaneceu dentro no momento exato do disparo (14:30).", tx + 14, ty + 220, 14, (Color){165, 95, 12, 255});
     }
     else if (doc == 3)
     {
         /* --- DOC 3: CAMERA INTERNA CFTV (SERVIDORES) --- */
         Rectangle cctvBox = {contentBox.x + 25, contentBox.y + 25, 300, 240};
-        DrawRectangleRounded(cctvBox, 0.04f, 6, (Color){8, 20, 14, 255});
-        DrawRectangleRoundedLinesEx(cctvBox, 0.04f, 6, 2.0f, (Color){45, 175, 85, 255});
+        DrawRectangleRounded(cctvBox, 0.04f, 6, (Color){10, 24, 16, 255});
+        DrawRectangleRoundedLinesEx(cctvBox, 0.04f, 6, 2.5f, (Color){45, 175, 85, 255});
 
         /* Imagem de monitor CFTV de seguranca */
         for (int y = (int)cctvBox.y + 4; y < (int)(cctvBox.y + cctvBox.height); y += 6)
@@ -5979,83 +6041,84 @@ void DrawDocumentViewer2008(const GameState *game)
 
         int tx = (int)(cctvBox.x + cctvBox.width + 30);
         int ty = (int)(contentBox.y + 30);
-        DrawGameText("CIRCUITO FECHADO (CFTV): SALA DE SERVIDORES", tx, ty, 17, CYAN_COLOR);
-        DrawLine(tx, ty + 24, tx + 420, ty + 24, Fade(CYAN_COLOR, 0.4f));
+        DrawGameText("CIRCUITO FECHADO (CFTV): SALA DE SERVIDORES", tx, ty, 17, (Color){28, 72, 128, 255});
+        DrawLine(tx, ty + 24, tx + 420, ty + 24, (Color){145, 168, 196, 255});
 
-        DrawGameText("LOCAL DA GRAVAÇÃO: Subsolo da Empresa (Rack de Redes)", tx, ty + 42, 15, RAYWHITE);
-        DrawGameText("TIMESTAMP EXATO DA CÂMERA: 14:30:12", tx, ty + 68, 15, (Color){60, 235, 110, 255});
+        DrawGameText("LOCAL DA GRAVAÇÃO: Subsolo da Empresa (Rack de Redes)", tx, ty + 42, 15, (Color){24, 32, 44, 255});
+        DrawGameText("TIMESTAMP EXATO DA CÂMERA: 14:30:12", tx, ty + 68, 15, (Color){25, 138, 62, 255});
 
         Rectangle boxC = {(float)tx, (float)(ty + 105), 430, 160};
-        DrawRectangleRounded(boxC, 0.08f, 6, (Color){24, 32, 44, 255});
-        DrawRectangleRoundedLinesEx(boxC, 0.08f, 6, 1.0f, (Color){60, 80, 105, 255});
-        DrawGameText("IMPORTÂNCIA PARA A CONTESTAÇÃO:", tx + 14, ty + 120, 14, GOLD_COLOR);
-        DrawGameText("- Imagem estatica nitida de Lucas trabalhando nos servidores.", tx + 14, ty + 148, 14, LIGHTGRAY);
-        DrawGameText("- O horario bate no EXATO MINUTO em que o drone afirma te-lo visto.", tx + 14, ty + 172, 14, (Color){60, 235, 110, 255});
-        DrawGameText("- Quando combinada com o Registro de Entrada (#3), cria", tx + 14, ty + 198, 14, GOLD_COLOR);
-        DrawGameText("  um ALIBI COMPLETO E IRREFUTAVEL de falso positivo!", tx + 14, ty + 220, 14, (Color){60, 235, 110, 255});
+        DrawRectangleRounded(boxC, 0.06f, 6, (Color){235, 248, 238, 255});
+        DrawRectangleRoundedLinesEx(boxC, 0.06f, 6, 1.5f, (Color){75, 168, 102, 255});
+        DrawGameText("IMPORTÂNCIA PARA A CONTESTAÇÃO:", tx + 14, ty + 120, 14, (Color){22, 122, 52, 255});
+        DrawGameText("- Imagem estática nítida de Lucas trabalhando nos servidores.", tx + 14, ty + 148, 14, (Color){40, 52, 65, 255});
+        DrawGameText("- O horário bate no EXATO MINUTO em que o drone afirma tê-lo visto.", tx + 14, ty + 172, 14, (Color){22, 128, 55, 255});
+        DrawGameText("- Quando combinada com o Registro de Entrada (#3), cria", tx + 14, ty + 198, 14, (Color){165, 95, 12, 255});
+        DrawGameText("  um ÁLIBI COMPLETO E IRREFUTÁVEL de falso positivo!", tx + 14, ty + 220, 14, (Color){22, 128, 55, 255});
     }
     else if (doc == 4)
     {
         /* --- DOC 4: NOTAS DO DR. RAMOS (DESCOBERTA OPCIONAL 1) --- */
         int tx = (int)(contentBox.x + 35);
         int ty = (int)(contentBox.y + 25);
-        DrawGameText("CADERNO DE PESQUISAS DO DR. RAMOS // ANO 2004", tx, ty, 18, GOLD_COLOR);
-        DrawLine(tx, ty + 26, tx + 710, ty + 26, Fade(GOLD_COLOR, 0.4f));
+        DrawGameText("CADERNO DE PESQUISAS DO DR. RAMOS // ANO 2004", tx, ty, 18, (Color){155, 92, 18, 255});
+        DrawLine(tx, ty + 26, tx + 710, ty + 26, (Color){195, 165, 115, 255});
 
         Rectangle pBox = {(float)tx, (float)(ty + 42), 710, 250};
-        DrawRectangleRounded(pBox, 0.04f, 6, (Color){24, 32, 44, 255});
-        DrawRectangleRoundedLinesEx(pBox, 0.04f, 6, 1.5f, (Color){168, 142, 93, 255});
+        DrawRectangleRounded(pBox, 0.04f, 6, (Color){252, 248, 236, 255});
+        DrawRectangleRoundedLinesEx(pBox, 0.04f, 6, 1.8f, (Color){185, 148, 88, 255});
 
-        DrawGameText("\"O reconhecimento facial foi desenvolvido para resgatar seres humanos.\"", tx + 24, ty + 60, 16, GOLD_COLOR);
-        DrawGameText("Criamos esta rede neural para encontrar criancas perdidas em multidoes", tx + 24, ty + 95, 15, RAYWHITE);
-        DrawGameText("e sobreviventes soterrados sob escombros de catastrofes naturais.", tx + 24, ty + 120, 15, RAYWHITE);
-        DrawGameText("A visao computacional deve ser um farol de acolhimento e protecao da vida.", tx + 24, ty + 145, 15, RAYWHITE);
-        DrawGameText("Jamais imaginei que a maquina seria transformada em carcere e censura.", tx + 24, ty + 170, 15, (Color){245, 175, 120, 255});
+        DrawGameText("\"O reconhecimento facial foi desenvolvido para resgatar seres humanos.\"", tx + 24, ty + 60, 16, (Color){155, 88, 14, 255});
+        DrawGameText("Criamos esta rede neural para encontrar crianças perdidas em multidões", tx + 24, ty + 95, 15, (Color){35, 45, 58, 255});
+        DrawGameText("e sobreviventes soterrados sob escombros de catástrofes naturais.", tx + 24, ty + 120, 15, (Color){35, 45, 58, 255});
+        DrawGameText("A visão computacional deve ser um farol de acolhimento e proteção da vida.", tx + 24, ty + 145, 15, (Color){35, 45, 58, 255});
+        DrawGameText("Jamais imaginei que a máquina seria transformada em cárcere e censura.", tx + 24, ty + 170, 15, (Color){175, 52, 38, 255});
 
-        DrawGameText("DIRETRIZ DE PROTEÇÃO ÉTICA LOCAL:", tx + 24, ty + 205, 14, CYAN_COLOR);
-        DrawGameText("\"Para evitar que um governo tirânico use esta instalacao para ataques,", tx + 24, ty + 225, 13, LIGHTGRAY);
-        DrawGameText("o despacho automatico pode ser desligado localmente, preservando todas as provas.\"", tx + 24, ty + 245, 13, (Color){60, 235, 110, 255});
+        DrawGameText("DIRETRIZ DE PROTEÇÃO ÉTICA LOCAL:", tx + 24, ty + 205, 14, (Color){28, 82, 142, 255});
+        DrawGameText("\"Para evitar que um governo tirânico use esta instalação para ataques,", tx + 24, ty + 225, 13, (Color){55, 65, 78, 255});
+        DrawGameText("o despacho automático pode ser desligado localmente, preservando todas as provas.\"", tx + 24, ty + 245, 13, (Color){24, 128, 58, 255});
 
-        DrawRectangleRounded((Rectangle){(float)tx, (float)(ty + 310), 710, 60}, 0.08f, 6, Fade((Color){60, 200, 100, 255}, 0.15f));
-        DrawRectangleRoundedLinesEx((Rectangle){(float)tx, (float)(ty + 310), 710, 60}, 0.08f, 6, 1.0f, (Color){45, 145, 75, 255});
-        DrawGameText("[REGISTRO HUMANITARIO ARQUIVADO NO DIARIO COM SUCESSO]", tx + 24, ty + 330, 15, (Color){60, 235, 110, 255});
+        DrawRectangleRounded((Rectangle){(float)tx, (float)(ty + 310), 710, 60}, 0.08f, 6, (Color){228, 246, 234, 255});
+        DrawRectangleRoundedLinesEx((Rectangle){(float)tx, (float)(ty + 310), 710, 60}, 0.08f, 6, 1.5f, (Color){45, 155, 78, 255});
+        DrawGameText("[REGISTRO HUMANITÁRIO ARQUIVADO NO DIÁRIO COM SUCESSO]", tx + 24, ty + 330, 15, (Color){22, 125, 52, 255});
     }
     else if (doc == 5)
     {
         /* --- DOC 5: MEMORANDO GOVERNAMENTAL (DESCOBERTA OPCIONAL 2) --- */
         int tx = (int)(contentBox.x + 35);
         int ty = (int)(contentBox.y + 25);
-        DrawGameText("MINISTÉRIO DA SEGURANÇA PÚBLICA // DIRETRIZ SEC-402 (2008)", tx, ty, 18, RED_COLOR);
-        DrawLine(tx, ty + 26, tx + 710, ty + 26, Fade(RED_COLOR, 0.4f));
+        DrawGameText("MINISTÉRIO DA SEGURANÇA PÚBLICA // DIRETRIZ SEC-402 (2008)", tx, ty, 18, (Color){185, 38, 32, 255});
+        DrawLine(tx, ty + 26, tx + 710, ty + 26, (Color){215, 135, 130, 255});
 
         Rectangle gBox = {(float)tx, (float)(ty + 42), 710, 250};
-        DrawRectangleRounded(gBox, 0.04f, 6, (Color){24, 32, 44, 255});
-        DrawRectangleRoundedLinesEx(gBox, 0.04f, 6, 1.5f, (Color){185, 60, 50, 255});
+        DrawRectangleRounded(gBox, 0.04f, 6, (Color){252, 242, 242, 255});
+        DrawRectangleRoundedLinesEx(gBox, 0.04f, 6, 1.8f, (Color){195, 85, 80, 255});
 
-        DrawGameText("ASSUNTO: Adaptação de Algoritmos Biometricos para Neutralizacao de Dissidentes", tx + 24, ty + 60, 15, RED_COLOR);
-        DrawGameText("1. Fica ordenada a integracao dos algoritmos do Dr. Ramos aos drones de ataque.", tx + 24, ty + 95, 15, RAYWHITE);
-        DrawGameText("2. Qualquer individuo com similaridade superior a 75% em protestos sera visado.", tx + 24, ty + 120, 15, RAYWHITE);
-        DrawGameText("3. Prioriza-se velocidade de resposta sobre a certeza da identificacao.", tx + 24, ty + 145, 15, (Color){245, 160, 90, 255});
+        DrawGameText("ASSUNTO: Adaptação de Algoritmos Biométricos para Neutralização de Dissidentes", tx + 24, ty + 60, 15, (Color){175, 35, 30, 255});
+        DrawGameText("1. Fica ordenada a integração dos algoritmos do Dr. Ramos aos drones de ataque.", tx + 24, ty + 95, 15, (Color){35, 45, 58, 255});
+        DrawGameText("2. Qualquer indivíduo com similaridade superior a 75% em protestos será visado.", tx + 24, ty + 120, 15, (Color){35, 45, 58, 255});
+        DrawGameText("3. Prioriza-se velocidade de resposta sobre a certeza da identificação.", tx + 24, ty + 145, 15, (Color){185, 75, 22, 255});
 
-        DrawGameText("CLÁUSULA DE MANUTENÇÃO LOCAL:", tx + 24, ty + 185, 14, GOLD_COLOR);
-        DrawGameText("\"O controle de despacho automatico de drones da filial pode ser suspenso", tx + 24, ty + 205, 13, LIGHTGRAY);
-        DrawGameText("no menu 'Configuracao da Instalacao' do computador para manutencao dos logs.\"", tx + 24, ty + 225, 13, CYAN_COLOR);
+        DrawGameText("CLÁUSULA DE MANUTENÇÃO LOCAL:", tx + 24, ty + 185, 14, (Color){165, 95, 12, 255});
+        DrawGameText("\"O controle de despacho automático de drones da filial pode ser suspenso", tx + 24, ty + 205, 13, (Color){55, 65, 78, 255});
+        DrawGameText("no menu 'Configuração da Instalação' do computador para manutenção dos logs.\"", tx + 24, ty + 225, 13, (Color){28, 82, 142, 255});
 
-        DrawRectangleRounded((Rectangle){(float)tx, (float)(ty + 310), 710, 60}, 0.08f, 6, Fade(GOLD_COLOR, 0.15f));
-        DrawRectangleRoundedLinesEx((Rectangle){(float)tx, (float)(ty + 310), 710, 60}, 0.08f, 6, 1.0f, GOLD_COLOR);
-        DrawGameText("[DESVIO GOVERNAMENTAL CONFIRMADO: PISTA DE OVERRIDE LIBERADA]", tx + 24, ty + 330, 15, GOLD_COLOR);
+        DrawRectangleRounded((Rectangle){(float)tx, (float)(ty + 310), 710, 60}, 0.08f, 6, (Color){254, 245, 222, 255});
+        DrawRectangleRoundedLinesEx((Rectangle){(float)tx, (float)(ty + 310), 710, 60}, 0.08f, 6, 1.5f, (Color){205, 145, 35, 255});
+        DrawGameText("[DESVIO GOVERNAMENTAL CONFIRMADO: PISTA DE OVERRIDE LIBERADA]", tx + 24, ty + 330, 15, (Color){165, 95, 12, 255});
     }
 
-    /* Botoes de acao na base do modal */
+    /* Botoes de acao 3D na base do modal */
     if (doc >= 0 && doc <= 3)
     {
         bool isSel = game->puzzle2008Selected[doc];
-        Rectangle btnToggle = {panel.x + 40, panel.y + panel.height - 52, 340, 40};
-        DrawButton(btnToggle, isSel ? "[ - REMOVER DE EVIDENCIA ]" : "[ + SELECIONAR COMO EVIDENCIA ]", isSel ? RED_COLOR : (Color){50, 215, 110, 255});
+        Rectangle btnToggle = {panel.x + 26, panel.y + panel.height - 54, 340, 42};
+        DrawCorpButton2008(btnToggle, isSel ? "- REMOVER DE EVIDÊNCIA" : "+ SELECIONAR COMO EVIDÊNCIA",
+                           isSel ? (Color){195, 52, 44, 255} : (Color){38, 152, 82, 255}, true);
     }
 
-    Rectangle btnClose = {panel.x + panel.width - 220, panel.y + panel.height - 52, 190, 40};
-    DrawButton(btnClose, "< FECHAR [ESC]", CYAN_COLOR);
+    Rectangle btnClose = {panel.x + panel.width - 216, panel.y + panel.height - 54, 190, 42};
+    DrawCorpButton2008(btnClose, "< FECHAR [ESC]", (Color){42, 102, 168, 255}, true);
 }
 
 void UpdateDocumentViewer2008(GameState *game)
@@ -6966,47 +7029,116 @@ void DrawPuzzle2008(const GameState *game)
 {
     float time = (float)GetTime();
 
-    /* Desenha a sala ao fundo suavemente escurecida para manter imersao */
+    /* Desenha a sala corporativa clara ao fundo com leve vinheta para destacar o monitor */
     DrawRoom2008(game);
-    DrawRectangle(0, 0, SCREEN_WIDTH, SCREEN_HEIGHT, Fade((Color){6, 10, 16, 255}, 0.86f));
+    DrawRectangle(0, 0, SCREEN_WIDTH, SCREEN_HEIGHT, Fade((Color){18, 26, 38, 255}, 0.52f));
 
-    /* Moldura externa do monitor LCD corporativo 2008 (abaixo dos botoes superiores) */
+    /* ===================================================================== */
+    /* 1. MOLDURA FISICA DO MONITOR LCD CORPORATIVO PRATEADO (SYNCMASTER)    */
+    /* ===================================================================== */
     Rectangle mon = {70, 52, 1140, 648};
-    DrawRectangleRounded((Rectangle){mon.x + 6, mon.y + 8, mon.width, mon.height}, 0.03f, 8, (Color){4, 7, 12, 255});
-    DrawRectangleRounded(mon, 0.03f, 8, (Color){22, 30, 42, 255});
-    DrawRectangleRoundedLinesEx(mon, 0.03f, 8, 3.0f, (Color){82, 104, 128, 255});
+    Rectangle casing = {mon.x - 10, mon.y - 8, mon.width + 20, mon.height + 20};
 
-    /* Barra superior compacta do Sistema Operacional */
-    Rectangle osHeader = {mon.x + 18, mon.y + 10, mon.width - 36, 30};
-    DrawRectangleRounded(osHeader, 0.15f, 6, (Color){12, 18, 26, 255});
-    DrawRectangleRoundedLinesEx(osHeader, 0.15f, 6, 1.2f, Fade(CYAN_COLOR, 0.65f));
+    /* Sombra projetada e carcaca metalica prateada 3D */
+    DrawRectangleRounded((Rectangle){casing.x + 6, casing.y + 8, casing.width, casing.height}, 0.03f, 8, (Color){14, 20, 28, 255});
+    DrawRectangleRounded(casing, 0.03f, 8, (Color){192, 198, 208, 255});
+    /* Chanfro iluminado superior/esquerdo e sombra inferior/direita */
+    DrawRectangleRoundedLinesEx(casing, 0.03f, 8, 3.0f, (Color){230, 235, 244, 255});
+    DrawRectangleRoundedLinesEx((Rectangle){casing.x + 2, casing.y + 2, casing.width - 4, casing.height - 4}, 0.03f, 8, 2.0f, (Color){128, 136, 148, 255});
 
-    DrawCircle((int)osHeader.x + 16, (int)osHeader.y + 15, 4.5f, (Color){80, 235, 120, 255});
-    DrawGameText("SISTEMA NACIONAL DE VIGILÂNCIA BIOMÉTRICA // NÓ 2008", (int)osHeader.x + 30, (int)osHeader.y + 7, 15, CYAN_COLOR);
-    DrawGameText("STATUS: CONEXÃO SEGURA", (int)(osHeader.x + osHeader.width - 215), (int)osHeader.y + 8, 13, (Color){80, 235, 120, 255});
+    /* Rebaixo escuro da tela LCD */
+    DrawRectangleRounded((Rectangle){mon.x - 2, mon.y - 2, mon.width + 4, mon.height - 6}, 0.02f, 6, (Color){68, 76, 88, 255});
 
-    /* Abas de navegacao e botao de sair */
+    /* Fundo claro corporativo do Sistema Operacional (Prata-Perola / Gelo) */
+    Rectangle screenArea = {mon.x, mon.y, mon.width, mon.height - 10};
+    DrawRectangleRounded(screenArea, 0.015f, 6, (Color){222, 228, 238, 255});
+
+    /* Textura de grade tecnica sutil no papel de parede corporativo */
+    for (int gx = (int)screenArea.x + 24; gx < (int)(screenArea.x + screenArea.width); gx += 28)
+        DrawLine(gx, (int)screenArea.y + 40, gx, (int)(screenArea.y + screenArea.height - 4), Fade((Color){182, 194, 210, 255}, 0.45f));
+    for (int gy = (int)screenArea.y + 56; gy < (int)(screenArea.y + screenArea.height); gy += 28)
+        DrawLine((int)screenArea.x + 4, gy, (int)(screenArea.x + screenArea.width - 4), gy, Fade((Color){182, 194, 210, 255}, 0.45f));
+
+    /* Detalhes fisicos na borda inferior do monitor (Logo, botoes OSD e LED) */
+    DrawGameText("SYNCMASTER // CORP-2008", (int)(mon.x + mon.width * 0.5f - 85), (int)(mon.y + mon.height - 8), 11, (Color){78, 86, 98, 255});
+    for (int b = 0; b < 4; b++)
+    {
+        DrawRectangleRounded((Rectangle){mon.x + mon.width - 140 + b * 22, mon.y + mon.height - 7, 14, 5}, 0.4f, 4, (Color){115, 124, 136, 255});
+    }
+    DrawCircle((int)(mon.x + mon.width - 36), (int)(mon.y + mon.height - 4), 4.0f, (Color){45, 225, 95, 255});
+    DrawCircle((int)(mon.x + mon.width - 36), (int)(mon.y + mon.height - 4), 2.0f, (Color){190, 255, 210, 255});
+
+    /* ===================================================================== */
+    /* 2. BARRA DE TITULO DO SISTEMA (ESTILO AERO CORPORATIVO 2008)          */
+    /* ===================================================================== */
+    Rectangle osHeader = {mon.x + 6, mon.y + 6, mon.width - 12, 34};
+    DrawRectangleRounded(osHeader, 0.14f, 6, (Color){34, 82, 142, 255});
+    /* Reflexo vitrificado superior */
+    DrawRectangleRounded((Rectangle){osHeader.x + 2, osHeader.y + 2, osHeader.width - 4, 15}, 0.14f, 6, Fade(RAYWHITE, 0.24f));
+    DrawRectangleRoundedLinesEx(osHeader, 0.14f, 6, 1.5f, (Color){20, 52, 96, 255});
+
+    /* Icone de escudo corporativo + titulo */
+    DrawCircle((int)osHeader.x + 20, (int)osHeader.y + 17, 7.0f, GOLD_COLOR);
+    DrawCircle((int)osHeader.x + 20, (int)osHeader.y + 17, 4.0f, (Color){34, 82, 142, 255});
+    DrawGameText("SISTEMA NACIONAL DE VIGILÂNCIA BIOMÉTRICA // NÓ 2008", (int)osHeader.x + 36, (int)osHeader.y + 9, 15, RAYWHITE);
+
+    /* Pill de status de conexao + botoes classicos de janela */
+    Rectangle connPill = {osHeader.x + osHeader.width - 300, osHeader.y + 6, 206, 22};
+    DrawRectangleRounded(connPill, 0.4f, 6, (Color){22, 128, 64, 255});
+    DrawRectangleRoundedLinesEx(connPill, 0.4f, 6, 1.0f, (Color){110, 235, 150, 255});
+    DrawCircle((int)connPill.x + 12, (int)connPill.y + 11, 3.5f, (Color){120, 255, 160, 255});
+    DrawGameText("STATUS: CONEXÃO SEGURA", (int)connPill.x + 22, (int)connPill.y + 5, 12, RAYWHITE);
+
+    for (int wb = 0; wb < 3; wb++)
+    {
+        Rectangle winBtn = {osHeader.x + osHeader.width - 82 + wb * 25, osHeader.y + 6, 22, 22};
+        Color wbCol = (wb == 2) ? (Color){198, 58, 48, 255} : (Color){58, 108, 168, 255};
+        DrawRectangleRounded(winBtn, 0.25f, 4, wbCol);
+        DrawRectangleRoundedLinesEx(winBtn, 0.25f, 4, 1.0f, Fade(RAYWHITE, 0.65f));
+        const char *sym = (wb == 0) ? "_" : ((wb == 1) ? "O" : "X");
+        DrawGameText(sym, (int)winBtn.x + 7, (int)winBtn.y + 4, 12, RAYWHITE);
+    }
+
+    /* ===================================================================== */
+    /* 3. BARRA DE FERRAMENTAS METALICA E ABAS DE PASTA                      */
+    /* ===================================================================== */
+    Rectangle toolStrip = {mon.x + 6, mon.y + 42, mon.width - 12, 46};
+    DrawRectangle(toolStrip.x, toolStrip.y, toolStrip.width, toolStrip.height, (Color){202, 210, 222, 255});
+    DrawLine((int)toolStrip.x, (int)(toolStrip.y + toolStrip.height), (int)(toolStrip.x + toolStrip.width), (int)(toolStrip.y + toolStrip.height), (Color){154, 166, 182, 255});
+
     Rectangle tab0 = {mon.x + 18, mon.y + 46, 320, 38};
     Rectangle tab1 = {mon.x + 348, mon.y + 46, 360, 38};
     Rectangle btnClose = {mon.x + mon.width - 248, mon.y + 46, 230, 38};
 
     bool isTab0 = (game->terminal2008ActiveTab == 0);
-    DrawRectangleRounded(tab0, 0.20f, 6, isTab0 ? (Color){32, 52, 74, 255} : (Color){18, 24, 34, 255});
-    DrawRectangleRoundedLinesEx(tab0, 0.20f, 6, 1.8f, isTab0 ? GOLD_COLOR : (Color){50, 65, 80, 255});
-    DrawGameText("1. ORDEM DE ALVO PENDENTE", (int)tab0.x + 28, (int)tab0.y + 11, 15, isTab0 ? GOLD_COLOR : LIGHTGRAY);
 
-    DrawRectangleRounded(tab1, 0.20f, 6, !isTab0 ? (Color){32, 52, 74, 255} : (Color){18, 24, 34, 255});
-    DrawRectangleRoundedLinesEx(tab1, 0.20f, 6, 1.8f, !isTab0 ? CYAN_COLOR : (Color){50, 65, 80, 255});
+    /* Aba 0 */
+    DrawRectangleRounded(tab0, 0.18f, 6, isTab0 ? (Color){248, 250, 254, 255} : (Color){178, 188, 204, 255});
+    if (isTab0)
+    {
+        DrawRectangleRounded((Rectangle){tab0.x + 2, tab0.y + 2, tab0.width - 4, 5}, 0.2f, 4, (Color){208, 52, 44, 255});
+    }
+    DrawRectangleRoundedLinesEx(tab0, 0.18f, 6, isTab0 ? 2.0f : 1.2f, isTab0 ? (Color){52, 92, 142, 255} : (Color){138, 148, 165, 255});
+    DrawGameText("1. ORDEM DE ALVO PENDENTE", (int)tab0.x + 26, (int)tab0.y + 12, 15, isTab0 ? (Color){24, 36, 52, 255} : (Color){68, 78, 92, 255});
+
+    /* Aba 1 */
+    DrawRectangleRounded(tab1, 0.18f, 6, !isTab0 ? (Color){248, 250, 254, 255} : (Color){178, 188, 204, 255});
+    if (!isTab0)
+    {
+        DrawRectangleRounded((Rectangle){tab1.x + 2, tab1.y + 2, tab1.width - 4, 5}, 0.2f, 4, (Color){38, 102, 172, 255});
+    }
+    DrawRectangleRoundedLinesEx(tab1, 0.18f, 6, !isTab0 ? 2.0f : 1.2f, !isTab0 ? (Color){52, 92, 142, 255} : (Color){138, 148, 165, 255});
     if (game->room2008OptionalUnlocked)
     {
-        DrawGameText(game->room2008OptionalCompleted ? "2. CONFIGURAÇÃO [DESATIVADA]" : "2. CONFIGURAÇÃO DA INSTALAÇÃO", (int)tab1.x + 22, (int)tab1.y + 11, 15, !isTab0 ? CYAN_COLOR : (Color){80, 235, 120, 255});
+        DrawGameText(game->room2008OptionalCompleted ? "2. CONFIGURAÇÃO [DESATIVADA]" : "2. CONFIGURAÇÃO DA INSTALAÇÃO",
+                     (int)tab1.x + 22, (int)tab1.y + 12, 15, !isTab0 ? (Color){24, 36, 52, 255} : (Color){24, 125, 58, 255});
     }
     else
     {
-        DrawGameText("2. CONFIGURAÇÃO [BLOQUEADA]", (int)tab1.x + 24, (int)tab1.y + 11, 15, GRAY);
+        DrawGameText("2. CONFIGURAÇÃO [BLOQUEADA]", (int)tab1.x + 24, (int)tab1.y + 12, 15, (Color){88, 98, 112, 255});
     }
 
-    DrawButton(btnClose, "< VOLTAR À SALA [ESC]", (Color){185, 60, 50, 255});
+    DrawCorpButton2008(btnClose, "< VOLTAR À SALA [ESC]", (Color){196, 54, 46, 255}, true);
 
     if (game->terminal2008ActiveTab == 0)
     {
@@ -7014,70 +7146,85 @@ void DrawPuzzle2008(const GameState *game)
         /* ABA 1: ORDEM DE ALVO PENDENTE & SELECAO DE EVIDENCIAS     */
         /* ========================================================= */
 
-        /* Painel Superior Visual do Alvo (Sem bloco denso de texto) */
+        /* 4. PAINEL SUPERIOR DO ALVO (Ficha Corporativa Clara e Detalhada) */
         Rectangle targetPanel = {mon.x + 18, mon.y + 92, mon.width - 36, 94};
-        Color tBorder = game->puzzle2008Contested ? (Color){60, 235, 110, 255} : (Color){225, 75, 65, 255};
-        DrawRectangleRounded(targetPanel, 0.06f, 6, (Color){15, 22, 32, 255});
-        DrawRectangleRoundedLinesEx(targetPanel, 0.06f, 6, 2.0f, tBorder);
+        Color tAccent = game->puzzle2008Contested ? (Color){34, 152, 78, 255} : (Color){202, 48, 42, 255};
+        Color tBg = game->puzzle2008Contested ? (Color){236, 250, 240, 255} : (Color){252, 245, 244, 255};
 
-        /* Mini retrato de radar biometrico a esquerda */
-        Rectangle radarBox = {targetPanel.x + 12, targetPanel.y + 10, 74, 74};
-        DrawRectangleRounded(radarBox, 0.10f, 4, (Color){10, 16, 24, 255});
-        DrawRectangleRoundedLinesEx(radarBox, 0.10f, 4, 1.5f, tBorder);
-        DrawCircle((int)radarBox.x + 37, (int)radarBox.y + 28, 14, Fade(tBorder, 0.35f));
-        DrawRectangleRounded((Rectangle){radarBox.x + 21, radarBox.y + 44, 32, 22}, 0.3f, 4, Fade(tBorder, 0.35f));
-        DrawLine((int)radarBox.x + 37, (int)radarBox.y + 8, (int)radarBox.x + 37, (int)radarBox.y + 66, Fade(tBorder, 0.45f));
-        DrawLine((int)radarBox.x + 8, (int)radarBox.y + 34, (int)radarBox.x + 66, (int)radarBox.y + 34, Fade(tBorder, 0.45f));
+        DrawRectangleRounded((Rectangle){targetPanel.x + 3, targetPanel.y + 4, targetPanel.width, targetPanel.height}, 0.06f, 6, Fade(BLACK, 0.12f));
+        DrawRectangleRounded(targetPanel, 0.06f, 6, tBg);
+        /* Faixa lateral de alerta */
+        DrawRectangleRounded((Rectangle){targetPanel.x + 2, targetPanel.y + 2, 10, targetPanel.height - 4}, 0.2f, 4, tAccent);
+        DrawRectangleRoundedLinesEx(targetPanel, 0.06f, 6, 2.0f, tAccent);
+
+        /* Retrato biometrico detalhado a esquerda */
+        Rectangle radarBox = {targetPanel.x + 20, targetPanel.y + 10, 74, 74};
+        DrawRectangleRounded(radarBox, 0.10f, 4, (Color){218, 228, 240, 255});
+        DrawRectangleRoundedLinesEx(radarBox, 0.10f, 4, 1.8f, tAccent);
+        /* Silhueta corporativa detalhada (camisa, gravata, rosto, cabelo) */
+        DrawRectangleRounded((Rectangle){radarBox.x + 16, radarBox.y + 46, 42, 24}, 0.25f, 4, (Color){52, 72, 98, 255});
+        DrawTriangle((Vector2){radarBox.x + 37, radarBox.y + 48}, (Vector2){radarBox.x + 32, radarBox.y + 68}, (Vector2){radarBox.x + 42, radarBox.y + 68}, (Color){185, 42, 38, 255});
+        DrawCircle((int)radarBox.x + 37, (int)radarBox.y + 29, 14, (Color){224, 182, 152, 255});
+        DrawRectangleRounded((Rectangle){radarBox.x + 23, radarBox.y + 14, 28, 10}, 0.4f, 4, (Color){54, 42, 34, 255});
+        /* Mira biometrica sobre o retrato */
+        DrawRectangleLinesEx((Rectangle){radarBox.x + 19, radarBox.y + 12, 36, 36}, 1.2f, Fade(tAccent, 0.85f));
+        DrawLine((int)radarBox.x + 37, (int)radarBox.y + 6, (int)radarBox.x + 37, (int)radarBox.y + 68, Fade(tAccent, 0.40f));
+        DrawLine((int)radarBox.x + 6, (int)radarBox.y + 30, (int)radarBox.x + 68, (int)radarBox.y + 30, Fade(tAccent, 0.40f));
 
         if (!game->puzzle2008Contested)
         {
-            float blink = 0.65f + 0.35f * sinf(time * 5.5f);
-            DrawGameText("[ ! ] ORDEM #8491 — INTERCEPTAÇÃO POR DRONE PROGRAMADA", (int)targetPanel.x + 100, (int)targetPanel.y + 13, 17, Fade(RED_COLOR, blink));
+            float blink = 0.75f + 0.25f * sinf(time * 5.5f);
+            DrawGameText("[ ! ] ORDEM #8491 — INTERCEPTAÇÃO POR DRONE PROGRAMADA", (int)targetPanel.x + 106, (int)targetPanel.y + 12, 17, Fade((Color){192, 32, 28, 255}, blink));
 
-            /* 3 Badges visuais rapidos e diretos */
-            Rectangle b1 = {targetPanel.x + 100, targetPanel.y + 44, 218, 36};
-            Rectangle b2 = {targetPanel.x + 328, targetPanel.y + 44, 268, 36};
-            Rectangle b3 = {targetPanel.x + 606, targetPanel.y + 44, 228, 36};
+            /* 3 Cartoes de dados em alto contraste */
+            Rectangle b1 = {targetPanel.x + 106, targetPanel.y + 42, 214, 38};
+            Rectangle b2 = {targetPanel.x + 330, targetPanel.y + 42, 266, 38};
+            Rectangle b3 = {targetPanel.x + 606, targetPanel.y + 42, 228, 38};
 
-            DrawRectangleRounded(b1, 0.22f, 6, (Color){22, 34, 48, 255});
-            DrawRectangleRoundedLinesEx(b1, 0.22f, 6, 1.2f, (Color){70, 95, 125, 255});
-            DrawGameText("ALVO: LUCAS SILVA", (int)b1.x + 16, (int)b1.y + 10, 15, RAYWHITE);
+            DrawRectangleRounded(b1, 0.20f, 6, (Color){232, 238, 248, 255});
+            DrawRectangleRounded((Rectangle){b1.x + 2, b1.y + 2, 6, b1.height - 4}, 0.3f, 4, (Color){42, 96, 162, 255});
+            DrawRectangleRoundedLinesEx(b1, 0.20f, 6, 1.5f, (Color){125, 152, 188, 255});
+            DrawGameText("ALVO: LUCAS SILVA", (int)b1.x + 16, (int)b1.y + 11, 15, (Color){22, 34, 52, 255});
 
-            DrawRectangleRounded(b2, 0.22f, 6, (Color){36, 30, 22, 255});
-            DrawRectangleRoundedLinesEx(b2, 0.22f, 6, 1.2f, GOLD_COLOR);
-            DrawGameText("ACUSAÇÃO: PRAÇA (14:30)", (int)b2.x + 16, (int)b2.y + 10, 15, GOLD_COLOR);
+            DrawRectangleRounded(b2, 0.20f, 6, (Color){254, 244, 218, 255});
+            DrawRectangleRounded((Rectangle){b2.x + 2, b2.y + 2, 6, b2.height - 4}, 0.3f, 4, (Color){215, 132, 18, 255});
+            DrawRectangleRoundedLinesEx(b2, 0.20f, 6, 1.5f, (Color){215, 158, 65, 255});
+            DrawGameText("ACUSAÇÃO: PRAÇA (14:30)", (int)b2.x + 16, (int)b2.y + 11, 15, (Color){145, 78, 8, 255});
 
-            DrawRectangleRounded(b3, 0.22f, 6, (Color){40, 22, 26, 255});
-            DrawRectangleRoundedLinesEx(b3, 0.22f, 6, 1.2f, RED_COLOR);
-            DrawGameText("IA DRONE: 78% (INCERTO)", (int)b3.x + 16, (int)b3.y + 10, 15, (Color){255, 120, 110, 255});
+            DrawRectangleRounded(b3, 0.20f, 6, (Color){254, 230, 230, 255});
+            DrawRectangleRounded((Rectangle){b3.x + 2, b3.y + 2, 6, b3.height - 4}, 0.3f, 4, (Color){202, 48, 42, 255});
+            DrawRectangleRoundedLinesEx(b3, 0.20f, 6, 1.5f, (Color){215, 115, 110, 255});
+            DrawGameText("IA DRONE: 78% (INCERTO)", (int)b3.x + 16, (int)b3.y + 11, 15, (Color){172, 28, 24, 255});
 
-            /* Box de objetivo a direita */
-            Rectangle objBox = {targetPanel.x + 846, targetPanel.y + 10, 246, 74};
-            DrawRectangleRounded(objBox, 0.14f, 6, (Color){18, 32, 46, 255});
-            DrawRectangleRoundedLinesEx(objBox, 0.14f, 6, 1.2f, Fade(CYAN_COLOR, 0.7f));
-            DrawGameText("OBJETIVO:", (int)objBox.x + 14, (int)objBox.y + 10, 13, CYAN_COLOR);
-            DrawGameText("Examine os docs e marque", (int)objBox.x + 14, (int)objBox.y + 30, 13, RAYWHITE);
-            DrawGameText("2 provas do álibi (14:30).", (int)objBox.x + 14, (int)objBox.y + 49, 13, GOLD_COLOR);
+            /* Nota adesiva / Box de Objetivo a direita */
+            Rectangle objBox = {targetPanel.x + 846, targetPanel.y + 10, 244, 74};
+            DrawRectangleRounded((Rectangle){objBox.x + 2, objBox.y + 3, objBox.width, objBox.height}, 0.14f, 6, Fade(BLACK, 0.10f));
+            DrawRectangleRounded(objBox, 0.14f, 6, (Color){255, 246, 206, 255});
+            DrawRectangleRoundedLinesEx(objBox, 0.14f, 6, 1.8f, (Color){212, 158, 42, 255});
+            DrawCircle((int)(objBox.x + objBox.width - 14), (int)objBox.y + 12, 4.5f, (Color){205, 52, 42, 255});
+            DrawGameText("OBJETIVO:", (int)objBox.x + 14, (int)objBox.y + 9, 13, (Color){175, 78, 12, 255});
+            DrawGameText("Examine os docs e marque", (int)objBox.x + 14, (int)objBox.y + 29, 13, (Color){35, 45, 58, 255});
+            DrawGameText("2 provas do álibi (14:30).", (int)objBox.x + 14, (int)objBox.y + 49, 13, (Color){24, 82, 148, 255});
         }
         else
         {
-            DrawGameText("[ OK ] FALSO POSITIVO COMPROVADO — IDENTIFICAÇÃO ANULADA", (int)targetPanel.x + 100, (int)targetPanel.y + 16, 18, (Color){60, 235, 110, 255});
-            DrawGameText("Álibi confirmado: Lucas Silva estava dentro da sede da empresa às 14:30.", (int)targetPanel.x + 100, (int)targetPanel.y + 48, 15, RAYWHITE);
+            DrawGameText("[ OK ] FALSO POSITIVO COMPROVADO — IDENTIFICAÇÃO ANULADA", (int)targetPanel.x + 106, (int)targetPanel.y + 16, 18, (Color){24, 138, 62, 255});
+            DrawGameText("Álibi confirmado: Lucas Silva estava dentro da sede da empresa às 14:30.", (int)targetPanel.x + 106, (int)targetPanel.y + 48, 15, (Color){32, 44, 58, 255});
 
             if (!game->puzzle2008OrderSuspended)
             {
                 Rectangle btnSusp = {targetPanel.x + targetPanel.width - 365, targetPanel.y + 23, 350, 48};
-                DrawButton(btnSusp, "> SUSPENDER ORDEM DE DRONE <", (Color){60, 235, 110, 255});
+                DrawCorpButton2008(btnSusp, "> SUSPENDER ORDEM DE DRONE <", (Color){36, 158, 82, 255}, true);
             }
             else
             {
                 Rectangle btnDone = {targetPanel.x + targetPanel.width - 435, targetPanel.y + 23, 420, 48};
-                DrawButton(btnDone, "COLETAR CD E CONCLUIR >> [ENTER]", GOLD_COLOR);
+                DrawCorpButton2008(btnDone, "COLETAR CD E CONCLUIR >> [ENTER]", (Color){215, 134, 18, 255}, true);
             }
         }
 
         /* ========================================================= */
-        /* GRADE 2x2 DE EVIDENCIAS (Visual e sem textos pequenos!)   */
+        /* 5. GRADE 2x2 DE PASTAS/CARDS DE EVIDENCIAS CLAROS         */
         /* ========================================================= */
         const char *cardTitles[4] = {
             "1. COMPARAÇÃO FACIAL (DRONE)",
@@ -7106,106 +7253,140 @@ void DrawPuzzle2008(const GameState *game)
             bool isSel = game->puzzle2008Selected[c];
             bool hoverCard = CheckCollisionPointRec(GetVirtualMouse(), cRec);
 
-            Color cBg = isSel ? (Color){22, 44, 62, 255} : (hoverCard ? (Color){20, 30, 42, 255} : (Color){15, 22, 32, 255});
-            Color cBorder = isSel ? (Color){60, 225, 130, 255} : (hoverCard ? CYAN_COLOR : (Color){48, 66, 84, 255});
-            DrawRectangleRounded(cRec, 0.06f, 6, cBg);
-            DrawRectangleRoundedLinesEx(cRec, 0.06f, 6, isSel ? 2.5f : 1.5f, cBorder);
+            /* Sombra projetada do card */
+            DrawRectangleRounded((Rectangle){cRec.x + 4, cRec.y + 5, cRec.width, cRec.height}, 0.06f, 6, Fade(BLACK, 0.14f));
 
-            /* Miniatura visual do documento a esquerda do card */
-            Rectangle thumb = {cRec.x + 16, cRec.y + 16, 112, 116};
-            DrawRectangleRounded(thumb, 0.08f, 6, (Color){10, 16, 24, 255});
-            DrawRectangleRoundedLinesEx(thumb, 0.08f, 6, 1.5f, isSel ? (Color){60, 225, 130, 255} : (Color){60, 82, 104, 255});
+            /* Corpo claro do card (Branco-Perola ou Verde-Menta suave quando selecionado) */
+            Color cBg = isSel ? (Color){232, 248, 236, 255} : (hoverCard ? (Color){252, 253, 255, 255} : (Color){245, 248, 252, 255});
+            Color cBorder = isSel ? (Color){36, 158, 82, 255} : (hoverCard ? (Color){48, 108, 178, 255} : (Color){156, 170, 190, 255});
+            Color hdrCol = isSel ? (Color){32, 145, 76, 255} : (hoverCard ? (Color){42, 96, 158, 255} : (Color){52, 78, 112, 255});
+
+            DrawRectangleRounded(cRec, 0.06f, 6, cBg);
+
+            /* Faixa de cabecalho colorida no topo do card */
+            Rectangle cardHdr = {cRec.x + 2, cRec.y + 2, cRec.width - 4, 34};
+            DrawRectangleRounded(cardHdr, 0.12f, 6, hdrCol);
+            DrawRectangle((int)cardHdr.x, (int)(cardHdr.y + 18), (int)cardHdr.width, 16, hdrCol);
+            DrawLine((int)cardHdr.x + 4, (int)cardHdr.y + 3, (int)(cardHdr.x + cardHdr.width - 4), (int)cardHdr.y + 3, Fade(RAYWHITE, 0.25f));
+
+            DrawRectangleRoundedLinesEx(cRec, 0.06f, 6, isSel ? 2.8f : 1.8f, cBorder);
+
+            /* Clipe/marcador no cabecalho + Titulo em branco nitido */
+            DrawRectangleRounded((Rectangle){cRec.x + 14, cRec.y + 9, 8, 18}, 0.4f, 4, isSel ? (Color){140, 255, 175, 255} : GOLD_COLOR);
+            DrawGameText(cardTitles[c], (int)cRec.x + 30, (int)cRec.y + 9, 16, RAYWHITE);
+
+            /* Moldura da miniatura visual do documento (abaixo do cabecalho) */
+            Rectangle thumb = {cRec.x + 14, cRec.y + 42, 114, 96};
+            DrawRectangleRounded((Rectangle){thumb.x + 2, thumb.y + 2, thumb.width, thumb.height}, 0.08f, 6, Fade(BLACK, 0.12f));
+            DrawRectangleRounded(thumb, 0.08f, 6, (Color){216, 224, 236, 255});
+            DrawRectangleRoundedLinesEx(thumb, 0.08f, 6, 1.5f, isSel ? (Color){42, 162, 86, 255} : (Color){138, 152, 172, 255});
 
             if (c == 0)
             {
-                /* Thumbnail Doc 1: Foto do Drone + Mira Biométrica */
-                DrawCircle((int)thumb.x + 56, (int)thumb.y + 46, 22, Fade((Color){85, 130, 160, 255}, 0.45f));
-                DrawRectangleRounded((Rectangle){thumb.x + 34, thumb.y + 68, 44, 24}, 0.3f, 4, Fade((Color){85, 130, 160, 255}, 0.35f));
-                DrawRectangleLinesEx((Rectangle){thumb.x + 30, thumb.y + 20, 52, 54}, 1.5f, RED_COLOR);
-                DrawRectangle((int)thumb.x + 4, (int)(thumb.y + thumb.height - 24), (int)thumb.width - 8, 20, Fade(RED_COLOR, 0.30f));
-                DrawGameText("IA: 78%", (int)thumb.x + 26, (int)(thumb.y + thumb.height - 20), 13, RED_COLOR);
+                /* Thumbnail Doc 1: Foto Aerea do Drone + Mira Biometrica */
+                Rectangle inner = {thumb.x + 4, thumb.y + 4, thumb.width - 8, thumb.height - 8};
+                DrawRectangleRounded(inner, 0.06f, 4, (Color){28, 40, 54, 255});
+                /* Faixas de pedestre na praca ao fundo */
+                for (int s = 0; s < 4; s++)
+                    DrawRectangle((int)inner.x + 8 + s * 24, (int)inner.y + 62, 14, 5, Fade(LIGHTGRAY, 0.22f));
+                DrawCircle((int)thumb.x + 57, (int)thumb.y + 38, 16, (Color){125, 162, 188, 255});
+                DrawRectangleRounded((Rectangle){thumb.x + 37, thumb.y + 54, 40, 20}, 0.3f, 4, (Color){88, 122, 148, 255});
+                DrawRectangleLinesEx((Rectangle){thumb.x + 33, thumb.y + 16, 48, 46}, 1.5f, RED_COLOR);
+                DrawRectangle((int)inner.x, (int)(inner.y + inner.height - 20), (int)inner.width, 20, (Color){192, 42, 36, 255});
+                DrawGameText("IA: 78%", (int)thumb.x + 30, (int)(thumb.y + thumb.height - 21), 13, RAYWHITE);
             }
             else if (c == 1)
             {
-                /* Thumbnail Doc 2: Panfleto Impresso */
-                Rectangle paper = {thumb.x + 16, thumb.y + 10, 80, 96};
-                DrawRectangleRounded(paper, 0.06f, 4, PAPER_COLOR);
-                DrawRectangle((int)paper.x + 6, (int)paper.y + 8, (int)paper.width - 12, 14, (Color){185, 45, 35, 255});
-                DrawRectangle((int)paper.x + 10, (int)paper.y + 30, (int)paper.width - 20, 4, INK_COLOR);
-                DrawRectangle((int)paper.x + 10, (int)paper.y + 40, (int)paper.width - 28, 4, INK_COLOR);
-                DrawRectangle((int)paper.x + 10, (int)paper.y + 54, (int)paper.width - 16, 5, (Color){145, 35, 25, 255});
-                DrawRectangle((int)paper.x + 10, (int)paper.y + 70, (int)paper.width - 24, 4, (Color){90, 80, 65, 255});
-                DrawCircle((int)paper.x + 40, (int)paper.y + 4, 4, RED_COLOR);
+                /* Thumbnail Doc 2: Panfleto sob cortica clara */
+                Rectangle inner = {thumb.x + 4, thumb.y + 4, thumb.width - 8, thumb.height - 8};
+                DrawRectangleRounded(inner, 0.06f, 4, (Color){198, 158, 112, 255});
+                Rectangle paper = {thumb.x + 18, thumb.y + 8, 78, 80};
+                DrawRectangleRounded(paper, 0.06f, 4, (Color){252, 246, 232, 255});
+                DrawRectangleLinesEx(paper, 1.0f, (Color){168, 148, 118, 255});
+                DrawRectangle((int)paper.x + 6, (int)paper.y + 8, (int)paper.width - 12, 13, (Color){192, 45, 36, 255});
+                DrawRectangle((int)paper.x + 10, (int)paper.y + 28, (int)paper.width - 20, 4, (Color){45, 52, 62, 255});
+                DrawRectangle((int)paper.x + 10, (int)paper.y + 38, (int)paper.width - 26, 4, (Color){45, 52, 62, 255});
+                DrawRectangle((int)paper.x + 10, (int)paper.y + 50, (int)paper.width - 16, 5, (Color){165, 38, 30, 255});
+                DrawRectangle((int)paper.x + 10, (int)paper.y + 63, (int)paper.width - 24, 4, (Color){95, 85, 70, 255});
+                DrawCircle((int)paper.x + 39, (int)paper.y + 4, 4.5f, (Color){215, 45, 38, 255});
             }
             else if (c == 2)
             {
-                /* Thumbnail Doc 3: Cracha / Catraca */
-                Rectangle badge = {thumb.x + 14, thumb.y + 12, 84, 92};
-                DrawRectangleRounded(badge, 0.08f, 4, (Color){235, 242, 248, 255});
-                DrawRectangle((int)badge.x + 6, (int)badge.y + 6, (int)badge.width - 12, 14, (Color){35, 65, 95, 255});
-                DrawRectangle((int)badge.x + 10, (int)badge.y + 28, 45, 5, (Color){45, 55, 65, 255});
-                DrawRectangle((int)badge.x + 10, (int)badge.y + 38, 60, 4, (Color){100, 110, 120, 255});
-                DrawRectangle((int)badge.x + 8, (int)badge.y + 52, (int)badge.width - 16, 24, Fade((Color){45, 165, 80, 255}, 0.25f));
-                DrawRectangleLines((int)badge.x + 8, (int)badge.y + 52, (int)badge.width - 16, 24, (Color){35, 145, 65, 255});
-                DrawGameText("#0842", (int)badge.x + 20, (int)badge.y + 57, 13, (Color){25, 115, 45, 255});
+                /* Thumbnail Doc 3: Cracha / Registro de Ponto */
+                Rectangle inner = {thumb.x + 4, thumb.y + 4, thumb.width - 8, thumb.height - 8};
+                DrawRectangleRounded(inner, 0.06f, 4, (Color){188, 204, 224, 255});
+                Rectangle badge = {thumb.x + 14, thumb.y + 8, 86, 80};
+                DrawRectangleRounded(badge, 0.08f, 4, RAYWHITE);
+                DrawRectangleLinesEx(badge, 1.0f, (Color){120, 142, 168, 255});
+                DrawRectangle((int)badge.x + 5, (int)badge.y + 5, (int)badge.width - 10, 13, (Color){34, 76, 128, 255});
+                DrawCircle((int)badge.x + 18, (int)badge.y + 30, 7.0f, (Color){95, 125, 158, 255});
+                DrawRectangle((int)badge.x + 30, (int)badge.y + 24, 44, 5, (Color){45, 55, 68, 255});
+                DrawRectangle((int)badge.x + 30, (int)badge.y + 33, 34, 4, (Color){115, 125, 138, 255});
+                DrawRectangle((int)badge.x + 7, (int)badge.y + 46, (int)badge.width - 14, 24, (Color){222, 246, 228, 255});
+                DrawRectangleLines((int)badge.x + 7, (int)badge.y + 46, (int)badge.width - 14, 24, (Color){38, 152, 72, 255});
+                DrawGameText("14:15", (int)badge.x + 22, (int)badge.y + 51, 14, (Color){22, 122, 50, 255});
             }
             else
             {
-                /* Thumbnail Doc 4: Camera CFTV */
-                Rectangle cam = {thumb.x + 10, thumb.y + 14, 92, 88};
-                DrawRectangleRounded(cam, 0.08f, 4, (Color){8, 22, 14, 255});
-                DrawRectangleRoundedLinesEx(cam, 0.08f, 4, 1.5f, (Color){45, 175, 85, 255});
-                DrawCircle((int)cam.x + 12, (int)cam.y + 12, 3.5f, RED_COLOR);
-                DrawGameText("REC", (int)cam.x + 20, (int)cam.y + 6, 11, (Color){80, 245, 120, 255});
-                DrawRectangle((int)cam.x + 56, (int)cam.y + 24, 26, 52, (Color){18, 48, 30, 255});
-                DrawCircle((int)cam.x + 36, (int)cam.y + 42, 10, (Color){55, 135, 80, 255});
-                DrawRectangle((int)cam.x + 27, (int)cam.y + 53, 18, 24, (Color){40, 105, 62, 255});
+                /* Thumbnail Doc 4: Monitor CFTV dos Servidores */
+                Rectangle cam = {thumb.x + 6, thumb.y + 6, 102, 84};
+                DrawRectangleRounded(cam, 0.08f, 4, (Color){12, 32, 20, 255});
+                DrawRectangleRoundedLinesEx(cam, 0.08f, 4, 2.0f, (Color){45, 178, 88, 255});
+                DrawCircle((int)cam.x + 12, (int)cam.y + 12, 4.0f, (Color){235, 52, 42, 255});
+                DrawGameText("REC 14:30", (int)cam.x + 20, (int)cam.y + 6, 11, (Color){95, 248, 135, 255});
+                /* Rack de servidores com LEDs + silhueta de Lucas */
+                DrawRectangle((int)cam.x + 62, (int)cam.y + 22, 28, 54, (Color){22, 58, 36, 255});
+                for (int l = 0; l < 4; l++)
+                    DrawCircle((int)cam.x + 68, (int)cam.y + 28 + l * 12, 2.0f, (Color){95, 250, 140, 255});
+                DrawCircle((int)cam.x + 36, (int)cam.y + 40, 10, (Color){72, 165, 102, 255});
+                DrawRectangleRounded((Rectangle){cam.x + 25, cam.y + 51, 22, 25}, 0.25f, 4, (Color){52, 132, 78, 255});
             }
 
-            /* Titulo do Card */
-            int rx = (int)cRec.x + 144;
-            DrawGameText(cardTitles[c], rx, (int)cRec.y + 16, 17, isSel ? (Color){90, 245, 150, 255} : RAYWHITE);
+            /* Tags limpas de Fonte e Status (em fundo claro de alto contraste) */
+            int rx = (int)cRec.x + 142;
+            Rectangle srcTag = {(float)rx, cRec.y + 46, 234, 30};
+            DrawRectangleRounded(srcTag, 0.25f, 4, (Color){226, 233, 244, 255});
+            DrawRectangleRoundedLinesEx(srcTag, 0.25f, 4, 1.2f, (Color){148, 164, 186, 255});
+            DrawCircle((int)srcTag.x + 12, (int)srcTag.y + 15, 3.5f, (Color){42, 98, 165, 255});
+            DrawGameText(cardSources[c], (int)srcTag.x + 22, (int)srcTag.y + 8, 13, (Color){32, 44, 62, 255});
 
-            /* Tags limpas de Fonte e Status (sem textos pequenos) */
-            Rectangle srcTag = {(float)rx, cRec.y + 46, 232, 28};
-            DrawRectangleRounded(srcTag, 0.25f, 4, (Color){22, 32, 46, 255});
-            DrawRectangleRoundedLinesEx(srcTag, 0.25f, 4, 1.0f, (Color){55, 75, 98, 255});
-            DrawGameText(cardSources[c], (int)srcTag.x + 12, (int)srcTag.y + 7, 13, LIGHTGRAY);
-
-            Rectangle stTag = {(float)(rx + 242), cRec.y + 46, 148, 28};
+            Rectangle stTag = {(float)(rx + 242), cRec.y + 46, 150, 30};
             if (isSel)
             {
-                DrawRectangleRounded(stTag, 0.25f, 4, Fade((Color){50, 215, 110, 255}, 0.22f));
-                DrawRectangleRoundedLinesEx(stTag, 0.25f, 4, 1.5f, (Color){60, 235, 120, 255});
-                DrawGameText("[ SELECIONADA ]", (int)stTag.x + 14, (int)stTag.y + 7, 13, (Color){80, 245, 135, 255});
+                DrawRectangleRounded(stTag, 0.25f, 4, (Color){204, 242, 216, 255});
+                DrawRectangleRoundedLinesEx(stTag, 0.25f, 4, 1.5f, (Color){36, 158, 82, 255});
+                DrawGameText("[ SELECIONADA ]", (int)stTag.x + 15, (int)stTag.y + 8, 13, (Color){18, 118, 52, 255});
             }
             else if (docExamined[c])
             {
-                DrawRectangleRounded(stTag, 0.25f, 4, Fade(CYAN_COLOR, 0.16f));
-                DrawRectangleRoundedLinesEx(stTag, 0.25f, 4, 1.2f, Fade(CYAN_COLOR, 0.7f));
-                DrawGameText("[ JÁ EXAMINADO ]", (int)stTag.x + 14, (int)stTag.y + 7, 13, CYAN_COLOR);
+                DrawRectangleRounded(stTag, 0.25f, 4, (Color){214, 235, 252, 255});
+                DrawRectangleRoundedLinesEx(stTag, 0.25f, 4, 1.5f, (Color){52, 122, 192, 255});
+                DrawGameText("[ JÁ EXAMINADO ]", (int)stTag.x + 15, (int)stTag.y + 8, 13, (Color){24, 82, 148, 255});
             }
             else
             {
-                DrawRectangleRounded(stTag, 0.25f, 4, (Color){28, 26, 22, 255});
-                DrawRectangleRoundedLinesEx(stTag, 0.25f, 4, 1.0f, (Color){120, 100, 60, 255});
-                DrawGameText("[ NÃO LIDO ]", (int)stTag.x + 26, (int)stTag.y + 7, 13, GOLD_COLOR);
+                DrawRectangleRounded(stTag, 0.25f, 4, (Color){254, 242, 212, 255});
+                DrawRectangleRoundedLinesEx(stTag, 0.25f, 4, 1.5f, (Color){212, 152, 42, 255});
+                DrawGameText("[ NÃO LIDO ]", (int)stTag.x + 27, (int)stTag.y + 8, 13, (Color){155, 88, 12, 255});
             }
 
-            /* Botoes grandes e claros */
+            /* Botoes 3D Corporativos Coloridos (Adeus azul escuro sem detalhe!) */
             Rectangle btnExam = {(float)rx, cRec.y + 88, 186, 44};
-            DrawButton(btnExam, "EXAMINAR DOC", CYAN_COLOR);
+            DrawCorpButton2008(btnExam, "EXAMINAR DOC", (Color){42, 108, 178, 255}, true);
 
-            Rectangle btnSel = {(float)(rx + 198), cRec.y + 88, 192, 44};
-            DrawButton(btnSel, isSel ? "- REMOVER" : "+ SELECIONAR", isSel ? RED_COLOR : (Color){60, 215, 110, 255});
+            Rectangle btnSel = {(float)(rx + 198), cRec.y + 88, 194, 44};
+            DrawCorpButton2008(btnSel, isSel ? "- REMOVER" : "+ SELECIONAR",
+                               isSel ? (Color){196, 54, 46, 255} : (Color){38, 152, 82, 255}, true);
         }
 
         /* ========================================================= */
-        /* BARRA INFERIOR DE CONTESTACAO COM 2 SLOTS VISUAIS         */
+        /* 6. DOCK INFERIOR METALICO COM BANDEJAS DE PROVA E BOTAO   */
         /* ========================================================= */
         Rectangle actionBar = {mon.x + 18, mon.y + 526, mon.width - 36, 106};
-        DrawRectangleRounded(actionBar, 0.06f, 6, (Color){14, 20, 30, 255});
-        DrawRectangleRoundedLinesEx(actionBar, 0.06f, 6, 1.5f, (Color){50, 70, 92, 255});
+        DrawRectangleRounded((Rectangle){actionBar.x + 3, actionBar.y + 4, actionBar.width, actionBar.height}, 0.06f, 6, Fade(BLACK, 0.14f));
+        DrawRectangleRounded(actionBar, 0.06f, 6, (Color){204, 214, 226, 255});
+        DrawLine((int)actionBar.x + 6, (int)actionBar.y + 2, (int)(actionBar.x + actionBar.width - 6), (int)actionBar.y + 2, Fade(RAYWHITE, 0.65f));
+        DrawRectangleRoundedLinesEx(actionBar, 0.06f, 6, 2.0f, (Color){138, 152, 172, 255});
 
         int selIndices[2] = {-1, -1};
         int found = 0;
@@ -7223,45 +7404,52 @@ void DrawPuzzle2008(const GameState *game)
 
         for (int s = 0; s < 2; s++)
         {
-            Rectangle slotRec = {actionBar.x + 16 + s * 320, actionBar.y + 14, 308, 46};
+            Rectangle slotRec = {actionBar.x + 16 + s * 320, actionBar.y + 12, 308, 46};
             int docIdx = selIndices[s];
             if (docIdx >= 0)
             {
-                DrawRectangleRounded(slotRec, 0.18f, 6, (Color){20, 42, 36, 255});
-                DrawRectangleRoundedLinesEx(slotRec, 0.18f, 6, 1.8f, (Color){60, 225, 125, 255});
-                DrawGameText(TextFormat("PROVA %d: %s", s + 1, shortNames[docIdx]), (int)slotRec.x + 14, (int)slotRec.y + 15, 15, (Color){90, 245, 150, 255});
+                DrawRectangleRounded(slotRec, 0.18f, 6, (Color){222, 248, 230, 255});
+                DrawRectangleRounded((Rectangle){slotRec.x + 2, slotRec.y + 2, 8, slotRec.height - 4}, 0.3f, 4, (Color){36, 158, 82, 255});
+                DrawRectangleRoundedLinesEx(slotRec, 0.18f, 6, 2.0f, (Color){36, 158, 82, 255});
+                DrawGameText(TextFormat("PROVA %d: %s", s + 1, shortNames[docIdx]), (int)slotRec.x + 18, (int)slotRec.y + 15, 15, (Color){18, 112, 48, 255});
             }
             else
             {
-                DrawRectangleRounded(slotRec, 0.18f, 6, (Color){18, 24, 34, 255});
-                DrawRectangleRoundedLinesEx(slotRec, 0.18f, 6, 1.2f, (Color){55, 70, 88, 255});
-                DrawGameText(TextFormat("PROVA %d: [ VAZIO ]", s + 1), (int)slotRec.x + 68, (int)slotRec.y + 15, 15, GRAY);
+                DrawRectangleRounded(slotRec, 0.18f, 6, (Color){232, 238, 246, 255});
+                DrawRectangleRoundedLinesEx(slotRec, 0.18f, 6, 1.5f, (Color){158, 170, 188, 255});
+                DrawGameText(TextFormat("PROVA %d: [ VAZIO ]", s + 1), (int)slotRec.x + 68, (int)slotRec.y + 15, 15, (Color){102, 114, 130, 255});
             }
         }
 
         if (!game->puzzle2008Contested)
         {
-            Rectangle btnContest = {actionBar.x + 662, actionBar.y + 14, 424, 46};
+            Rectangle btnContest = {actionBar.x + 662, actionBar.y + 12, 424, 46};
             bool canContest = (game->puzzle2008SelectionCount == 2);
-            DrawButton(btnContest, "CONTESTAR IDENTIFICAÇÃO", canContest ? GOLD_COLOR : GRAY);
+            DrawCorpButton2008(btnContest, "CONTESTAR IDENTIFICAÇÃO",
+                               canContest ? (Color){218, 132, 16, 255} : (Color){142, 152, 166, 255}, canContest);
         }
         else
         {
-            Rectangle okBanner = {actionBar.x + 662, actionBar.y + 14, 424, 46};
-            DrawRectangleRounded(okBanner, 0.18f, 6, Fade((Color){45, 175, 85, 255}, 0.22f));
-            DrawRectangleRoundedLinesEx(okBanner, 0.18f, 6, 1.8f, (Color){60, 235, 110, 255});
-            DrawGameText("[ OK ] CONTESTAÇÃO ACEITA PELO SISTEMA", (int)okBanner.x + 34, (int)okBanner.y + 15, 16, (Color){80, 245, 130, 255});
+            Rectangle okBanner = {actionBar.x + 662, actionBar.y + 12, 424, 46};
+            DrawRectangleRounded(okBanner, 0.18f, 6, (Color){216, 246, 226, 255});
+            DrawRectangleRoundedLinesEx(okBanner, 0.18f, 6, 2.0f, (Color){36, 158, 82, 255});
+            DrawGameText("[ OK ] CONTESTAÇÃO ACEITA PELO SISTEMA", (int)okBanner.x + 34, (int)okBanner.y + 15, 16, (Color){20, 122, 52, 255});
         }
 
-        /* Linha unica de feedback / orientacao */
+        /* Faixa inferior clara de feedback / orientacao */
+        Rectangle tipStrip = {actionBar.x + 16, actionBar.y + 64, actionBar.width - 32, 32};
+        DrawRectangleRounded(tipStrip, 0.22f, 4, (Color){242, 246, 252, 255});
+        DrawRectangleRoundedLinesEx(tipStrip, 0.22f, 4, 1.0f, (Color){168, 180, 198, 255});
+
         if (game->puzzle2008Feedback[0] != '\0')
         {
-            Color fbCol = game->puzzle2008Contested ? (Color){80, 240, 130, 255} : (Color){250, 175, 85, 255};
-            DrawGameText(game->puzzle2008Feedback, (int)actionBar.x + 18, (int)actionBar.y + 72, 15, fbCol);
+            Color fbCol = game->puzzle2008Contested ? (Color){20, 128, 55, 255} : (Color){185, 68, 16, 255};
+            DrawGameText(game->puzzle2008Feedback, (int)tipStrip.x + 14, (int)tipStrip.y + 8, 15, fbCol);
         }
         else
         {
-            DrawGameText("Clique em [EXAMINAR DOC] para inspecionar os detalhes e selecione as 2 provas do álibi.", (int)actionBar.x + 18, (int)actionBar.y + 72, 15, (Color){155, 175, 195, 255});
+            DrawGameText("Clique em [EXAMINAR DOC] para inspecionar os detalhes e selecione as 2 provas do álibi.",
+                         (int)tipStrip.x + 14, (int)tipStrip.y + 8, 15, (Color){48, 62, 82, 255});
         }
     }
     else
@@ -7270,56 +7458,57 @@ void DrawPuzzle2008(const GameState *game)
         /* ABA 2: CONFIGURACAO DA INSTALACAO (DESCOBERTA OPCIONAL)   */
         /* ========================================================= */
         Rectangle optPanel = {mon.x + 18, mon.y + 92, mon.width - 36, 540};
-        DrawRectangleRounded(optPanel, 0.04f, 6, (Color){16, 24, 34, 255});
-        DrawRectangleRoundedLinesEx(optPanel, 0.04f, 6, 2.0f, game->room2008OptionalUnlocked ? (Color){45, 165, 95, 255} : (Color){165, 55, 45, 255});
+        DrawRectangleRounded((Rectangle){optPanel.x + 3, optPanel.y + 4, optPanel.width, optPanel.height}, 0.04f, 6, Fade(BLACK, 0.12f));
+        DrawRectangleRounded(optPanel, 0.04f, 6, (Color){245, 248, 252, 255});
+        DrawRectangleRoundedLinesEx(optPanel, 0.04f, 6, 2.0f, game->room2008OptionalUnlocked ? (Color){42, 152, 86, 255} : (Color){188, 62, 54, 255});
 
         if (!game->room2008OptionalUnlocked)
         {
-            DrawPadlockIcon((int)(optPanel.x + optPanel.width / 2), (int)(optPanel.y + 125), 2.0f, GOLD_COLOR, RAYWHITE);
-            DrawGameText("ACESSO ADMINISTRATIVO RESTRITO // DIRETRIZES DA FILIAL", (int)optPanel.x + 230, (int)optPanel.y + 195, 20, RED_COLOR);
-            DrawGameText("Para acessar as configurações desta instalação, examine o Caderno do Dr. Ramos", (int)optPanel.x + 195, (int)optPanel.y + 240, 16, LIGHTGRAY);
-            DrawGameText("e o Memorando Governamental na bancada direita do escritório.", (int)optPanel.x + 255, (int)optPanel.y + 270, 16, LIGHTGRAY);
-            DrawGameText("Ambos os documentos juntos liberam a chave de manutenção local.", (int)optPanel.x + 255, (int)optPanel.y + 315, 15, GOLD_COLOR);
+            DrawPadlockIcon((int)(optPanel.x + optPanel.width / 2), (int)(optPanel.y + 125), 2.0f, (Color){205, 138, 24, 255}, (Color){42, 56, 74, 255});
+            DrawGameText("ACESSO ADMINISTRATIVO RESTRITO // DIRETRIZES DA FILIAL", (int)optPanel.x + 230, (int)optPanel.y + 195, 20, (Color){185, 42, 36, 255});
+            DrawGameText("Para acessar as configurações desta instalação, examine o Caderno do Dr. Ramos", (int)optPanel.x + 195, (int)optPanel.y + 240, 16, (Color){42, 54, 68, 255});
+            DrawGameText("e o Memorando Governamental na bancada direita do escritório.", (int)optPanel.x + 255, (int)optPanel.y + 270, 16, (Color){42, 54, 68, 255});
+            DrawGameText("Ambos os documentos juntos liberam a chave de manutenção local.", (int)optPanel.x + 255, (int)optPanel.y + 315, 15, (Color){168, 98, 14, 255});
         }
         else
         {
-            DrawGameText("DIRETRIZES DA UNIDADE LOCAL // FILIAL METROPOLITANA 08", (int)optPanel.x + 35, (int)optPanel.y + 30, 20, GOLD_COLOR);
-            DrawLine((int)optPanel.x + 35, (int)optPanel.y + 60, (int)(optPanel.x + optPanel.width - 35), (int)optPanel.y + 60, Fade(GOLD_COLOR, 0.4f));
+            DrawGameText("DIRETRIZES DA UNIDADE LOCAL // FILIAL METROPOLITANA 08", (int)optPanel.x + 35, (int)optPanel.y + 30, 20, (Color){28, 76, 138, 255});
+            DrawLine((int)optPanel.x + 35, (int)optPanel.y + 60, (int)(optPanel.x + optPanel.width - 35), (int)optPanel.y + 60, (Color){155, 175, 202, 255});
 
-            DrawGameText("STATUS DO SISTEMA: Conectado à rede regional de monitoramento", (int)optPanel.x + 35, (int)optPanel.y + 80, 16, RAYWHITE);
-            DrawGameText("REGISTROS FORENSES ARQUIVADOS: 1.420 ocorrências preservadas", (int)optPanel.x + 35, (int)optPanel.y + 110, 16, CYAN_COLOR);
+            DrawGameText("STATUS DO SISTEMA: Conectado à rede regional de monitoramento", (int)optPanel.x + 35, (int)optPanel.y + 80, 16, (Color){32, 44, 58, 255});
+            DrawGameText("REGISTROS FORENSES ARQUIVADOS: 1.420 ocorrências preservadas", (int)optPanel.x + 35, (int)optPanel.y + 110, 16, (Color){28, 98, 168, 255});
 
             Rectangle cardStatus = {optPanel.x + 35, optPanel.y + 145, optPanel.width - 70, 120};
-            DrawRectangleRounded(cardStatus, 0.05f, 6, (Color){24, 32, 44, 255});
-            DrawRectangleRoundedLinesEx(cardStatus, 0.05f, 6, 1.5f, (Color){55, 75, 95, 255});
+            DrawRectangleRounded(cardStatus, 0.05f, 6, (Color){232, 238, 248, 255});
+            DrawRectangleRoundedLinesEx(cardStatus, 0.05f, 6, 1.8f, (Color){145, 165, 192, 255});
 
-            DrawGameText("ENVIO AUTOMÁTICO DE ALVOS DESTA INSTALAÇÃO:", (int)cardStatus.x + 20, (int)cardStatus.y + 20, 16, GOLD_COLOR);
+            DrawGameText("ENVIO AUTOMÁTICO DE ALVOS DESTA INSTALAÇÃO:", (int)cardStatus.x + 20, (int)cardStatus.y + 20, 16, (Color){24, 36, 52, 255});
             if (!game->room2008OptionalCompleted)
             {
-                DrawGameText("[ ATIVO ] - Drones são despachados automaticamente sob correspondência preliminar.", (int)cardStatus.x + 20, (int)cardStatus.y + 50, 15, RED_COLOR);
-                DrawGameText("Desativar o envio automático suspende os ataques sem apagar as provas forenses.", (int)cardStatus.x + 20, (int)cardStatus.y + 80, 15, LIGHTGRAY);
+                DrawGameText("[ ATIVO ] - Drones são despachados automaticamente sob correspondência preliminar.", (int)cardStatus.x + 20, (int)cardStatus.y + 50, 15, (Color){188, 38, 32, 255});
+                DrawGameText("Desativar o envio automático suspende os ataques sem apagar as provas forenses.", (int)cardStatus.x + 20, (int)cardStatus.y + 80, 15, (Color){52, 64, 80, 255});
 
                 Rectangle btnDisable = {optPanel.x + 35, optPanel.y + 290, 520, 52};
-                DrawButton(btnDisable, "DESATIVAR ENVIO AUTOMÁTICO DESTA INSTALAÇÃO", (Color){245, 155, 55, 255});
+                DrawCorpButton2008(btnDisable, "DESATIVAR ENVIO AUTOMÁTICO DESTA INSTALAÇÃO", (Color){215, 128, 22, 255}, true);
             }
             else
             {
-                DrawGameText("[ DESATIVADO ] - O despacho automático de drones desta central foi bloqueado.", (int)cardStatus.x + 20, (int)cardStatus.y + 50, 15, (Color){60, 235, 110, 255});
-                DrawGameText("Todos os 1.420 relatórios foram preservados intactos como prova contra o abuso.", (int)cardStatus.x + 20, (int)cardStatus.y + 80, 15, (Color){100, 235, 140, 255});
+                DrawGameText("[ DESATIVADO ] - O despacho automático de drones desta central foi bloqueado.", (int)cardStatus.x + 20, (int)cardStatus.y + 50, 15, (Color){24, 135, 62, 255});
+                DrawGameText("Todos os 1.420 relatórios foram preservados intactos como prova contra o abuso.", (int)cardStatus.x + 20, (int)cardStatus.y + 80, 15, (Color){32, 118, 58, 255});
 
                 Rectangle okBox = {optPanel.x + 35, optPanel.y + 290, optPanel.width - 70, 70};
-                DrawRectangleRounded(okBox, 0.08f, 6, Fade((Color){45, 165, 80, 255}, 0.20f));
-                DrawRectangleRoundedLinesEx(okBox, 0.08f, 6, 1.5f, (Color){60, 235, 110, 255});
-                DrawGameText("[ V ] PROTOCOLO ÉTICO APLICADO: CENTRAL LOCAL PROTEGIDA COM SUCESSO!", (int)okBox.x + 25, (int)okBox.y + 25, 16, (Color){60, 235, 110, 255});
+                DrawRectangleRounded(okBox, 0.08f, 6, (Color){222, 246, 230, 255});
+                DrawRectangleRoundedLinesEx(okBox, 0.08f, 6, 2.0f, (Color){38, 158, 82, 255});
+                DrawGameText("[ V ] PROTOCOLO ÉTICO APLICADO: CENTRAL LOCAL PROTEGIDA COM SUCESSO!", (int)okBox.x + 25, (int)okBox.y + 25, 16, (Color){20, 122, 52, 255});
             }
 
             Rectangle cardInfo = {optPanel.x + 35, optPanel.y + 380, optPanel.width - 70, 120};
-            DrawRectangleRounded(cardInfo, 0.05f, 6, Fade(PANEL_COLOR, 0.90f));
-            DrawRectangleRoundedLinesEx(cardInfo, 0.05f, 6, 1.5f, (Color){60, 80, 105, 255});
-            DrawGameText("COMPREENSÃO ÉTICA PROFUNDA:", (int)cardInfo.x + 20, (int)cardInfo.y + 16, 15, GOLD_COLOR);
-            DrawGameText("- Apagar o sistema destruiria as evidências que comprovam o desvio do governo.", (int)cardInfo.x + 20, (int)cardInfo.y + 44, 14, LIGHTGRAY);
-            DrawGameText("- Desativar o despacho automático impede ataques imediatos mantendo a verdade protegida.", (int)cardInfo.x + 20, (int)cardInfo.y + 68, 14, LIGHTGRAY);
-            DrawGameText("- A ação afeta exclusivamente esta instalação e foi devidamente registrada no diário.", (int)cardInfo.x + 20, (int)cardInfo.y + 92, 14, (Color){60, 235, 110, 255});
+            DrawRectangleRounded(cardInfo, 0.05f, 6, (Color){254, 248, 226, 255});
+            DrawRectangleRoundedLinesEx(cardInfo, 0.05f, 6, 1.5f, (Color){210, 165, 68, 255});
+            DrawGameText("COMPREENSÃO ÉTICA PROFUNDA:", (int)cardInfo.x + 20, (int)cardInfo.y + 16, 15, (Color){165, 92, 12, 255});
+            DrawGameText("- Apagar o sistema destruiria as evidências que comprovam o desvio do governo.", (int)cardInfo.x + 20, (int)cardInfo.y + 44, 14, (Color){42, 54, 68, 255});
+            DrawGameText("- Desativar o despacho automático impede ataques imediatos mantendo a verdade protegida.", (int)cardInfo.x + 20, (int)cardInfo.y + 68, 14, (Color){42, 54, 68, 255});
+            DrawGameText("- A ação afeta exclusivamente esta instalação e foi devidamente registrada no diário.", (int)cardInfo.x + 20, (int)cardInfo.y + 92, 14, (Color){24, 128, 58, 255});
         }
     }
 }
@@ -7333,11 +7522,13 @@ void UpdatePuzzle2008(GameState *game)
     }
 
     Rectangle mon = {70, 52, 1140, 648};
+    Rectangle osHeader = {mon.x + 6, mon.y + 6, mon.width - 12, 34};
+    Rectangle winCloseBtn = {osHeader.x + osHeader.width - 32, osHeader.y + 6, 22, 22};
     Rectangle tab0 = {mon.x + 18, mon.y + 46, 320, 38};
     Rectangle tab1 = {mon.x + 348, mon.y + 46, 360, 38};
     Rectangle btnClose = {mon.x + mon.width - 248, mon.y + 46, 230, 38};
 
-    if (Clicked(btnClose) || IsKeyPressed(KEY_ESCAPE))
+    if (Clicked(btnClose) || Clicked(winCloseBtn) || IsKeyPressed(KEY_ESCAPE))
     {
         game->screen = SCREEN_ROOM_2008;
         return;
@@ -7360,11 +7551,11 @@ void UpdatePuzzle2008(GameState *game)
             int col = c % 2;
             int row = c / 2;
             Rectangle cRec = {mon.x + 18 + col * 556, mon.y + 198 + row * 160, 548, 148};
-            Rectangle thumb = {cRec.x + 16, cRec.y + 16, 112, 116};
-            int rx = (int)cRec.x + 144;
-            Rectangle stTag = {(float)(rx + 242), cRec.y + 46, 148, 28};
+            Rectangle thumb = {cRec.x + 14, cRec.y + 42, 114, 96};
+            int rx = (int)cRec.x + 142;
+            Rectangle stTag = {(float)(rx + 242), cRec.y + 46, 150, 30};
             Rectangle btnExam = {(float)rx, cRec.y + 88, 186, 44};
-            Rectangle btnSel = {(float)(rx + 198), cRec.y + 88, 192, 44};
+            Rectangle btnSel = {(float)(rx + 198), cRec.y + 88, 194, 44};
 
             if (Clicked(btnExam) || Clicked(thumb))
             {
@@ -7408,7 +7599,7 @@ void UpdatePuzzle2008(GameState *game)
         }
         for (int s = 0; s < 2; s++)
         {
-            Rectangle slotRec = {actionBar.x + 16 + s * 320, actionBar.y + 14, 308, 46};
+            Rectangle slotRec = {actionBar.x + 16 + s * 320, actionBar.y + 12, 308, 46};
             if (selIndices[s] >= 0 && Clicked(slotRec))
             {
                 game->puzzle2008Selected[selIndices[s]] = false;
@@ -7417,7 +7608,7 @@ void UpdatePuzzle2008(GameState *game)
         }
 
         /* Botao de Contestacao */
-        Rectangle btnContest = {actionBar.x + 662, actionBar.y + 14, 424, 46};
+        Rectangle btnContest = {actionBar.x + 662, actionBar.y + 12, 424, 46};
 
         if (!game->puzzle2008Contested)
         {
