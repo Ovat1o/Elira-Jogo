@@ -6113,7 +6113,7 @@ void DrawDocumentViewer2008(const GameState *game)
     {
         bool isSel = game->puzzle2008Selected[doc];
         Rectangle btnToggle = {panel.x + 26, panel.y + panel.height - 54, 340, 42};
-        DrawCorpButton2008(btnToggle, isSel ? "- REMOVER DE EVIDÊNCIA" : "+ SELECIONAR COMO EVIDÊNCIA",
+        DrawCorpButton2008(btnToggle, isSel ? "REMOVER DE EVIDÊNCIA" : "SELECIONAR COMO EVIDÊNCIA",
                            isSel ? (Color){195, 52, 44, 255} : (Color){38, 152, 82, 255}, true);
     }
 
@@ -7059,8 +7059,7 @@ void DrawPuzzle2008(const GameState *game)
     for (int gy = (int)screenArea.y + 56; gy < (int)(screenArea.y + screenArea.height); gy += 28)
         DrawLine((int)screenArea.x + 4, gy, (int)(screenArea.x + screenArea.width - 4), gy, Fade((Color){182, 194, 210, 255}, 0.45f));
 
-    /* Detalhes fisicos na borda inferior do monitor (Logo, botoes OSD e LED) */
-    DrawGameText("SYNCMASTER // CORP-2008", (int)(mon.x + mon.width * 0.5f - 85), (int)(mon.y + mon.height - 8), 11, (Color){78, 86, 98, 255});
+    /* Detalhes fisicos na borda inferior do monitor (botoes OSD e LED) */
     for (int b = 0; b < 4; b++)
     {
         DrawRectangleRounded((Rectangle){mon.x + mon.width - 140 + b * 22, mon.y + mon.height - 7, 14, 5}, 0.4f, 4, (Color){115, 124, 136, 255});
@@ -7082,13 +7081,7 @@ void DrawPuzzle2008(const GameState *game)
     DrawCircle((int)osHeader.x + 20, (int)osHeader.y + 17, 4.0f, (Color){34, 82, 142, 255});
     DrawGameText("SISTEMA NACIONAL DE VIGILÂNCIA BIOMÉTRICA // NÓ 2008", (int)osHeader.x + 36, (int)osHeader.y + 9, 15, RAYWHITE);
 
-    /* Pill de status de conexao + botoes classicos de janela */
-    Rectangle connPill = {osHeader.x + osHeader.width - 300, osHeader.y + 6, 206, 22};
-    DrawRectangleRounded(connPill, 0.4f, 6, (Color){22, 128, 64, 255});
-    DrawRectangleRoundedLinesEx(connPill, 0.4f, 6, 1.0f, (Color){110, 235, 150, 255});
-    DrawCircle((int)connPill.x + 12, (int)connPill.y + 11, 3.5f, (Color){120, 255, 160, 255});
-    DrawGameText("STATUS: CONEXÃO SEGURA", (int)connPill.x + 22, (int)connPill.y + 5, 12, RAYWHITE);
-
+    /* Botoes classicos de janela */
     for (int wb = 0; wb < 3; wb++)
     {
         Rectangle winBtn = {osHeader.x + osHeader.width - 82 + wb * 25, osHeader.y + 6, 22, 22};
@@ -7375,7 +7368,7 @@ void DrawPuzzle2008(const GameState *game)
             DrawCorpButton2008(btnExam, "EXAMINAR DOC", (Color){42, 108, 178, 255}, true);
 
             Rectangle btnSel = {(float)(rx + 198), cRec.y + 88, 194, 44};
-            DrawCorpButton2008(btnSel, isSel ? "- REMOVER" : "+ SELECIONAR",
+            DrawCorpButton2008(btnSel, isSel ? "REMOVER" : "SELECIONAR",
                                isSel ? (Color){196, 54, 46, 255} : (Color){38, 152, 82, 255}, true);
         }
 
