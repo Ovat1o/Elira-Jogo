@@ -6966,44 +6966,47 @@ void DrawPuzzle2008(const GameState *game)
 {
     float time = (float)GetTime();
 
-    /* Fundo escuro */
-    DrawRectangle(0, 0, SCREEN_WIDTH, SCREEN_HEIGHT, Fade(BLACK, 0.88f));
+    /* Desenha a sala ao fundo suavemente escurecida para manter imersao */
+    DrawRoom2008(game);
+    DrawRectangle(0, 0, SCREEN_WIDTH, SCREEN_HEIGHT, Fade((Color){6, 10, 16, 255}, 0.86f));
 
-    /* Moldura externa do monitor LCD corporativo 2008 */
-    Rectangle mon = {80, 25, 1120, 670};
-    DrawRectangleRounded(mon, 0.03f, 8, (Color){25, 34, 46, 255});
-    DrawRectangleRoundedLinesEx(mon, 0.03f, 8, 3.0f, (Color){75, 95, 115, 255});
+    /* Moldura externa do monitor LCD corporativo 2008 (abaixo dos botoes superiores) */
+    Rectangle mon = {70, 52, 1140, 648};
+    DrawRectangleRounded((Rectangle){mon.x + 6, mon.y + 8, mon.width, mon.height}, 0.03f, 8, (Color){4, 7, 12, 255});
+    DrawRectangleRounded(mon, 0.03f, 8, (Color){22, 30, 42, 255});
+    DrawRectangleRoundedLinesEx(mon, 0.03f, 8, 3.0f, (Color){82, 104, 128, 255});
 
-    /* Cabecalho do Sistema Operacional */
-    Rectangle osHeader = {mon.x + 16, mon.y + 14, mon.width - 32, 46};
-    DrawRectangleRounded(osHeader, 0.10f, 6, (Color){15, 22, 32, 255});
-    DrawRectangleRoundedLinesEx(osHeader, 0.10f, 6, 1.5f, CYAN_COLOR);
+    /* Barra superior compacta do Sistema Operacional */
+    Rectangle osHeader = {mon.x + 18, mon.y + 10, mon.width - 36, 30};
+    DrawRectangleRounded(osHeader, 0.15f, 6, (Color){12, 18, 26, 255});
+    DrawRectangleRoundedLinesEx(osHeader, 0.15f, 6, 1.2f, Fade(CYAN_COLOR, 0.65f));
 
-    DrawGameText("SISTEMA NACIONAL DE VIGILÂNCIA BIOMÉTRICA // NÓ 2008", (int)osHeader.x + 20, (int)osHeader.y + 14, 17, CYAN_COLOR);
-    DrawGameText("STATUS: CONEXAO SEGURA", (int)osHeader.x + 640, (int)osHeader.y + 16, 14, (Color){80, 235, 120, 255});
+    DrawCircle((int)osHeader.x + 16, (int)osHeader.y + 15, 4.5f, (Color){80, 235, 120, 255});
+    DrawGameText("SISTEMA NACIONAL DE VIGILÂNCIA BIOMÉTRICA // NÓ 2008", (int)osHeader.x + 30, (int)osHeader.y + 7, 15, CYAN_COLOR);
+    DrawGameText("STATUS: CONEXÃO SEGURA", (int)(osHeader.x + osHeader.width - 215), (int)osHeader.y + 8, 13, (Color){80, 235, 120, 255});
 
-    /* Abas superiores */
-    Rectangle tab0 = {mon.x + 20, mon.y + 68, 320, 40};
-    Rectangle tab1 = {mon.x + 350, mon.y + 68, 370, 40};
-    Rectangle btnClose = {mon.x + mon.width - 250, mon.y + 68, 230, 40};
+    /* Abas de navegacao e botao de sair */
+    Rectangle tab0 = {mon.x + 18, mon.y + 46, 320, 38};
+    Rectangle tab1 = {mon.x + 348, mon.y + 46, 360, 38};
+    Rectangle btnClose = {mon.x + mon.width - 248, mon.y + 46, 230, 38};
 
     bool isTab0 = (game->terminal2008ActiveTab == 0);
-    DrawRectangleRounded(tab0, 0.20f, 6, isTab0 ? (Color){30, 48, 68, 255} : (Color){20, 26, 36, 255});
-    DrawRectangleRoundedLinesEx(tab0, 0.20f, 6, 1.5f, isTab0 ? GOLD_COLOR : (Color){50, 65, 80, 255});
-    DrawGameText("1. ORDEM DE ALVO PENDENTE", (int)tab0.x + 28, (int)tab0.y + 12, 15, isTab0 ? GOLD_COLOR : LIGHTGRAY);
+    DrawRectangleRounded(tab0, 0.20f, 6, isTab0 ? (Color){32, 52, 74, 255} : (Color){18, 24, 34, 255});
+    DrawRectangleRoundedLinesEx(tab0, 0.20f, 6, 1.8f, isTab0 ? GOLD_COLOR : (Color){50, 65, 80, 255});
+    DrawGameText("1. ORDEM DE ALVO PENDENTE", (int)tab0.x + 28, (int)tab0.y + 11, 15, isTab0 ? GOLD_COLOR : LIGHTGRAY);
 
-    DrawRectangleRounded(tab1, 0.20f, 6, !isTab0 ? (Color){30, 48, 68, 255} : (Color){20, 26, 36, 255});
-    DrawRectangleRoundedLinesEx(tab1, 0.20f, 6, 1.5f, !isTab0 ? CYAN_COLOR : (Color){50, 65, 80, 255});
+    DrawRectangleRounded(tab1, 0.20f, 6, !isTab0 ? (Color){32, 52, 74, 255} : (Color){18, 24, 34, 255});
+    DrawRectangleRoundedLinesEx(tab1, 0.20f, 6, 1.8f, !isTab0 ? CYAN_COLOR : (Color){50, 65, 80, 255});
     if (game->room2008OptionalUnlocked)
     {
-        DrawGameText(game->room2008OptionalCompleted ? "2. CONFIGURACAO [DESATIVADA]" : "2. CONFIGURAÇÃO DA INSTALAÇÃO", (int)tab1.x + 24, (int)tab1.y + 12, 15, !isTab0 ? CYAN_COLOR : (Color){80, 235, 120, 255});
+        DrawGameText(game->room2008OptionalCompleted ? "2. CONFIGURAÇÃO [DESATIVADA]" : "2. CONFIGURAÇÃO DA INSTALAÇÃO", (int)tab1.x + 22, (int)tab1.y + 11, 15, !isTab0 ? CYAN_COLOR : (Color){80, 235, 120, 255});
     }
     else
     {
-        DrawGameText("2. CONFIGURAÇÃO [BLOQUEADA]", (int)tab1.x + 24, (int)tab1.y + 12, 15, GRAY);
+        DrawGameText("2. CONFIGURAÇÃO [BLOQUEADA]", (int)tab1.x + 24, (int)tab1.y + 11, 15, GRAY);
     }
 
-    DrawButton(btnClose, "< SAIR DO TERMINAL [ESC]", (Color){185, 60, 50, 255});
+    DrawButton(btnClose, "< VOLTAR À SALA [ESC]", (Color){185, 60, 50, 255});
 
     if (game->terminal2008ActiveTab == 0)
     {
@@ -7011,118 +7014,254 @@ void DrawPuzzle2008(const GameState *game)
         /* ABA 1: ORDEM DE ALVO PENDENTE & SELECAO DE EVIDENCIAS     */
         /* ========================================================= */
 
-        /* Painel Superior do Alvo */
-        Rectangle targetPanel = {mon.x + 20, mon.y + 116, mon.width - 40, 115};
+        /* Painel Superior Visual do Alvo (Sem bloco denso de texto) */
+        Rectangle targetPanel = {mon.x + 18, mon.y + 92, mon.width - 36, 94};
         Color tBorder = game->puzzle2008Contested ? (Color){60, 235, 110, 255} : (Color){225, 75, 65, 255};
-        DrawRectangleRounded(targetPanel, 0.05f, 6, (Color){16, 24, 34, 255});
-        DrawRectangleRoundedLinesEx(targetPanel, 0.05f, 6, 2.0f, tBorder);
+        DrawRectangleRounded(targetPanel, 0.06f, 6, (Color){15, 22, 32, 255});
+        DrawRectangleRoundedLinesEx(targetPanel, 0.06f, 6, 2.0f, tBorder);
+
+        /* Mini retrato de radar biometrico a esquerda */
+        Rectangle radarBox = {targetPanel.x + 12, targetPanel.y + 10, 74, 74};
+        DrawRectangleRounded(radarBox, 0.10f, 4, (Color){10, 16, 24, 255});
+        DrawRectangleRoundedLinesEx(radarBox, 0.10f, 4, 1.5f, tBorder);
+        DrawCircle((int)radarBox.x + 37, (int)radarBox.y + 28, 14, Fade(tBorder, 0.35f));
+        DrawRectangleRounded((Rectangle){radarBox.x + 21, radarBox.y + 44, 32, 22}, 0.3f, 4, Fade(tBorder, 0.35f));
+        DrawLine((int)radarBox.x + 37, (int)radarBox.y + 8, (int)radarBox.x + 37, (int)radarBox.y + 66, Fade(tBorder, 0.45f));
+        DrawLine((int)radarBox.x + 8, (int)radarBox.y + 34, (int)radarBox.x + 66, (int)radarBox.y + 34, Fade(tBorder, 0.45f));
 
         if (!game->puzzle2008Contested)
         {
-            float blink = 0.6f + 0.4f * sinf(time * 6.0f);
-            DrawGameText("[ ! ] ORDEM #8491 - ENVIO DE DRONE DE INTERCEPTAÇÃO: PROGRAMADO (14:30)", (int)targetPanel.x + 20, (int)targetPanel.y + 14, 18, Fade(RED_COLOR, blink));
-            DrawGameText("ALVO: LUCAS SILVA  |  SETOR: PRAÇA CENTRAL  |  BASE LEGAL: DIRETRIZ SEC-402", (int)targetPanel.x + 20, (int)targetPanel.y + 42, 15, RAYWHITE);
-            DrawGameText("AVALIAÇÃO DA IA: Similaridade por drone: 78% (Alta incerteza). Ordem aguarda envio.", (int)targetPanel.x + 20, (int)targetPanel.y + 66, 14, GOLD_COLOR);
-            DrawGameText("INSTRUÇÃO: Selecione 2 evidências registradas para contestar a identificação.", (int)targetPanel.x + 20, (int)targetPanel.y + 88, 14, CYAN_COLOR);
+            float blink = 0.65f + 0.35f * sinf(time * 5.5f);
+            DrawGameText("[ ! ] ORDEM #8491 — INTERCEPTAÇÃO POR DRONE PROGRAMADA", (int)targetPanel.x + 100, (int)targetPanel.y + 13, 17, Fade(RED_COLOR, blink));
+
+            /* 3 Badges visuais rapidos e diretos */
+            Rectangle b1 = {targetPanel.x + 100, targetPanel.y + 44, 218, 36};
+            Rectangle b2 = {targetPanel.x + 328, targetPanel.y + 44, 268, 36};
+            Rectangle b3 = {targetPanel.x + 606, targetPanel.y + 44, 228, 36};
+
+            DrawRectangleRounded(b1, 0.22f, 6, (Color){22, 34, 48, 255});
+            DrawRectangleRoundedLinesEx(b1, 0.22f, 6, 1.2f, (Color){70, 95, 125, 255});
+            DrawGameText("ALVO: LUCAS SILVA", (int)b1.x + 16, (int)b1.y + 10, 15, RAYWHITE);
+
+            DrawRectangleRounded(b2, 0.22f, 6, (Color){36, 30, 22, 255});
+            DrawRectangleRoundedLinesEx(b2, 0.22f, 6, 1.2f, GOLD_COLOR);
+            DrawGameText("ACUSAÇÃO: PRAÇA (14:30)", (int)b2.x + 16, (int)b2.y + 10, 15, GOLD_COLOR);
+
+            DrawRectangleRounded(b3, 0.22f, 6, (Color){40, 22, 26, 255});
+            DrawRectangleRoundedLinesEx(b3, 0.22f, 6, 1.2f, RED_COLOR);
+            DrawGameText("IA DRONE: 78% (INCERTO)", (int)b3.x + 16, (int)b3.y + 10, 15, (Color){255, 120, 110, 255});
+
+            /* Box de objetivo a direita */
+            Rectangle objBox = {targetPanel.x + 846, targetPanel.y + 10, 246, 74};
+            DrawRectangleRounded(objBox, 0.14f, 6, (Color){18, 32, 46, 255});
+            DrawRectangleRoundedLinesEx(objBox, 0.14f, 6, 1.2f, Fade(CYAN_COLOR, 0.7f));
+            DrawGameText("OBJETIVO:", (int)objBox.x + 14, (int)objBox.y + 10, 13, CYAN_COLOR);
+            DrawGameText("Examine os docs e marque", (int)objBox.x + 14, (int)objBox.y + 30, 13, RAYWHITE);
+            DrawGameText("2 provas do álibi (14:30).", (int)objBox.x + 14, (int)objBox.y + 49, 13, GOLD_COLOR);
         }
         else
         {
-            DrawGameText("[ OK ] STATUS: IDENTIFICAÇÃO NÃO CONFIRMADA // FALSO POSITIVO COMPROVADO", (int)targetPanel.x + 20, (int)targetPanel.y + 14, 18, (Color){60, 235, 110, 255});
-            DrawGameText("ÁLIBI CONFIRMADO: O alvo estava no laboratório da empresa às 14:30.", (int)targetPanel.x + 20, (int)targetPanel.y + 42, 15, RAYWHITE);
+            DrawGameText("[ OK ] FALSO POSITIVO COMPROVADO — IDENTIFICAÇÃO ANULADA", (int)targetPanel.x + 100, (int)targetPanel.y + 16, 18, (Color){60, 235, 110, 255});
+            DrawGameText("Álibi confirmado: Lucas Silva estava dentro da sede da empresa às 14:30.", (int)targetPanel.x + 100, (int)targetPanel.y + 48, 15, RAYWHITE);
 
             if (!game->puzzle2008OrderSuspended)
             {
-                Rectangle btnSusp = {targetPanel.x + targetPanel.width - 370, targetPanel.y + 58, 350, 44};
+                Rectangle btnSusp = {targetPanel.x + targetPanel.width - 365, targetPanel.y + 23, 350, 48};
                 DrawButton(btnSusp, "> SUSPENDER ORDEM DE DRONE <", (Color){60, 235, 110, 255});
             }
             else
             {
-                Rectangle btnDone = {targetPanel.x + targetPanel.width - 450, targetPanel.y + 58, 430, 44};
-                DrawButton(btnDone, "COLETAR CD DE MEMORIA E CONCLUIR >> [ENTER]", GOLD_COLOR);
-                DrawGameText("CD ejetado no drive da maquina!", (int)targetPanel.x + 20, (int)targetPanel.y + 75, 15, GOLD_COLOR);
+                Rectangle btnDone = {targetPanel.x + targetPanel.width - 435, targetPanel.y + 23, 420, 48};
+                DrawButton(btnDone, "COLETAR CD E CONCLUIR >> [ENTER]", GOLD_COLOR);
             }
         }
 
-        /* Grade com os 4 Cards de Registros */
+        /* ========================================================= */
+        /* GRADE 2x2 DE EVIDENCIAS (Visual e sem textos pequenos!)   */
+        /* ========================================================= */
         const char *cardTitles[4] = {
             "1. COMPARAÇÃO FACIAL (DRONE)",
-            "2. PANFLETO DA REVOLTA POPULAR",
-            "3. REGISTRO DE ENTRADA (CATRACA)",
-            "4. CÂMERA INTERNA CFTV (SERVIDORES)"
+            "2. PANFLETO DA REVOLTA",
+            "3. REGISTRO DA CATRACA",
+            "4. CÂMERA INTERNA CFTV"
         };
-        const char *cardDesc1[4] = {
-            "Foto aerea granulada do drone Alpha-4 as 14:30 na manifestacao.",
-            "Material apreendido no centro matutino. Cita Lucas como lider.",
-            "Catraca da sede corporativa. Entrada biométrica registrada as 14:15.",
-            "Gravacao CFTV no subsolo da empresa no exato minuto de 14:30:12."
+        const char *cardSources[4] = {
+            "FONTE: DRONE ALPHA-4",
+            "FONTE: PRAÇA CENTRAL",
+            "FONTE: PORTARIA DA SEDE",
+            "FONTE: SUBSOLO (SERVIDORES)"
         };
-        const char *cardDesc2[4] = {
-            "Indice 78%: baixa resolucao. Nao garante identidade nem local.",
-            "Comprova ativismo politico, mas NAO informa local as 14:30.",
-            "Indica presenca no predio corporativo (a 12 km da praca).",
-            "Mostra presenca fisica irrefutavel no servidor no mesmo horario!"
+        bool docExamined[4] = {
+            game->doc2008FaceExamined,
+            game->doc2008FlyerExamined,
+            game->doc2008EntryExamined,
+            game->doc2008CameraExamined
         };
 
         for (int c = 0; c < 4; c++)
         {
             int col = c % 2;
             int row = c / 2;
-            Rectangle cRec = {mon.x + 20 + col * 545, mon.y + 240 + row * 150, 530, 140};
+            Rectangle cRec = {mon.x + 18 + col * 556, mon.y + 198 + row * 160, 548, 148};
             bool isSel = game->puzzle2008Selected[c];
+            bool hoverCard = CheckCollisionPointRec(GetVirtualMouse(), cRec);
 
-            Color cBg = isSel ? (Color){24, 42, 60, 255} : (Color){16, 24, 32, 255};
-            Color cBorder = isSel ? (Color){50, 205, 235, 255} : (Color){45, 60, 75, 255};
+            Color cBg = isSel ? (Color){22, 44, 62, 255} : (hoverCard ? (Color){20, 30, 42, 255} : (Color){15, 22, 32, 255});
+            Color cBorder = isSel ? (Color){60, 225, 130, 255} : (hoverCard ? CYAN_COLOR : (Color){48, 66, 84, 255});
             DrawRectangleRounded(cRec, 0.06f, 6, cBg);
             DrawRectangleRoundedLinesEx(cRec, 0.06f, 6, isSel ? 2.5f : 1.5f, cBorder);
 
-            /* Checkbox */
-            Rectangle chkBox = {cRec.x + 14, cRec.y + 14, 26, 26};
-            DrawRectangleRounded(chkBox, 0.15f, 4, isSel ? (Color){50, 205, 235, 255} : (Color){10, 16, 24, 255});
-            DrawRectangleRoundedLinesEx(chkBox, 0.15f, 4, 1.5f, isSel ? RAYWHITE : GRAY);
-            if (isSel)
+            /* Miniatura visual do documento a esquerda do card */
+            Rectangle thumb = {cRec.x + 16, cRec.y + 16, 112, 116};
+            DrawRectangleRounded(thumb, 0.08f, 6, (Color){10, 16, 24, 255});
+            DrawRectangleRoundedLinesEx(thumb, 0.08f, 6, 1.5f, isSel ? (Color){60, 225, 130, 255} : (Color){60, 82, 104, 255});
+
+            if (c == 0)
             {
-                DrawGameText("X", (int)chkBox.x + 7, (int)chkBox.y + 4, 18, (Color){10, 18, 28, 255});
+                /* Thumbnail Doc 1: Foto do Drone + Mira Biométrica */
+                DrawCircle((int)thumb.x + 56, (int)thumb.y + 46, 22, Fade((Color){85, 130, 160, 255}, 0.45f));
+                DrawRectangleRounded((Rectangle){thumb.x + 34, thumb.y + 68, 44, 24}, 0.3f, 4, Fade((Color){85, 130, 160, 255}, 0.35f));
+                DrawRectangleLinesEx((Rectangle){thumb.x + 30, thumb.y + 20, 52, 54}, 1.5f, RED_COLOR);
+                DrawRectangle((int)thumb.x + 4, (int)(thumb.y + thumb.height - 24), (int)thumb.width - 8, 20, Fade(RED_COLOR, 0.30f));
+                DrawGameText("IA: 78%", (int)thumb.x + 26, (int)(thumb.y + thumb.height - 20), 13, RED_COLOR);
+            }
+            else if (c == 1)
+            {
+                /* Thumbnail Doc 2: Panfleto Impresso */
+                Rectangle paper = {thumb.x + 16, thumb.y + 10, 80, 96};
+                DrawRectangleRounded(paper, 0.06f, 4, PAPER_COLOR);
+                DrawRectangle((int)paper.x + 6, (int)paper.y + 8, (int)paper.width - 12, 14, (Color){185, 45, 35, 255});
+                DrawRectangle((int)paper.x + 10, (int)paper.y + 30, (int)paper.width - 20, 4, INK_COLOR);
+                DrawRectangle((int)paper.x + 10, (int)paper.y + 40, (int)paper.width - 28, 4, INK_COLOR);
+                DrawRectangle((int)paper.x + 10, (int)paper.y + 54, (int)paper.width - 16, 5, (Color){145, 35, 25, 255});
+                DrawRectangle((int)paper.x + 10, (int)paper.y + 70, (int)paper.width - 24, 4, (Color){90, 80, 65, 255});
+                DrawCircle((int)paper.x + 40, (int)paper.y + 4, 4, RED_COLOR);
+            }
+            else if (c == 2)
+            {
+                /* Thumbnail Doc 3: Cracha / Catraca */
+                Rectangle badge = {thumb.x + 14, thumb.y + 12, 84, 92};
+                DrawRectangleRounded(badge, 0.08f, 4, (Color){235, 242, 248, 255});
+                DrawRectangle((int)badge.x + 6, (int)badge.y + 6, (int)badge.width - 12, 14, (Color){35, 65, 95, 255});
+                DrawRectangle((int)badge.x + 10, (int)badge.y + 28, 45, 5, (Color){45, 55, 65, 255});
+                DrawRectangle((int)badge.x + 10, (int)badge.y + 38, 60, 4, (Color){100, 110, 120, 255});
+                DrawRectangle((int)badge.x + 8, (int)badge.y + 52, (int)badge.width - 16, 24, Fade((Color){45, 165, 80, 255}, 0.25f));
+                DrawRectangleLines((int)badge.x + 8, (int)badge.y + 52, (int)badge.width - 16, 24, (Color){35, 145, 65, 255});
+                DrawGameText("#0842", (int)badge.x + 20, (int)badge.y + 57, 13, (Color){25, 115, 45, 255});
+            }
+            else
+            {
+                /* Thumbnail Doc 4: Camera CFTV */
+                Rectangle cam = {thumb.x + 10, thumb.y + 14, 92, 88};
+                DrawRectangleRounded(cam, 0.08f, 4, (Color){8, 22, 14, 255});
+                DrawRectangleRoundedLinesEx(cam, 0.08f, 4, 1.5f, (Color){45, 175, 85, 255});
+                DrawCircle((int)cam.x + 12, (int)cam.y + 12, 3.5f, RED_COLOR);
+                DrawGameText("REC", (int)cam.x + 20, (int)cam.y + 6, 11, (Color){80, 245, 120, 255});
+                DrawRectangle((int)cam.x + 56, (int)cam.y + 24, 26, 52, (Color){18, 48, 30, 255});
+                DrawCircle((int)cam.x + 36, (int)cam.y + 42, 10, (Color){55, 135, 80, 255});
+                DrawRectangle((int)cam.x + 27, (int)cam.y + 53, 18, 24, (Color){40, 105, 62, 255});
             }
 
-            DrawGameText(cardTitles[c], (int)cRec.x + 50, (int)cRec.y + 16, 16, isSel ? (Color){50, 215, 245, 255} : RAYWHITE);
-            DrawGameText(cardDesc1[c], (int)cRec.x + 16, (int)cRec.y + 48, 13, LIGHTGRAY);
-            DrawGameText(cardDesc2[c], (int)cRec.x + 16, (int)cRec.y + 70, 13, (c == 2 || c == 3) ? (Color){100, 235, 140, 255} : (Color){220, 175, 100, 255});
+            /* Titulo do Card */
+            int rx = (int)cRec.x + 144;
+            DrawGameText(cardTitles[c], rx, (int)cRec.y + 16, 17, isSel ? (Color){90, 245, 150, 255} : RAYWHITE);
 
-            /* Botoes de card: Examinar e Selecionar */
-            Rectangle btnExam = {cRec.x + 16, cRec.y + 96, 160, 32};
-            DrawButton(btnExam, "Examinar Doc", CYAN_COLOR);
+            /* Tags limpas de Fonte e Status (sem textos pequenos) */
+            Rectangle srcTag = {(float)rx, cRec.y + 46, 232, 28};
+            DrawRectangleRounded(srcTag, 0.25f, 4, (Color){22, 32, 46, 255});
+            DrawRectangleRoundedLinesEx(srcTag, 0.25f, 4, 1.0f, (Color){55, 75, 98, 255});
+            DrawGameText(cardSources[c], (int)srcTag.x + 12, (int)srcTag.y + 7, 13, LIGHTGRAY);
 
-            Rectangle btnSel = {cRec.x + 190, cRec.y + 96, 220, 32};
-            DrawButton(btnSel, isSel ? "Remover Selecao" : "+ Selecionar Evidencia", isSel ? RED_COLOR : (Color){60, 215, 110, 255});
+            Rectangle stTag = {(float)(rx + 242), cRec.y + 46, 148, 28};
+            if (isSel)
+            {
+                DrawRectangleRounded(stTag, 0.25f, 4, Fade((Color){50, 215, 110, 255}, 0.22f));
+                DrawRectangleRoundedLinesEx(stTag, 0.25f, 4, 1.5f, (Color){60, 235, 120, 255});
+                DrawGameText("[ SELECIONADA ]", (int)stTag.x + 14, (int)stTag.y + 7, 13, (Color){80, 245, 135, 255});
+            }
+            else if (docExamined[c])
+            {
+                DrawRectangleRounded(stTag, 0.25f, 4, Fade(CYAN_COLOR, 0.16f));
+                DrawRectangleRoundedLinesEx(stTag, 0.25f, 4, 1.2f, Fade(CYAN_COLOR, 0.7f));
+                DrawGameText("[ JÁ EXAMINADO ]", (int)stTag.x + 14, (int)stTag.y + 7, 13, CYAN_COLOR);
+            }
+            else
+            {
+                DrawRectangleRounded(stTag, 0.25f, 4, (Color){28, 26, 22, 255});
+                DrawRectangleRoundedLinesEx(stTag, 0.25f, 4, 1.0f, (Color){120, 100, 60, 255});
+                DrawGameText("[ NÃO LIDO ]", (int)stTag.x + 26, (int)stTag.y + 7, 13, GOLD_COLOR);
+            }
+
+            /* Botoes grandes e claros */
+            Rectangle btnExam = {(float)rx, cRec.y + 88, 186, 44};
+            DrawButton(btnExam, "EXAMINAR DOC", CYAN_COLOR);
+
+            Rectangle btnSel = {(float)(rx + 198), cRec.y + 88, 192, 44};
+            DrawButton(btnSel, isSel ? "- REMOVER" : "+ SELECIONAR", isSel ? RED_COLOR : (Color){60, 215, 110, 255});
         }
 
-        /* Barra de Acao de Contestacao Inferior */
-        Rectangle actionBar = {mon.x + 20, mon.y + 550, mon.width - 40, 100};
-        DrawRectangleRounded(actionBar, 0.05f, 6, (Color){14, 20, 30, 255});
-        DrawRectangleRoundedLinesEx(actionBar, 0.05f, 6, 1.5f, (Color){45, 62, 80, 255});
+        /* ========================================================= */
+        /* BARRA INFERIOR DE CONTESTACAO COM 2 SLOTS VISUAIS         */
+        /* ========================================================= */
+        Rectangle actionBar = {mon.x + 18, mon.y + 526, mon.width - 36, 106};
+        DrawRectangleRounded(actionBar, 0.06f, 6, (Color){14, 20, 30, 255});
+        DrawRectangleRoundedLinesEx(actionBar, 0.06f, 6, 1.5f, (Color){50, 70, 92, 255});
 
-        DrawGameText(TextFormat("Evidências Selecionadas: %d/2", game->puzzle2008SelectionCount), (int)actionBar.x + 20, (int)actionBar.y + 14, 17, GOLD_COLOR);
+        int selIndices[2] = {-1, -1};
+        int found = 0;
+        for (int i = 0; i < 4 && found < 2; i++)
+        {
+            if (game->puzzle2008Selected[i]) selIndices[found++] = i;
+        }
+
+        const char *shortNames[4] = {
+            "DOC 1: DRONE (78%)",
+            "DOC 2: PANFLETO",
+            "DOC 3: CATRACA (14:15)",
+            "DOC 4: CFTV (14:30)"
+        };
+
+        for (int s = 0; s < 2; s++)
+        {
+            Rectangle slotRec = {actionBar.x + 16 + s * 320, actionBar.y + 14, 308, 46};
+            int docIdx = selIndices[s];
+            if (docIdx >= 0)
+            {
+                DrawRectangleRounded(slotRec, 0.18f, 6, (Color){20, 42, 36, 255});
+                DrawRectangleRoundedLinesEx(slotRec, 0.18f, 6, 1.8f, (Color){60, 225, 125, 255});
+                DrawGameText(TextFormat("PROVA %d: %s", s + 1, shortNames[docIdx]), (int)slotRec.x + 14, (int)slotRec.y + 15, 15, (Color){90, 245, 150, 255});
+            }
+            else
+            {
+                DrawRectangleRounded(slotRec, 0.18f, 6, (Color){18, 24, 34, 255});
+                DrawRectangleRoundedLinesEx(slotRec, 0.18f, 6, 1.2f, (Color){55, 70, 88, 255});
+                DrawGameText(TextFormat("PROVA %d: [ VAZIO ]", s + 1), (int)slotRec.x + 68, (int)slotRec.y + 15, 15, GRAY);
+            }
+        }
 
         if (!game->puzzle2008Contested)
         {
-            Rectangle btnContest = {actionBar.x + 320, actionBar.y + 10, 340, 44};
+            Rectangle btnContest = {actionBar.x + 662, actionBar.y + 14, 424, 46};
             bool canContest = (game->puzzle2008SelectionCount == 2);
             DrawButton(btnContest, "CONTESTAR IDENTIFICAÇÃO", canContest ? GOLD_COLOR : GRAY);
         }
         else
         {
-            DrawGameText("[ V ] IDENTIFICAÇÃO CONTESTADA COM SUCESSO!", (int)actionBar.x + 320, (int)actionBar.y + 20, 17, (Color){60, 235, 110, 255});
+            Rectangle okBanner = {actionBar.x + 662, actionBar.y + 14, 424, 46};
+            DrawRectangleRounded(okBanner, 0.18f, 6, Fade((Color){45, 175, 85, 255}, 0.22f));
+            DrawRectangleRoundedLinesEx(okBanner, 0.18f, 6, 1.8f, (Color){60, 235, 110, 255});
+            DrawGameText("[ OK ] CONTESTAÇÃO ACEITA PELO SISTEMA", (int)okBanner.x + 34, (int)okBanner.y + 15, 16, (Color){80, 245, 130, 255});
         }
 
-        /* Mensagem de Feedback */
+        /* Linha unica de feedback / orientacao */
         if (game->puzzle2008Feedback[0] != '\0')
         {
-            Color fbCol = game->puzzle2008Contested ? (Color){60, 235, 110, 255} : (Color){245, 165, 80, 255};
-            DrawGameText(game->puzzle2008Feedback, (int)actionBar.x + 20, (int)actionBar.y + 65, 15, fbCol);
+            Color fbCol = game->puzzle2008Contested ? (Color){80, 240, 130, 255} : (Color){250, 175, 85, 255};
+            DrawGameText(game->puzzle2008Feedback, (int)actionBar.x + 18, (int)actionBar.y + 72, 15, fbCol);
         }
         else
         {
-            DrawGameText("Dica: Selecione as duas evidencias que demonstram onde o alvo estava no horario da acusacao.", (int)actionBar.x + 20, (int)actionBar.y + 65, 14, GRAY);
+            DrawGameText("Clique em [EXAMINAR DOC] para inspecionar os detalhes e selecione as 2 provas do álibi.", (int)actionBar.x + 18, (int)actionBar.y + 72, 15, (Color){155, 175, 195, 255});
         }
     }
     else
@@ -7130,25 +7269,25 @@ void DrawPuzzle2008(const GameState *game)
         /* ========================================================= */
         /* ABA 2: CONFIGURACAO DA INSTALACAO (DESCOBERTA OPCIONAL)   */
         /* ========================================================= */
-        Rectangle optPanel = {mon.x + 20, mon.y + 116, mon.width - 40, 530};
+        Rectangle optPanel = {mon.x + 18, mon.y + 92, mon.width - 36, 540};
         DrawRectangleRounded(optPanel, 0.04f, 6, (Color){16, 24, 34, 255});
         DrawRectangleRoundedLinesEx(optPanel, 0.04f, 6, 2.0f, game->room2008OptionalUnlocked ? (Color){45, 165, 95, 255} : (Color){165, 55, 45, 255});
 
         if (!game->room2008OptionalUnlocked)
         {
-            DrawPadlockIcon((int)(optPanel.x + optPanel.width / 2), (int)(optPanel.y + 120), 2.0f, GOLD_COLOR, RAYWHITE);
-            DrawGameText("ACESSO ADMINISTRATIVO RESTRITO // DIRETRIZES DA FILIAL", (int)optPanel.x + 220, (int)optPanel.y + 190, 20, RED_COLOR);
-            DrawGameText("Para acessar as configuracoes desta instalacao, correlacione as notas do Dr. Ramos", (int)optPanel.x + 190, (int)optPanel.y + 230, 16, LIGHTGRAY);
-            DrawGameText("e o memorando governamental encontrados no escritorio corporativo.", (int)optPanel.x + 240, (int)optPanel.y + 260, 16, LIGHTGRAY);
-            DrawGameText("Examinar ambos os documentos revela a chave de manutencao do projeto.", (int)optPanel.x + 245, (int)optPanel.y + 300, 15, GOLD_COLOR);
+            DrawPadlockIcon((int)(optPanel.x + optPanel.width / 2), (int)(optPanel.y + 125), 2.0f, GOLD_COLOR, RAYWHITE);
+            DrawGameText("ACESSO ADMINISTRATIVO RESTRITO // DIRETRIZES DA FILIAL", (int)optPanel.x + 230, (int)optPanel.y + 195, 20, RED_COLOR);
+            DrawGameText("Para acessar as configurações desta instalação, examine o Caderno do Dr. Ramos", (int)optPanel.x + 195, (int)optPanel.y + 240, 16, LIGHTGRAY);
+            DrawGameText("e o Memorando Governamental na bancada direita do escritório.", (int)optPanel.x + 255, (int)optPanel.y + 270, 16, LIGHTGRAY);
+            DrawGameText("Ambos os documentos juntos liberam a chave de manutenção local.", (int)optPanel.x + 255, (int)optPanel.y + 315, 15, GOLD_COLOR);
         }
         else
         {
             DrawGameText("DIRETRIZES DA UNIDADE LOCAL // FILIAL METROPOLITANA 08", (int)optPanel.x + 35, (int)optPanel.y + 30, 20, GOLD_COLOR);
             DrawLine((int)optPanel.x + 35, (int)optPanel.y + 60, (int)(optPanel.x + optPanel.width - 35), (int)optPanel.y + 60, Fade(GOLD_COLOR, 0.4f));
 
-            DrawGameText("STATUS DO SISTEMA: Conectado a rede regional de monitoramento", (int)optPanel.x + 35, (int)optPanel.y + 80, 16, RAYWHITE);
-            DrawGameText("REGISTROS FORENSES ARQUIVADOS: 1.420 ocorrencias preservadas", (int)optPanel.x + 35, (int)optPanel.y + 110, 16, CYAN_COLOR);
+            DrawGameText("STATUS DO SISTEMA: Conectado à rede regional de monitoramento", (int)optPanel.x + 35, (int)optPanel.y + 80, 16, RAYWHITE);
+            DrawGameText("REGISTROS FORENSES ARQUIVADOS: 1.420 ocorrências preservadas", (int)optPanel.x + 35, (int)optPanel.y + 110, 16, CYAN_COLOR);
 
             Rectangle cardStatus = {optPanel.x + 35, optPanel.y + 145, optPanel.width - 70, 120};
             DrawRectangleRounded(cardStatus, 0.05f, 6, (Color){24, 32, 44, 255});
@@ -7157,16 +7296,16 @@ void DrawPuzzle2008(const GameState *game)
             DrawGameText("ENVIO AUTOMÁTICO DE ALVOS DESTA INSTALAÇÃO:", (int)cardStatus.x + 20, (int)cardStatus.y + 20, 16, GOLD_COLOR);
             if (!game->room2008OptionalCompleted)
             {
-                DrawGameText("[ ATIVO ] - Drones sao despachados automaticamente sob correspondencia preliminar.", (int)cardStatus.x + 20, (int)cardStatus.y + 50, 15, RED_COLOR);
-                DrawGameText("Desativar o envio automatico suspende os ataques sem apagar as provas forenses.", (int)cardStatus.x + 20, (int)cardStatus.y + 80, 15, LIGHTGRAY);
+                DrawGameText("[ ATIVO ] - Drones são despachados automaticamente sob correspondência preliminar.", (int)cardStatus.x + 20, (int)cardStatus.y + 50, 15, RED_COLOR);
+                DrawGameText("Desativar o envio automático suspende os ataques sem apagar as provas forenses.", (int)cardStatus.x + 20, (int)cardStatus.y + 80, 15, LIGHTGRAY);
 
                 Rectangle btnDisable = {optPanel.x + 35, optPanel.y + 290, 520, 52};
                 DrawButton(btnDisable, "DESATIVAR ENVIO AUTOMÁTICO DESTA INSTALAÇÃO", (Color){245, 155, 55, 255});
             }
             else
             {
-                DrawGameText("[ DESATIVADO ] - O despacho automatico de drones desta central foi bloqueado.", (int)cardStatus.x + 20, (int)cardStatus.y + 50, 15, (Color){60, 235, 110, 255});
-                DrawGameText("Todos os 1.420 relatorios foram preservados intactos como prova contra o abuso.", (int)cardStatus.x + 20, (int)cardStatus.y + 80, 15, (Color){100, 235, 140, 255});
+                DrawGameText("[ DESATIVADO ] - O despacho automático de drones desta central foi bloqueado.", (int)cardStatus.x + 20, (int)cardStatus.y + 50, 15, (Color){60, 235, 110, 255});
+                DrawGameText("Todos os 1.420 relatórios foram preservados intactos como prova contra o abuso.", (int)cardStatus.x + 20, (int)cardStatus.y + 80, 15, (Color){100, 235, 140, 255});
 
                 Rectangle okBox = {optPanel.x + 35, optPanel.y + 290, optPanel.width - 70, 70};
                 DrawRectangleRounded(okBox, 0.08f, 6, Fade((Color){45, 165, 80, 255}, 0.20f));
@@ -7178,9 +7317,9 @@ void DrawPuzzle2008(const GameState *game)
             DrawRectangleRounded(cardInfo, 0.05f, 6, Fade(PANEL_COLOR, 0.90f));
             DrawRectangleRoundedLinesEx(cardInfo, 0.05f, 6, 1.5f, (Color){60, 80, 105, 255});
             DrawGameText("COMPREENSÃO ÉTICA PROFUNDA:", (int)cardInfo.x + 20, (int)cardInfo.y + 16, 15, GOLD_COLOR);
-            DrawGameText("- Apagar o sistema destruiria as evidencias que comprovam o desvio do governo.", (int)cardInfo.x + 20, (int)cardInfo.y + 44, 14, LIGHTGRAY);
-            DrawGameText("- Desativar o despacho automatico impede ataques imediatos mantendo a verdade protegida.", (int)cardInfo.x + 20, (int)cardInfo.y + 68, 14, LIGHTGRAY);
-            DrawGameText("- A acao afeta exclusivamente esta instalacao e foi devidamente registrada no diario.", (int)cardInfo.x + 20, (int)cardInfo.y + 92, 14, (Color){60, 235, 110, 255});
+            DrawGameText("- Apagar o sistema destruiria as evidências que comprovam o desvio do governo.", (int)cardInfo.x + 20, (int)cardInfo.y + 44, 14, LIGHTGRAY);
+            DrawGameText("- Desativar o despacho automático impede ataques imediatos mantendo a verdade protegida.", (int)cardInfo.x + 20, (int)cardInfo.y + 68, 14, LIGHTGRAY);
+            DrawGameText("- A ação afeta exclusivamente esta instalação e foi devidamente registrada no diário.", (int)cardInfo.x + 20, (int)cardInfo.y + 92, 14, (Color){60, 235, 110, 255});
         }
     }
 }
@@ -7193,10 +7332,10 @@ void UpdatePuzzle2008(GameState *game)
         return;
     }
 
-    Rectangle mon = {80, 25, 1120, 670};
-    Rectangle tab0 = {mon.x + 20, mon.y + 68, 320, 40};
-    Rectangle tab1 = {mon.x + 350, mon.y + 68, 370, 40};
-    Rectangle btnClose = {mon.x + mon.width - 250, mon.y + 68, 230, 40};
+    Rectangle mon = {70, 52, 1140, 648};
+    Rectangle tab0 = {mon.x + 18, mon.y + 46, 320, 38};
+    Rectangle tab1 = {mon.x + 348, mon.y + 46, 360, 38};
+    Rectangle btnClose = {mon.x + mon.width - 248, mon.y + 46, 230, 38};
 
     if (Clicked(btnClose) || IsKeyPressed(KEY_ESCAPE))
     {
@@ -7220,12 +7359,14 @@ void UpdatePuzzle2008(GameState *game)
         {
             int col = c % 2;
             int row = c / 2;
-            Rectangle cRec = {mon.x + 20 + col * 545, mon.y + 240 + row * 150, 530, 140};
-            Rectangle btnExam = {cRec.x + 16, cRec.y + 96, 160, 32};
-            Rectangle btnSel = {cRec.x + 190, cRec.y + 96, 220, 32};
-            Rectangle chkBox = {cRec.x + 14, cRec.y + 14, 26, 26};
+            Rectangle cRec = {mon.x + 18 + col * 556, mon.y + 198 + row * 160, 548, 148};
+            Rectangle thumb = {cRec.x + 16, cRec.y + 16, 112, 116};
+            int rx = (int)cRec.x + 144;
+            Rectangle stTag = {(float)(rx + 242), cRec.y + 46, 148, 28};
+            Rectangle btnExam = {(float)rx, cRec.y + 88, 186, 44};
+            Rectangle btnSel = {(float)(rx + 198), cRec.y + 88, 192, 44};
 
-            if (Clicked(btnExam))
+            if (Clicked(btnExam) || Clicked(thumb))
             {
                 if (c == 0) game->doc2008FaceExamined = true;
                 if (c == 1) game->doc2008FlyerExamined = true;
@@ -7235,7 +7376,7 @@ void UpdatePuzzle2008(GameState *game)
                 return;
             }
 
-            if (Clicked(btnSel) || Clicked(chkBox))
+            if (Clicked(btnSel) || Clicked(stTag))
             {
                 if (game->puzzle2008Selected[c])
                 {
@@ -7251,15 +7392,32 @@ void UpdatePuzzle2008(GameState *game)
                     }
                     else
                     {
-                        snprintf(game->puzzle2008Feedback, sizeof(game->puzzle2008Feedback), "Maximo de 2 evidencias atingido. Remova uma para trocar.");
+                        snprintf(game->puzzle2008Feedback, sizeof(game->puzzle2008Feedback), "Máximo de 2 evidências atingido. Remova uma para trocar.");
                     }
                 }
             }
         }
 
+        /* Permitir remover evidencia clicando direto nos slots da barra inferior */
+        Rectangle actionBar = {mon.x + 18, mon.y + 526, mon.width - 36, 106};
+        int selIndices[2] = {-1, -1};
+        int found = 0;
+        for (int i = 0; i < 4 && found < 2; i++)
+        {
+            if (game->puzzle2008Selected[i]) selIndices[found++] = i;
+        }
+        for (int s = 0; s < 2; s++)
+        {
+            Rectangle slotRec = {actionBar.x + 16 + s * 320, actionBar.y + 14, 308, 46};
+            if (selIndices[s] >= 0 && Clicked(slotRec))
+            {
+                game->puzzle2008Selected[selIndices[s]] = false;
+                game->puzzle2008SelectionCount--;
+            }
+        }
+
         /* Botao de Contestacao */
-        Rectangle actionBar = {mon.x + 20, mon.y + 550, mon.width - 40, 100};
-        Rectangle btnContest = {actionBar.x + 320, actionBar.y + 10, 340, 44};
+        Rectangle btnContest = {actionBar.x + 662, actionBar.y + 14, 424, 46};
 
         if (!game->puzzle2008Contested)
         {
@@ -7269,45 +7427,45 @@ void UpdatePuzzle2008(GameState *game)
                 if (game->puzzle2008Selected[2] && game->puzzle2008Selected[3])
                 {
                     game->puzzle2008Contested = true;
-                    snprintf(game->puzzle2008Feedback, sizeof(game->puzzle2008Feedback), "FALSO POSITIVO COMPROVADO! A catraca e o CFTV provam presenca na empresa as 14:30.");
+                    snprintf(game->puzzle2008Feedback, sizeof(game->puzzle2008Feedback), "FALSO POSITIVO COMPROVADO! A catraca e o CFTV provam presença na empresa às 14:30.");
                 }
                 else if (game->puzzle2008Selected[0] && game->puzzle2008Selected[1])
                 {
-                    snprintf(game->puzzle2008Feedback, sizeof(game->puzzle2008Feedback), "A foto borrada e o panfleto citam o alvo, mas nao provam onde ele estava as 14:30.");
+                    snprintf(game->puzzle2008Feedback, sizeof(game->puzzle2008Feedback), "A foto borrada e o panfleto citam o alvo, mas não provam onde ele estava às 14:30.");
                 }
                 else if (game->puzzle2008Selected[0] && game->puzzle2008Selected[2])
                 {
-                    snprintf(game->puzzle2008Feedback, sizeof(game->puzzle2008Feedback), "O registro de ponto indica entrada, mas falta prova visual de permanencia as 14:30.");
+                    snprintf(game->puzzle2008Feedback, sizeof(game->puzzle2008Feedback), "O registro de ponto indica entrada, mas falta prova visual de permanência às 14:30.");
                 }
                 else if (game->puzzle2008Selected[0] && game->puzzle2008Selected[3])
                 {
-                    snprintf(game->puzzle2008Feedback, sizeof(game->puzzle2008Feedback), "A camera interna mostra presenca, mas precisa do registro formal de ponto.");
+                    snprintf(game->puzzle2008Feedback, sizeof(game->puzzle2008Feedback), "A câmera interna mostra presença, mas precisa do registro formal de entrada.");
                 }
                 else if (game->puzzle2008Selected[1] && (game->puzzle2008Selected[2] || game->puzzle2008Selected[3]))
                 {
-                    snprintf(game->puzzle2008Feedback, sizeof(game->puzzle2008Feedback), "O panfleto indica militancia politica, mas nao desmente a posicao da IA.");
+                    snprintf(game->puzzle2008Feedback, sizeof(game->puzzle2008Feedback), "O panfleto indica ativismo matutino (10h-13h), mas não comprova o álibi às 14:30.");
                 }
                 else
                 {
-                    snprintf(game->puzzle2008Feedback, sizeof(game->puzzle2008Feedback), "Evidencias insuficientes para comprovar o falso positivo. Tente outra combinacao.");
+                    snprintf(game->puzzle2008Feedback, sizeof(game->puzzle2008Feedback), "Evidências insuficientes para comprovar o falso positivo. Tente outra combinação.");
                 }
             }
         }
         else
         {
-            Rectangle targetPanel = {mon.x + 20, mon.y + 116, mon.width - 40, 115};
+            Rectangle targetPanel = {mon.x + 18, mon.y + 92, mon.width - 36, 94};
             if (!game->puzzle2008OrderSuspended)
             {
-                Rectangle btnSusp = {targetPanel.x + targetPanel.width - 370, targetPanel.y + 58, 350, 44};
+                Rectangle btnSusp = {targetPanel.x + targetPanel.width - 365, targetPanel.y + 23, 350, 48};
                 if (Clicked(btnSusp) || IsKeyPressed(KEY_ENTER) || IsKeyPressed(KEY_SPACE))
                 {
                     game->puzzle2008OrderSuspended = true;
-                    snprintf(game->puzzle2008Feedback, sizeof(game->puzzle2008Feedback), "ORDEM SUSPENSA! Drones cancelados. O CD de Memoria foi ejetado pelo drive.");
+                    snprintf(game->puzzle2008Feedback, sizeof(game->puzzle2008Feedback), "ORDEM SUSPENSA! Drones cancelados. O CD de Memória foi ejetado pelo drive.");
                 }
             }
             else
             {
-                Rectangle btnDone = {targetPanel.x + targetPanel.width - 450, targetPanel.y + 58, 430, 44};
+                Rectangle btnDone = {targetPanel.x + targetPanel.width - 435, targetPanel.y + 23, 420, 48};
                 if (Clicked(btnDone) || IsKeyPressed(KEY_ENTER) || IsKeyPressed(KEY_SPACE))
                 {
                     game->screen = SCREEN_RESULT_2008;
@@ -7317,10 +7475,10 @@ void UpdatePuzzle2008(GameState *game)
     }
     else
     {
-        /* Aba 1: Acao Opcional */
+        /* Aba 2: Acao Opcional */
         if (game->room2008OptionalUnlocked && !game->room2008OptionalCompleted)
         {
-            Rectangle optPanel = {mon.x + 20, mon.y + 116, mon.width - 40, 530};
+            Rectangle optPanel = {mon.x + 18, mon.y + 92, mon.width - 36, 540};
             Rectangle btnDisable = {optPanel.x + 35, optPanel.y + 290, 520, 52};
             if (Clicked(btnDisable))
             {
