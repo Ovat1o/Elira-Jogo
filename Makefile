@@ -78,8 +78,16 @@ else ifneq ($(wildcard /mnt/c/raylib/w64devkit/bin/gcc.exe),)
     LDLIBS ?= -L$(SRC_RAYLIB_DIR) -L$(SRC_DIR) -LC:/raylib/raylib/src -lraylib -lopengl32 -lgdi32 -lwinmm
     OUT    := ELIRA.exe
 else ifeq ($(UNAME_S),Darwin)
-    RAYLIB_PREFIX ?= $(shell brew --prefix raylib 2>/dev/null)
-    LDLIBS ?= $(RAYLIB_PREFIX)/lib/libraylib.a -framework Cocoa -framework IOKit -framework OpenGL -framework CoreVideo
+    BREW_BIN := $(shell which brew 2>/dev/null || (test -x /opt/homebrew/bin/brew && echo /opt/homebrew/bin/brew) || (test -x /usr/local/bin/brew && echo /usr/local/bin/brew))
+    RAYLIB_PREFIX ?= $(shell $(BREW_BIN) --prefix raylib 2>/dev/null)
+    ifeq ($(RAYLIB_PREFIX),)
+        ifneq ($(wildcard /opt/homebrew/opt/raylib/lib/libraylib.a),)
+            RAYLIB_PREFIX := /opt/homebrew/opt/raylib
+        else ifneq ($(wildcard /usr/local/opt/raylib/lib/libraylib.a),)
+            RAYLIB_PREFIX := /usr/local/opt/raylib
+        endif
+    endif
+    LDLIBS ?= $(RAYLIB_PREFIX)/lib/libraylib.a -framework Cocoa -framework IOKit -framework OpenGL -framework CoreVideo -framework QuartzCore
     OUT    := ELIRA
 else
     ifneq ($(wildcard $(LOCAL_RAYLIB)),)
