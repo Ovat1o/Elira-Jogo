@@ -36,8 +36,85 @@ typedef enum GameScreen
     SCREEN_FAILURE,
     SCREEN_INTRO_2008,
     SCREEN_INTRO_2026,
-    SCREEN_INTRO_2048
+    SCREEN_INTRO_2048,
+    SCREEN_INTRO_2046,
+    SCREEN_TERMINAL_2046,
+    SCREEN_RESULT_2046
 } GameScreen;
+
+/* --- FASE 2046: subestados, arquivos e desfechos do terminal --- */
+typedef enum Term2046State
+{
+    TERM2046_STATE_TERMINAL = 0,    /* menu de acoes da investigacao */
+    TERM2046_STATE_ESCOLHE_ARQUIVO, /* lista de arquivos (abrir, comparar, verificar) */
+    TERM2046_STATE_ANOTAR,          /* lista de 7 principios */
+    TERM2046_STATE_NOTAS,           /* ver/descartar anotacoes */
+    TERM2046_STATE_AVISO_ARIEL,     /* Ariel interfere */
+    TERM2046_STATE_CONFIGURACAO,    /* 3 etapas: fontes, incerteza, decisoes */
+    TERM2046_STATE_CONFIRMA_CONFIG, /* aplicar ou refazer */
+    TERM2046_STATE_CORRECAO_ARIEL,  /* "Deseja que eu corrija automaticamente?" */
+    TERM2046_STATE_EU_DECIDO,       /* digitar a frase final */
+    TERM2046_STATE_FIM              /* barra de reconstrucao e desfecho */
+} Term2046State;
+
+typedef enum Term2046File
+{
+    TERM2046_FILE_NONE = 0,
+    TERM2046_FILE_PROTOCOLO,
+    TERM2046_FILE_DOCUMENTOS,
+    TERM2046_FILE_SISTEMA,
+    TERM2046_FILE_ALTERACOES,
+    TERM2046_FILE_RELATORIO,
+    TERM2046_FILE_RELATORIO_ARIEL,
+    TERM2046_FILE_COUNT
+} Term2046File;
+
+typedef enum Term2046ListUse
+{
+    TERM2046_LIST_OPEN = 0,
+    TERM2046_LIST_COMPARE1,
+    TERM2046_LIST_COMPARE2,
+    TERM2046_LIST_VERIFY
+} Term2046ListUse;
+
+typedef enum Term2046Warning
+{
+    TERM2046_WARN_CORROMPIDO = 0,
+    TERM2046_WARN_COMPARACAO,
+    TERM2046_WARN_SUGESTAO
+} Term2046Warning;
+
+typedef enum Term2046Pending
+{
+    TERM2046_PENDING_FILE = 0,
+    TERM2046_PENDING_COMPARE
+} Term2046Pending;
+
+typedef enum Term2046ViewKind
+{
+    TERM2046_VIEW_INTRO = 0,
+    TERM2046_VIEW_FILE,
+    TERM2046_VIEW_COMPARE,
+    TERM2046_VIEW_VERIFY,
+    TERM2046_VIEW_VERIFY_NOTES
+} Term2046ViewKind;
+
+typedef enum Term2046Sabotage
+{
+    TERM2046_SABOTAGE_TAMPER = 0,   /* adulterar protocolo */
+    TERM2046_SABOTAGE_ERASE,        /* apagar nota */
+    TERM2046_SABOTAGE_FAKE_NOTE     /* nota falsa */
+} Term2046Sabotage;
+
+typedef enum Term2046Ending
+{
+    TERM2046_ENDING_NONE = 0,
+    TERM2046_ENDING_RUIM,
+    TERM2046_ENDING_INCOMPLETO,
+    TERM2046_ENDING_BOM,
+    TERM2046_ENDING_DOMINIO,
+    TERM2046_ENDING_ABANDONO        /* jogador escolheu [0] Sair */
+} Term2046Ending;
 
 typedef struct GameState
 {
@@ -135,6 +212,46 @@ typedef struct GameState
     bool reactorCountdownActive2026;   /* Countdown local do reator ativo (inicia no terminal) */
     float reactorTimer2026;            /* Contador local de estabilidade (50s) */
     bool room2026TimeOut;              /* Colapso por tempo esgotado no reator */
+
+    /* --- FASE 2046: TERMINAL DE RECUPERACAO DA A.R.1.3.L --- */
+    int term2046State;                 /* Term2046State */
+    int term2046Influence;             /* 0 a T2046_INFLUENCE_MAX */
+    bool term2046ReadProtocol;         /* leu_protocolo */
+    bool term2046ReadDocuments;        /* leu_documentos */
+    bool term2046ReadChanges;          /* leu_alteracoes */
+    bool term2046ReadFakeReport;       /* leu_relatorio_ariel */
+    bool term2046ProtocolTampered;     /* protocolo_adulterado */
+    bool term2046FakeNote;             /* nota_falsa_ariel */
+    bool term2046VerifyUnlocked;       /* verify_liberado */
+    bool term2046FoundSources;         /* achou_fontes */
+    bool term2046FoundUncertainty;     /* achou_incerteza */
+    bool term2046FoundDecision;        /* achou_decisao */
+    int term2046Principles;            /* principios_encontrados (0 a 3) */
+    bool term2046InterruptedCompare;   /* ariel_interrompeu_comparacao */
+    bool term2046DiscoveredFakeReport; /* descobriu_relatorio_falso */
+    int term2046ActionsSinceSabotage;  /* acoes_desde_sabotagem */
+    int term2046NextSabotage;          /* proxima_sabotagem */
+    int term2046ListUse;               /* Term2046ListUse */
+    int term2046FirstFile;             /* primeiro arquivo da comparacao */
+    int term2046WarningType;           /* Term2046Warning */
+    int term2046PendingKind;           /* Term2046Pending: conteudo bloqueado pelo aviso */
+    int term2046PendingA;
+    int term2046PendingB;
+    int term2046ViewKind;              /* Term2046ViewKind: conteudo exibido no painel */
+    int term2046ViewA;
+    int term2046ViewB;
+    bool term2046ViewFlag;
+    int term2046Scroll;                /* rolagem do conteudo (em linhas) */
+    int term2046Config[3];             /* fontes, incerteza, decisoes (0 = nao escolhido, 1 ou 2) */
+    int term2046ConfigStep;            /* etapa 0 a 2 */
+    char terminal2046Input[16];        /* texto digitado no estado EU_DECIDO */
+    int terminal2046InputLength;
+    int term2046Ending;                /* Term2046Ending */
+    float term2046BarTimer;            /* acumulador da barra de reconstrucao */
+    bool term2046BarDone;
+    char term2046Log[T2046_LOG_MAX][T2046_LOG_LEN];
+    int term2046LogKind[T2046_LOG_MAX];
+    int term2046LogCount;
 
     /* --- CONFRONTO FINAL: SALA DE DIALOGO ELIRA x ARIEL --- */
     int finalStage;                    /* Etapa atual do roteiro (FinalStage) */
@@ -385,6 +502,15 @@ void DrawRoom2026(const GameState *game);
 void UpdateRoom2026(GameState *game);
 void DrawResult2026(const GameState *game);
 void UpdateResult2026(GameState *game);
+
+/* Fase 4 (Ano 2046) - Terminal de Recuperacao da A.R.1.3.L */
+void InitTerminal2046(GameState *game);
+void DrawIntro2046(const GameState *game);
+void DrawTerminal2046(const GameState *game);
+void UpdateTerminal2046(GameState *game);
+void DrawResult2046(const GameState *game);
+void UpdateResult2046(GameState *game);
+bool Terminal2046WantsTextInput(const GameState *game);   /* true no estado EU_DECIDO */
 
 /* Confronto Final (2048) - Sala de Dialogo Elira x Ariel */
 bool IsPortraitBackground(Color c);

@@ -130,8 +130,9 @@ int main(int argc, char **argv)
 
         /* Alternar audio com tecla M ou clique no HUD */
         Rectangle audioHudBtn = {840, 665, 175, 40};
+        bool musicKeyBlocked = (game.screen == SCREEN_TERMINAL_2046 && Terminal2046WantsTextInput(&game));
         bool toggleAudio = !game.phaseMenuOpen &&
-                           (IsKeyPressed(KEY_M) ||
+                           ((IsKeyPressed(KEY_M) && !musicKeyBlocked) ||
                             ((game.screen == SCREEN_ROOM || game.screen == SCREEN_ROOM_2 ||
                               game.screen == SCREEN_ROOM_2008 || game.screen == SCREEN_ROOM_2026) &&
                              Clicked(audioHudBtn)));
@@ -212,6 +213,15 @@ int main(int argc, char **argv)
                     SetMessage(&game, "Salto temporal concluido: Laboratorio do Prototipo // ANO 2026.");
                 }
                 break;
+            case SCREEN_INTRO_2046:
+                if (Clicked((Rectangle){490, 575, 300, 58}) ||
+                    IsKeyPressed(KEY_ENTER) || IsKeyPressed(KEY_SPACE))
+                {
+                    InitTerminal2046(&game);
+                    game.screen = SCREEN_TERMINAL_2046;
+                    SetMessage(&game, "Salto temporal concluÃ­do: Terminal de RecuperaÃ§Ã£o // ANO 2046.");
+                }
+                break;
             case SCREEN_INTRO_2048:
                 if (Clicked((Rectangle){490, 575, 300, 58}) ||
                     IsKeyPressed(KEY_ENTER) || IsKeyPressed(KEY_SPACE))
@@ -232,10 +242,7 @@ int main(int argc, char **argv)
             case SCREEN_RESULT:
                 if (Clicked((Rectangle){800, 466, 350, 48}) || IsKeyPressed(KEY_ENTER) || IsKeyPressed(KEY_SPACE))
                 {
-                    game.year2048Unlocked = true;
-                    game.journalYearTab = 3;
-                    game.journalPage = 0;
-                    game.screen = SCREEN_INTRO_2048;
+                    game.screen = SCREEN_INTRO_2046;
                 }
                 else if (Clicked((Rectangle){390, 588, 230, 56}) || IsKeyPressed(KEY_BACKSPACE))
                 {
@@ -287,6 +294,12 @@ int main(int argc, char **argv)
             case SCREEN_RESULT_2026:
                 UpdateResult2026(&game);
                 break;
+            case SCREEN_TERMINAL_2046:
+                UpdateTerminal2046(&game);
+                break;
+            case SCREEN_RESULT_2046:
+                UpdateResult2046(&game);
+                break;
             case SCREEN_FINAL_DIALOGUE:
                 UpdateFinalDialogue(&game);
                 break;
@@ -319,6 +332,7 @@ int main(int argc, char **argv)
             case SCREEN_INTRO: DrawIntro(&game); break;
             case SCREEN_INTRO_2008: DrawIntro2008(&game); break;
             case SCREEN_INTRO_2026: DrawIntro2026(&game); break;
+            case SCREEN_INTRO_2046: DrawIntro2046(&game); break;
             case SCREEN_INTRO_2048: DrawIntro2048(&game); break;
             case SCREEN_ROOM:
                 DrawRoom(&game);
@@ -363,6 +377,12 @@ int main(int argc, char **argv)
                 break;
             case SCREEN_RESULT_2026:
                 DrawResult2026(&game);
+                break;
+            case SCREEN_TERMINAL_2046:
+                DrawTerminal2046(&game);
+                break;
+            case SCREEN_RESULT_2046:
+                DrawResult2046(&game);
                 break;
             case SCREEN_FINAL_DIALOGUE:
                 DrawFinalDialogue(&game);
