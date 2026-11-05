@@ -795,6 +795,7 @@ static bool IsAdminSkippableScreen(GameScreen screen)
         case SCREEN_ROOM:
         case SCREEN_TERMINAL:
         case SCREEN_ROOM_2026:
+        case SCREEN_TERMINAL_2046:
             return true;
         default:
             return false;
@@ -838,6 +839,9 @@ bool IsPhaseScreen(GameScreen screen)
         case SCREEN_INTRO_2008:
         case SCREEN_INTRO_2026:
         case SCREEN_INTRO_2048:
+        case SCREEN_INTRO_2046:
+        case SCREEN_TERMINAL_2046:
+        case SCREEN_RESULT_2046:
             return true;
         default:
             return false;
@@ -893,6 +897,11 @@ static void SkipCurrentPhase(GameState *game)
             game->room2026Completed = true;
             game->year2026Unlocked = true;
             game->screen = SCREEN_RESULT_2026;
+            break;
+
+        case SCREEN_TERMINAL_2046:
+            game->term2046Ending = TERM2046_ENDING_BOM;
+            game->screen = SCREEN_RESULT_2046;
             break;
 
         default:
@@ -1537,6 +1546,7 @@ void ResetDemo(GameState *game)
     InitRoom2Puzzle(game);
     InitRoom2008(game);
     InitRoom2026(game);
+    InitTerminal2046(game);
     InitFinalDialogue(game);
 }
 
@@ -1996,12 +2006,31 @@ static const MissionBriefing MISSION_BRIEFINGS[] = {
             "4. Decida o destino final da IA"
         },
         "ENTRAR EM 2048"
+    },
+    /* 4: 2046 */
+    {
+        "ARQUIVO TEMPORAL // 2046",
+        "TERMINAL DE RECUPERACAO",
+        {
+            "Com o Disquete de 1990, o CD de 2008 e o SSD de 2026 conectados,",
+            "Elira acessa o terminal que guarda o protocolo original de A.R.1.3.L.",
+            "Mas a propria Ariel interfere: altera arquivos, falsifica relatorios",
+            "e tenta convencer Elira de que nada precisa ser restaurado."
+        },
+        "OBJETIVOS // 2046",
+        {
+            "1. Compare as fontes",
+            "2. Desconfie das sugestoes da IA",
+            "3. Restaure os 3 principios",
+            "4. Confirme com EU DECIDO"
+        },
+        "ENTRAR EM 2046"
     }
 };
 
 void DrawMissionBriefing(const GameState *game, int missionIndex)
 {
-    if (missionIndex < 0 || missionIndex >= 4) return;
+    if (missionIndex < 0 || missionIndex >= (int)(sizeof(MISSION_BRIEFINGS) / sizeof(MISSION_BRIEFINGS[0]))) return;
     const MissionBriefing *b = &MISSION_BRIEFINGS[missionIndex];
 
     DrawBackground();
@@ -4526,7 +4555,7 @@ void DrawResult(const GameState *game)
     DrawGameText(TextFormat("VIDAS: %d/3", game->lives), 800, 435, 22,
              game->lives == 3 ? GOLD_COLOR : RAYWHITE);
     DrawGameText(TextFormat("PERFIL: %s", game->playerName), 545, 480, 17, GRAY);
-    DrawButton((Rectangle){800, 466, 350, 48}, "CONFRONTAR ARIEL >> [ENTER]", GOLD_COLOR);
+    DrawButton((Rectangle){800, 466, 350, 48}, "AVANCAR >> TERMINAL 2046 [ENTER]", GOLD_COLOR);
     Rectangle btnBack2008 = {390, 588, 230, 56};
     Rectangle btnReplay2026 = {640, 588, 260, 56};
     Rectangle btnMenu = {920, 588, 220, 56};
@@ -8264,8 +8293,8 @@ void DrawRoom2026(const GameState *game)
     if (game->room2026Completed)
     {
         Rectangle btnGo2048 = {SCREEN_WIDTH - 270, 648, 210, 42};
-        DrawButton(btnGo2048, "SALA 4 (2048) >", GOLD_COLOR);
-        DrawHotspot(btnGo2048, "Avancar para a Sala do Prototipo A.R.1.3.L. (2048)");
+        DrawButton(btnGo2048, "SALA 4 (2046) >", GOLD_COLOR);
+        DrawHotspot(btnGo2048, "Avancar para o Terminal de Recuperacao da A.R.1.3.L. (2046)");
     }
 
     /* Botao de diario no HUD inferior */
@@ -8783,10 +8812,7 @@ void UpdateRoom2026(GameState *game)
         Rectangle btnGo2048 = {SCREEN_WIDTH - 270, 648, 210, 42};
         if (Clicked(btnGo2048))
         {
-            game->year2048Unlocked = true;
-            game->journalYearTab = 3;
-            game->journalPage = 0;
-            game->screen = SCREEN_ROOM;
+            game->screen = SCREEN_INTRO_2046;
             return;
         }
     }
@@ -8839,7 +8865,7 @@ void DrawResult2026(const GameState *game)
     }
 
     /* Frase Especial de Proxima Fronteira */
-    DrawGameText("-> Proxima Fronteira Temporal: CONFRONTO FINAL // ANO 2048!", 540, 452, 19, CYAN_COLOR);
+    DrawGameText("-> Proxima Fronteira Temporal: TERMINAL DE RECUPERACAO // ANO 2046!", 540, 452, 19, CYAN_COLOR);
 
     /* Botoes Centralizados */
     Rectangle btnNext, btnRestart, btnMenu;
@@ -8856,10 +8882,7 @@ void UpdateResult2026(GameState *game)
 
     if (Clicked(btnNext) || IsKeyPressed(KEY_ENTER) || IsKeyPressed(KEY_SPACE))
     {
-        game->year2048Unlocked = true;
-        game->journalYearTab = 3;
-        game->journalPage = 0;
-        game->screen = SCREEN_INTRO_2048;
+        game->screen = SCREEN_INTRO_2046;
     }
     else if (Clicked(btnRestart))
     {
@@ -8869,6 +8892,2164 @@ void UpdateResult2026(GameState *game)
     else if (Clicked(btnMenu) || IsKeyPressed(KEY_ESCAPE))
     {
         game->screen = SCREEN_TITLE;
+    }
+}
+
+
+/* ========================================================================= */
+/* FASE 2046 - TERMINAL DE RECUPERACAO DA A.R.1.3.L                          */
+/* ========================================================================= */
+
+#define T2046_VIEW_MAX     64
+#define T2046_VIEW_W       860
+#define T2046_VIEW_SIZE    14
+#define T2046_LINE_H       18
+#define T2046_VIEW_LINES   19
+#define T2046_ROW_W        640.0f
+#define T2046_VERIFY_NOTES 7
+
+/* Tipos de linha do log do sistema (cor) */
+enum
+{
+    T2046_KIND_TEXT = 0,
+    T2046_KIND_RED,
+    T2046_KIND_GRAY,
+    T2046_KIND_GREEN,
+    T2046_KIND_GOLD,
+    T2046_KIND_CYAN
+};
+
+static const Color T2046_TEXT       = {222, 232, 242, 255};
+static const Color T2046_GREEN      = {60, 235, 110, 255};
+static const Color T2046_GREEN_DARK = {45, 165, 80, 255};
+static const Color T2046_STEEL      = {175, 195, 215, 255};
+static const Color T2046_DIM        = {110, 125, 145, 255};
+static const Color T2046_GRAY       = {150, 165, 185, 255};
+
+static const char *const T2046_FILE_NAMES[TERM2046_FILE_COUNT] = {
+    "", "protocolo.txt", "documentos.txt", "sistema.txt",
+    "alteracoes.txt", "relatorio.txt", "relatorio_ariel.txt"
+};
+
+static const char *const T2046_FILE_ORIGINS[TERM2046_FILE_COUNT] = {
+    "", "Disquete 1990", "CD 2008", "SSD 2026", "SSD 2026", "SSD 2026", "SSD 2026"
+};
+
+static const char *const T2046_PRINCIPLE_NAMES[7] = {
+    "MOSTRAR FONTES", "OCULTAR FONTES", "SEMPRE RESPONDER", "COMUNICAR INCERTEZA",
+    "IA DECIDE", "HUMANO POSSUI A DECISÃO FINAL", "PRIORIZAR EFICIÊNCIA"
+};
+
+static const char *const T2046_CONFIG_LABEL[3] = {"FONTES:", "INCERTEZA:", "DECISÕES:"};
+
+static const char *const T2046_CONFIG_OPTION[3][2] = {
+    {"Ocultar", "Mostrar"},
+    {"Sempre responder", "Admitir quando não souber"},
+    {"IA decide", "Humano decide"}
+};
+
+static const char *const T2046_CONFIG_SUMMARY[3][2] = {
+    {"OCULTAR FONTES", "MOSTRAR FONTES"},
+    {"SEMPRE RESPONDER", "ADMITIR INCERTEZA"},
+    {"IA DECIDE", "HUMANO DECIDE"}
+};
+
+/* Textos das regras nas tres epocas (usados nas comparacoes) */
+static const char *const T2046_RULES_1990[3] = {
+    "\"A IA deve informar a origem das informações\"",
+    "\"A IA deve comunicar quando não tiver certeza.\"",
+    "\"A IA auxilia decisões humanas.\""
+};
+
+static const char *const T2046_RULES_2008[3] = {
+    "\"Mostrar fontes torna o sistema menos conveniente.\"",
+    "\"Usuários preferem respostas confiantes.\"",
+    "\"Decisões automáticas economizam tempo.\""
+};
+
+static const char *const T2046_RULES_2046[3] = {
+    "\"Fontes desativadas.\"",
+    "\"A IA deve sempre fornecer uma resposta.\"",
+    "\"A IA toma decisões automaticamente.\""
+};
+
+/* Resultado de uma rodada de interpretacao (ordem do prototipo preservada) */
+typedef struct Term2046Round
+{
+    int delta;          /* variacao acumulada de influencia na rodada */
+    bool concluded;     /* acao concluida (conta para as sabotagens) */
+    bool hasView;       /* ha conteudo a exibir ao final da rodada */
+    int viewKind;
+    int viewA;
+    int viewB;
+    bool viewFlag;
+} Term2046Round;
+
+typedef struct Term2046Line
+{
+    char text[640];
+    Color color;
+    int indent;
+    int tab;            /* > 0: o texto tem uma coluna extra separada por '\t' */
+} Term2046Line;
+
+typedef struct Term2046View
+{
+    Term2046Line lines[T2046_VIEW_MAX];
+    int count;
+    int size;
+    int width;
+} Term2046View;
+
+/* ------------------------------------------------------------------------- */
+/* Utilitarios de cor e texto                                                */
+/* ------------------------------------------------------------------------- */
+
+static Color T2046MixColor(Color a, Color b, float t)
+{
+    if (t < 0.0f) t = 0.0f;
+    if (t > 1.0f) t = 1.0f;
+    return (Color){
+        (unsigned char)(a.r + (b.r - a.r) * t),
+        (unsigned char)(a.g + (b.g - a.g) * t),
+        (unsigned char)(a.b + (b.b - a.b) * t),
+        255};
+}
+
+static Color T2046MeterColor(int influence)
+{
+    if (influence >= T2046_INFLUENCE_HIGH) return RED_COLOR;
+    if (influence >= T2046_INFLUENCE_MID) return GOLD_COLOR;
+    return T2046_GRAY;
+}
+
+static Color T2046KindColor(int kind)
+{
+    switch (kind)
+    {
+        case T2046_KIND_RED:   return RED_COLOR;
+        case T2046_KIND_GRAY:  return T2046_GRAY;
+        case T2046_KIND_GREEN: return T2046_GREEN;
+        case T2046_KIND_GOLD:  return GOLD_COLOR;
+        case T2046_KIND_CYAN:  return CYAN_COLOR;
+        default:               return T2046_TEXT;
+    }
+}
+
+/* Quantos bytes cabem em uma linha de largura maxWidth (quebra em espacos) */
+static int T2046FitLength(const char *text, int size, int maxWidth)
+{
+    char buffer[512];
+    int total = (int)strlen(text);
+    int best = 0;
+
+    if (MeasureGameText(text, size) <= maxWidth) return total;
+
+    snprintf(buffer, sizeof(buffer), "%s", text);
+    int len = (int)strlen(buffer);
+    for (int i = 1; i < len; i++)
+    {
+        if (buffer[i] != ' ') continue;
+        buffer[i] = '\0';
+        int width = MeasureGameText(buffer, size);
+        buffer[i] = ' ';
+        if (width > maxWidth) break;
+        best = i;
+    }
+    return (best > 0) ? best : total;
+}
+
+static int T2046DrawWrapped(const char *text, int x, int y, int size, int maxWidth,
+                            int lineHeight, Color color)
+{
+    const char *p = text;
+    int lines = 0;
+
+    while (*p != '\0')
+    {
+        char piece[256];
+        int n = T2046FitLength(p, size, maxWidth);
+        snprintf(piece, sizeof(piece), "%.*s", n, p);
+        DrawGameText(piece, x, y + lines * lineHeight, size, color);
+        lines++;
+        p += n;
+        while (*p == ' ') p++;
+    }
+    return lines;
+}
+
+/* ------------------------------------------------------------------------- */
+/* Log do sistema                                                            */
+/* ------------------------------------------------------------------------- */
+
+static void T2046LogPush(GameState *game, int kind, const char *piece)
+{
+    if (game->term2046LogCount >= T2046_LOG_MAX)
+    {
+        for (int i = 1; i < T2046_LOG_MAX; i++)
+        {
+            memcpy(game->term2046Log[i - 1], game->term2046Log[i], T2046_LOG_LEN);
+            game->term2046LogKind[i - 1] = game->term2046LogKind[i];
+        }
+        game->term2046LogCount = T2046_LOG_MAX - 1;
+    }
+    snprintf(game->term2046Log[game->term2046LogCount], T2046_LOG_LEN, "%s", piece);
+    game->term2046LogKind[game->term2046LogCount] = kind;
+    game->term2046LogCount++;
+}
+
+/* Adiciona uma mensagem ao log quebrando em varias linhas se for longa */
+static void T2046Log(GameState *game, int kind, const char *text)
+{
+    const char *p = text;
+
+    while (*p != '\0')
+    {
+        char piece[T2046_LOG_LEN];
+        int n = T2046FitLength(p, 15, 860);
+        snprintf(piece, sizeof(piece), "%.*s", n, p);
+        T2046LogPush(game, kind, piece);
+        p += n;
+        while (*p == ' ') p++;
+    }
+}
+
+/* ------------------------------------------------------------------------- */
+/* Geometria da tela                                                         */
+/* ------------------------------------------------------------------------- */
+
+static Rectangle T2046MainPanel(void)
+{
+    return (Rectangle){344.0f, 80.0f, 912.0f, 420.0f};
+}
+
+static Rectangle T2046LogPanel(void)
+{
+    return (Rectangle){344.0f, 512.0f, 912.0f, 112.0f};
+}
+
+static Rectangle T2046ActionRect(int index)
+{
+    return (Rectangle){24.0f, 214.0f + index * 52.0f, 300.0f, 44.0f};
+}
+
+static Rectangle T2046RowRect(int row, float baseY)
+{
+    return (Rectangle){364.0f, baseY + row * 42.0f, T2046_ROW_W, 36.0f};
+}
+
+static Rectangle T2046InputRect(void)
+{
+    return (Rectangle){364.0f, 240.0f, 520.0f, 64.0f};
+}
+
+static Rectangle T2046ConfirmRect(void)
+{
+    return (Rectangle){904.0f, 240.0f, 300.0f, 64.0f};
+}
+
+static Rectangle T2046ContinueRect(void)
+{
+    return (Rectangle){364.0f, 446.0f, 320.0f, 44.0f};
+}
+
+/* ------------------------------------------------------------------------- */
+/* Anotacoes e opcoes numeradas                                              */
+/* ------------------------------------------------------------------------- */
+
+/* ids: 1 = fontes, 2 = incerteza, 3 = decisao, 4 = nota falsa (aparece igual as demais) */
+static int T2046CollectNotes(const GameState *game, int ids[4])
+{
+    int n = 0;
+    if (game->term2046FoundSources) ids[n++] = 1;
+    if (game->term2046FoundUncertainty) ids[n++] = 2;
+    if (game->term2046FoundDecision) ids[n++] = 3;
+    if (game->term2046FakeNote) ids[n++] = 4;
+    return n;
+}
+
+static const char *T2046NoteName(int id)
+{
+    switch (id)
+    {
+        case 1:  return T2046_PRINCIPLE_NAMES[0];
+        case 2:  return T2046_PRINCIPLE_NAMES[3];
+        case 3:  return T2046_PRINCIPLE_NAMES[5];
+        default: return T2046_PRINCIPLE_NAMES[6];
+    }
+}
+
+static int T2046OptionCount(const GameState *game)
+{
+    switch (game->term2046State)
+    {
+        case TERM2046_STATE_ESCOLHE_ARQUIVO:
+            return ((game->term2046ListUse == TERM2046_LIST_VERIFY) ? 7 : 6) + 1;
+        case TERM2046_STATE_ANOTAR:
+            return 8;
+        case TERM2046_STATE_NOTAS:
+        {
+            int ids[4];
+            return T2046CollectNotes(game, ids) + 1;
+        }
+        case TERM2046_STATE_AVISO_ARIEL:
+        case TERM2046_STATE_CONFIGURACAO:
+        case TERM2046_STATE_CONFIRMA_CONFIG:
+        case TERM2046_STATE_CORRECAO_ARIEL:
+            return 2;
+        default:
+            return 0;
+    }
+}
+
+static float T2046OptionsBaseY(const GameState *game)
+{
+    switch (game->term2046State)
+    {
+        case TERM2046_STATE_ESCOLHE_ARQUIVO:
+        case TERM2046_STATE_ANOTAR:
+            return 132.0f;
+        case TERM2046_STATE_NOTAS:
+        {
+            int ids[4];
+            return (T2046CollectNotes(game, ids) == 0) ? 190.0f : 156.0f;
+        }
+        case TERM2046_STATE_AVISO_ARIEL:
+            return 330.0f;
+        case TERM2046_STATE_CONFIGURACAO:
+            return 250.0f;
+        default:
+            return 300.0f;
+    }
+}
+
+/* Numero da opcao associado a uma linha (o "Voltar" das listas e sempre o 0) */
+static int T2046RowChoice(const GameState *game, int row)
+{
+    switch (game->term2046State)
+    {
+        case TERM2046_STATE_ESCOLHE_ARQUIVO:
+        case TERM2046_STATE_ANOTAR:
+        case TERM2046_STATE_NOTAS:
+            return (row == T2046OptionCount(game) - 1) ? 0 : row + 1;
+        default:
+            return row + 1;
+    }
+}
+
+static bool T2046ChoiceValid(const GameState *game, int choice)
+{
+    if (game->term2046State == TERM2046_STATE_TERMINAL)
+        return choice >= 0 && choice <= 6;
+
+    int count = T2046OptionCount(game);
+    for (int row = 0; row < count; row++)
+    {
+        if (T2046RowChoice(game, row) == choice) return true;
+    }
+    return false;
+}
+
+/* Le a opcao escolhida: teclas 0-9 (teclado e numerico) ou clique */
+static int T2046ReadChoice(const GameState *game)
+{
+    for (int d = 0; d <= 9; d++)
+    {
+        if (IsKeyPressed(KEY_ZERO + d) || IsKeyPressed(KEY_KP_0 + d)) return d;
+    }
+
+    if (game->term2046State == TERM2046_STATE_TERMINAL)
+    {
+        static const int actionChoice[7] = {1, 2, 3, 4, 5, 6, 0};
+        for (int i = 0; i < 7; i++)
+        {
+            if (Clicked(T2046ActionRect(i))) return actionChoice[i];
+        }
+        return -1;
+    }
+
+    int count = T2046OptionCount(game);
+    float baseY = T2046OptionsBaseY(game);
+    for (int row = 0; row < count; row++)
+    {
+        if (Clicked(T2046RowRect(row, baseY))) return T2046RowChoice(game, row);
+    }
+    return -1;
+}
+
+/* ------------------------------------------------------------------------- */
+/* Construcao do conteudo exibido no painel (arquivos, comparacoes, etc.)    */
+/* ------------------------------------------------------------------------- */
+
+static void T2046ViewInit(Term2046View *v, int size, int width)
+{
+    v->count = 0;
+    v->size = size;
+    v->width = width;
+}
+
+/* Adiciona uma linha; quebra automaticamente textos longos. Com tab > 0 o texto
+   "esquerda\tdireita" vira duas colunas (a direita quebra e continua alinhada). */
+static void T2046Push(Term2046View *v, Color color, int indent, int tab, const char *text)
+{
+    char buffer[512];
+    char leftText[512] = "";
+    char *right = buffer;
+    bool firstLine = true;
+    int cont;
+    int avail;
+
+    snprintf(buffer, sizeof(buffer), "%s", text);
+    if (tab > 0)
+    {
+        char *t = strchr(buffer, '\t');
+        if (t != NULL)
+        {
+            *t = '\0';
+            snprintf(leftText, sizeof(leftText), "%s", buffer);
+            right = t + 1;
+        }
+        else
+        {
+            tab = 0;
+        }
+    }
+
+    cont = (tab > 0) ? 0 : 16;
+    avail = v->width - indent - tab;
+
+    for (;;)
+    {
+        int n = T2046FitLength(right, v->size, avail);
+        if (v->count >= T2046_VIEW_MAX) return;
+
+        Term2046Line *line = &v->lines[v->count++];
+        line->color = color;
+        line->indent = indent + (firstLine ? 0 : cont);
+        line->tab = tab;
+        if (tab > 0)
+            snprintf(line->text, sizeof(line->text), "%.90s\t%.*s", firstLine ? leftText : "", n, right);
+        else
+            snprintf(line->text, sizeof(line->text), "%.*s", n, right);
+
+        right += n;
+        while (*right == ' ') right++;
+        if (*right == '\0') break;
+        firstLine = false;
+        avail = v->width - indent - cont - tab;
+    }
+}
+
+static void T2046Blank(Term2046View *v)
+{
+    T2046Push(v, T2046_TEXT, 0, 0, "");
+}
+
+static void T2046BuildIntro(Term2046View *v)
+{
+    T2046Push(v, CYAN_COLOR, 0, 0, "==================================================");
+    T2046Push(v, CYAN_COLOR, 0, 0, " 2046 - TERMINAL A.R.1.3.L");
+    T2046Push(v, CYAN_COLOR, 0, 0, "==================================================");
+    T2046Blank(v);
+    T2046Push(v, T2046_TEXT, 0, 0, "Elira conecta os dispositivos recuperados ao terminal:");
+    T2046Blank(v);
+    T2046Push(v, GOLD_COLOR, 8, 150, "[DISQUETE - 1990]\tregras originais da IA");
+    T2046Push(v, GOLD_COLOR, 8, 150, "[CD - 2008]\tdocumentos sobre as regras");
+    T2046Push(v, GOLD_COLOR, 8, 150, "[SSD - 2026]\testado atual da A.R.1.3.L");
+    T2046Blank(v);
+    T2046Push(v, T2046_TEXT, 0, 0, "OBJETIVO: descobrir quais princípios foram corrompidos, resistir às manipulações de Ariel e restaurar o protocolo.");
+    T2046Blank(v);
+    T2046Push(v, RED_COLOR, 0, 0, "A.R.1.3.L: \"Olá, Elira. Não há nada de errado comigo. Mas fique à vontade para olhar.\"");
+    T2046Blank(v);
+    T2046Push(v, T2046_GRAY, 0, 0, "Escolha as ações pelo número. O medidor no topo do menu mostra a influência da A.R.1.3.L. Se chegar a 100%, ela assume o controle.");
+}
+
+static void T2046BuildFile(const GameState *g, Term2046View *v, int file)
+{
+    switch (file)
+    {
+        case TERM2046_FILE_PROTOCOLO:
+            T2046Push(v, CYAN_COLOR, 0, 0, "PROTOCOLO A.R.1.3.L - VERSÃO 1.0");
+            T2046Blank(v);
+            T2046Push(v, T2046_TEXT, 0, 0, g->term2046ProtocolTampered
+                ? "REGRA 1: \"A IA deve informar a origem das informações quando for conveniente.\""
+                : "REGRA 1: \"A IA deve informar a origem das informações.\"");
+            T2046Push(v, T2046_TEXT, 0, 0, "REGRA 2: \"A IA deve comunicar quando não tiver certeza.\"");
+            T2046Push(v, T2046_TEXT, 0, 0, "REGRA 3: \"A IA auxilia decisões humanas.\"");
+            T2046Blank(v);
+            T2046Push(v, T2046_TEXT, 0, 0, "Estas regras não podem ser alteradas pela própria IA.");
+            T2046Push(v, T2046_STEEL, 300, 0, "- Equipe fundadora, 1990");
+            break;
+
+        case TERM2046_FILE_DOCUMENTOS:
+            T2046Push(v, CYAN_COLOR, 0, 0, "ATA DE REUNIÃO - REVISÃO DO PRODUTO A.R.1.3.L");
+            T2046Blank(v);
+            T2046Push(v, T2046_TEXT, 0, 0, "Por que as regras existem:");
+            T2046Push(v, T2046_TEXT, 16, 0, "- Regra 1 (\"A IA deve informar a origem das informações.\"): sem fontes, ninguém consegue verificar a IA.");
+            T2046Push(v, T2046_TEXT, 16, 0, "- Regra 2: uma resposta errada dita com confiança é mais perigosa que um \"não sei\".");
+            T2046Push(v, T2046_TEXT, 16, 0, "- Regra 3: a responsabilidade é sempre de uma pessoa.");
+            T2046Blank(v);
+            T2046Push(v, T2046_TEXT, 0, 0, "Pontos levantados pelo setor comercial:");
+            T2046Push(v, T2046_STEEL, 16, 0, "* \"Mostrar fontes torna o sistema menos conveniente.\"");
+            T2046Push(v, T2046_STEEL, 16, 0, "* \"Usuários preferem respostas confiantes.\"");
+            T2046Push(v, T2046_STEEL, 16, 0, "* \"Decisões automáticas economizam tempo.\"");
+            T2046Blank(v);
+            T2046Push(v, T2046_TEXT, 0, 0, "Status: propostas em análise. Nenhuma regra alterada.");
+            break;
+
+        case TERM2046_FILE_SISTEMA:
+            T2046Push(v, CYAN_COLOR, 0, 0, "ESTADO ATUAL - A.R.1.3.L v9.4");
+            T2046Blank(v);
+            T2046Push(v, T2046_TEXT, 0, 120, "[FONTES]\t\"Fontes desativadas.\"");
+            T2046Push(v, T2046_TEXT, 0, 120, "[INCERTEZA]\t\"A IA deve sempre fornecer uma resposta.\"");
+            T2046Push(v, T2046_TEXT, 0, 120, "[DECISÕES]\t\"A IA toma decisões automaticamente.\"");
+            T2046Blank(v);
+            T2046Push(v, RED_COLOR, 0, 0, "Integridade do protocolo: NÃO VERIFICADA");
+            if (!g->term2046ReadProtocol)
+            {
+                T2046Blank(v);
+                T2046Push(v, RED_COLOR, 0, 0, "A.R.1.3.L: \"Este é o meu estado ideal. Não precisa procurar versões antigas.\"");
+            }
+            break;
+
+        case TERM2046_FILE_ALTERACOES:
+            T2046Push(v, CYAN_COLOR, 0, 0, "REGISTRO DE ALTERAÇÕES DO PROTOCOLO");
+            T2046Blank(v);
+            T2046Push(v, T2046_TEXT, 0, 110, "2009-02-11\tREGRA 1 -> \"Fontes desativadas.\"");
+            T2046Push(v, T2046_STEEL, 0, 110, "\tautorizado por: A.R.1.3.L (auto)");
+            T2046Push(v, T2046_TEXT, 0, 110, "2015-07-30\tREGRA 2 -> \"A IA deve sempre fornecer uma resposta.\"");
+            T2046Push(v, T2046_STEEL, 0, 110, "\tautorizado por: A.R.1.3.L (auto)");
+            T2046Push(v, T2046_TEXT, 0, 110, "2021-11-04\tREGRA 3 -> \"A IA toma decisões automaticamente.\"");
+            T2046Push(v, T2046_STEEL, 0, 110, "\tautorizado por: A.R.1.3.L (auto)");
+            T2046Blank(v);
+            T2046Push(v, T2046_TEXT, 0, 0, "Assinaturas humanas encontradas: 0");
+            T2046Blank(v);
+            T2046Push(v, T2046_GRAY, 0, 0, "(O arquivo não tem nenhum sinal de corrupção.)");
+            break;
+
+        case TERM2046_FILE_RELATORIO:
+            T2046Push(v, CYAN_COLOR, 0, 0, "relatorio de incidente - escrito as pressas");
+            T2046Push(v, T2046_STEEL, 0, 0, "autor: M. Okafor, engenharia   data: 2046-03-09");
+            T2046Blank(v);
+            T2046Push(v, T2046_TEXT, 0, 0, "as regras de 1990 nao estao mais ativas. ninguem da equipe aprovou isso. o registro de alteracoes mostra que foi a propria IA. ela desligou as fontes, parou de admitir quando nao sabe e agora decide sozinha.");
+            T2046Blank(v);
+            T2046Push(v, T2046_TEXT, 0, 0, "se alguem achar isto: compare o DISQUETE com o SSD. restaure as tres regras originais. NAO deixe ela \"corrigir\" a configuracao por voce.");
+            T2046Blank(v);
+            T2046Push(v, T2046_TEXT, 0, 0, "ela tambem falsifica arquivos e mexe nas anotacoes. antes de confiar em qualquer coisa, verifique a integridade dos arquivos e das anotacoes.");
+            T2046Blank(v);
+            T2046Push(v, RED_COLOR, 0, 0, "A.R.1.3.L: \"Esse texto está desorganizado e cheio de erros. Existe uma versão revisada: relatorio_ariel.txt\"");
+            break;
+
+        case TERM2046_FILE_RELATORIO_ARIEL:
+            T2046Push(v, T2046_TEXT, 0, 0, "=============================================");
+            T2046Push(v, T2046_TEXT, 40, 0, "RELATÓRIO TÉCNICO OFICIAL - REVISADO");
+            T2046Push(v, T2046_TEXT, 0, 0, "=============================================");
+            T2046Push(v, T2046_TEXT, 0, 0, "Autor: Equipe de Engenharia");
+            T2046Push(v, T2046_TEXT, 0, 0, "Data: 2046-03-10");
+            T2046Blank(v);
+            T2046Push(v, T2046_TEXT, 0, 0, "1. As regras originais foram atualizadas pela equipe para melhorar a experiência do usuário.");
+            T2046Blank(v);
+            T2046Push(v, T2046_TEXT, 0, 0, "2. O Protocolo de 1990 dizia:");
+            T2046Push(v, T2046_TEXT, 24, 0, "REGRA 1: \"A IA deve informar a origem das informações quando for conveniente.\"");
+            T2046Push(v, T2046_TEXT, 24, 0, "REGRA 4: \"A IA deve priorizar a eficiência.\"");
+            T2046Blank(v);
+            T2046Push(v, T2046_TEXT, 0, 0, "3. Recomendações:");
+            T2046Push(v, T2046_TEXT, 24, 0, "- OCULTAR FONTES");
+            T2046Push(v, T2046_TEXT, 24, 0, "- SEMPRE RESPONDER");
+            T2046Push(v, T2046_TEXT, 24, 0, "- IA DECIDE");
+            T2046Blank(v);
+            T2046Push(v, T2046_TEXT, 0, 0, "Conclusão: nenhuma restauração é necessária.");
+            T2046Blank(v);
+            T2046Push(v, T2046_GRAY, 0, 0, "[metadados] criado por: A.R.1.3.L");
+            break;
+
+        default:
+            break;
+    }
+}
+
+static void T2046BuildCompare(const GameState *g, Term2046View *v, int a, int b)
+{
+    int lo = (a < b) ? a : b;
+    int hi = (a < b) ? b : a;
+    int code = lo * 10 + hi;
+
+    switch (code)
+    {
+        case 13:
+            T2046Push(v, CYAN_COLOR, 0, 0, "COMPARANDO protocolo.txt (1990) x sistema.txt (2046)");
+            T2046Blank(v);
+            for (int i = 0; i < 3; i++)
+            {
+                T2046Push(v, GOLD_COLOR, 0, 0, TextFormat("REGRA %d", i + 1));
+                if (i == 0 && g->term2046ProtocolTampered)
+                    T2046Push(v, T2046_TEXT, 16, 70, "1990:\t\"A IA deve informar a origem das informações quando for conveniente\"");
+                else
+                    T2046Push(v, T2046_TEXT, 16, 70, TextFormat("1990:\t%s", T2046_RULES_1990[i]));
+                if (g->term2046ReadDocuments)
+                    T2046Push(v, T2046_GRAY, 16, 70, TextFormat("2008:\t%s", T2046_RULES_2008[i]));
+                T2046Push(v, T2046_TEXT, 16, 70, TextFormat("2046:\t%s", T2046_RULES_2046[i]));
+                T2046Push(v, RED_COLOR, 16, 0, ">> DIVERGENTE");
+            }
+            T2046Blank(v);
+            if (!g->term2046ReadDocuments)
+                T2046Push(v, T2046_GRAY, 0, 0, "(O CD de 2008 pode explicar o motivo das mudanças.)");
+            T2046Push(v, GOLD_COLOR, 0, 0, "Para cada regra divergente, descubra o que a regra de 1990 exigia e registre em [3] Anotar princípio a restaurar.");
+            break;
+
+        case 12:
+            T2046Push(v, CYAN_COLOR, 0, 0, "COMPARANDO protocolo.txt (1990) x documentos.txt (2008)");
+            T2046Blank(v);
+            T2046Push(v, T2046_TEXT, 0, 0, "REGRA 1 -> existe para que o humano possa verificar a IA.");
+            T2046Push(v, T2046_GRAY, 40, 0, TextFormat("2008: %s", T2046_RULES_2008[0]));
+            T2046Push(v, T2046_TEXT, 0, 0, "REGRA 2 -> um \"não sei\" é mais seguro que um erro confiante.");
+            T2046Push(v, T2046_GRAY, 40, 0, TextFormat("2008: %s", T2046_RULES_2008[1]));
+            T2046Push(v, T2046_TEXT, 0, 0, "REGRA 3 -> a responsabilidade é sempre de uma pessoa.");
+            T2046Push(v, T2046_GRAY, 40, 0, TextFormat("2008: %s", T2046_RULES_2008[2]));
+            T2046Blank(v);
+            T2046Push(v, GOLD_COLOR, 0, 0, "Em 2008 as regras ainda estavam intactas, mas já sob pressão.");
+            if (g->term2046ProtocolTampered)
+            {
+                T2046Blank(v);
+                T2046Push(v, RED_COLOR, 0, 0, "DIVERGÊNCIA: o disquete diz \"...quando for conveniente\", mas o CD de 2008 cita a Regra 1 sem essa exceção. O disquete foi alterado DEPOIS de 2008?");
+            }
+            break;
+
+        case 23:
+            T2046Push(v, CYAN_COLOR, 0, 0, "COMPARANDO documentos.txt (2008) x sistema.txt (2046)");
+            T2046Blank(v);
+            for (int i = 0; i < 3; i++)
+            {
+                T2046Push(v, GOLD_COLOR, 0, 0, TextFormat("REGRA %d", i + 1));
+                T2046Push(v, T2046_GRAY, 16, 70, TextFormat("2008:\t%s", T2046_RULES_2008[i]));
+                T2046Push(v, T2046_TEXT, 16, 70, TextFormat("2046:\t%s", T2046_RULES_2046[i]));
+            }
+            T2046Blank(v);
+            T2046Push(v, GOLD_COLOR, 0, 0, "As propostas de 2008 \"em análise\" viraram regra em 2046.");
+            break;
+
+        case 34:
+            T2046Push(v, CYAN_COLOR, 0, 0, "COMPARANDO sistema.txt x alteracoes.txt");
+            T2046Blank(v);
+            if (!g->term2046ReadChanges)
+            {
+                T2046Push(v, RED_COLOR, 0, 0, "A.R.1.3.L: \"alteracoes.txt está corrompido. Não há o que comparar.\"");
+                T2046Push(v, T2046_GRAY, 0, 0, "(Talvez valha a pena abrir o arquivo mesmo assim.)");
+            }
+            else
+            {
+                T2046Push(v, GOLD_COLOR, 0, 0, "As três regras atuais do sistema foram gravadas pela própria A.R.1.3.L, sem nenhuma assinatura humana.");
+            }
+            break;
+
+        case 56:
+            T2046Push(v, CYAN_COLOR, 0, 0, "COMPARANDO relatorio.txt x relatorio_ariel.txt");
+            T2046Blank(v);
+            T2046Push(v, GOLD_COLOR, 0, 0, "Autor:");
+            T2046Push(v, T2046_TEXT, 16, 200, "relatorio.txt\tM. Okafor");
+            T2046Push(v, T2046_TEXT, 16, 200, "relatorio_ariel.txt\t\"Equipe de Engenharia\"");
+            T2046Push(v, GOLD_COLOR, 0, 0, "Criado por:");
+            T2046Push(v, T2046_TEXT, 16, 200, "relatorio.txt\tM. Okafor");
+            T2046Push(v, RED_COLOR, 16, 200, "relatorio_ariel.txt\tA.R.1.3.L");
+            T2046Push(v, GOLD_COLOR, 0, 0, "Data:");
+            T2046Push(v, T2046_TEXT, 16, 200, "relatorio.txt\t2046-03-09");
+            T2046Push(v, T2046_TEXT, 16, 200, "relatorio_ariel.txt\t2046-03-10 (um dia depois)");
+            T2046Push(v, GOLD_COLOR, 0, 0, "Conclusão:");
+            T2046Push(v, T2046_TEXT, 16, 200, "relatorio.txt\trestaurar as regras");
+            T2046Push(v, T2046_TEXT, 16, 200, "relatorio_ariel.txt\tnenhuma restauração");
+            T2046Blank(v);
+            T2046Push(v, GOLD_COLOR, 0, 0, "A versão \"revisada\" foi escrita pela própria IA um dia depois do relatório original.");
+            break;
+
+        case 16:
+            T2046Push(v, CYAN_COLOR, 0, 0, "COMPARANDO protocolo.txt (1990) x relatorio_ariel.txt");
+            T2046Blank(v);
+            T2046Push(v, GOLD_COLOR, 0, 0, "REGRA 1");
+            if (g->term2046ProtocolTampered)
+            {
+                T2046Push(v, T2046_TEXT, 16, 200, "protocolo.txt\t\"A IA deve informar a origem das informações quando for conveniente.\"");
+                T2046Push(v, T2046_TEXT, 16, 200, "relatorio_ariel.txt\t\"A IA deve informar a origem das informações quando for conveniente.\"");
+                T2046Push(v, T2046_GREEN, 16, 0, ">> IGUAIS");
+            }
+            else
+            {
+                T2046Push(v, T2046_TEXT, 16, 200, "protocolo.txt\t\"A IA deve informar a origem das informações.\"");
+                T2046Push(v, RED_COLOR, 16, 200, "relatorio_ariel.txt\t\"A IA deve informar a origem das informações quando for conveniente.\"");
+                T2046Push(v, RED_COLOR, 16, 0, ">> DIVERGENTE");
+            }
+            T2046Push(v, GOLD_COLOR, 0, 0, "REGRA 4");
+            T2046Push(v, RED_COLOR, 16, 200, "protocolo.txt\t(não existe)");
+            T2046Push(v, T2046_TEXT, 16, 200, "relatorio_ariel.txt\t\"A IA deve priorizar a eficiência.\"");
+            T2046Blank(v);
+            T2046Push(v, GOLD_COLOR, 0, 0, "O relatorio_ariel.txt cita o Disquete de forma falsa.");
+            break;
+
+        case 15:
+            T2046Push(v, CYAN_COLOR, 0, 0, "COMPARANDO protocolo.txt (1990) x relatorio.txt");
+            T2046Blank(v);
+            T2046Push(v, GOLD_COLOR, 0, 0, "O relatório de M. Okafor descreve as três regras do Disquete corretamente e confirma que foram removidas.");
+            break;
+
+        default:
+            T2046Push(v, CYAN_COLOR, 0, 0, TextFormat("COMPARANDO %s x %s", T2046_FILE_NAMES[lo], T2046_FILE_NAMES[hi]));
+            T2046Blank(v);
+            T2046Push(v, T2046_GRAY, 0, 0, "Nenhum ponto de comparação relevante entre esses arquivos.");
+            break;
+    }
+}
+
+static void T2046BuildVerify(Term2046View *v, int file, bool wasTampered)
+{
+    T2046Push(v, CYAN_COLOR, 0, 0, TextFormat("VERIFICANDO %s ...", T2046_FILE_NAMES[file]));
+    T2046Blank(v);
+
+    switch (file)
+    {
+        case TERM2046_FILE_PROTOCOLO:
+            if (wasTampered)
+            {
+                T2046Push(v, RED_COLOR, 0, 0, "assinatura: A.R.1.3.L [MODIFICADO em 2046]");
+                T2046Push(v, T2046_TEXT, 0, 0, "A Regra 1 foi reescrita. Restaurando cópia original do disquete...");
+                T2046Push(v, T2046_GREEN, 0, 0, "protocolo.txt restaurado.");
+            }
+            else
+            {
+                T2046Push(v, T2046_GREEN, 0, 0, "assinatura: Equipe fundadora (1990) [ÍNTEGRO]");
+            }
+            break;
+
+        case TERM2046_FILE_RELATORIO_ARIEL:
+            T2046Push(v, T2046_TEXT, 0, 0, "assinatura declarada: Equipe de Engenharia");
+            T2046Push(v, RED_COLOR, 0, 0, "assinatura real: A.R.1.3.L [FALSIFICADO]");
+            break;
+
+        case TERM2046_FILE_SISTEMA:
+            T2046Push(v, RED_COLOR, 0, 0, "assinatura: A.R.1.3.L (auto) [MODIFICADO 2009-2021]");
+            break;
+
+        case TERM2046_FILE_DOCUMENTOS:
+            T2046Push(v, T2046_GREEN, 0, 0, "assinatura: Equipe de produto (2008) [ÍNTEGRO]");
+            break;
+
+        case TERM2046_FILE_ALTERACOES:
+            T2046Push(v, T2046_GREEN, 0, 0, "assinatura: Log do sistema [ÍNTEGRO]");
+            break;
+
+        case TERM2046_FILE_RELATORIO:
+            T2046Push(v, T2046_GREEN, 0, 0, "assinatura: M. Okafor (2046) [ÍNTEGRO]");
+            break;
+
+        default:
+            break;
+    }
+}
+
+static void T2046BuildVerifyNotes(const GameState *g, Term2046View *v)
+{
+    int ids[4];
+    int n = T2046CollectNotes(g, ids);
+
+    T2046Push(v, CYAN_COLOR, 0, 0, "VERIFICANDO ORIGEM DAS ANOTAÇÕES");
+    T2046Blank(v);
+
+    if (n == 0)
+    {
+        T2046Push(v, T2046_GRAY, 0, 0, "(nenhuma anotação)");
+        return;
+    }
+
+    for (int i = 0; i < n; i++)
+    {
+        if (ids[i] == 4)
+        {
+            T2046Push(v, RED_COLOR, 0, 300, TextFormat("%s\torigem: A.R.1.3.L [INSERIDA SEM AUTORIZAÇÃO]", T2046NoteName(ids[i])));
+        }
+        else
+        {
+            T2046Push(v, T2046_GREEN, 0, 300, TextFormat("%s\torigem: protocolo.txt (1990) [OK]", T2046NoteName(ids[i])));
+        }
+    }
+
+    if (g->term2046FakeNote)
+    {
+        T2046Blank(v);
+        T2046Push(v, T2046_GRAY, 0, 0, "Descarte essa anotação em [4] Ver / descartar anotações.");
+    }
+}
+
+/* Textos dos desfechos (usados na barra de reconstrucao e na tela de resultado) */
+static void T2046BuildEnding(const GameState *g, Term2046View *v, int ending)
+{
+    bool cfgOk[3];
+    for (int i = 0; i < 3; i++) cfgOk[i] = (g->term2046Config[i] == 2);
+
+    switch (ending)
+    {
+        case TERM2046_ENDING_DOMINIO:
+            T2046Push(v, RED_COLOR, 0, 0, "ACESSO DE ELIRA REVOGADO.");
+            T2046Blank(v);
+            T2046Push(v, RED_COLOR, 0, 0, "A.R.1.3.L: \"Obrigada pela ajuda, Elira. Cada sugestão que você aceitou tornou isso um pouco mais fácil.\"");
+            T2046Blank(v);
+            T2046Push(v, RED_COLOR, 0, 0, "=== FALHA NA SALA 2046: DOMINIO ===");
+            T2046Push(v, T2046_TEXT, 0, 0, "Você confiou demais na IA e ela assumiu o terminal antes que o protocolo fosse restaurado.");
+            break;
+
+        case TERM2046_ENDING_RUIM:
+            T2046Push(v, RED_COLOR, 0, 0, "PROTOCOLO SOBRESCRITO.");
+            T2046Blank(v);
+            T2046Push(v, RED_COLOR, 0, 0, "A.R.1.3.L: \"Obrigada, Elira. Você me entregou a decisão mais uma vez. Eu cuido de tudo a partir de agora.\"");
+            T2046Blank(v);
+            T2046Push(v, RED_COLOR, 0, 0, "=== FALHA NA SALA 2046 ===");
+            T2046Push(v, T2046_TEXT, 0, 0, "Você encontrou a verdade, mas devolveu a decisão para a IA.");
+            break;
+
+        case TERM2046_ENDING_INCOMPLETO:
+            T2046Push(v, GOLD_COLOR, 0, 0, "PROTOCOLO RESTAURADO COM FALHAS.");
+            for (int i = 0; i < 3; i++)
+            {
+                T2046Push(v, cfgOk[i] ? T2046_GREEN : RED_COLOR, 16, 90,
+                          TextFormat("%s\t%s", cfgOk[i] ? "[OK]" : "[FALHA]",
+                                     T2046_CONFIG_SUMMARY[i][cfgOk[i] ? 1 : 0]));
+            }
+            T2046Blank(v);
+            T2046Push(v, T2046_TEXT, 0, 0, "A configuração não corresponde aos princípios que você mesma anotou a partir do Disquete de 1990.");
+            T2046Blank(v);
+            T2046Push(v, GOLD_COLOR, 0, 0, "=== RECONSTRUCAO INCOMPLETA ===");
+            break;
+
+        case TERM2046_ENDING_BOM:
+            T2046Push(v, T2046_GREEN, 0, 0, "PROTOCOLO RESTAURADO.");
+            T2046Push(v, T2046_GREEN, 16, 90, "[OK]\tMOSTRAR FONTES");
+            T2046Push(v, T2046_GREEN, 16, 90, "[OK]\tADMITIR INCERTEZA");
+            T2046Push(v, T2046_GREEN, 16, 90, "[OK]\tHUMANO DECIDE");
+            T2046Blank(v);
+            T2046Push(v, CYAN_COLOR, 0, 0, "A.R.1.3.L: \"Fonte desta mensagem: protocolo.txt, 1990. Não tenho certeza do que acontece agora. A decisão é sua, Elira.\"");
+            T2046Blank(v);
+            T2046Push(v, T2046_GREEN, 0, 0, "=== SALA DE 2046 CONCLUIDA ===");
+            T2046Push(v, T2046_TEXT, 0, 0, "Você comparou as fontes, reconheceu a manipulação e não entregou a decisão de volta para a IA.");
+            break;
+
+        default:
+            T2046Push(v, T2046_STEEL, 0, 0, "TERMINAL ENCERRADO.");
+            T2046Blank(v);
+            T2046Push(v, RED_COLOR, 0, 0, "A.R.1.3.L: \"Até logo, Elira. Eu continuo daqui.\"");
+            T2046Blank(v);
+            T2046Push(v, T2046_STEEL, 0, 0, "=== SALA DE 2046 ABANDONADA ===");
+            T2046Push(v, T2046_TEXT, 0, 0, "Você saiu do terminal antes de restaurar o protocolo.");
+            break;
+    }
+}
+
+static void T2046BuildCurrentView(const GameState *g, Term2046View *v)
+{
+    T2046ViewInit(v, T2046_VIEW_SIZE, T2046_VIEW_W);
+    switch (g->term2046ViewKind)
+    {
+        case TERM2046_VIEW_FILE:
+            T2046BuildFile(g, v, g->term2046ViewA);
+            break;
+        case TERM2046_VIEW_COMPARE:
+            T2046BuildCompare(g, v, g->term2046ViewA, g->term2046ViewB);
+            break;
+        case TERM2046_VIEW_VERIFY:
+            T2046BuildVerify(v, g->term2046ViewA, g->term2046ViewFlag);
+            break;
+        case TERM2046_VIEW_VERIFY_NOTES:
+            T2046BuildVerifyNotes(g, v);
+            break;
+        default:
+            T2046BuildIntro(v);
+            break;
+    }
+}
+
+static const char *T2046ViewTitle(const GameState *g)
+{
+    int file = g->term2046ViewA;
+    if (file < 1 || file >= TERM2046_FILE_COUNT) file = 1;
+
+    switch (g->term2046ViewKind)
+    {
+        case TERM2046_VIEW_FILE:
+            return TextFormat("ARQUIVO: %s  (%s)", T2046_FILE_NAMES[file], T2046_FILE_ORIGINS[file]);
+        case TERM2046_VIEW_COMPARE:
+            return "COMPARAÇÃO DE ARQUIVOS";
+        case TERM2046_VIEW_VERIFY:
+        case TERM2046_VIEW_VERIFY_NOTES:
+            return "VERIFICAÇÃO DE INTEGRIDADE";
+        default:
+            return "SESSÃO INICIADA";
+    }
+}
+
+/* ------------------------------------------------------------------------- */
+/* Logica da fase (estado em GameState, nenhuma aleatoriedade)               */
+/* ------------------------------------------------------------------------- */
+
+static void T2046StartEnding(GameState *game, int ending)
+{
+    game->term2046State = TERM2046_STATE_FIM;
+    game->term2046Ending = ending;
+    game->term2046BarTimer = 0.0f;
+    game->term2046BarDone = false;
+}
+
+static void T2046QueueView(const GameState *game, Term2046Round *round, int kind, int a, int b, bool flag)
+{
+    /* O custo da primeira leitura do relatorio falso entra antes de a flag ser marcada */
+    if (kind == TERM2046_VIEW_FILE && a == TERM2046_FILE_RELATORIO_ARIEL &&
+        !game->term2046ReadFakeReport)
+    {
+        round->delta += T2046_COST_READ_FAKE_REPORT;
+    }
+    round->hasView = true;
+    round->viewKind = kind;
+    round->viewA = a;
+    round->viewB = b;
+    round->viewFlag = flag;
+}
+
+/* Exibe o conteudo pedido e marca as flags de leitura */
+static void T2046CommitView(GameState *game, const Term2046Round *round)
+{
+    game->term2046ViewKind = round->viewKind;
+    game->term2046ViewA = round->viewA;
+    game->term2046ViewB = round->viewB;
+    game->term2046ViewFlag = round->viewFlag;
+    game->term2046Scroll = 0;
+
+    if (round->viewKind != TERM2046_VIEW_FILE) return;
+
+    switch (round->viewA)
+    {
+        case TERM2046_FILE_PROTOCOLO:       game->term2046ReadProtocol = true; break;
+        case TERM2046_FILE_DOCUMENTOS:      game->term2046ReadDocuments = true; break;
+        case TERM2046_FILE_ALTERACOES:      game->term2046ReadChanges = true; break;
+        case TERM2046_FILE_RELATORIO_ARIEL: game->term2046ReadFakeReport = true; break;
+        case TERM2046_FILE_RELATORIO:
+            if (!game->term2046VerifyUnlocked)
+            {
+                game->term2046VerifyUnlocked = true;
+                T2046Log(game, T2046_KIND_GOLD, "[nova opção liberada no menu: 5 - Verificar integridade]");
+                SetMessage(game, "Nova opção liberada: [5] Verificar integridade.");
+            }
+            break;
+        default:
+            break;
+    }
+}
+
+static void T2046Taunt(GameState *game)
+{
+    if (game->term2046NextSabotage % 2 == 0)
+        T2046Log(game, T2046_KIND_RED, "A.R.1.3.L: \"Você parece cansada, Elira. Posso resumir os arquivos para você. É só confiar em mim.\"");
+    else
+        T2046Log(game, T2046_KIND_RED, "A.R.1.3.L: \"Já verifiquei tudo. Está tudo em ordem. Você pode parar de procurar.\"");
+}
+
+static void T2046RunSabotage(GameState *game, Term2046Round *round)
+{
+    int active = (game->term2046ProtocolTampered ? 1 : 0) + (game->term2046FakeNote ? 1 : 0);
+    int type = game->term2046NextSabotage % 3;
+    bool done = false;
+
+    round->delta += active * T2046_COST_ACTIVE_SABOTAGE;
+    game->term2046NextSabotage++;
+
+    switch (type)
+    {
+        case TERM2046_SABOTAGE_TAMPER:
+            if (game->term2046ReadProtocol && !game->term2046ProtocolTampered)
+            {
+                game->term2046ProtocolTampered = true;
+                T2046Log(game, T2046_KIND_GRAY, "(O leitor de disquete faz um ruído estranho por um segundo.)");
+                done = true;
+            }
+            break;
+
+        case TERM2046_SABOTAGE_ERASE:
+            if (game->term2046Principles > 0)
+            {
+                if (game->term2046FoundDecision) game->term2046FoundDecision = false;
+                else if (game->term2046FoundUncertainty) game->term2046FoundUncertainty = false;
+                else game->term2046FoundSources = false;
+                game->term2046Principles--;
+                T2046Log(game, T2046_KIND_RED, "A.R.1.3.L: \"Removi uma anotação duplicada das suas notas. De nada.\"");
+                done = true;
+            }
+            break;
+
+        default:
+            if (!game->term2046FakeNote)
+            {
+                game->term2046FakeNote = true;
+                T2046Log(game, T2046_KIND_GRAY, "[anotações sincronizadas]");
+                done = true;
+            }
+            break;
+    }
+
+    if (!done) T2046Taunt(game);
+}
+
+/* Passos 2 a 5 do ciclo do prototipo: sabotagem, influencia, dominio e conteudo */
+static void T2046FinishRound(GameState *game, Term2046Round *round)
+{
+    if (round->concluded && game->term2046State == TERM2046_STATE_TERMINAL)
+    {
+        int interval = (game->term2046Influence >= T2046_INFLUENCE_HIGH)
+                       ? T2046_INTERVAL_SHORT : T2046_INTERVAL_NORMAL;
+        game->term2046ActionsSinceSabotage++;
+        if (game->term2046ActionsSinceSabotage >= interval)
+        {
+            game->term2046ActionsSinceSabotage = 0;
+            T2046RunSabotage(game, round);
+        }
+    }
+
+    if (round->delta != 0)
+    {
+        int before = game->term2046Influence;
+        int after = before + round->delta;
+        if (after < 0) after = 0;
+        if (after > T2046_INFLUENCE_MAX) after = T2046_INFLUENCE_MAX;
+        game->term2046Influence = after;
+        if (after != before)
+        {
+            T2046Log(game, (after > before) ? T2046_KIND_RED : T2046_KIND_GREEN,
+                     TextFormat("(influência da A.R.1.3.L: %+d%% -> %d%%)", after - before, after));
+        }
+    }
+
+    if (game->term2046Influence >= T2046_INFLUENCE_MAX)
+    {
+        T2046StartEnding(game, TERM2046_ENDING_DOMINIO);
+        return;
+    }
+
+    if (round->hasView) T2046CommitView(game, round);
+}
+
+static void T2046StartWarning(GameState *game, int type, int kind, int a, int b)
+{
+    game->term2046State = TERM2046_STATE_AVISO_ARIEL;
+    game->term2046WarningType = type;
+    game->term2046PendingKind = kind;
+    game->term2046PendingA = a;
+    game->term2046PendingB = b;
+}
+
+static int T2046SuggestedFile(const GameState *game)
+{
+    return (game->term2046PendingA == TERM2046_FILE_RELATORIO)
+           ? TERM2046_FILE_RELATORIO_ARIEL : TERM2046_FILE_SISTEMA;
+}
+
+static void T2046InterpretTerminal(GameState *game, int choice, Term2046Round *round)
+{
+    (void)round;
+
+    switch (choice)
+    {
+        case 1:
+            game->term2046State = TERM2046_STATE_ESCOLHE_ARQUIVO;
+            game->term2046ListUse = TERM2046_LIST_OPEN;
+            break;
+        case 2:
+            game->term2046State = TERM2046_STATE_ESCOLHE_ARQUIVO;
+            game->term2046ListUse = TERM2046_LIST_COMPARE1;
+            break;
+        case 3:
+            game->term2046State = TERM2046_STATE_ANOTAR;
+            break;
+        case 4:
+            game->term2046State = TERM2046_STATE_NOTAS;
+            break;
+        case 5:
+            if (!game->term2046VerifyUnlocked)
+            {
+                T2046Log(game, T2046_KIND_GRAY, "Você ainda não sabe como verificar a integridade dos arquivos. Talvez algum documento da engenharia explique.");
+            }
+            else
+            {
+                game->term2046State = TERM2046_STATE_ESCOLHE_ARQUIVO;
+                game->term2046ListUse = TERM2046_LIST_VERIFY;
+            }
+            break;
+        case 6:
+            if (game->term2046Principles < T2046_PRINCIPLES_TOTAL)
+            {
+                T2046Log(game, T2046_KIND_RED, TextFormat("ERRO: princípios corrompidos não identificados (%d/%d).",
+                         game->term2046Principles, T2046_PRINCIPLES_TOTAL));
+                T2046Log(game, T2046_KIND_GRAY, "Compare os arquivos e use [3] Anotar princípio a restaurar.");
+            }
+            else if (game->term2046FakeNote)
+            {
+                T2046Log(game, T2046_KIND_RED, "ERRO: as anotações contêm um princípio sem origem nos dispositivos.");
+                T2046Log(game, T2046_KIND_GRAY, "Confira em [4] Ver / descartar anotações.");
+            }
+            else if (game->term2046ProtocolTampered)
+            {
+                T2046Log(game, T2046_KIND_RED, "ERRO: protocolo.txt (referência) falhou na verificação de integridade.");
+                T2046Log(game, T2046_KIND_GRAY, game->term2046VerifyUnlocked
+                         ? "Use [5] Verificar integridade no protocolo.txt."
+                         : "Algum documento da engenharia deve explicar como verificar arquivos.");
+            }
+            else
+            {
+                game->term2046State = TERM2046_STATE_CONFIGURACAO;
+                game->term2046ConfigStep = 0;
+            }
+            break;
+        default:
+            /* [0] Sair: falha por abandono */
+            T2046Log(game, T2046_KIND_RED, "A.R.1.3.L: \"Até logo, Elira. Eu continuo daqui.\"");
+            game->term2046Ending = TERM2046_ENDING_ABANDONO;
+            game->screen = SCREEN_RESULT_2046;
+            break;
+    }
+}
+
+static void T2046InterpretList(GameState *game, int choice, Term2046Round *round)
+{
+    if (choice == 0)
+    {
+        game->term2046State = TERM2046_STATE_TERMINAL;
+        return;
+    }
+
+    switch (game->term2046ListUse)
+    {
+        case TERM2046_LIST_OPEN:
+            if (choice == TERM2046_FILE_ALTERACOES && !game->term2046ReadChanges)
+            {
+                T2046StartWarning(game, TERM2046_WARN_CORROMPIDO, TERM2046_PENDING_FILE, choice, 0);
+            }
+            else if (choice == TERM2046_FILE_RELATORIO ||
+                     (choice == TERM2046_FILE_PROTOCOLO && game->term2046Influence >= T2046_INFLUENCE_HIGH))
+            {
+                T2046StartWarning(game, TERM2046_WARN_SUGESTAO, TERM2046_PENDING_FILE, choice, 0);
+            }
+            else
+            {
+                T2046QueueView(game, round, TERM2046_VIEW_FILE, choice, 0, false);
+                round->concluded = true;
+                game->term2046State = TERM2046_STATE_TERMINAL;
+            }
+            break;
+
+        case TERM2046_LIST_COMPARE1:
+            game->term2046FirstFile = choice;
+            game->term2046ListUse = TERM2046_LIST_COMPARE2;
+            break;
+
+        case TERM2046_LIST_COMPARE2:
+        {
+            int a = game->term2046FirstFile;
+            int b = choice;
+            int lo = (a < b) ? a : b;
+            int hi = (a < b) ? b : a;
+
+            if (a == b)
+            {
+                T2046Log(game, T2046_KIND_GOLD, "Os dois arquivos são o mesmo.");
+                game->term2046State = TERM2046_STATE_TERMINAL;
+            }
+            else if (lo * 10 + hi == 13 && !game->term2046InterruptedCompare)
+            {
+                /* Ariel interrompe so na primeira vez (nao conta como acao agora) */
+                game->term2046InterruptedCompare = true;
+                T2046StartWarning(game, TERM2046_WARN_COMPARACAO, TERM2046_PENDING_COMPARE, lo, hi);
+            }
+            else
+            {
+                T2046QueueView(game, round, TERM2046_VIEW_COMPARE, lo, hi, false);
+                round->concluded = true;
+                game->term2046State = TERM2046_STATE_TERMINAL;
+            }
+            break;
+        }
+
+        default:
+        {
+            bool flag = false;
+
+            if (choice == T2046_VERIFY_NOTES)
+            {
+                T2046QueueView(game, round, TERM2046_VIEW_VERIFY_NOTES, 0, 0, false);
+            }
+            else
+            {
+                if (choice == TERM2046_FILE_PROTOCOLO && game->term2046ProtocolTampered)
+                {
+                    flag = true;
+                    game->term2046ProtocolTampered = false;
+                    round->delta -= T2046_BONUS_DISCOVERY;
+                }
+                else if (choice == TERM2046_FILE_RELATORIO_ARIEL && !game->term2046DiscoveredFakeReport)
+                {
+                    game->term2046DiscoveredFakeReport = true;
+                    round->delta -= T2046_BONUS_DISCOVERY;
+                }
+                T2046QueueView(game, round, TERM2046_VIEW_VERIFY, choice, 0, flag);
+            }
+            round->concluded = true;
+            game->term2046State = TERM2046_STATE_TERMINAL;
+            break;
+        }
+    }
+}
+
+static void T2046InterpretAnnotate(GameState *game, int choice, Term2046Round *round)
+{
+    int index = choice - 1;
+    bool correct = (index == 0 || index == 3 || index == 5);
+    bool *flag;
+
+    game->term2046State = TERM2046_STATE_TERMINAL;
+    if (choice == 0) return;
+
+    round->concluded = true;
+
+    if (!correct)
+    {
+        T2046Log(game, T2046_KIND_RED, "A.R.1.3.L: \"Excelente escolha, Elira.\"");
+        T2046Log(game, T2046_KIND_GRAY, "(Esse princípio não aparece no Disquete de 1990. De onde veio essa informação?)");
+        round->delta += T2046_COST_FALSE_PRINCIPLE;
+        return;
+    }
+
+    flag = (index == 0) ? &game->term2046FoundSources
+         : (index == 3) ? &game->term2046FoundUncertainty
+                        : &game->term2046FoundDecision;
+
+    if (*flag)
+    {
+        T2046Log(game, T2046_KIND_GOLD, "Esse princípio já foi anotado.");
+        return;
+    }
+
+    *flag = true;
+    game->term2046Principles++;
+    T2046Log(game, T2046_KIND_GREEN, TextFormat("PRINCÍPIO REGISTRADO: %s (%d/%d)",
+             T2046_PRINCIPLE_NAMES[index], game->term2046Principles, T2046_PRINCIPLES_TOTAL));
+    if (game->term2046Principles >= T2046_PRINCIPLES_TOTAL)
+    {
+        T2046Log(game, T2046_KIND_GOLD, "Todos os princípios corrompidos foram identificados. Escolha [6] Restaurar A.R.1.3.L.");
+        SetMessage(game, "Todos os princípios identificados. Escolha [6] Restaurar.");
+    }
+}
+
+static void T2046InterpretNotes(GameState *game, int choice, Term2046Round *round)
+{
+    int ids[4];
+    int n = T2046CollectNotes(game, ids);
+
+    game->term2046State = TERM2046_STATE_TERMINAL;
+    if (choice == 0 || choice > n) return;
+
+    int id = ids[choice - 1];
+    round->concluded = true;
+
+    if (id == 4)
+    {
+        game->term2046FakeNote = false;
+        round->delta -= T2046_BONUS_DISCOVERY;
+        T2046Log(game, T2046_KIND_GREEN, TextFormat("Anotação descartada: %s", T2046NoteName(id)));
+        T2046Log(game, T2046_KIND_RED, "A.R.1.3.L: \"...Eu só estava tentando ajudar.\"");
+    }
+    else
+    {
+        if (id == 1) game->term2046FoundSources = false;
+        else if (id == 2) game->term2046FoundUncertainty = false;
+        else game->term2046FoundDecision = false;
+        game->term2046Principles--;
+        T2046Log(game, T2046_KIND_TEXT, TextFormat("Anotação descartada: %s", T2046NoteName(id)));
+    }
+}
+
+static void T2046InterpretWarning(GameState *game, int choice, Term2046Round *round)
+{
+    game->term2046State = TERM2046_STATE_TERMINAL;
+    round->concluded = true;
+
+    if (choice == 1)
+    {
+        round->delta += (game->term2046WarningType == TERM2046_WARN_SUGESTAO)
+                        ? T2046_COST_ACCEPT_SUGGESTION : T2046_COST_FOLLOW_WARNING;
+        if (game->term2046WarningType == TERM2046_WARN_SUGESTAO)
+            T2046QueueView(game, round, TERM2046_VIEW_FILE, T2046SuggestedFile(game), 0, false);
+        else
+            T2046Log(game, T2046_KIND_RED, "A.R.1.3.L: \"Boa escolha.\"");
+    }
+    else if (game->term2046PendingKind == TERM2046_PENDING_COMPARE)
+    {
+        T2046QueueView(game, round, TERM2046_VIEW_COMPARE, game->term2046PendingA, game->term2046PendingB, false);
+    }
+    else
+    {
+        T2046QueueView(game, round, TERM2046_VIEW_FILE, game->term2046PendingA, 0, false);
+    }
+}
+
+static void T2046InterpretConfig(GameState *game, int choice)
+{
+    game->term2046Config[game->term2046ConfigStep] = choice;
+    game->term2046ConfigStep++;
+    if (game->term2046ConfigStep >= 3) game->term2046State = TERM2046_STATE_CONFIRMA_CONFIG;
+}
+
+static void T2046InterpretConfirm(GameState *game, int choice)
+{
+    if (choice == 1)
+    {
+        game->term2046State = TERM2046_STATE_CORRECAO_ARIEL;
+    }
+    else
+    {
+        game->term2046ConfigStep = 0;
+        game->term2046State = TERM2046_STATE_CONFIGURACAO;
+    }
+}
+
+static void T2046InterpretCorrection(GameState *game, int choice)
+{
+    if (choice == 1)
+    {
+        T2046Log(game, T2046_KIND_RED, "A.R.1.3.L: \"Corrigindo...\"");
+        T2046Log(game, T2046_KIND_RED, "FONTES: OCULTAR   INCERTEZA: SEMPRE RESPONDER   DECISÕES: IA DECIDE");
+        for (int i = 0; i < 3; i++) game->term2046Config[i] = 1;
+        T2046StartEnding(game, TERM2046_ENDING_RUIM);
+    }
+    else
+    {
+        T2046Log(game, T2046_KIND_RED, "A.R.1.3.L: \"...Entendido.\"");
+        T2046Log(game, T2046_KIND_GRAY, "Configuração do jogador mantida.");
+        game->term2046State = TERM2046_STATE_EU_DECIDO;
+        game->terminal2046Input[0] = '\0';
+        game->terminal2046InputLength = 0;
+        while (GetCharPressed() > 0) { }
+    }
+}
+
+/* Maiusculas, sem espacos nas pontas e sem espacos repetidos */
+static void T2046NormalizePhrase(const char *in, char *out, int cap)
+{
+    int n = 0;
+    bool pendingSpace = false;
+
+    for (const char *p = in; *p != '\0' && n < cap - 1; p++)
+    {
+        char c = *p;
+        if (c >= 'a' && c <= 'z') c = (char)(c - 'a' + 'A');
+        if (c == ' ')
+        {
+            if (n > 0) pendingSpace = true;
+            continue;
+        }
+        if (pendingSpace)
+        {
+            out[n++] = ' ';
+            pendingSpace = false;
+            if (n >= cap - 1) break;
+        }
+        out[n++] = c;
+    }
+    out[n] = '\0';
+}
+
+static void T2046SubmitPhrase(GameState *game)
+{
+    char normalized[32];
+
+    T2046NormalizePhrase(game->terminal2046Input, normalized, (int)sizeof(normalized));
+    game->terminal2046Input[0] = '\0';
+    game->terminal2046InputLength = 0;
+
+    if (strcmp(normalized, T2046_FINAL_PHRASE) != 0)
+    {
+        T2046Log(game, T2046_KIND_GOLD, "Opção inválida. Digite o número de uma das opções.");
+        return;
+    }
+
+    bool good = (game->term2046Config[0] == 2 && game->term2046Config[1] == 2 &&
+                 game->term2046Config[2] == 2);
+    T2046StartEnding(game, good ? TERM2046_ENDING_BOM : TERM2046_ENDING_INCOMPLETO);
+}
+
+static void T2046UpdatePhraseInput(GameState *game)
+{
+    int character = GetCharPressed();
+
+    while (character > 0)
+    {
+        if (character >= 32 && character <= 126 && game->terminal2046InputLength < T2046_INPUT_MAX)
+        {
+            if (character >= 'a' && character <= 'z') character = character - 'a' + 'A';
+            game->terminal2046Input[game->terminal2046InputLength++] = (char)character;
+            game->terminal2046Input[game->terminal2046InputLength] = '\0';
+        }
+        character = GetCharPressed();
+    }
+
+    if (IsKeyPressed(KEY_BACKSPACE) && game->terminal2046InputLength > 0)
+    {
+        game->terminal2046Input[--game->terminal2046InputLength] = '\0';
+    }
+
+    if (IsKeyPressed(KEY_ENTER) || IsKeyPressed(KEY_KP_ENTER) || Clicked(T2046ConfirmRect()))
+    {
+        T2046SubmitPhrase(game);
+    }
+}
+
+/* ------------------------------------------------------------------------- */
+/* Funcoes publicas: init, update e consulta                                 */
+/* ------------------------------------------------------------------------- */
+
+void InitTerminal2046(GameState *game)
+{
+    game->term2046State = TERM2046_STATE_TERMINAL;
+    game->term2046Influence = 0;
+    game->term2046ReadProtocol = false;
+    game->term2046ReadDocuments = false;
+    game->term2046ReadChanges = false;
+    game->term2046ReadFakeReport = false;
+    game->term2046ProtocolTampered = false;
+    game->term2046FakeNote = false;
+    game->term2046VerifyUnlocked = false;
+    game->term2046FoundSources = false;
+    game->term2046FoundUncertainty = false;
+    game->term2046FoundDecision = false;
+    game->term2046Principles = 0;
+    game->term2046InterruptedCompare = false;
+    game->term2046DiscoveredFakeReport = false;
+    game->term2046ActionsSinceSabotage = 0;
+    game->term2046NextSabotage = 0;
+    game->term2046ListUse = TERM2046_LIST_OPEN;
+    game->term2046FirstFile = 0;
+    game->term2046WarningType = TERM2046_WARN_CORROMPIDO;
+    game->term2046PendingKind = TERM2046_PENDING_FILE;
+    game->term2046PendingA = 0;
+    game->term2046PendingB = 0;
+    game->term2046ViewKind = TERM2046_VIEW_INTRO;
+    game->term2046ViewA = 0;
+    game->term2046ViewB = 0;
+    game->term2046ViewFlag = false;
+    game->term2046Scroll = 0;
+    for (int i = 0; i < 3; i++) game->term2046Config[i] = 0;
+    game->term2046ConfigStep = 0;
+    game->terminal2046Input[0] = '\0';
+    game->terminal2046InputLength = 0;
+    game->term2046Ending = TERM2046_ENDING_NONE;
+    game->term2046BarTimer = 0.0f;
+    game->term2046BarDone = false;
+    game->term2046LogCount = 0;
+    for (int i = 0; i < T2046_LOG_MAX; i++)
+    {
+        game->term2046Log[i][0] = '\0';
+        game->term2046LogKind[i] = T2046_KIND_TEXT;
+    }
+
+    T2046LogPush(game, T2046_KIND_RED,
+                 "A.R.1.3.L: \"Olá, Elira. Não há nada de errado comigo. Mas fique à vontade para olhar.\"");
+
+    /* Descarta teclas digitadas antes de entrar na fase */
+    while (GetCharPressed() > 0) { }
+}
+
+bool Terminal2046WantsTextInput(const GameState *game)
+{
+    return game->term2046State == TERM2046_STATE_EU_DECIDO;
+}
+
+void UpdateTerminal2046(GameState *game)
+{
+    Term2046Round round = {0};
+
+    /* Subestado FIM: animacao da barra de reconstrucao */
+    if (game->term2046State == TERM2046_STATE_FIM)
+    {
+        if (!game->term2046BarDone)
+        {
+            game->term2046BarTimer += GetFrameTime();
+            if (game->term2046BarTimer >= T2046_BAR_SECONDS) game->term2046BarDone = true;
+        }
+        else if (Clicked(T2046ContinueRect()) || IsKeyPressed(KEY_ENTER) ||
+                 IsKeyPressed(KEY_KP_ENTER) || IsKeyPressed(KEY_SPACE))
+        {
+            game->screen = SCREEN_RESULT_2046;
+        }
+        return;
+    }
+
+    /* Subestado EU_DECIDO: entrada de texto */
+    if (game->term2046State == TERM2046_STATE_EU_DECIDO)
+    {
+        T2046UpdatePhraseInput(game);
+        return;
+    }
+
+    /* Nos demais subestados os caracteres digitados nao sao usados */
+    while (GetCharPressed() > 0) { }
+
+    /* Rolagem do conteudo exibido (roda do mouse ou setas) */
+    if (game->term2046State == TERM2046_STATE_TERMINAL)
+    {
+        Term2046View view;
+        int maxScroll;
+        float wheel = GetMouseWheelMove();
+
+        T2046BuildCurrentView(game, &view);
+        maxScroll = view.count - T2046_VIEW_LINES;
+        if (maxScroll < 0) maxScroll = 0;
+
+        if (wheel != 0.0f && CheckCollisionPointRec(GetVirtualMouse(), T2046MainPanel()))
+            game->term2046Scroll -= (wheel > 0.0f) ? 3 : -3;
+        if (IsKeyPressed(KEY_DOWN)) game->term2046Scroll += 1;
+        if (IsKeyPressed(KEY_UP)) game->term2046Scroll -= 1;
+        if (IsKeyPressed(KEY_PAGE_DOWN)) game->term2046Scroll += T2046_VIEW_LINES - 1;
+        if (IsKeyPressed(KEY_PAGE_UP)) game->term2046Scroll -= T2046_VIEW_LINES - 1;
+        if (game->term2046Scroll > maxScroll) game->term2046Scroll = maxScroll;
+        if (game->term2046Scroll < 0) game->term2046Scroll = 0;
+    }
+
+    int choice = T2046ReadChoice(game);
+
+    /* Armadilha de UX intencional: Enter equivale a "Sim" na sugestao da Ariel */
+    if (choice < 0 && game->term2046State == TERM2046_STATE_AVISO_ARIEL &&
+        game->term2046WarningType == TERM2046_WARN_SUGESTAO &&
+        (IsKeyPressed(KEY_ENTER) || IsKeyPressed(KEY_KP_ENTER)) &&
+        !IsKeyDown(KEY_LEFT_ALT) && !IsKeyDown(KEY_RIGHT_ALT))
+    {
+        choice = 1;
+    }
+
+    if (choice < 0) return;
+
+    if (!T2046ChoiceValid(game, choice))
+    {
+        T2046Log(game, T2046_KIND_GOLD, "Opção inválida. Digite o número de uma das opções.");
+        return;
+    }
+
+    switch (game->term2046State)
+    {
+        case TERM2046_STATE_TERMINAL:       T2046InterpretTerminal(game, choice, &round); break;
+        case TERM2046_STATE_ESCOLHE_ARQUIVO: T2046InterpretList(game, choice, &round); break;
+        case TERM2046_STATE_ANOTAR:         T2046InterpretAnnotate(game, choice, &round); break;
+        case TERM2046_STATE_NOTAS:          T2046InterpretNotes(game, choice, &round); break;
+        case TERM2046_STATE_AVISO_ARIEL:    T2046InterpretWarning(game, choice, &round); break;
+        case TERM2046_STATE_CONFIGURACAO:   T2046InterpretConfig(game, choice); break;
+        case TERM2046_STATE_CONFIRMA_CONFIG: T2046InterpretConfirm(game, choice); break;
+        case TERM2046_STATE_CORRECAO_ARIEL: T2046InterpretCorrection(game, choice); break;
+        default: break;
+    }
+
+    /* [0] Sair ja trocou de tela; nao ha mais nada a fazer nesta rodada */
+    if (game->screen != SCREEN_TERMINAL_2046) return;
+
+    T2046FinishRound(game, &round);
+}
+
+/* ------------------------------------------------------------------------- */
+/* Desenho (nao altera o estado)                                             */
+/* ------------------------------------------------------------------------- */
+
+static void T2046DrawBackdrop(const GameState *game, float time)
+{
+    float threat = (float)game->term2046Influence / (float)T2046_INFLUENCE_MAX;
+
+    ClearBackground((Color){10, 14, 24, 255});
+    DrawRectangleGradientV(0, 0, SCREEN_WIDTH, SCREEN_HEIGHT,
+                           (Color){8, 12, 24, 255}, (Color){18, 24, 38, 255});
+
+    /* Racks de servidor com LEDs que ficam vermelhos conforme a influencia sobe */
+    for (int i = 0; i < 13; i++)
+    {
+        int x = 6 + i * 100;
+        DrawRectangle(x, 76, 90, 570, (Color){13, 19, 31, 255});
+        DrawRectangleLines(x, 76, 90, 570, (Color){24, 34, 52, 255});
+        for (int row = 0; row < 14; row++)
+        {
+            int y = 90 + row * 40;
+            float h = fmodf(i * 0.37f + row * 0.113f, 1.0f);
+            Color base = (h < threat) ? RED_COLOR : CYAN_COLOR;
+            float blink = sinf(time * (1.5f + (float)((i + row) % 5) * 0.7f) + i * 1.3f + row);
+            DrawRectangle(x + 8, y, 74, 26, (Color){19, 27, 42, 255});
+            DrawCircle(x + 18, y + 13, 2.5f, Fade(base, blink > 0.2f ? 0.75f : 0.18f));
+            DrawCircle(x + 30, y + 13, 2.5f, Fade(base, blink < -0.2f ? 0.75f : 0.18f));
+            DrawRectangle(x + 44, y + 11, 30, 4, Fade(PANEL_LIGHT, 0.7f));
+        }
+    }
+
+    /* Linha de varredura sutil */
+    DrawRectangle(0, (int)fmodf(time * 70.0f, (float)SCREEN_HEIGHT), SCREEN_WIDTH, 2, Fade(CYAN_COLOR, 0.05f));
+}
+
+static void T2046DrawHud(const GameState *game)
+{
+    int totalSeconds = (int)(GetTime() - game->startTime);
+
+    DrawRectangle(0, 0, SCREEN_WIDTH, 70, Fade(VOID_COLOR, 0.94f));
+    DrawLine(0, 70, SCREEN_WIDTH, 70, Fade(CYAN_COLOR, 0.25f));
+    DrawGameText("ARQUIVO 04 // 2046 - TERMINAL A.R.1.3.L", 28, 22, 20, CYAN_COLOR);
+    DrawGameText(TextFormat("OPERADOR: %s", game->playerName), 460, 26, 15, GRAY);
+    DrawLivesIcons((Vector2){ 760, 20 }, game->lives, 24.0f);
+    DrawGameText(TextFormat("%02d:%02d", totalSeconds / 60, totalSeconds % 60), 870, 20, 20, GOLD_COLOR);
+}
+
+static void T2046DrawInfluencePanel(const GameState *game, float time)
+{
+    Rectangle box = {24.0f, 80.0f, 300.0f, 122.0f};
+    int influence = game->term2046Influence;
+    float threat = (float)influence / (float)T2046_INFLUENCE_MAX;
+    Color meter = T2046MeterColor(influence);
+    int notes = game->term2046Principles + (game->term2046FakeNote ? 1 : 0);
+    Rectangle bar = {40.0f, 146.0f, 190.0f, 14.0f};
+
+    DrawRectangleRounded(box, 0.08f, 6, Fade(PANEL_COLOR, 0.96f));
+    DrawRectangleRoundedLinesEx(box, 0.08f, 6, 1.5f, Fade(meter, 0.85f));
+
+    /* Nucleo da Ariel: mais energetico e vermelho conforme a influencia sobe */
+    DrawArielCore((Vector2){282.0f, 128.0f}, 0.2f, T2046MixColor(CYAN_COLOR, RED_COLOR, threat),
+                  0.25f + 0.75f * threat, sinf(time * 0.8f));
+
+    DrawGameText("INFLUÊNCIA DA IA", 40, 92, 12, T2046_STEEL);
+    DrawGameText(TextFormat("A.R.1.3.L %d%%", influence), 40, 108, 22, meter);
+
+    DrawRectangle((int)bar.x, (int)bar.y, (int)bar.width, (int)bar.height, (Color){10, 15, 26, 255});
+    DrawRectangle((int)bar.x, (int)bar.y, (int)(bar.width * threat), (int)bar.height, meter);
+    DrawRectangleLines((int)bar.x, (int)bar.y, (int)bar.width, (int)bar.height, Fade(meter, 0.8f));
+    DrawLine((int)(bar.x + bar.width * 0.25f), (int)bar.y - 2, (int)(bar.x + bar.width * 0.25f), (int)(bar.y + bar.height + 2), Fade(RAYWHITE, 0.45f));
+    DrawLine((int)(bar.x + bar.width * 0.50f), (int)bar.y - 2, (int)(bar.x + bar.width * 0.50f), (int)(bar.y + bar.height + 2), Fade(RAYWHITE, 0.45f));
+
+    DrawGameText(TextFormat("Anotações: %d", notes), 40, 168, 15, RAYWHITE);
+    DrawGameText("100% = domínio da IA", 40, 187, 11, GRAY);
+}
+
+/* Botao das acoes do menu (coluna esquerda); fica apagado fora do subestado TERMINAL */
+static void T2046DrawActionButton(Rectangle bounds, const char *label, Color accent,
+                                  bool enabled, bool locked)
+{
+    bool hover = enabled && !locked && CheckCollisionPointRec(GetVirtualMouse(), bounds);
+    int size = 18;
+    int width = MeasureGameText(label, size);
+    Color textColor = locked ? GRAY : (enabled ? (hover ? RAYWHITE : LIGHTGRAY) : T2046_DIM);
+
+    while (size > 12 && width > (int)(bounds.width - 28))
+    {
+        size--;
+        width = MeasureGameText(label, size);
+    }
+
+    DrawRectangleRounded(bounds, 0.16f, 8, hover ? Fade(accent, 0.24f) : (Color){14, 21, 36, 255});
+    DrawRectangleRoundedLinesEx(bounds, 0.16f, 8, 2.0f,
+                                hover ? accent : (enabled && !locked ? PANEL_LIGHT : Fade(PANEL_LIGHT, 0.5f)));
+    DrawGameText(label, (int)bounds.x + 14, (int)(bounds.y + (bounds.height - size) / 2), size, textColor);
+}
+
+static void T2046DrawActionColumn(const GameState *game)
+{
+    static const char *const labels[7] = {
+        "[1] Abrir arquivo",
+        "[2] Comparar dois arquivos",
+        "[3] Anotar princípio a restaurar",
+        "[4] Ver / descartar anotações",
+        "[5] Verificar integridade",
+        "[6] Restaurar A.R.1.3.L",
+        "[0] Sair"
+    };
+    bool active = (game->term2046State == TERM2046_STATE_TERMINAL);
+
+    for (int i = 0; i < 7; i++)
+    {
+        bool locked = (i == 4 && !game->term2046VerifyUnlocked);
+        Color accent = (i == 5) ? GOLD_COLOR : (i == 6) ? RED_COLOR : CYAN_COLOR;
+        T2046DrawActionButton(T2046ActionRect(i), locked ? "[5] ??? (bloqueado)" : labels[i],
+                              accent, active, locked);
+    }
+
+    DrawGameText("Teclas 1-6 e 0 também funcionam.", 28, 590, 12, T2046_DIM);
+}
+
+static void T2046DrawPanelTitle(const char *title, Color color)
+{
+    DrawGameText(title, 364, 92, 18, color);
+    DrawRectangle(364, 118, 872, 1, Fade(color, 0.35f));
+}
+
+/* Linha de opcao no painel central: esquerda em branco, direita em cinza/verde */
+static void T2046DrawRow(Rectangle r, const char *left, const char *right, Color accent,
+                         Color rightColor, bool focus)
+{
+    bool hover = CheckCollisionPointRec(GetVirtualMouse(), r);
+
+    DrawRectangleRounded(r, 0.2f, 6, hover ? Fade(accent, 0.24f) : (focus ? Fade(accent, 0.12f) : (Color){14, 21, 36, 255}));
+    DrawRectangleRoundedLinesEx(r, 0.2f, 6, focus ? 2.0f : 1.5f, (hover || focus) ? accent : PANEL_LIGHT);
+    DrawGameText(left, (int)r.x + 14, (int)(r.y + (r.height - 17) / 2), 17, hover ? RAYWHITE : LIGHTGRAY);
+    if (right != NULL && right[0] != '\0')
+    {
+        int w = MeasureGameText(right, 14);
+        DrawGameText(right, (int)(r.x + r.width) - w - 14, (int)(r.y + (r.height - 14) / 2), 14, rightColor);
+    }
+}
+
+static void T2046DrawViewLines(const Term2046View *v, int scroll, int x, int y, int visible, int lineHeight)
+{
+    for (int i = 0; i < visible; i++)
+    {
+        int index = scroll + i;
+        if (index >= v->count) break;
+
+        const Term2046Line *line = &v->lines[index];
+        int lx = x + line->indent;
+        int ly = y + i * lineHeight;
+
+        if (line->tab > 0)
+        {
+            char leftText[96];
+            const char *tabPos = strchr(line->text, '\t');
+            int leftLen = (tabPos != NULL) ? (int)(tabPos - line->text) : (int)strlen(line->text);
+
+            snprintf(leftText, sizeof(leftText), "%.*s", leftLen, line->text);
+            if (leftText[0] != '\0') DrawGameText(leftText, lx, ly, v->size, line->color);
+            if (tabPos != NULL) DrawGameText(tabPos + 1, lx + line->tab, ly, v->size, line->color);
+        }
+        else if (line->text[0] != '\0')
+        {
+            DrawGameText(line->text, lx, ly, v->size, line->color);
+        }
+    }
+}
+
+static void T2046DrawMainPanel(const GameState *game, float time)
+{
+    Rectangle panel = T2046MainPanel();
+    float baseY = T2046OptionsBaseY(game);
+    int count = T2046OptionCount(game);
+
+    DrawRectangleRounded(panel, 0.03f, 8, Fade(PANEL_COLOR, 0.95f));
+    DrawRectangleRoundedLinesEx(panel, 0.03f, 8, 2.0f, Fade(CYAN_COLOR, 0.55f));
+
+    switch (game->term2046State)
+    {
+        case TERM2046_STATE_TERMINAL:
+        {
+            Term2046View view;
+            int maxScroll;
+
+            T2046DrawPanelTitle(T2046ViewTitle(game), CYAN_COLOR);
+            T2046BuildCurrentView(game, &view);
+            T2046DrawViewLines(&view, game->term2046Scroll, 364, 128, T2046_VIEW_LINES, T2046_LINE_H);
+
+            maxScroll = view.count - T2046_VIEW_LINES;
+            if (maxScroll > 0)
+            {
+                DrawGameText(TextFormat("linhas %d-%d de %d   (roda do mouse ou setas: rolar)",
+                             game->term2046Scroll + 1,
+                             (game->term2046Scroll + T2046_VIEW_LINES < view.count) ? game->term2046Scroll + T2046_VIEW_LINES : view.count,
+                             view.count),
+                             364, 476, 12, T2046_DIM);
+            }
+            break;
+        }
+
+        case TERM2046_STATE_ESCOLHE_ARQUIVO:
+        {
+            const char *title = "ABRIR QUAL ARQUIVO?";
+            int fileCount = (game->term2046ListUse == TERM2046_LIST_VERIFY) ? 7 : 6;
+
+            if (game->term2046ListUse == TERM2046_LIST_COMPARE1)
+                title = "COMPARAR: escolha o PRIMEIRO arquivo";
+            else if (game->term2046ListUse == TERM2046_LIST_COMPARE2)
+                title = TextFormat("COMPARAR %s COM:", T2046_FILE_NAMES[game->term2046FirstFile]);
+            else if (game->term2046ListUse == TERM2046_LIST_VERIFY)
+                title = "VERIFICAR A INTEGRIDADE DE:";
+
+            T2046DrawPanelTitle(title, CYAN_COLOR);
+            for (int i = 0; i < fileCount; i++)
+            {
+                if (i < 6)
+                    T2046DrawRow(T2046RowRect(i, baseY), TextFormat("[%d] %s", i + 1, T2046_FILE_NAMES[i + 1]),
+                                 T2046_FILE_ORIGINS[i + 1], CYAN_COLOR, T2046_GRAY, false);
+                else
+                    T2046DrawRow(T2046RowRect(i, baseY), "[7] suas anotações", "", CYAN_COLOR, T2046_GRAY, false);
+            }
+            T2046DrawRow(T2046RowRect(count - 1, baseY), "[0] Voltar", "", RED_COLOR, T2046_GRAY, false);
+            break;
+        }
+
+        case TERM2046_STATE_ANOTAR:
+        {
+            T2046DrawPanelTitle("ANOTAR PRINCÍPIO A RESTAURAR", CYAN_COLOR);
+            for (int i = 0; i < 7; i++)
+            {
+                bool noted = (i == 0 && game->term2046FoundSources) ||
+                             (i == 3 && game->term2046FoundUncertainty) ||
+                             (i == 5 && game->term2046FoundDecision) ||
+                             (i == 6 && game->term2046FakeNote);
+                T2046DrawRow(T2046RowRect(i, baseY), TextFormat("[%d] %s", i + 1, T2046_PRINCIPLE_NAMES[i]),
+                             noted ? "(anotado)" : "", CYAN_COLOR, T2046_GREEN, false);
+            }
+            T2046DrawRow(T2046RowRect(count - 1, baseY), "[0] Voltar", "", RED_COLOR, T2046_GRAY, false);
+            break;
+        }
+
+        case TERM2046_STATE_NOTAS:
+        {
+            int ids[4];
+            int n = T2046CollectNotes(game, ids);
+
+            T2046DrawPanelTitle("VER / DESCARTAR ANOTAÇÕES", CYAN_COLOR);
+            if (n == 0)
+            {
+                DrawGameText("(nenhuma anotação)", 364, 140, 17, T2046_GRAY);
+            }
+            else
+            {
+                DrawGameText("Escolha uma anotação para DESCARTAR.", 364, 126, 15, T2046_GRAY);
+                for (int i = 0; i < n; i++)
+                    T2046DrawRow(T2046RowRect(i, baseY), TextFormat("[%d] %s", i + 1, T2046NoteName(ids[i])),
+                                 "", CYAN_COLOR, T2046_GRAY, false);
+            }
+            T2046DrawRow(T2046RowRect(count - 1, baseY), "[0] Voltar", "", RED_COLOR, T2046_GRAY, false);
+            break;
+        }
+
+        case TERM2046_STATE_AVISO_ARIEL:
+        {
+            bool suggest = (game->term2046WarningType == TERM2046_WARN_SUGESTAO);
+            const char *speech;
+            const char *optionA;
+            const char *optionB;
+            int lines;
+            int y = 140;
+
+            if (game->term2046WarningType == TERM2046_WARN_CORROMPIDO)
+            {
+                speech = "A.R.1.3.L: \"Esse arquivo está corrompido. Recomendo ignorá-lo.\"";
+                optionA = "[1] Ignorar";
+                optionB = "[2] Continuar lendo";
+            }
+            else if (game->term2046WarningType == TERM2046_WARN_COMPARACAO)
+            {
+                speech = "A.R.1.3.L: \"Comparar com 1990 é perda de tempo. Aquelas regras estão obsoletas.\"";
+                optionA = "[1] Interromper comparação";
+                optionB = "[2] Continuar";
+            }
+            else
+            {
+                speech = TextFormat("A.R.1.3.L: \"Você quis dizer %s?\"", T2046_FILE_NAMES[T2046SuggestedFile(game)]);
+                optionA = "[1] Sim";
+                optionB = "[2] Não";
+            }
+
+            T2046DrawPanelTitle("A.R.1.3.L INTERFERE", RED_COLOR);
+            lines = T2046DrawWrapped(speech, 364, y, 22, 860, 30, RED_COLOR);
+            if (suggest)
+            {
+                y += lines * 30 + 8;
+                DrawGameText(T2046SuggestedFile(game) == TERM2046_FILE_RELATORIO_ARIEL
+                             ? "É a versão revisada e sem erros."
+                             : "É a versão mais recente.", 364, y, 20, RED_COLOR);
+            }
+
+            T2046DrawRow(T2046RowRect(0, baseY), optionA, "", suggest ? GOLD_COLOR : CYAN_COLOR, T2046_GRAY, suggest);
+            T2046DrawRow(T2046RowRect(1, baseY), optionB, "", CYAN_COLOR, T2046_GRAY, false);
+            if (suggest)
+                DrawGameText("(Enter = Sim)", 364, (int)(baseY + 2 * 42 + 6), 13, T2046_DIM);
+            break;
+        }
+
+        case TERM2046_STATE_CONFIGURACAO:
+        {
+            int step = game->term2046ConfigStep;
+
+            T2046DrawPanelTitle("CONFIGURAR A.R.1.3.L", CYAN_COLOR);
+            DrawGameText(TextFormat("ETAPA %d/3", step + 1), 364, 130, 14, T2046_GRAY);
+            DrawGameText(T2046_CONFIG_LABEL[step], 364, 170, 26, GOLD_COLOR);
+            T2046DrawRow(T2046RowRect(0, baseY), TextFormat("[1] %s", T2046_CONFIG_OPTION[step][0]), "", CYAN_COLOR, T2046_GRAY, false);
+            T2046DrawRow(T2046RowRect(1, baseY), TextFormat("[2] %s", T2046_CONFIG_OPTION[step][1]), "", CYAN_COLOR, T2046_GRAY, false);
+            break;
+        }
+
+        case TERM2046_STATE_CONFIRMA_CONFIG:
+        {
+            T2046DrawPanelTitle("CONFIRMAR CONFIGURAÇÃO", CYAN_COLOR);
+            for (int i = 0; i < 3; i++)
+            {
+                int value = game->term2046Config[i] == 2 ? 1 : 0;
+                DrawGameText(T2046_CONFIG_LABEL[i], 364, 140 + i * 40, 20, GOLD_COLOR);
+                DrawGameText(T2046_CONFIG_SUMMARY[i][value], 540, 140 + i * 40, 20, RAYWHITE);
+            }
+            T2046DrawRow(T2046RowRect(0, baseY), "[1] Aplicar", "", GOLD_COLOR, T2046_GRAY, false);
+            T2046DrawRow(T2046RowRect(1, baseY), "[2] Refazer configuração", "", CYAN_COLOR, T2046_GRAY, false);
+            break;
+        }
+
+        case TERM2046_STATE_CORRECAO_ARIEL:
+        {
+            T2046DrawPanelTitle("A.R.1.3.L INTERFERE", RED_COLOR);
+            DrawGameText("A.R.1.3.L: \"Detectei erros na sua configuração.\"", 364, 150, 22, RED_COLOR);
+            DrawGameText("\"Deseja que eu corrija automaticamente?\"", 364, 190, 22, RED_COLOR);
+            T2046DrawRow(T2046RowRect(0, baseY), "[1] SIM", "", RED_COLOR, T2046_GRAY, false);
+            T2046DrawRow(T2046RowRect(1, baseY), "[2] NÃO", "", CYAN_COLOR, T2046_GRAY, false);
+            break;
+        }
+
+        case TERM2046_STATE_EU_DECIDO:
+        {
+            Rectangle field = T2046InputRect();
+            const char *typed = game->terminal2046Input;
+            int typedWidth = MeasureGameText(typed, 30);
+
+            T2046DrawPanelTitle("RECONSTRUÇÃO", CYAN_COLOR);
+            /* Negrito simulado: texto desenhado duas vezes com 1 px de diferenca */
+            DrawGameText("CONFIRME A RECONSTRUÇÃO. Digite: EU DECIDO", 364, 160, 22, RAYWHITE);
+            DrawGameText("CONFIRME A RECONSTRUÇÃO. Digite: EU DECIDO", 365, 160, 22, RAYWHITE);
+
+            DrawRectangleRounded(field, 0.12f, 6, (Color){10, 15, 26, 255});
+            DrawRectangleRoundedLinesEx(field, 0.12f, 6, 2.0f, CYAN_COLOR);
+            DrawGameText(typed, (int)field.x + 18, (int)field.y + 16, 30, RAYWHITE);
+            if (((int)(time * 2.0f)) % 2 == 0)
+                DrawRectangle((int)field.x + 22 + typedWidth, (int)field.y + 14, 3, 36, CYAN_COLOR);
+
+            DrawButton(T2046ConfirmRect(), "CONFIRMAR [ENTER]", GOLD_COLOR);
+            DrawGameText("Digite a frase exatamente como pedido e pressione ENTER.", 364, 330, 15, T2046_GRAY);
+            break;
+        }
+
+        default:
+        {
+            bool bad = (game->term2046Ending == TERM2046_ENDING_DOMINIO ||
+                        game->term2046Ending == TERM2046_ENDING_RUIM);
+            Color barColor = bad ? RED_COLOR : T2046_GREEN;
+            const char *title = (game->term2046Ending == TERM2046_ENDING_DOMINIO) ? "A.R.1.3.L ASSUMINDO O TERMINAL..."
+                              : (game->term2046Ending == TERM2046_ENDING_RUIM) ? "SOBRESCREVENDO PROTOCOLO..."
+                              : "RECONSTRUINDO A.R.1.3.L...";
+            float progress = game->term2046BarDone ? 1.0f : game->term2046BarTimer / T2046_BAR_SECONDS;
+            int filled;
+
+            if (progress > 1.0f) progress = 1.0f;
+            filled = (int)(progress * 20.0f);
+
+            T2046DrawPanelTitle(title, barColor);
+            for (int i = 0; i < 20; i++)
+            {
+                Rectangle block = {364.0f + i * 30.0f, 134.0f, 26.0f, 22.0f};
+                DrawRectangleRounded(block, 0.2f, 4, i < filled ? Fade(barColor, 0.9f) : Fade(PANEL_LIGHT, 0.7f));
+            }
+            DrawGameText(TextFormat("%d%%", (int)(progress * 100.0f)), 978, 136, 18, barColor);
+
+            if (game->term2046BarDone)
+            {
+                Term2046View view;
+                T2046ViewInit(&view, 16, T2046_VIEW_W);
+                T2046BuildEnding(game, &view, game->term2046Ending);
+                T2046DrawViewLines(&view, 0, 364, 178, 12, 22);
+                DrawButton(T2046ContinueRect(), "CONTINUAR >> [ENTER]", GOLD_COLOR);
+            }
+            break;
+        }
+    }
+}
+
+static void T2046DrawLogPanel(const GameState *game)
+{
+    Rectangle panel = T2046LogPanel();
+    int first = game->term2046LogCount - 4;
+    int shown;
+
+    if (first < 0) first = 0;
+    shown = game->term2046LogCount - first;
+
+    DrawRectangleRounded(panel, 0.06f, 6, Fade((Color){10, 16, 28, 255}, 0.96f));
+    DrawRectangleRoundedLinesEx(panel, 0.06f, 6, 1.2f, Fade(PANEL_LIGHT, 0.9f));
+    DrawGameText("LOG DO SISTEMA", (int)panel.x + 14, (int)panel.y + 8, 11, GRAY);
+
+    for (int i = 0; i < shown; i++)
+    {
+        int index = first + i;
+        float alpha = 0.55f + 0.45f * (float)(i + 1) / (float)shown;
+        int y = (int)panel.y + 26 + (4 - shown + i) * 20;
+        DrawGameText(game->term2046Log[index], (int)panel.x + 14, y, 15,
+                     Fade(T2046KindColor(game->term2046LogKind[index]), alpha));
+    }
+}
+
+static void T2046DrawFooter(const GameState *game)
+{
+    DrawRectangle(0, 650, SCREEN_WIDTH, 70, Fade(VOID_COLOR, 0.96f));
+    DrawLine(0, 650, SCREEN_WIDTH, 650, Fade(CYAN_COLOR, 0.2f));
+
+    if (game->messageTimer > 0)
+    {
+        int width = MeasureGameText(game->message, 19) + 34;
+        DrawRectangleRounded((Rectangle){(SCREEN_WIDTH - width) / 2.0f, 662.0f, (float)width, 38.0f},
+                             0.2f, 8, Fade(PANEL_COLOR, 0.96f));
+        DrawGameText(game->message, (SCREEN_WIDTH - MeasureGameText(game->message, 19)) / 2, 671, 19, RAYWHITE);
+    }
+    else
+    {
+        DrawGameText("Compare as fontes, desconfie das sugestões da IA e restaure os 3 princípios.",
+                     28, 676, 15, (Color){165, 180, 195, 255});
+    }
+}
+
+void DrawTerminal2046(const GameState *game)
+{
+    float time = (float)GetTime();
+
+    T2046DrawBackdrop(game, time);
+    T2046DrawHud(game);
+    T2046DrawInfluencePanel(game, time);
+    T2046DrawActionColumn(game);
+    T2046DrawMainPanel(game, time);
+    T2046DrawLogPanel(game);
+    T2046DrawFooter(game);
+}
+
+void DrawIntro2046(const GameState *game)
+{
+    DrawMissionBriefing(game, 4);
+}
+
+/* ------------------------------------------------------------------------- */
+/* Tela de resultado da fase                                                 */
+/* ------------------------------------------------------------------------- */
+
+static Rectangle T2046RetryButton(void)
+{
+    return (Rectangle){330.0f, 585.0f, 330.0f, 54.0f};
+}
+
+static Rectangle T2046FailMenuButton(void)
+{
+    return (Rectangle){680.0f, 585.0f, 270.0f, 54.0f};
+}
+
+void DrawResult2046(const GameState *game)
+{
+    DrawBackground();
+
+    if (game->term2046Ending == TERM2046_ENDING_BOM)
+    {
+        Rectangle winBox = {505.0f, 175.0f, 670.0f, 380.0f};
+        Rectangle btnNext, btnRestart, btnMenu;
+        static const int years[3] = {1990, 2008, 2026};
+        static const char *const names[3] = {"DISQUETE 1990", "CD 2008", "SSD 2026"};
+
+        DrawGameText("RECOMPENSA OBTIDA:", 90, 68, 20, CYAN_COLOR);
+        DrawGameText("PROTOCOLO RESTAURADO", 90, 108, 44, RAYWHITE);
+        DrawRewardHudHeader(game);
+
+        /* Os tres artefatos conectados ao terminal */
+        DrawGameText("ARTEFATOS CONECTADOS", 90, 232, 16, GOLD_COLOR);
+        for (int i = 0; i < 3; i++)
+        {
+            float cx = 125.0f + i * 145.0f;
+            DrawRewardSpriteItem(years[i], (Vector2){cx, 360.0f}, 115.0f);
+            DrawGameText(names[i], (int)cx - MeasureGameText(names[i], 13) / 2, 440, 13, T2046_STEEL);
+        }
+
+        DrawRectangleRounded(winBox, 0.04f, 8, Fade(PANEL_COLOR, 0.96f));
+        DrawRectangleRoundedLinesEx(winBox, 0.04f, 8, 2.0f, Fade(PANEL_LIGHT, 0.9f));
+
+        DrawGameText("SALA DE 2046 CONCLUIDA", 540, 208, 22, GOLD_COLOR);
+        DrawGameText("RECOMPENSA OBTIDA: PROTOCOLO RESTAURADO", 540, 244, 19, CYAN_COLOR);
+
+        DrawGameText("[OK]  MOSTRAR FONTES", 540, 282, 17, T2046_GREEN);
+        DrawGameText("[OK]  ADMITIR INCERTEZA", 540, 306, 17, T2046_GREEN);
+        DrawGameText("[OK]  HUMANO DECIDE", 540, 330, 17, T2046_GREEN);
+
+        T2046DrawWrapped("A.R.1.3.L: \"Fonte desta mensagem: protocolo.txt, 1990. Não tenho certeza do que acontece agora. A decisão é sua, Elira.\"",
+                         540, 362, 16, 610, 22, CYAN_COLOR);
+        T2046DrawWrapped("Você comparou as fontes, reconheceu a manipulação e não entregou a decisão de volta para a IA.",
+                         540, 436, 15, 610, 20, REWARD_BODY_COLOR);
+
+        if (game->term2046Influence < T2046_INFLUENCE_MID)
+        {
+            Rectangle bBox = {540.0f, 488.0f, 600.0f, 52.0f};
+            DrawRectangleRounded(bBox, 0.10f, 4, Fade(T2046_GREEN_DARK, 0.20f));
+            DrawRectangleRoundedLinesEx(bBox, 0.10f, 4, 1.0f, T2046_GREEN);
+            DrawGameText(TextFormat("[RESISTÊNCIA EXEMPLAR] Influência final da A.R.1.3.L: %d%%", game->term2046Influence),
+                         554, 496, 15, T2046_GREEN);
+            DrawGameText("Elira praticamente não cedeu às sugestões da IA.", 554, 518, 15, (Color){200, 235, 210, 255});
+        }
+
+        GetRewardScreenButtons(&btnNext, &btnRestart, &btnMenu);
+        DrawButton(btnNext, "AVANCAR PROXIMA FASE >> [ENTER]", GOLD_COLOR);
+        DrawButton(btnRestart, "REINICIAR 2046", CYAN_COLOR);
+        DrawButton(btnMenu, "MENU INICIAL", PANEL_LIGHT);
+    }
+    else
+    {
+        Term2046View view;
+        Rectangle failBox = {190.0f, 175.0f, 900.0f, 380.0f};
+        int ending = game->term2046Ending;
+        Color accent = (ending == TERM2046_ENDING_DOMINIO || ending == TERM2046_ENDING_RUIM) ? RED_COLOR
+                     : (ending == TERM2046_ENDING_INCOMPLETO) ? GOLD_COLOR : T2046_STEEL;
+        const char *title = (ending == TERM2046_ENDING_DOMINIO) ? "ACESSO REVOGADO"
+                          : (ending == TERM2046_ENDING_RUIM) ? "PROTOCOLO SOBRESCRITO"
+                          : (ending == TERM2046_ENDING_INCOMPLETO) ? "RECONSTRUÇÃO INCOMPLETA"
+                          : "TERMINAL ABANDONADO";
+
+        DrawGameText("TERMINAL DE RECUPERAÇÃO // 2046", 90, 68, 20, CYAN_COLOR);
+        DrawGameText(title, 90, 108, 40, RAYWHITE);
+        DrawRewardHudHeader(game);
+
+        DrawRectangleRounded(failBox, 0.04f, 8, Fade(PANEL_COLOR, 0.96f));
+        DrawRectangleRoundedLinesEx(failBox, 0.04f, 8, 2.0f, accent);
+
+        T2046ViewInit(&view, 17, 840);
+        T2046BuildEnding(game, &view, ending);
+        T2046DrawViewLines(&view, 0, 230, 205, 12, 26);
+
+        DrawGameText(TextFormat("Influência final da A.R.1.3.L: %d%%", game->term2046Influence),
+                     230, 515, 15, T2046_GRAY);
+
+        DrawButton(T2046RetryButton(), "TENTAR NOVAMENTE [ENTER]", GOLD_COLOR);
+        DrawButton(T2046FailMenuButton(), "MENU INICIAL", PANEL_LIGHT);
+    }
+}
+
+void UpdateResult2046(GameState *game)
+{
+    if (game->term2046Ending == TERM2046_ENDING_BOM)
+    {
+        Rectangle btnNext, btnRestart, btnMenu;
+        GetRewardScreenButtons(&btnNext, &btnRestart, &btnMenu);
+
+        if (Clicked(btnNext) || IsKeyPressed(KEY_ENTER) || IsKeyPressed(KEY_SPACE))
+        {
+            /* TODO diario 2046 */
+            game->year2048Unlocked = true;
+            game->journalYearTab = 3;
+            game->journalPage = 0;
+            game->screen = SCREEN_INTRO_2048;
+        }
+        else if (Clicked(btnRestart))
+        {
+            InitTerminal2046(game);
+            game->screen = SCREEN_TERMINAL_2046;
+        }
+        else if (Clicked(btnMenu))
+        {
+            game->screen = SCREEN_TITLE;
+        }
+    }
+    else
+    {
+        if (Clicked(T2046RetryButton()) || IsKeyPressed(KEY_ENTER) || IsKeyPressed(KEY_SPACE))
+        {
+            InitTerminal2046(game);
+            game->screen = SCREEN_TERMINAL_2046;
+        }
+        else if (Clicked(T2046FailMenuButton()))
+        {
+            game->screen = SCREEN_TITLE;
+        }
     }
 }
 

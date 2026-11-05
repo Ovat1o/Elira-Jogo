@@ -61,6 +61,27 @@
 /* ========================================================================= */
 #define FINAL_TYPE_SPEED 48.0f /* bytes por segundo no efeito maquina de escrever */
 
+/* ========================================================================= */
+/* FASE 2046 - TERMINAL DA A.R.1.3.L                                         */
+/* ========================================================================= */
+#define T2046_INFLUENCE_MAX          100    /* influencia que da a vitoria a Ariel */
+#define T2046_INFLUENCE_HIGH         50     /* sabotagens mais frequentes; abrir protocolo vira sugestao */
+#define T2046_INFLUENCE_MID          25     /* muda a cor do medidor */
+#define T2046_COST_FOLLOW_WARNING    15     /* seguir aviso de Ariel */
+#define T2046_COST_ACCEPT_SUGGESTION 15     /* aceitar "Voce quis dizer...?" */
+#define T2046_COST_READ_FAKE_REPORT  10     /* 1a leitura de relatorio_ariel.txt */
+#define T2046_COST_FALSE_PRINCIPLE   15     /* anotar principio falso */
+#define T2046_COST_ACTIVE_SABOTAGE   5      /* por sabotagem ativa nao descoberta, a cada ciclo */
+#define T2046_BONUS_DISCOVERY        10     /* descoberta de sabotagem (reduz a influencia) */
+#define T2046_INTERVAL_NORMAL        5      /* acoes entre sabotagens */
+#define T2046_INTERVAL_SHORT         3      /* idem, com influencia >= 50 */
+#define T2046_PRINCIPLES_TOTAL       3      /* principios corretos a recuperar */
+#define T2046_BAR_SECONDS            1.2f   /* duracao da barra de reconstrucao (segundos) */
+#define T2046_FINAL_PHRASE           "EU DECIDO"
+#define T2046_LOG_MAX                12     /* linhas guardadas no log do terminal */
+#define T2046_LOG_LEN                200    /* tamanho maximo de cada linha do log */
+#define T2046_INPUT_MAX              15     /* caracteres aceitos no campo de texto */
+
 /* Macro auxiliar para remocao do fundo do retrato (flood fill) */
 #define PORTRAIT_PUSH(X, Y) do { int _i = (Y) * w + (X); \
     if (px[_i].a != 0 && IsPortraitBackground(px[_i])) { px[_i].a = 0; stack[sp++] = _i; } } while (0)
