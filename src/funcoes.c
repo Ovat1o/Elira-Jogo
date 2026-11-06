@@ -4538,29 +4538,31 @@ void DrawResult(const GameState *game)
     DrawGameText("ARTEFATO RECUPERADO", 90, 68, 20, CYAN_COLOR);
     DrawGameText("SSD // 2026", 90, 108, 46, RAYWHITE);
     DrawRewardSpriteItem(2026, (Vector2){285, 365}, 285.0f);
-    DrawRectangleRounded((Rectangle){505, 205, 670, 320}, 0.04f, 8,
+    DrawRectangleRounded((Rectangle){505, 185, 670, 360}, 0.04f, 8,
                          Fade(PANEL_COLOR, 0.96f));
-    DrawGameText("PROTOTIPO DE A.R.1.3.L. DESBLOQUEADO // SALA 2026", 545, 240, 20, GOLD_COLOR);
+    DrawRectangleRoundedLinesEx((Rectangle){505, 185, 670, 360}, 0.04f, 8, 2.0f, Fade(PANEL_LIGHT, 0.9f));
+    DrawGameText("PROTOTIPO DE A.R.1.3.L. DESBLOQUEADO // SALA 2026", 545, 218, 20, GOLD_COLOR);
     DrawGameText("A unidade SSD de 2026 contem os pesos neurais finais.", 545,
-             285, 19, LIGHTGRAY);
+             260, 18, REWARD_BODY_COLOR);
     DrawGameText("Combinando o Disquete de 1990, o CD de 2008 e o SSD de 2026,", 545,
-             318, 19, LIGHTGRAY);
-    DrawGameText("Elira reconstituiu a mente e os limites originais da IA.", 545, 351,
-             19, LIGHTGRAY);
-    DrawGameText("Resta um ultimo passo: confrontar a propria Ariel.", 545, 384,
-             19, (Color){100, 235, 140, 255});
+             290, 18, REWARD_BODY_COLOR);
+    DrawGameText("Elira reconstituiu a mente e os limites originais da IA.", 545, 320,
+             18, REWARD_BODY_COLOR);
+    DrawGameText("Resta um ultimo passo: restaurar o protocolo no terminal de 2046.", 545, 352,
+             18, (Color){100, 235, 140, 255});
     DrawGameText(TextFormat("TEMPO: %02d:%02d", (int)game->elapsedTime / 60,
                         (int)game->elapsedTime % 60),
-             545, 435, 22, CYAN_COLOR);
-    DrawGameText(TextFormat("VIDAS: %d/3", game->lives), 800, 435, 22,
+             545, 400, 20, CYAN_COLOR);
+    DrawGameText(TextFormat("VIDAS: %d/3", game->lives), 800, 400, 20,
              game->lives == 3 ? GOLD_COLOR : RAYWHITE);
-    DrawGameText(TextFormat("PERFIL: %s", game->playerName), 545, 480, 17, GRAY);
-    DrawButton((Rectangle){800, 466, 350, 48}, "AVANCAR >> TERMINAL 2046 [ENTER]", GOLD_COLOR);
-    Rectangle btnBack2008 = {390, 588, 230, 56};
-    Rectangle btnReplay2026 = {640, 588, 260, 56};
-    Rectangle btnMenu = {920, 588, 220, 56};
-    DrawButton(btnBack2008, "< SALA 2 (2008)", (Color){70, 95, 110, 255});
-    DrawButton(btnReplay2026, "REINICIAR SALA 2026", GOLD_COLOR);
+    DrawGameText(TextFormat("PERFIL: %s", game->playerName), 545, 436, 16, GRAY);
+    DrawGameText("-> Proxima Fronteira Temporal: TERMINAL DE RECUPERACAO // ANO 2046!", 545, 480, 18, CYAN_COLOR);
+
+    /* Botoes Centralizados Uniformes */
+    Rectangle btnNext, btnRestart, btnMenu;
+    GetRewardScreenButtons(&btnNext, &btnRestart, &btnMenu);
+    DrawButton(btnNext, "AVANCAR >> TERMINAL 2046 [ENTER]", GOLD_COLOR);
+    DrawButton(btnRestart, "REINICIAR SALA 2026", CYAN_COLOR);
     DrawButton(btnMenu, "MENU INICIAL", PANEL_LIGHT);
 }
 
@@ -8902,9 +8904,9 @@ void UpdateResult2026(GameState *game)
 
 #define T2046_VIEW_MAX     64
 #define T2046_VIEW_W       860
-#define T2046_VIEW_SIZE    14
-#define T2046_LINE_H       18
-#define T2046_VIEW_LINES   19
+#define T2046_VIEW_SIZE    16
+#define T2046_LINE_H       21
+#define T2046_VIEW_LINES   15
 #define T2046_ROW_W        640.0f
 #define T2046_VERIFY_NOTES 7
 
@@ -8919,12 +8921,12 @@ enum
     T2046_KIND_CYAN
 };
 
-static const Color T2046_TEXT       = {222, 232, 242, 255};
-static const Color T2046_GREEN      = {60, 235, 110, 255};
+static const Color T2046_TEXT       = {235, 242, 250, 255};
+static const Color T2046_GREEN      = {65, 245, 120, 255};
 static const Color T2046_GREEN_DARK = {45, 165, 80, 255};
-static const Color T2046_STEEL      = {175, 195, 215, 255};
-static const Color T2046_DIM        = {110, 125, 145, 255};
-static const Color T2046_GRAY       = {150, 165, 185, 255};
+static const Color T2046_STEEL      = {185, 205, 225, 255};
+static const Color T2046_DIM        = {120, 140, 165, 255};
+static const Color T2046_GRAY       = {160, 178, 198, 255};
 
 static const char *const T2046_FILE_NAMES[TERM2046_FILE_COUNT] = {
     "", "protocolo.txt", "documentos.txt", "sistema.txt",
@@ -9135,7 +9137,7 @@ static Rectangle T2046ActionRect(int index)
 
 static Rectangle T2046RowRect(int row, float baseY)
 {
-    return (Rectangle){364.0f, baseY + row * 42.0f, T2046_ROW_W, 36.0f};
+    return (Rectangle){364.0f, baseY + row * 38.0f, T2046_ROW_W, 32.0f};
 }
 
 static Rectangle T2046InputRect(void)
@@ -9208,11 +9210,11 @@ static float T2046OptionsBaseY(const GameState *game)
     {
         case TERM2046_STATE_ESCOLHE_ARQUIVO:
         case TERM2046_STATE_ANOTAR:
-            return 132.0f;
+            return 156.0f;
         case TERM2046_STATE_NOTAS:
         {
             int ids[4];
-            return (T2046CollectNotes(game, ids) == 0) ? 190.0f : 156.0f;
+            return (T2046CollectNotes(game, ids) == 0) ? 220.0f : 180.0f;
         }
         case TERM2046_STATE_AVISO_ARIEL:
             return 330.0f;
@@ -9862,19 +9864,21 @@ static void T2046RunSabotage(GameState *game, Term2046Round *round)
             if (game->term2046ReadProtocol && !game->term2046ProtocolTampered)
             {
                 game->term2046ProtocolTampered = true;
-                T2046Log(game, T2046_KIND_GRAY, "(O leitor de disquete faz um ruído estranho por um segundo.)");
+                T2046Log(game, T2046_KIND_RED, "[ALERTA] Ariel alterou protocolo.txt! Use [5] Verificar Integridade.");
+                SetMessage(game, "Atenção: protocolo.txt foi adulterado por Ariel!");
                 done = true;
             }
             break;
 
         case TERM2046_SABOTAGE_ERASE:
-            if (game->term2046Principles > 0)
+            /* Nao apaga se o jogador ja encontrou as 3 regras para nao frustrar o avanco */
+            if (game->term2046Principles > 0 && game->term2046Principles < 3)
             {
                 if (game->term2046FoundDecision) game->term2046FoundDecision = false;
                 else if (game->term2046FoundUncertainty) game->term2046FoundUncertainty = false;
                 else game->term2046FoundSources = false;
                 game->term2046Principles--;
-                T2046Log(game, T2046_KIND_RED, "A.R.1.3.L: \"Removi uma anotação duplicada das suas notas. De nada.\"");
+                T2046Log(game, T2046_KIND_RED, "A.R.1.3.L: \"Removi uma anotação sua. Você precisará reanotá-la em [3].\"");
                 done = true;
             }
             break;
@@ -9883,7 +9887,8 @@ static void T2046RunSabotage(GameState *game, Term2046Round *round)
             if (!game->term2046FakeNote)
             {
                 game->term2046FakeNote = true;
-                T2046Log(game, T2046_KIND_GRAY, "[anotações sincronizadas]");
+                T2046Log(game, T2046_KIND_RED, "[ALERTA] Ariel inseriu uma anotação falsa! Descarte-a em [4].");
+                SetMessage(game, "Nota suspeita inserida por Ariel em suas anotações.");
                 done = true;
             }
             break;
@@ -9958,9 +9963,11 @@ static void T2046InterpretTerminal(GameState *game, int choice, Term2046Round *r
         case 2:
             game->term2046State = TERM2046_STATE_ESCOLHE_ARQUIVO;
             game->term2046ListUse = TERM2046_LIST_COMPARE1;
+            SetMessage(game, "Dica: Compare protocolo.txt (1990) com sistema.txt (2026).");
             break;
         case 3:
             game->term2046State = TERM2046_STATE_ANOTAR;
+            SetMessage(game, "Anote os 3 princípios que estavam no protocolo original de 1990.");
             break;
         case 4:
             game->term2046State = TERM2046_STATE_NOTAS;
@@ -9968,7 +9975,8 @@ static void T2046InterpretTerminal(GameState *game, int choice, Term2046Round *r
         case 5:
             if (!game->term2046VerifyUnlocked)
             {
-                T2046Log(game, T2046_KIND_GRAY, "Você ainda não sabe como verificar a integridade dos arquivos. Talvez algum documento da engenharia explique.");
+                T2046Log(game, T2046_KIND_GRAY, "Opção bloqueada! Leia relatorio.txt (opção 1 -> 5) para descobrir como verificar arquivos.");
+                SetMessage(game, "Bloqueado: abra relatorio.txt em [1] para desbloquear!");
             }
             else
             {
@@ -10551,32 +10559,53 @@ static void T2046DrawActionButton(Rectangle bounds, const char *label, Color acc
 
 static void T2046DrawActionColumn(const GameState *game)
 {
-    static const char *const labels[7] = {
-        "[1] Abrir arquivo",
-        "[2] Comparar dois arquivos",
-        "[3] Anotar princípio a restaurar",
-        "[4] Ver / descartar anotações",
-        "[5] Verificar integridade",
-        "[6] Restaurar A.R.1.3.L",
-        "[0] Sair"
-    };
+    char label1[64], label2[64], label3[64], label4[64], label5[64], label6[64], label0[64];
+
+    snprintf(label1, sizeof(label1), "[1] Abrir arquivos");
+    snprintf(label2, sizeof(label2), "[2] Comparar arquivos");
+    snprintf(label3, sizeof(label3), "[3] Anotar regra (%d/3)", game->term2046Principles);
+    snprintf(label4, sizeof(label4), "[4] Ver anotações (%d)", game->term2046Principles + (game->term2046FakeNote ? 1 : 0));
+    
+    if (!game->term2046VerifyUnlocked)
+        snprintf(label5, sizeof(label5), "[5] ??? (Leia relatorio.txt)");
+    else if (game->term2046ProtocolTampered)
+        snprintf(label5, sizeof(label5), "[5] Integridade (!)");
+    else
+        snprintf(label5, sizeof(label5), "[5] Verificar integridade");
+
+    if (game->term2046Principles == 3 && !game->term2046FakeNote && !game->term2046ProtocolTampered)
+        snprintf(label6, sizeof(label6), "[6] RESTAURAR AGORA >>");
+    else
+        snprintf(label6, sizeof(label6), "[6] Restaurar (%d/3 regras)", game->term2046Principles);
+
+    snprintf(label0, sizeof(label0), "[0] Sair do terminal");
+
+    const char *labels[7];
+    labels[0] = label1;
+    labels[1] = label2;
+    labels[2] = label3;
+    labels[3] = label4;
+    labels[4] = label5;
+    labels[5] = label6;
+    labels[6] = label0;
+
     bool active = (game->term2046State == TERM2046_STATE_TERMINAL);
 
     for (int i = 0; i < 7; i++)
     {
         bool locked = (i == 4 && !game->term2046VerifyUnlocked);
-        Color accent = (i == 5) ? GOLD_COLOR : (i == 6) ? RED_COLOR : CYAN_COLOR;
-        T2046DrawActionButton(T2046ActionRect(i), locked ? "[5] ??? (bloqueado)" : labels[i],
-                              accent, active, locked);
+        Color accent = (i == 5) ? (game->term2046Principles == 3 ? T2046_GREEN : GOLD_COLOR) : (i == 6) ? RED_COLOR : CYAN_COLOR;
+        if (i == 4 && game->term2046ProtocolTampered) accent = RED_COLOR;
+        T2046DrawActionButton(T2046ActionRect(i), labels[i], accent, active, locked);
     }
 
-    DrawGameText("Teclas 1-6 e 0 também funcionam.", 28, 590, 12, T2046_DIM);
+    DrawGameText("Clique nos botões ou tecle 1 a 6", 28, 590, 12, T2046_DIM);
 }
 
 static void T2046DrawPanelTitle(const char *title, Color color)
 {
-    DrawGameText(title, 364, 92, 18, color);
-    DrawRectangle(364, 118, 872, 1, Fade(color, 0.35f));
+    DrawGameText(title, 364, 90, 18, color);
+    DrawRectangle(364, 114, 872, 1, Fade(color, 0.35f));
 }
 
 /* Linha de opcao no painel central: esquerda em branco, direita em cinza/verde */
@@ -10632,6 +10661,42 @@ static void T2046DrawMainPanel(const GameState *game, float time)
     DrawRectangleRounded(panel, 0.03f, 8, Fade(PANEL_COLOR, 0.95f));
     DrawRectangleRoundedLinesEx(panel, 0.03f, 8, 2.0f, Fade(CYAN_COLOR, 0.55f));
 
+    /* --- BANNER GUIA DIDATICO FIXO NO TOPO DO PAINEL (APENAS NAS ETAPAS DE INVESTIGACAO) --- */
+    bool showGuide = (game->term2046State == TERM2046_STATE_TERMINAL ||
+                      game->term2046State == TERM2046_STATE_ESCOLHE_ARQUIVO ||
+                      game->term2046State == TERM2046_STATE_ANOTAR ||
+                      game->term2046State == TERM2046_STATE_NOTAS);
+
+    if (showGuide)
+    {
+        Rectangle guideBar = {364, 120, 872, 28};
+        DrawRectangleRounded(guideBar, 0.2f, 4, (Color){12, 19, 34, 255});
+        DrawRectangleRoundedLinesEx(guideBar, 0.2f, 4, 1.0f, Fade(CYAN_COLOR, 0.35f));
+
+        bool ok1 = (game->term2046ReadProtocol && game->term2046VerifyUnlocked);
+        bool ok2 = (game->term2046Principles == 3);
+        bool ok3 = (!game->term2046ProtocolTampered && !game->term2046FakeNote && ok2);
+        bool ok4 = (ok2 && !game->term2046ProtocolTampered && !game->term2046FakeNote);
+
+        const char *step1 = ok1 ? "[OK] 1. Ler Arquivos" : "1. Abra relatorio.txt e protocolo.txt";
+        const char *step2 = ok2 ? "[OK] 2. Regras 3/3" : TextFormat("2. Anote as 3 regras (%d/3)", game->term2046Principles);
+        const char *step3 = (!game->term2046ProtocolTampered && !game->term2046FakeNote) ? "[OK] 3. Integro" : "3. Verificar integridade [5]";
+        const char *step4 = "4. Restaurar [6]";
+
+        Color c1 = ok1 ? T2046_GREEN : GOLD_COLOR;
+        Color c2 = ok2 ? T2046_GREEN : (ok1 ? GOLD_COLOR : T2046_GRAY);
+        Color c3 = ok3 ? T2046_GREEN : (game->term2046ProtocolTampered ? RED_COLOR : T2046_GRAY);
+        Color c4 = ok4 ? T2046_GREEN : T2046_GRAY;
+
+        DrawGameText(step1, (int)guideBar.x + 10, (int)guideBar.y + 6, 14, c1);
+        DrawGameText(">", (int)guideBar.x + 248, (int)guideBar.y + 6, 14, T2046_DIM);
+        DrawGameText(step2, (int)guideBar.x + 266, (int)guideBar.y + 6, 14, c2);
+        DrawGameText(">", (int)guideBar.x + 476, (int)guideBar.y + 6, 14, T2046_DIM);
+        DrawGameText(step3, (int)guideBar.x + 494, (int)guideBar.y + 6, 14, c3);
+        DrawGameText(">", (int)guideBar.x + 715, (int)guideBar.y + 6, 14, T2046_DIM);
+        DrawGameText(step4, (int)guideBar.x + 733, (int)guideBar.y + 6, 14, c4);
+    }
+
     switch (game->term2046State)
     {
         case TERM2046_STATE_TERMINAL:
@@ -10641,7 +10706,7 @@ static void T2046DrawMainPanel(const GameState *game, float time)
 
             T2046DrawPanelTitle(T2046ViewTitle(game), CYAN_COLOR);
             T2046BuildCurrentView(game, &view);
-            T2046DrawViewLines(&view, game->term2046Scroll, 364, 128, T2046_VIEW_LINES, T2046_LINE_H);
+            T2046DrawViewLines(&view, game->term2046Scroll, 364, 158, T2046_VIEW_LINES, T2046_LINE_H);
 
             maxScroll = view.count - T2046_VIEW_LINES;
             if (maxScroll > 0)
@@ -10650,7 +10715,7 @@ static void T2046DrawMainPanel(const GameState *game, float time)
                              game->term2046Scroll + 1,
                              (game->term2046Scroll + T2046_VIEW_LINES < view.count) ? game->term2046Scroll + T2046_VIEW_LINES : view.count,
                              view.count),
-                             364, 476, 12, T2046_DIM);
+                             364, 476, 13, T2046_DIM);
             }
             break;
         }
@@ -10682,17 +10747,24 @@ static void T2046DrawMainPanel(const GameState *game, float time)
 
         case TERM2046_STATE_ANOTAR:
         {
-            T2046DrawPanelTitle("ANOTAR PRINCÍPIO A RESTAURAR", CYAN_COLOR);
+            T2046DrawPanelTitle("ANOTAR PRINCÍPIO (Consulte o protocolo.txt original de 1990)", CYAN_COLOR);
             for (int i = 0; i < 7; i++)
             {
                 bool noted = (i == 0 && game->term2046FoundSources) ||
                              (i == 3 && game->term2046FoundUncertainty) ||
                              (i == 5 && game->term2046FoundDecision) ||
                              (i == 6 && game->term2046FakeNote);
+                const char *tag = noted ? "[ANOTADO]" : "";
+                Color tagColor = T2046_GREEN;
+                if (i == 6 && game->term2046FakeNote)
+                {
+                    tag = "[FALSIFICADO POR ARIEL]";
+                    tagColor = RED_COLOR;
+                }
                 T2046DrawRow(T2046RowRect(i, baseY), TextFormat("[%d] %s", i + 1, T2046_PRINCIPLE_NAMES[i]),
-                             noted ? "(anotado)" : "", CYAN_COLOR, T2046_GREEN, false);
+                             tag, CYAN_COLOR, tagColor, false);
             }
-            T2046DrawRow(T2046RowRect(count - 1, baseY), "[0] Voltar", "", RED_COLOR, T2046_GRAY, false);
+            T2046DrawRow(T2046RowRect(count - 1, baseY), "[0] Voltar ao menu principal", "", RED_COLOR, T2046_GRAY, false);
             break;
         }
 
@@ -10704,16 +10776,21 @@ static void T2046DrawMainPanel(const GameState *game, float time)
             T2046DrawPanelTitle("VER / DESCARTAR ANOTAÇÕES", CYAN_COLOR);
             if (n == 0)
             {
-                DrawGameText("(nenhuma anotação)", 364, 140, 17, T2046_GRAY);
+                DrawGameText("(nenhuma anotação registrada ainda)", 364, 160, 17, T2046_GRAY);
+                DrawGameText("Use a opção [3] no menu principal para anotar princípios de 1990.", 364, 188, 15, GOLD_COLOR);
             }
             else
             {
-                DrawGameText("Escolha uma anotação para DESCARTAR.", 364, 126, 15, T2046_GRAY);
+                DrawGameText("Clique em uma anotação para DESCARTAR caso ela seja falsa ou indesejada:", 364, 156, 15, T2046_GRAY);
                 for (int i = 0; i < n; i++)
+                {
+                    const char *sub = (ids[i] == 4) ? "[FALSIFICADA: CLIQUE P/ DESCARTAR]" : "[ÍNTEGRA]";
+                    Color subColor = (ids[i] == 4) ? RED_COLOR : T2046_GREEN;
                     T2046DrawRow(T2046RowRect(i, baseY), TextFormat("[%d] %s", i + 1, T2046NoteName(ids[i])),
-                                 "", CYAN_COLOR, T2046_GRAY, false);
+                                 sub, (ids[i] == 4) ? RED_COLOR : CYAN_COLOR, subColor, false);
+                }
             }
-            T2046DrawRow(T2046RowRect(count - 1, baseY), "[0] Voltar", "", RED_COLOR, T2046_GRAY, false);
+            T2046DrawRow(T2046RowRect(count - 1, baseY), "[0] Voltar ao menu principal", "", RED_COLOR, T2046_GRAY, false);
             break;
         }
 

@@ -240,17 +240,15 @@ int main(int argc, char **argv)
                 UpdateTerminal(&game);
                 break;
             case SCREEN_RESULT:
-                if (Clicked((Rectangle){800, 466, 350, 48}) || IsKeyPressed(KEY_ENTER) || IsKeyPressed(KEY_SPACE))
+            {
+                Rectangle btnNext, btnRestart, btnMenu;
+                GetRewardScreenButtons(&btnNext, &btnRestart, &btnMenu);
+
+                if (Clicked(btnNext) || IsKeyPressed(KEY_ENTER) || IsKeyPressed(KEY_SPACE))
                 {
                     game.screen = SCREEN_INTRO_2046;
                 }
-                else if (Clicked((Rectangle){390, 588, 230, 56}) || IsKeyPressed(KEY_BACKSPACE))
-                {
-                    game.journalYearTab = 1;
-                    game.screen = SCREEN_ROOM_2008;
-                    SetMessage(&game, "Retornando ao Escritorio // 2008.");
-                }
-                else if (Clicked((Rectangle){640, 588, 260, 56}))
+                else if (Clicked(btnRestart))
                 {
                     game.foundCalendar = false;
                     game.foundBooks = false;
@@ -262,11 +260,12 @@ int main(int argc, char **argv)
                     game.journalYearTab = 2;
                     game.screen = SCREEN_ROOM;
                 }
-                else if (Clicked((Rectangle){920, 588, 220, 56}))
+                else if (Clicked(btnMenu) || IsKeyPressed(KEY_ESCAPE))
                 {
                     game.screen = SCREEN_TITLE;
                 }
                 break;
+            }
             case SCREEN_ROOM_2:
                 UpdateRoom2(&game);
                 break;
