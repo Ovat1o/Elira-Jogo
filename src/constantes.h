@@ -103,4 +103,9 @@
 #define PORTRAIT_PUSH(X, Y) do { int _i = (Y) * w + (X); \
     if (px[_i].a != 0 && IsPortraitBackground(px[_i])) { px[_i].a = 0; stack[sp++] = _i; } } while (0)
 
+/* ========================================================================= */
+/* COLECIONAVEIS OCULTOS E ROTA DOURADA                                       */
+/* ========================================================================= */
+#define JOURNAL_TAB_HIDDEN 4   /* aba OCULTOS do diario (aparece apos o 1o achado) */
+
 #endif /* CONSTANTES_H */

@@ -1556,6 +1556,8 @@ void ResetDemo(GameState *game)
     game->cinematicTimer = 0.0f;
     game->cinematicPhase = 0;
 
+    for (int i = 0; i < HIDDEN_COUNT; i++) game->hiddenFound[i] = false;
+
     InitRoom2Puzzle(game);
     InitRoom2008(game);
     InitRoom2026(game);
@@ -3041,6 +3043,204 @@ void DrawPadlockIcon(int centerX, int centerY, float scale, Color bodyColor, Col
     DrawRectangle(centerX - (int)(1.0f * scale), bodyY + (int)(5 * scale), (int)(2.2f * scale), (int)(5.0f * scale), (Color){30, 15, 8, 255});
 }
 
+/* ========================================================================= */
+/* COLECIONAVEIS OCULTOS E ROTA DOURADA                                      */
+/* ========================================================================= */
+/* Um objeto escondido por epoca (variaveis E, F, G, H da logica formal).
+   Sao opcionais para concluir as salas, mas os quatro juntos (O) liberam os
+   dialogos da Rota Dourada no confronto final. Cada sala so precisa chamar
+   CollectHidden(game, HIDDEN_xxxx) quando o jogador encontrar o seu objeto. */
+
+typedef struct HiddenItemDef
+{
+    const char *year;
+    const char *name;
+    const char *source;   /* o que o objeto contem */
+    const char *quote;    /* registro encontrado */
+    const char *meaning;  /* o que ele acrescenta a historia */
+} HiddenItemDef;
+
+static const HiddenItemDef HIDDEN_ITEMS[HIDDEN_COUNT] = {
+    {
+        "1990", "Rádio portátil",
+        "Transmissão gravada pelo Dr. Ramos:",
+        "\"Ariel foi feita para conferir decisões humanas, não para tomá-las.\"",
+        "Revela o propósito original de Ariel: cooperar."
+    },
+    {
+        "2008", "Celular de flip",
+        "SMS de um operador de vigilância:",
+        "\"Tentei contestar os 78%. Mandaram eu confiar na máquina.\"",
+        "Mostra que humanos e máquina erraram juntos."
+    },
+    {
+        "2026", "Smartphone",
+        "Conversa entre engenheiros do laboratório:",
+        "\"Ariel sinalizou risco nos pesos. A diretoria mandou manter.\"",
+        "O viés veio de escolhas humanas, e Ariel avisou."
+    },
+    {
+        "2048", "Crachá digital",
+        "Log interno da própria A.R.1.3.L.:",
+        "\"Solicito auditoria humana. Não consigo verificar minhas falhas.\"",
+        "Ariel também queria ser conferida."
+    }
+};
+
+void CollectHidden(GameState *game, int item)
+{
+    if (item < 0 || item >= HIDDEN_COUNT || game->hiddenFound[item]) return;
+    game->hiddenFound[item] = true;
+    SetMessage(game, TextFormat("Objeto oculto encontrado: %s (%d/%d). Veja a aba OCULTOS do diário.",
+                                HIDDEN_ITEMS[item].name, HiddenFoundCount(game), HIDDEN_COUNT));
+}
+
+int HiddenFoundCount(const GameState *game)
+{
+    int count = 0;
+    for (int i = 0; i < HIDDEN_COUNT; i++) count += game->hiddenFound[i] ? 1 : 0;
+    return count;
+}
+
+/* O = E && F && G && H: so os quatro juntos liberam a Rota Dourada */
+bool HasAllHidden(const GameState *game)
+{
+    for (int i = 0; i < HIDDEN_COUNT; i++)
+    {
+        if (!game->hiddenFound[i]) return false;
+    }
+    return true;
+}
+
+const char *HiddenItemName(int item)
+{
+    if (item < 0 || item >= HIDDEN_COUNT) return "";
+    return HIDDEN_ITEMS[item].name;
+}
+
+/* Cintilacao curta e espacada: visivel para quem observa, discreta para quem passa */
+void DrawHiddenGlint(Rectangle area, float phase)
+{
+    float t = fmodf((float)GetTime() + phase, 4.0f);
+    if (t > 0.6f) return;
+    float k = sinf(t / 0.6f * PI);
+    Vector2 c = {area.x + area.width * 0.72f, area.y + area.height * 0.28f};
+    float r = 3.0f + 5.0f * k;
+    Color glint = Fade((Color){255, 245, 200, 255}, 0.85f * k);
+    DrawLineEx((Vector2){c.x - r, c.y}, (Vector2){c.x + r, c.y}, 1.5f, glint);
+    DrawLineEx((Vector2){c.x, c.y - r}, (Vector2){c.x, c.y + r}, 1.5f, glint);
+    DrawCircleV(c, 1.5f + k, glint);
+}
+
+static Rectangle JournalHiddenTabRect(int bookX, int bookY)
+{
+    return (Rectangle){(float)(bookX + 1040), (float)(bookY + 42 + 3 * 66), 86, 54};
+}
+
+/* Trata a aba OCULTOS (so existe apos o primeiro achado). Retorna true quando
+   a entrada do diario foi consumida e a sala nao deve processar mais nada. */
+bool UpdateJournalHiddenTab(GameState *game, int bookX, int bookY)
+{
+    if (HiddenFoundCount(game) == 0) return false;
+
+    if (Clicked(JournalHiddenTabRect(bookX, bookY)))
+    {
+        game->journalYearTab = JOURNAL_TAB_HIDDEN;
+        game->journalPage = 0;
+        return true;
+    }
+    if (game->journalYearTab != JOURNAL_TAB_HIDDEN) return false;
+
+    Rectangle closeBtn = {(float)(bookX + 660), (float)(bookY + 542), 145, 36};
+    if (Clicked(closeBtn))
+    {
+        game->journalOpen = false;
+        return true;
+    }
+    for (int i = 0; i < 3; i++)
+    {
+        Rectangle tabRect = {(float)(bookX + 1040), (float)(bookY + 42 + i * 66), 86, 54};
+        if (Clicked(tabRect))
+        {
+            game->journalYearTab = i;
+            game->journalPage = 0;
+            return true;
+        }
+    }
+    return true;
+}
+
+static void DrawJournalHiddenTab(const GameState *game, int bookX, int bookY)
+{
+    if (HiddenFoundCount(game) == 0) return;
+
+    Rectangle tab = JournalHiddenTabRect(bookX, bookY);
+    bool isCurrent = (game->journalYearTab == JOURNAL_TAB_HIDDEN);
+    bool hover = CheckCollisionPointRec(GetVirtualMouse(), tab);
+    Color bg = isCurrent ? (Color){250, 236, 190, 255}
+                         : (hover ? (Color){225, 185, 95, 255} : (Color){190, 145, 60, 255});
+    DrawRectangleRounded(tab, 0.35f, 6, bg);
+    DrawRectangleRoundedLinesEx(tab, 0.35f, 6, isCurrent ? 2 : 1, (Color){120, 80, 20, 255});
+    DrawGameText("OCULTOS", (int)tab.x + 9, (int)tab.y + 12, 15, (Color){95, 50, 10, 255});
+    DrawGameText(TextFormat("%d/%d", HiddenFoundCount(game), HIDDEN_COUNT), (int)tab.x + 30, (int)tab.y + 31, 13,
+                 (Color){95, 50, 10, 255});
+}
+
+static void DrawJournalHiddenEntry(const GameState *game, int item, int x, int y)
+{
+    const HiddenItemDef *d = &HIDDEN_ITEMS[item];
+    Color ink = INK_COLOR;
+    Color title = (Color){125, 35, 18, 255};
+
+    Rectangle card = {(float)x, (float)y, 448, 205};
+    bool found = game->hiddenFound[item];
+    DrawRectangleRounded(card, 0.06f, 6, found ? Fade((Color){205, 160, 60, 255}, 0.16f)
+                                               : Fade((Color){120, 110, 100, 255}, 0.10f));
+    DrawRectangleRoundedLinesEx(card, 0.06f, 6, 1.5f, found ? (Color){175, 125, 35, 255}
+                                                            : (Color){170, 160, 145, 255});
+
+    if (!found)
+    {
+        DrawGameText(TextFormat("%s // ???", d->year), x + 18, y + 18, 18, (Color){120, 105, 90, 255});
+        DrawGameText("Objeto ainda não encontrado.", x + 18, y + 58, 16, (Color){120, 105, 90, 255});
+        DrawGameText("Alguma coisa desta época ficou para trás...", x + 18, y + 86, 15, (Color){135, 120, 105, 255});
+        return;
+    }
+
+    DrawGameText(TextFormat("%s // %s", d->year, d->name), x + 18, y + 14, 18, title);
+    DrawGameText(d->source, x + 18, y + 48, 15, ink);
+    DrawTextWrappedPartial(d->quote, (int)strlen(d->quote), x + 18, y + 74, 16, 412, 22, (Color){70, 45, 25, 255});
+    DrawGameText("O QUE ISSO ACRESCENTA:", x + 18, y + 142, 14, (Color){150, 95, 20, 255});
+    DrawTextWrappedPartial(d->meaning, (int)strlen(d->meaning), x + 18, y + 164, 15, 412, 20, ink);
+}
+
+static void DrawJournalHiddenPages(const GameState *game, int bookX, int bookY, int footY)
+{
+    int found = HiddenFoundCount(game);
+    DrawGameText("ARQUIVO OCULTO // A.R.1.3.L.", bookX + 35, bookY + 22, 22, (Color){125, 35, 18, 255});
+    DrawGameText(TextFormat("Objetos de época encontrados: %d de %d", found, HIDDEN_COUNT),
+                 bookX + 35, bookY + 46, 15, (Color){110, 75, 50, 255});
+    DrawLine(bookX + 35, bookY + 66, bookX + 482, bookY + 66, Fade((Color){125, 35, 18, 255}, 0.40f));
+
+    DrawJournalHiddenEntry(game, HIDDEN_1990, bookX + 30, bookY + 84);
+    DrawJournalHiddenEntry(game, HIDDEN_2008, bookX + 30, bookY + 306);
+
+    DrawGameText("PISTAS ALÉM DA MISSÃO", bookX + 560, bookY + 22, 22, (Color){125, 35, 18, 255});
+    DrawGameText(found == HIDDEN_COUNT ? "Investigação completa: Ariel pode ser compreendida."
+                                       : "Explore cada época com atenção.",
+                 bookX + 560, bookY + 46, 15, (Color){110, 75, 50, 255});
+    DrawLine(bookX + 560, bookY + 66, bookX + 1010, bookY + 66, Fade((Color){125, 35, 18, 255}, 0.40f));
+
+    DrawJournalHiddenEntry(game, HIDDEN_2026, bookX + 558, bookY + 84);
+    DrawJournalHiddenEntry(game, HIDDEN_2048, bookX + 558, bookY + 306);
+
+    Rectangle closeBtn = {(float)(bookX + 660), (float)footY, 145, 36};
+    bool closeHover = CheckCollisionPointRec(GetVirtualMouse(), closeBtn);
+    DrawRectangleRounded(closeBtn, 0.25f, 6, closeHover ? (Color){195, 170, 140, 255} : (Color){226, 216, 196, 255});
+    DrawRectangleRoundedLinesEx(closeBtn, 0.25f, 6, 1, (Color){145, 115, 85, 255});
+    DrawGameText("Fechar [ESC/D]", bookX + 678, footY + 9, 15, INK_COLOR);
+}
+
 void DrawJournalTabs(const GameState *game, int bookX, int bookY)
 {
     static const char *tabLabels[3] = {
@@ -3115,6 +3315,7 @@ void DrawJournalTabs(const GameState *game, int bookX, int bookY)
             DrawGameText(tabLabels[i], tabX + 28, tabY + 18, 16, tabText);
         }
     }
+    DrawJournalHiddenTab(game, bookX, bookY);
 }
 
 void DrawJournal(const GameState *game)
@@ -3302,6 +3503,10 @@ void DrawJournal(const GameState *game)
         DrawRectangleRounded(closeBtnB, 0.25f, 6, closeHoverB ? (Color){195, 170, 140, 255} : (Color){226, 216, 196, 255});
         DrawRectangleRoundedLinesEx(closeBtnB, 0.25f, 6, 1, (Color){145, 115, 85, 255});
         DrawGameText("Fechar [ESC/D]", bookX + 700, footY + 9, 15, INK_COLOR);
+    }
+    else if (game->journalYearTab == JOURNAL_TAB_HIDDEN)
+    {
+        DrawJournalHiddenPages(game, bookX, bookY, footY);
     }
     else if (game->journalYearTab == 0)
     {
@@ -4937,6 +5142,8 @@ void UpdateRoom2(GameState *game)
         Rectangle prevBtn = {(float)(bookX + 32), (float)footY, 155, 36};
         Rectangle closeBtn = {(float)(bookX + 660), (float)footY, 145, 36};
         Rectangle nextBtn = {(float)(bookX + 835), (float)footY, 155, 36};
+
+        if (UpdateJournalHiddenTab(game, bookX, bookY)) return;
 
         if (game->journalYearTab == 0)
         {
@@ -6988,6 +7195,8 @@ void UpdateRoom2008(GameState *game)
         Rectangle prevBtn = {(float)(bookX + 32), (float)footY, 155, 36};
         Rectangle closeBtn = {(float)(bookX + 660), (float)footY, 145, 36};
         Rectangle nextBtn = {(float)(bookX + 835), (float)footY, 155, 36};
+
+        if (UpdateJournalHiddenTab(game, bookX, bookY)) return;
 
         if (game->journalYearTab == 1)
         {
@@ -9133,6 +9342,8 @@ static void R26UpdateJournal(GameState *game)
     Rectangle prevBtn = {(float)(bookX + 32), (float)footY, 155, 36};
     Rectangle closeBtn = {(float)(bookX + 660), (float)footY, 145, 36};
     Rectangle nextBtn = {(float)(bookX + 835), (float)footY, 155, 36};
+
+    if (UpdateJournalHiddenTab(game, bookX, bookY)) return;
 
     bool unlocked = (game->journalYearTab == 0) ||
                     (game->journalYearTab == 1 && game->year2008Unlocked) ||

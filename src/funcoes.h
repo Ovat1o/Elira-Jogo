@@ -116,6 +116,16 @@ typedef enum Term2046Ending
     TERM2046_ENDING_ABANDONO        /* jogador escolheu [0] Sair */
 } Term2046Ending;
 
+/* --- COLECIONAVEIS OCULTOS (um por epoca; logica formal E, F, G, H) --- */
+typedef enum HiddenItem
+{
+    HIDDEN_1990 = 0,   /* E - Radio portatil */
+    HIDDEN_2008,       /* F - Celular de flip */
+    HIDDEN_2026,       /* G - Smartphone */
+    HIDDEN_2048,       /* H - Cracha digital */
+    HIDDEN_COUNT
+} HiddenItem;
+
 typedef struct GameState
 {
     GameScreen screen;
@@ -266,6 +276,9 @@ typedef struct GameState
     float finalTypeTimer;              /* Tempo acumulado do efeito maquina de escrever */
     int finalPoints;                   /* Pontos de compreensao (0 a 2) */
     int finalChoice[3];                /* Escolhas: P1, P2, Decisao final (-1 = pendente) */
+
+    /* --- COLECIONAVEIS OCULTOS: hiddenFound[i] = E, F, G, H --- */
+    bool hiddenFound[HIDDEN_COUNT];
 
     /* --- INTRODUCAO CINEMATOGRAFICA NARRATIVA --- */
     float crawlScroll;
@@ -473,6 +486,14 @@ void DrawHud(const GameState *game);
 void DrawPadlockIcon(int centerX, int centerY, float scale, Color bodyColor, Color shackleColor);
 void DrawJournalTabs(const GameState *game, int bookX, int bookY);
 void DrawJournal(const GameState *game);
+
+/* Colecionaveis ocultos (Rota Dourada) - logica centralizada em funcoes.c */
+void CollectHidden(GameState *game, int item);          /* marca o oculto e avisa o jogador */
+int HiddenFoundCount(const GameState *game);
+bool HasAllHidden(const GameState *game);               /* O = E && F && G && H */
+const char *HiddenItemName(int item);
+void DrawHiddenGlint(Rectangle area, float phase);      /* brilho discreto sobre o objeto escondido */
+bool UpdateJournalHiddenTab(GameState *game, int bookX, int bookY); /* true = entrada consumida */
 void UpdateRoom(GameState *game);
 void AddDigit(GameState *game, char digit);
 void CheckCode(GameState *game);
