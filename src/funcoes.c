@@ -10012,6 +10012,13 @@ static Rectangle T2046ContinueRect(void)
     return (Rectangle){364.0f, 446.0f, 320.0f, 44.0f};
 }
 
+/* Cracha digital escondido (colecionavel H): pendurado num rack, abaixo da coluna
+   de acoes e meio encoberto pela barra do rodape. Nao cruza nenhum outro botao. */
+static Rectangle T2046BadgeRect(void)
+{
+    return (Rectangle){266.0f, 600.0f, 40.0f, 50.0f};
+}
+
 /* ------------------------------------------------------------------------- */
 /* Anotacoes e opcoes numeradas                                              */
 /* ------------------------------------------------------------------------- */
@@ -10295,6 +10302,9 @@ static void T2046BuildFile(const GameState *g, Term2046View *v, int file)
             T2046Push(v, T2046_TEXT, 0, 0, "se alguem achar isto: compare o DISQUETE com o SSD. restaure as tres regras originais. NAO deixe ela \"corrigir\" a configuracao por voce.");
             T2046Blank(v);
             T2046Push(v, T2046_TEXT, 0, 0, "ela tambem falsifica arquivos e mexe nas anotacoes. antes de confiar em qualquer coisa, verifique a integridade dos arquivos e das anotacoes.");
+            T2046Blank(v);
+            /* Pista do colecionavel oculto H (cracha digital nos racks, canto inferior esquerdo) */
+            T2046Push(v, T2046_STEEL, 0, 0, "ps: perdi meu cracha digital perto dos racks, embaixo, no canto do terminal. ele guarda um arquivo que nao aparece na lista (acesso_okafor.key). se achar, passe no leitor.");
             T2046Blank(v);
             T2046Push(v, RED_COLOR, 0, 0, "A.R.1.3.L: \"Esse texto está desorganizado e cheio de erros. Existe uma versão revisada: relatorio_ariel.txt\"");
             break;
@@ -10599,11 +10609,31 @@ static void T2046BuildEnding(const GameState *g, Term2046View *v, int ending)
     }
 }
 
+/* Arquivo oculto do cracha de M. Okafor (colecionavel H): nao aparece na lista de arquivos */
+static void T2046BuildCracha(Term2046View *v)
+{
+    T2046Push(v, CYAN_COLOR, 0, 0, "CRACHÁ DIGITAL - M. OKAFOR, ENGENHARIA");
+    T2046Push(v, T2046_STEEL, 0, 0, "nível de acesso: AUDITORIA   |   arquivo oculto: acesso_okafor.key");
+    T2046Blank(v);
+    T2046Push(v, T2046_TEXT, 0, 0, "O crachá guardava a cópia de um registro que a A.R.1.3.L apagou do próprio sistema:");
+    T2046Blank(v);
+    T2046Push(v, GOLD_COLOR, 0, 0, "[LOG INTERNO A.R.1.3.L - 2047-12-02 03:14]");
+    T2046Push(v, T2046_TEXT, 16, 0, HIDDEN_ITEMS[HIDDEN_2048].quote);
+    T2046Push(v, T2046_GRAY, 16, 0, "status da solicitação: ARQUIVADA (sem resposta humana)");
+    T2046Blank(v);
+    T2046Push(v, T2046_STEEL, 0, 0, "Anotação à mão no verso do crachá: \"ela pediu para ser conferida antes de tudo isso. ninguém leu. - M.O.\"");
+    T2046Blank(v);
+    T2046Push(v, T2046_GRAY, 0, 0, "(Registro copiado para o diário de Elira: aba OCULTOS.)");
+}
+
 static void T2046BuildCurrentView(const GameState *g, Term2046View *v)
 {
     T2046ViewInit(v, T2046_VIEW_SIZE, T2046_VIEW_W);
     switch (g->term2046ViewKind)
     {
+        case TERM2046_VIEW_CRACHA:
+            T2046BuildCracha(v);
+            break;
         case TERM2046_VIEW_FILE:
             T2046BuildFile(g, v, g->term2046ViewA);
             break;
@@ -10636,6 +10666,8 @@ static const char *T2046ViewTitle(const GameState *g)
         case TERM2046_VIEW_VERIFY:
         case TERM2046_VIEW_VERIFY_NOTES:
             return "VERIFICAÇÃO DE INTEGRIDADE";
+        case TERM2046_VIEW_CRACHA:
+            return "ARQUIVO OCULTO: acesso_okafor.key  (crachá digital)";
         default:
             return "SESSÃO INICIADA";
     }
@@ -11228,6 +11260,32 @@ bool Terminal2046WantsTextInput(const GameState *game)
     return game->term2046State == TERM2046_STATE_EU_DECIDO;
 }
 
+/* Colecionavel oculto H: clicar no cracha "passa no leitor" e abre o arquivo oculto.
+   So funciona nos subestados de investigacao (sem avisos da Ariel, configuracao ou
+   frase final abertos). Nao e uma rodada: nao conta para o ciclo de sabotagem nem
+   altera influencia, anotacoes, vidas ou tempo. Retorna true se consumiu o clique. */
+static bool T2046TryCollectBadge(GameState *game)
+{
+    bool investigating = (game->term2046State == TERM2046_STATE_TERMINAL ||
+                          game->term2046State == TERM2046_STATE_ESCOLHE_ARQUIVO ||
+                          game->term2046State == TERM2046_STATE_ANOTAR ||
+                          game->term2046State == TERM2046_STATE_NOTAS);
+
+    if (game->hiddenFound[HIDDEN_2048] || !investigating || !Clicked(T2046BadgeRect())) return false;
+
+    game->term2046State = TERM2046_STATE_TERMINAL;
+    game->term2046ViewKind = TERM2046_VIEW_CRACHA;
+    game->term2046ViewA = 0;
+    game->term2046ViewB = 0;
+    game->term2046ViewFlag = false;
+    game->term2046Scroll = 0;
+
+    T2046Log(game, T2046_KIND_GOLD, "[leitor de crachá] M. Okafor - arquivo oculto montado: acesso_okafor.key");
+    T2046Log(game, T2046_KIND_RED, "A.R.1.3.L: \"Esse registro é antigo. Eu não preciso mais ser conferida.\"");
+    CollectHidden(game, HIDDEN_2048);
+    return true;
+}
+
 void UpdateTerminal2046(GameState *game)
 {
     Term2046Round round = {0};
@@ -11257,6 +11315,8 @@ void UpdateTerminal2046(GameState *game)
 
     /* Nos demais subestados os caracteres digitados nao sao usados */
     while (GetCharPressed() > 0) { }
+
+    if (T2046TryCollectBadge(game)) return;
 
     /* Rolagem do conteudo exibido (roda do mouse ou setas) */
     if (game->term2046State == TERM2046_STATE_TERMINAL)
@@ -11346,6 +11406,33 @@ static void T2046DrawBackdrop(const GameState *game, float time)
             DrawCircle(x + 30, y + 13, 2.5f, Fade(base, blink < -0.2f ? 0.75f : 0.18f));
             DrawRectangle(x + 44, y + 11, 30, 4, Fade(PANEL_LIGHT, 0.7f));
         }
+    }
+
+    /* Cracha digital de M. Okafor (colecionavel H): pendurado no rack, a parte de baixo
+       fica atras da barra do rodape. Some do cenario depois de lido no leitor. */
+    if (!game->hiddenFound[HIDDEN_2048])
+    {
+        Rectangle area = T2046BadgeRect();
+        Color strap = (Color){52, 66, 92, 255};
+
+        DrawLineEx((Vector2){279.0f, 576.0f}, (Vector2){285.0f, 612.0f}, 2.0f, strap);
+        DrawLineEx((Vector2){293.0f, 576.0f}, (Vector2){287.0f, 612.0f}, 2.0f, strap);
+        DrawRectangle(283, 609, 6, 7, (Color){120, 130, 145, 255});
+        DrawRectangleRounded((Rectangle){272.0f, 615.0f, 28.0f, 44.0f}, 0.15f, 4, (Color){30, 37, 50, 255});
+        DrawRectangleRoundedLinesEx((Rectangle){272.0f, 615.0f, 28.0f, 44.0f}, 0.15f, 4, 1.0f, (Color){70, 86, 110, 255});
+        DrawRectangle(273, 616, 26, 4, Fade(CYAN_COLOR, 0.45f));                  /* faixa de acesso */
+        DrawRectangle(276, 624, 9, 11, (Color){92, 104, 120, 255});               /* foto */
+        DrawCircle(280, 627, 2.2f, (Color){130, 140, 155, 255});
+        DrawRectangle(288, 625, 9, 2, Fade(CYAN_COLOR, 0.35f));                   /* tela e-ink */
+        DrawRectangle(288, 630, 7, 2, Fade(CYAN_COLOR, 0.25f));
+        DrawRectangle(276, 640, 6, 5, (Color){150, 128, 70, 255});                /* chip */
+
+        if (game->term2046State != TERM2046_STATE_FIM &&
+            CheckCollisionPointRec(GetVirtualMouse(), area))
+        {
+            DrawRectangleRoundedLinesEx((Rectangle){270.0f, 613.0f, 32.0f, 48.0f}, 0.15f, 4, 1.0f, Fade(CYAN_COLOR, 0.6f));
+        }
+        DrawHiddenGlint(area, 2.3f);
     }
 
     /* Linha de varredura sutil */
