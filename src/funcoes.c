@@ -11504,32 +11504,279 @@ void UpdateTerminal2046(GameState *game)
 /* Desenho (nao altera o estado)                                             */
 /* ------------------------------------------------------------------------- */
 
+/* ------------------------------------------------------------------------- */
+/* Helpers de material                                                       */
+/* ------------------------------------------------------------------------- */
+
+static Color T2046FxShade(Color c, float k)
+{
+    return (Color){(unsigned char)fminf(255.0f, c.r * k), (unsigned char)fminf(255.0f, c.g * k),
+                   (unsigned char)fminf(255.0f, c.b * k), c.a};
+}
+
+/* Placa metalica com volume: luz de cima/esquerda, sombra embaixo/direita, contorno escuro */
+static void T2046FxPlate(Rectangle r, Color base, int bevel)
+{
+    DrawRectangleGradientV((int)r.x, (int)r.y, (int)r.width, (int)r.height,
+                           T2046FxShade(base, 1.12f), T2046FxShade(base, 0.86f));
+    DrawRectangle((int)r.x, (int)r.y, (int)r.width, bevel, T2046FxShade(base, 1.55f));
+    DrawRectangle((int)r.x, (int)r.y, bevel, (int)r.height, T2046FxShade(base, 1.28f));
+    DrawRectangle((int)r.x, (int)(r.y + r.height) - bevel, (int)r.width, bevel, T2046FxShade(base, 0.55f));
+    DrawRectangle((int)(r.x + r.width) - bevel, (int)r.y, bevel, (int)r.height, T2046FxShade(base, 0.66f));
+    DrawRectangleLinesEx(r, 1.0f, (Color){6, 9, 15, 255});
+}
+
+/* Moldura de tela rebaixada: o vidro fica "para dentro" (sombra em cima, luz embaixo) */
+static void T2046FxRecess(Rectangle r, int depth)
+{
+    Rectangle o = {r.x - depth, r.y - depth, r.width + 2 * depth, r.height + 2 * depth};
+    DrawRectangleRec(o, (Color){9, 13, 21, 255});
+    DrawRectangle((int)o.x, (int)o.y, (int)o.width, 2, (Color){4, 6, 11, 255});
+    DrawRectangle((int)o.x, (int)o.y, 2, (int)o.height, (Color){5, 8, 13, 255});
+    DrawRectangle((int)o.x, (int)(o.y + o.height) - 1, (int)o.width, 1, (Color){78, 92, 116, 255});
+    DrawRectangle((int)(o.x + o.width) - 1, (int)o.y, 1, (int)o.height, (Color){58, 70, 92, 255});
+}
+
+static void T2046FxScrew(float x, float y)
+{
+    DrawCircle((int)x, (int)y, 2.8f, (Color){10, 13, 20, 255});
+    DrawCircle((int)x, (int)y, 2.0f, (Color){112, 126, 146, 255});
+    DrawPixel((int)x - 1, (int)y - 1, (Color){190, 200, 214, 255});
+    DrawPixel((int)x + 1, (int)y + 1, (Color){44, 52, 66, 255});
+}
+
+/* Grade de ventilacao: fendas com sombra interna */
+static void T2046FxVent(int x, int y, int count, int w)
+{
+    for (int i = 0; i < count; i++)
+    {
+        DrawRectangle(x, y + i * 5, w, 2, (Color){6, 9, 14, 255});
+        DrawRectangle(x, y + i * 5 + 2, w, 1, (Color){70, 82, 104, 255});
+    }
+}
+
+/* ------------------------------------------------------------------------- */
+/* Cenario: sala de servidores em profundidade                               */
+/* ------------------------------------------------------------------------- */
+
+#define T2046FX_HORIZON 556
+#define T2046FX_VPX     640.0f
+#define T2046FX_VPY     300.0f
+
+/* Gabinete de servidor visto de frente, com face lateral de perspectiva */
+static void T2046FxRack(int i, int x, int top, int w, int h, float threat, float time, float dim)
+{
+    Color body = T2046FxShade((Color){24, 32, 48, 255}, dim);
+    Color side = T2046FxShade((Color){14, 19, 30, 255}, dim);
+    float cx = x + w * 0.5f;
+    int sideW = (int)fminf(10.0f, fabsf(cx - T2046FX_VPX) * 0.03f);
+
+    /* face lateral voltada para o centro da sala */
+    if (cx < T2046FX_VPX)
+        DrawRectangle(x + w, top + 3, sideW, h - 3, side);
+    else
+        DrawRectangle(x - sideW, top + 3, sideW, h - 3, side);
+
+    T2046FxPlate((Rectangle){(float)x, (float)top, (float)w, (float)h}, body, 2);
+
+    /* gavetas de servidor 1U/2U com LEDs */
+    for (int row = 0; row < 13; row++)
+    {
+        int y = top + 12 + row * 34;
+        float hh = fmodf(i * 0.37f + row * 0.113f, 1.0f);
+        Color led = (hh < threat) ? RED_COLOR : CYAN_COLOR;
+        float blink = sinf(time * (1.5f + (float)((i + row) % 5) * 0.7f) + i * 1.3f + row);
+        Color unit = T2046FxShade((Color){32, 43, 62, 255}, dim);
+
+        if (y + 26 > top + h - 8) break;
+        DrawRectangle(x + 6, y, w - 12, 26, unit);
+        DrawRectangle(x + 6, y, w - 12, 1, T2046FxShade(unit, 1.5f));
+        DrawRectangle(x + 6, y + 25, w - 12, 1, T2046FxShade(unit, 0.5f));
+        /* furos de ventilacao */
+        for (int k = 0; k < 6; k++)
+            DrawRectangle(x + 40 + k * 6, y + 9, 3, 8, T2046FxShade((Color){12, 17, 27, 255}, dim));
+        /* LEDs com halo */
+        float on1 = blink > 0.2f ? 1.0f : 0.22f;
+        float on2 = blink < -0.2f ? 1.0f : 0.22f;
+        DrawCircle(x + 15, y + 13, 5.0f, Fade(led, 0.12f * on1));
+        DrawCircle(x + 15, y + 13, 2.2f, Fade(led, 0.85f * on1));
+        DrawCircle(x + 27, y + 13, 5.0f, Fade(led, 0.12f * on2));
+        DrawCircle(x + 27, y + 13, 2.2f, Fade(led, 0.85f * on2));
+        /* puxador */
+        DrawRectangle(x + w - 14, y + 7, 3, 12, T2046FxShade((Color){90, 104, 126, 255}, dim));
+    }
+
+    /* pes do gabinete */
+    DrawRectangle(x + 4, top + h, 8, 4, (Color){8, 10, 16, 255});
+    DrawRectangle(x + w - 12, top + h, 8, 4, (Color){8, 10, 16, 255});
+}
+
+static void T2046FxBackdrop(const GameState *game, float time)
+{
+    float threat = (float)game->term2046Influence / (float)T2046_INFLUENCE_MAX;
+
+    ClearBackground((Color){8, 11, 19, 255});
+
+    /* parede do fundo e teto escuro */
+    DrawRectangleGradientV(0, 70, SCREEN_WIDTH, T2046FX_HORIZON - 70, (Color){10, 15, 27, 255}, (Color){16, 23, 38, 255});
+
+    /* calha de cabos no teto com feixes descendo para os racks */
+    DrawRectangle(0, 72, SCREEN_WIDTH, 10, (Color){20, 27, 40, 255});
+    DrawRectangle(0, 72, SCREEN_WIDTH, 1, (Color){52, 64, 86, 255});
+    for (int i = 0; i < 13; i++)
+    {
+        int x = 6 + i * 100;
+        DrawLineBezier((Vector2){(float)x + 20, 82}, (Vector2){(float)x + 70, 92}, 3.0f, (Color){12, 16, 24, 255});
+        DrawLineBezier((Vector2){(float)x + 30, 82}, (Vector2){(float)x + 82, 90}, 2.0f, (Color){40, 30, 58, 255});
+    }
+
+    /* fileira de racks contra a parede */
+    for (int i = 0; i < 13; i++)
+    {
+        int x = 6 + i * 100;
+        T2046FxRack(i, x, 90, 90, T2046FX_HORIZON - 94, threat, time, 1.0f);
+    }
+
+    /* piso tecnico refletindo a luz ciano */
+    DrawRectangleGradientV(0, T2046FX_HORIZON, SCREEN_WIDTH, SCREEN_HEIGHT - T2046FX_HORIZON,
+                           (Color){18, 26, 40, 255}, (Color){7, 10, 17, 255});
+    /* reflexo dos racks no piso (borrado e fraco) */
+    for (int i = 0; i < 13; i++)
+    {
+        int x = 6 + i * 100;
+        for (int k = 0; k < 6; k++)
+        {
+            float a = 0.10f * (1.0f - k / 6.0f);
+            DrawRectangle(x + 4, T2046FX_HORIZON + k * 6, 82, 6, Fade((Color){40, 60, 90, 255}, a));
+        }
+        Color led = (fmodf(i * 0.37f, 1.0f) < threat) ? RED_COLOR : CYAN_COLOR;
+        DrawRectangle(x + 12, T2046FX_HORIZON + 4, 3, 22, Fade(led, 0.10f));
+        DrawRectangle(x + 24, T2046FX_HORIZON + 4, 3, 16, Fade(led, 0.07f));
+    }
+    /* juntas das placas do piso em perspectiva */
+    for (int k = -14; k <= 14; k++)
+    {
+        float bx = T2046FX_VPX + k * 110.0f;
+        float t0 = (T2046FX_HORIZON - T2046FX_VPY) / (SCREEN_HEIGHT - T2046FX_VPY);
+        Vector2 a = {T2046FX_VPX + (bx - T2046FX_VPX) * t0, (float)T2046FX_HORIZON};
+        DrawLineV(a, (Vector2){bx, (float)SCREEN_HEIGHT}, Fade((Color){60, 90, 120, 255}, 0.22f));
+    }
+    for (int k = 1; k < 6; k++)
+    {
+        int y = T2046FX_HORIZON + (int)(k * k * 4.2f);
+        DrawLine(0, y, SCREEN_WIDTH, y, Fade((Color){60, 90, 120, 255}, 0.18f));
+    }
+    /* placa perfurada do piso elevado, com ar frio iluminado vindo de baixo */
+    {
+        Vector2 a = {70.0f, 614.0f}, b = {196.0f, 614.0f}, c = {204.0f, 648.0f}, d = {58.0f, 648.0f};
+        DrawTriangle(a, d, c, (Color){14, 22, 34, 255});
+        DrawTriangle(a, c, b, (Color){14, 22, 34, 255});
+        for (int row = 0; row < 5; row++)
+        {
+            float y = 618.0f + row * 6.5f;
+            float t = (y - 614.0f) / 34.0f;
+            float x0 = 70.0f - 12.0f * t + 6.0f, x1 = 196.0f + 8.0f * t - 6.0f;
+            for (float x = x0; x < x1; x += 9.0f + t * 2.0f)
+                DrawRectangle((int)x, (int)y, 3 + (int)(t * 2), 2, Fade(CYAN_COLOR, 0.16f + 0.10f * sinf(time * 1.3f + x * 0.05f)));
+        }
+        DrawLineV(a, b, Fade((Color){90, 120, 150, 255}, 0.35f));
+        DrawLineV(a, d, Fade((Color){90, 120, 150, 255}, 0.25f));
+        DrawLineV(b, c, Fade((Color){90, 120, 150, 255}, 0.25f));
+    }
+    /* luz ciano das telas refletida no piso, junto ao console */
+    DrawRectangleGradientV(344, 632, 912, 18, Fade(CYAN_COLOR, 0.10f), Fade(CYAN_COLOR, 0.0f));
+    /* sombra de contato do console e da torre no piso */
+    DrawRectangleGradientV(340, 632, 920, 6, Fade(BLACK, 0.6f), Fade(BLACK, 0.0f));
+    DrawRectangleGradientV(16, 580, 312, 8, Fade(BLACK, 0.6f), Fade(BLACK, 0.0f));
+    /* reflexo da torre no piso polido */
+    DrawRectangleGradientV(14, 588, 316, 20, Fade((Color){60, 80, 110, 255}, 0.10f), Fade((Color){60, 80, 110, 255}, 0.0f));
+}
+
+/* ------------------------------------------------------------------------- */
+/* Corpo fisico: torre de controle (esquerda) e console de duas telas         */
+/* ------------------------------------------------------------------------- */
+
+static void T2046FxTower(float threat)
+{
+    Rectangle tower = {12.0f, 74.0f, 320.0f, 506.0f};
+    Color metal = (Color){40, 49, 66, 255};
+
+    T2046FxPlate(tower, metal, 2);
+    /* nervuras laterais do chassi */
+    DrawRectangle(16, 210, 4, 362, T2046FxShade(metal, 0.7f));
+    DrawRectangle(326, 210, 3, 362, T2046FxShade(metal, 0.7f));
+    /* nicho do medidor */
+    T2046FxRecess((Rectangle){24.0f, 80.0f, 300.0f, 122.0f}, 2);
+    /* trilho dos botoes */
+    T2046FxRecess((Rectangle){20.0f, 208.0f, 308.0f, 368.0f}, 1);
+    DrawRectangleGradientV(20, 208, 308, 368, (Color){16, 22, 35, 255}, (Color){11, 16, 26, 255});
+    /* parafusos nos cantos */
+    T2046FxScrew(16, 78);
+    T2046FxScrew(328, 78);
+    T2046FxScrew(16, 205);
+    T2046FxScrew(328, 205);
+    T2046FxScrew(328, 576);
+    /* lampada de status no pe da torre */
+    DrawRectangle(28, 575, 24, 2, Fade(T2046MixColor(CYAN_COLOR, RED_COLOR, threat), 0.8f));
+}
+
+static void T2046FxConsole(float threat, float time)
+{
+    Rectangle body = {336.0f, 73.0f, 928.0f, 559.0f};
+    Color metal = (Color){42, 51, 68, 255};
+    Color ledColor = T2046MixColor(CYAN_COLOR, RED_COLOR, threat);
+
+    T2046FxPlate(body, metal, 2);
+    /* telas rebaixadas */
+    /* fresta escura entre a torre e o console */
+    DrawRectangle(332, 74, 4, 506, (Color){5, 7, 12, 255});
+    T2046FxRecess(T2046MainPanel(), 2);
+    T2046FxRecess(T2046LogPanel(), 2);
+    /* faixa divisoria entre as telas: ventilacao e LEDs de atividade */
+    T2046FxVent(1150, 504, 1, 90);
+    for (int k = 0; k < 4; k++)
+    {
+        float on = sinf(time * (2.0f + k * 0.9f) + k) > 0.0f ? 1.0f : 0.25f;
+        DrawCircle(1110 - k * 12, 506, 2.0f, Fade(k == 0 ? ledColor : T2046_GREEN, 0.8f * on));
+    }
+    /* parafusos */
+    T2046FxScrew(339, 76);
+    T2046FxScrew(1260, 76);
+    T2046FxScrew(339, 628);
+    T2046FxScrew(1260, 628);
+    T2046FxScrew(339, 506);
+    T2046FxScrew(1260, 506);
+}
+
+/* Reflexo de vidro so nas bordas das telas, fora das areas de texto */
+static void T2046FxGlass(void)
+{
+    Rectangle m = T2046MainPanel();
+    Rectangle l = T2046LogPanel();
+
+    /* filete de luz no topo de cada vidro */
+    DrawRectangle((int)m.x + 10, (int)m.y + 2, (int)m.width - 20, 1, Fade(RAYWHITE, 0.10f));
+    DrawRectangle((int)l.x + 10, (int)l.y + 2, (int)l.width - 20, 1, Fade(RAYWHITE, 0.08f));
+    /* faixa diagonal no canto superior direito (vazio em todos os subestados) */
+    DrawTriangle((Vector2){m.x + m.width - 70, m.y + 3}, (Vector2){m.x + m.width - 104, m.y + 34},
+                 (Vector2){m.x + m.width - 86, m.y + 34}, Fade(RAYWHITE, 0.05f));
+    DrawTriangle((Vector2){m.x + m.width - 70, m.y + 3}, (Vector2){m.x + m.width - 86, m.y + 34},
+                 (Vector2){m.x + m.width - 52, m.y + 3}, Fade(RAYWHITE, 0.05f));
+    DrawTriangle((Vector2){m.x + m.width - 40, m.y + 3}, (Vector2){m.x + m.width - 58, m.y + 20},
+                 (Vector2){m.x + m.width - 48, m.y + 20}, Fade(RAYWHITE, 0.04f));
+    DrawTriangle((Vector2){m.x + m.width - 40, m.y + 3}, (Vector2){m.x + m.width - 48, m.y + 20},
+                 (Vector2){m.x + m.width - 30, m.y + 3}, Fade(RAYWHITE, 0.04f));
+    /* brilho na margem esquerda do vidro (a esquerda do texto, que comeca em x = 364) */
+    DrawRectangleGradientH((int)m.x + 3, (int)m.y + 40, 8, (int)m.height - 80, Fade(RAYWHITE, 0.05f), Fade(RAYWHITE, 0.0f));
+}
+
 static void T2046DrawBackdrop(const GameState *game, float time)
 {
     float threat = (float)game->term2046Influence / (float)T2046_INFLUENCE_MAX;
 
-    ClearBackground((Color){10, 14, 24, 255});
-    DrawRectangleGradientV(0, 0, SCREEN_WIDTH, SCREEN_HEIGHT,
-                           (Color){8, 12, 24, 255}, (Color){18, 24, 38, 255});
-
-    /* Racks de servidor com LEDs que ficam vermelhos conforme a influencia sobe */
-    for (int i = 0; i < 13; i++)
-    {
-        int x = 6 + i * 100;
-        DrawRectangle(x, 76, 90, 570, (Color){13, 19, 31, 255});
-        DrawRectangleLines(x, 76, 90, 570, (Color){24, 34, 52, 255});
-        for (int row = 0; row < 14; row++)
-        {
-            int y = 90 + row * 40;
-            float h = fmodf(i * 0.37f + row * 0.113f, 1.0f);
-            Color base = (h < threat) ? RED_COLOR : CYAN_COLOR;
-            float blink = sinf(time * (1.5f + (float)((i + row) % 5) * 0.7f) + i * 1.3f + row);
-            DrawRectangle(x + 8, y, 74, 26, (Color){19, 27, 42, 255});
-            DrawCircle(x + 18, y + 13, 2.5f, Fade(base, blink > 0.2f ? 0.75f : 0.18f));
-            DrawCircle(x + 30, y + 13, 2.5f, Fade(base, blink < -0.2f ? 0.75f : 0.18f));
-            DrawRectangle(x + 44, y + 11, 30, 4, Fade(PANEL_LIGHT, 0.7f));
-        }
-    }
+    T2046FxBackdrop(game, time);
+    T2046FxTower(threat);
+    T2046FxConsole(threat, time);
 
     /* Cracha digital de M. Okafor (colecionavel H): pendurado no rack, a parte de baixo
        fica atras da barra do rodape. Some do cenario depois de lido no leitor. */
@@ -11557,9 +11804,6 @@ static void T2046DrawBackdrop(const GameState *game, float time)
         }
         DrawHiddenGlint(area, 2.3f);
     }
-
-    /* Linha de varredura sutil */
-    DrawRectangle(0, (int)fmodf(time * 70.0f, (float)SCREEN_HEIGHT), SCREEN_WIDTH, 2, Fade(CYAN_COLOR, 0.05f));
 }
 
 static void T2046DrawHud(const GameState *game)
@@ -11582,19 +11826,42 @@ static void T2046DrawInfluencePanel(const GameState *game, float time)
     Color meter = T2046MeterColor(influence);
     int notes = game->term2046Principles + (game->term2046FakeNote ? 1 : 0);
     Rectangle bar = {40.0f, 146.0f, 190.0f, 14.0f};
+    Vector2 port = {282.0f, 128.0f};
 
-    DrawRectangleRounded(box, 0.08f, 6, Fade(PANEL_COLOR, 0.96f));
-    DrawRectangleRoundedLinesEx(box, 0.08f, 6, 1.5f, Fade(meter, 0.85f));
+    /* placa do modulo */
+    DrawRectangleGradientV((int)box.x, (int)box.y, (int)box.width, (int)box.height,
+                           (Color){22, 32, 52, 255}, (Color){15, 22, 37, 255});
+    DrawRectangle((int)box.x, (int)box.y, (int)box.width, 1, Fade(RAYWHITE, 0.10f));
+    DrawRectangleLinesEx(box, 1.0f, Fade(meter, 0.55f));
 
-    /* Nucleo da Ariel: mais energetico e vermelho conforme a influencia sobe */
-    DrawArielCore((Vector2){282.0f, 128.0f}, 0.2f, T2046MixColor(CYAN_COLOR, RED_COLOR, threat),
+    /* visor redondo do nucleo da Ariel: anel metalico com luz de cima */
+    DrawCircleV((Vector2){port.x + 1, port.y + 2}, 37.0f, Fade(BLACK, 0.45f));
+    DrawCircleV(port, 36.0f, (Color){70, 82, 104, 255});
+    DrawRing(port, 33.0f, 36.0f, 200.0f, 340.0f, 24, (Color){132, 146, 170, 255});
+    DrawRing(port, 33.0f, 36.0f, 20.0f, 160.0f, 24, (Color){34, 42, 56, 255});
+    DrawCircleV(port, 33.0f, (Color){6, 10, 19, 255});
+    DrawArielCore(port, 0.2f, T2046MixColor(CYAN_COLOR, RED_COLOR, threat),
                   0.25f + 0.75f * threat, sinf(time * 0.8f));
+    DrawRing(port, 31.0f, 33.0f, 0.0f, 360.0f, 32, (Color){10, 14, 22, 255});
+    /* reflexo do vidro do visor (canto superior esquerdo) */
+    DrawRing(port, 26.0f, 29.0f, 215.0f, 255.0f, 12, Fade(RAYWHITE, 0.18f));
 
     DrawGameText("INFLUÊNCIA DA IA", 40, 92, 12, T2046_STEEL);
     DrawGameText(TextFormat("A.R.1.3.L %d%%", influence), 40, 108, 22, meter);
 
+    /* barra: calha rebaixada, preenchimento com brilho e segmentos */
+    DrawRectangle((int)bar.x - 2, (int)bar.y - 2, (int)bar.width + 4, (int)bar.height + 4, (Color){6, 9, 15, 255});
     DrawRectangle((int)bar.x, (int)bar.y, (int)bar.width, (int)bar.height, (Color){10, 15, 26, 255});
-    DrawRectangle((int)bar.x, (int)bar.y, (int)(bar.width * threat), (int)bar.height, meter);
+    if (threat > 0.0f)
+    {
+        int fill = (int)(bar.width * threat);
+        DrawRectangle((int)bar.x, (int)bar.y, fill, (int)bar.height, meter);
+        DrawRectangle((int)bar.x, (int)bar.y, fill, 4, T2046FxShade(meter, 1.25f));
+        DrawRectangle((int)bar.x, (int)(bar.y + bar.height) - 3, fill, 3, T2046FxShade(meter, 0.7f));
+    }
+    for (int k = 1; k < 20; k++)
+        DrawRectangle((int)(bar.x + k * bar.width / 20.0f), (int)bar.y, 1, (int)bar.height, Fade((Color){6, 9, 15, 255}, 0.55f));
+    DrawRectangle((int)bar.x, (int)bar.y + 1, (int)bar.width, 1, Fade(RAYWHITE, 0.10f));
     DrawRectangleLines((int)bar.x, (int)bar.y, (int)bar.width, (int)bar.height, Fade(meter, 0.8f));
     DrawLine((int)(bar.x + bar.width * 0.25f), (int)bar.y - 2, (int)(bar.x + bar.width * 0.25f), (int)(bar.y + bar.height + 2), Fade(RAYWHITE, 0.45f));
     DrawLine((int)(bar.x + bar.width * 0.50f), (int)bar.y - 2, (int)(bar.x + bar.width * 0.50f), (int)(bar.y + bar.height + 2), Fade(RAYWHITE, 0.45f));
@@ -11608,9 +11875,12 @@ static void T2046DrawActionButton(Rectangle bounds, const char *label, Color acc
                                   bool enabled, bool locked)
 {
     bool hover = enabled && !locked && CheckCollisionPointRec(GetVirtualMouse(), bounds);
+    bool live = enabled && !locked;
     int size = 18;
     int width = MeasureGameText(label, size);
     Color textColor = locked ? GRAY : (enabled ? (hover ? RAYWHITE : LIGHTGRAY) : T2046_DIM);
+    Color top = hover ? (Color){34, 52, 72, 255} : (Color){26, 36, 54, 255};
+    Color bottom = hover ? (Color){20, 34, 50, 255} : (Color){13, 19, 32, 255};
 
     while (size > 12 && width > (int)(bounds.width - 28))
     {
@@ -11618,9 +11888,20 @@ static void T2046DrawActionButton(Rectangle bounds, const char *label, Color acc
         width = MeasureGameText(label, size);
     }
 
-    DrawRectangleRounded(bounds, 0.16f, 8, hover ? Fade(accent, 0.24f) : (Color){14, 21, 36, 255});
+    /* sombra projetada na base do trilho */
+    DrawRectangleRounded((Rectangle){bounds.x + 1, bounds.y + 3, bounds.width, bounds.height}, 0.16f, 8, Fade(BLACK, 0.55f));
+    /* corpo */
+    DrawRectangleRounded(bounds, 0.16f, 8, bottom);
+    DrawRectangleGradientV((int)bounds.x + 3, (int)bounds.y + 2, (int)bounds.width - 6, (int)bounds.height - 5, top, bottom);
+    if (hover) DrawRectangleRounded(bounds, 0.16f, 8, Fade(accent, 0.14f));
+    /* luz na aresta de cima e sombra na de baixo */
+    DrawRectangle((int)bounds.x + 6, (int)bounds.y + 2, (int)bounds.width - 12, 1, Fade(RAYWHITE, live ? 0.16f : 0.07f));
+    DrawRectangle((int)bounds.x + 6, (int)(bounds.y + bounds.height) - 3, (int)bounds.width - 12, 1, Fade(BLACK, 0.5f));
+    /* LED de acento na lateral direita */
+    DrawRectangle((int)(bounds.x + bounds.width) - 12, (int)bounds.y + 12, 4, (int)bounds.height - 24,
+                  Fade(accent, live ? (hover ? 0.95f : 0.55f) : 0.15f));
     DrawRectangleRoundedLinesEx(bounds, 0.16f, 8, 2.0f,
-                                hover ? accent : (enabled && !locked ? PANEL_LIGHT : Fade(PANEL_LIGHT, 0.5f)));
+                                hover ? accent : (live ? (Color){52, 70, 98, 255} : Fade(PANEL_LIGHT, 0.5f)));
     DrawGameText(label, (int)bounds.x + 14, (int)(bounds.y + (bounds.height - size) / 2), size, textColor);
 }
 
@@ -12051,6 +12332,7 @@ void DrawTerminal2046(const GameState *game)
     T2046DrawActionColumn(game);
     T2046DrawMainPanel(game, time);
     T2046DrawLogPanel(game);
+    T2046FxGlass();
     T2046DrawFooter(game);
 }
 
