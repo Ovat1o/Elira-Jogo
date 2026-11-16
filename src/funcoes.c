@@ -8474,6 +8474,9 @@ static const Rectangle R26_BACK2008_BTN = {610, 664, 105, 38};
 static const Rectangle R26_BACK1990_BTN = {725, 664, 105, 38};
 static const Rectangle R26_JOURNAL_BTN = {1040, 658, 215, 54};
 
+/* Colecionavel oculto G (smartphone): no chao, sob o suporte de amostras */
+static const Rectangle R26_PHONE_REC = {376, 604, 60, 34};
+
 static Rectangle R26SampleRec(int i)
 {
     return (Rectangle){32.0f + i * 110.0f, 430.0f, 100.0f, 165.0f};
@@ -9366,6 +9369,23 @@ static void R26DrawProcessingModal(const GameState *game)
     DrawGameText(TextFormat("%d%%", (int)(pct * 100)), 615, 385, 18, RAYWHITE);
 }
 
+/* Smartphone esquecido, virado para baixo; a tela vaza um brilho fraco pela borda */
+static void R26DrawHiddenPhone(const GameState *game, float time)
+{
+    if (game->hiddenFound[HIDDEN_2026]) return;
+    Rectangle body = {386, 614, 40, 18};
+    float glow = 0.18f + 0.12f * (0.5f + 0.5f * sinf(time * 1.3f));
+    DrawRectangle((int)body.x + 3, (int)body.y + 4, (int)body.width, (int)body.height, Fade(BLACK, 0.45f));
+    DrawRectangleRounded((Rectangle){body.x - 2, body.y - 2, body.width + 4, body.height + 4}, 0.4f, 6, Fade((Color){120, 200, 255, 255}, glow));
+    DrawRectangleRounded(body, 0.35f, 6, (Color){32, 36, 44, 255});
+    DrawRectangleRoundedLinesEx(body, 0.35f, 6, 1.0f, (Color){70, 78, 92, 255});
+    /* Modulo de camera na traseira */
+    DrawRectangleRounded((Rectangle){body.x + 4, body.y + 3, 10, 10}, 0.3f, 4, (Color){22, 25, 32, 255});
+    DrawCircle((int)body.x + 7, (int)body.y + 6, 2, (Color){60, 70, 90, 255});
+    DrawCircle((int)body.x + 11, (int)body.y + 10, 2, (Color){60, 70, 90, 255});
+    DrawHiddenGlint(R26_PHONE_REC, 2.3f);
+}
+
 void DrawRoom2026(const GameState *game)
 {
     float time = (float)GetTime();
@@ -9377,6 +9397,7 @@ void DrawRoom2026(const GameState *game)
     R26DrawManual(game, time);
     R26DrawAnalyzer(game, time);
     R26DrawSamples(game);
+    R26DrawHiddenPhone(game, time);
     R26DrawReactor(game, time, rec, conf);
     R26DrawMonitor(game, rec, conf);
     R26DrawWeightsBox(game);
@@ -9698,6 +9719,12 @@ void UpdateRoom2026(GameState *game)
     }
 
     /* 6. Exploracao da sala */
+    /* Oculto G: so com a sala livre (sem modal/diario); nao mexe no puzzle, vidas ou prazo */
+    if (!game->hiddenFound[HIDDEN_2026] && Clicked(R26_PHONE_REC))
+    {
+        CollectHidden(game, HIDDEN_2026);
+        return;
+    }
     if (IsKeyPressed(KEY_D) || Clicked(R26_JOURNAL_BTN))
     {
         game->journalOpen = true;
