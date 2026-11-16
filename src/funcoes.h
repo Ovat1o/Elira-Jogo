@@ -96,7 +96,8 @@ typedef enum Term2046ViewKind
     TERM2046_VIEW_FILE,
     TERM2046_VIEW_COMPARE,
     TERM2046_VIEW_VERIFY,
-    TERM2046_VIEW_VERIFY_NOTES
+    TERM2046_VIEW_VERIFY_NOTES,
+    TERM2046_VIEW_CRACHA            /* arquivo oculto do cracha de M. Okafor (colecionavel H) */
 } Term2046ViewKind;
 
 typedef enum Term2046Sabotage
