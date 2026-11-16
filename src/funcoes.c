@@ -6640,6 +6640,28 @@ void DrawRoom2008(const GameState *game)
     DrawEllipse(209, 432, 8, 20, (Color){82, 152, 90, 255});
     DrawEllipse(224, 434, 9, 19, (Color){54, 118, 66, 255});
 
+    /* Colecionavel oculto (F): celular de flip esquecido dentro do vaso, entre
+       as folhas, com o LED de SMS piscando fraco. Some depois de coletado. */
+    if (!game->hiddenFound[HIDDEN_2008])
+    {
+        Rectangle flipPhoneRec = {221, 442, 22, 30}; /* sincronizado com UpdateRoom2008 */
+        /* Corpo fechado do flip, inclinado e enterrado na terra do vaso */
+        DrawRectanglePro((Rectangle){231, 458, 11, 20}, (Vector2){5.5f, 10.0f}, 14.0f, (Color){58, 62, 70, 255});
+        DrawRectanglePro((Rectangle){231, 452, 11, 3}, (Vector2){5.5f, 1.5f}, 14.0f, (Color){120, 126, 136, 255});
+        /* Visor externo pequeno e antena curta */
+        DrawRectanglePro((Rectangle){230, 455, 6, 5}, (Vector2){3.0f, 2.5f}, 14.0f, (Color){30, 40, 52, 255});
+        DrawLineEx((Vector2){236, 449}, (Vector2){238, 444}, 2.0f, (Color){44, 48, 54, 255});
+        /* LED verde de SMS nao lido: pulso lento e fraco */
+        float smsPulse = 0.5f + 0.5f * sinf(time * 2.2f);
+        DrawCircle(233, 461, 1.6f, Fade((Color){70, 235, 110, 255}, 0.18f + 0.42f * smsPulse));
+        /* Uma folha caida por cima encobre parte do aparelho */
+        DrawEllipse(225, 458, 6, 10, (Color){48, 108, 60, 255});
+        DrawHiddenGlint(flipPhoneRec, 1.3f);
+    }
+    /* Borda do vaso redesenhada para que o celular pareca estar dentro dele */
+    DrawRectangleRounded((Rectangle){193, 464, 46, 8}, 0.3f, 4, (Color){238, 233, 224, 255});
+    DrawRectangleLinesEx((Rectangle){193, 464, 46, 8}, 1.0f, (Color){168, 160, 148, 255});
+
     /* ===================================================================== */
     /* 3. JANELA PANORAMICA EMPRESARIAL (SKYLINE DIURNO/ENTARDECER 2008)     */
     /* ===================================================================== */
@@ -7293,7 +7315,14 @@ void UpdateRoom2008(GameState *game)
         return;
     }
 
-    if (Clicked(monitorRec))
+    /* Celular de flip escondido no vaso (sincronizado com DrawRoom2008) */
+    Rectangle flipPhoneRec  = {221, 442, 22, 30};
+
+    if (!game->hiddenFound[HIDDEN_2008] && Clicked(flipPhoneRec))
+    {
+        CollectHidden(game, HIDDEN_2008);
+    }
+    else if (Clicked(monitorRec))
     {
         game->screen = SCREEN_PUZZLE_2008;
     }
