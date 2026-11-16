@@ -14197,8 +14197,8 @@ void UpdateFinalDialogue(GameState *game)
             {
                 int slot = (game->finalStage == FINAL_Q1) ? 0 : (game->finalStage == FINAL_Q2 ? 1 : 2);
                 game->finalChoice[slot] = i;
-                /* A resposta 2 das duas perguntas demonstra compreensao do problema */
-                if (slot < 2 && i == 1) game->finalPoints++;
+                /* A resposta 2 (ou a dourada) das duas perguntas demonstra compreensao do problema */
+                if (slot < 2 && (i == 1 || i == FINAL_GOLDEN_CHOICE)) game->finalPoints++;
                 AdvanceFinalStage(game);
                 return;
             }
