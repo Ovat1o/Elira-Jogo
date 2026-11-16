@@ -8615,73 +8615,314 @@ void DrawHudRoom2026(const GameState *game)
 /* ------------------------------------------------------------------------- */
 /* Cenario                                                                   */
 /* ------------------------------------------------------------------------- */
-static void R26DrawBackdrop(float time)
+/* ------------------------------------------------------------------------- */
+/* Helpers de desenho do cenario (prefixo R26V)                              */
+/* ------------------------------------------------------------------------- */
+static Color R26VShade(Color c, float k)
 {
-    ClearBackground((Color){16, 22, 32, 255});
-    DrawRectangleGradientV(0, 70, SCREEN_WIDTH, 400, (Color){10, 15, 24, 255}, (Color){20, 28, 42, 255});
-    DrawRectangleGradientV(0, 470, SCREEN_WIDTH, 178, (Color){22, 30, 44, 255}, (Color){12, 18, 28, 255});
+    return (Color){(unsigned char)fminf(255.0f, c.r * k), (unsigned char)fminf(255.0f, c.g * k),
+                   (unsigned char)fminf(255.0f, c.b * k), c.a};
+}
 
-    Vector2 vp = {640, 470};
-    for (int x = -400; x <= SCREEN_WIDTH + 400; x += 90)
-    {
-        Vector2 bottom = {(float)x, 648.0f};
-        Vector2 top = {vp.x + (bottom.x - vp.x) * 0.22f, 470.0f};
-        DrawLineV(top, bottom, Fade(CYAN_COLOR, 0.07f));
-    }
-    for (int k = 0; k < 7; k++)
-    {
-        float yy = 470.0f + k * k * 3.6f;
-        DrawLine(0, (int)yy, SCREEN_WIDTH, (int)yy, Fade(CYAN_COLOR, 0.04f + k * 0.01f));
-    }
-    DrawLine(0, 470, SCREEN_WIDTH, 470, Fade(CYAN_COLOR, 0.22f));
+/* Bloco com volume: luz no topo/esquerda, sombra embaixo/direita, contorno escuro */
+static void R26VBevel(Rectangle r, Color base, float t)
+{
+    DrawRectangleRec(r, base);
+    DrawRectangle((int)r.x, (int)r.y, (int)r.width, (int)t, R26VShade(base, 1.30f));
+    DrawRectangle((int)r.x, (int)r.y, (int)t, (int)r.height, R26VShade(base, 1.15f));
+    DrawRectangle((int)r.x, (int)(r.y + r.height - t), (int)r.width, (int)t, R26VShade(base, 0.62f));
+    DrawRectangle((int)(r.x + r.width - t), (int)r.y, (int)t, (int)r.height, R26VShade(base, 0.74f));
+    DrawRectangleLinesEx(r, 1, R26VShade(base, 0.38f));
+}
 
-    /* Tubulacao de resfriamento no teto */
-    DrawRectangle(0, 72, SCREEN_WIDTH, 10, (Color){28, 38, 54, 255});
-    DrawRectangle(0, 75, SCREEN_WIDTH, 4, Fade(CYAN_COLOR, 0.35f));
+/* Rebaixo (tela/janela embutida): sombra no topo/esquerda, luz embaixo/direita */
+static void R26VInset(Rectangle r, Color base, float t)
+{
+    DrawRectangleRec(r, base);
+    DrawRectangle((int)r.x, (int)r.y, (int)r.width, (int)t, R26VShade(base, 0.45f));
+    DrawRectangle((int)r.x, (int)r.y, (int)t, (int)r.height, R26VShade(base, 0.55f));
+    DrawRectangle((int)r.x, (int)(r.y + r.height - 1), (int)r.width, 1, R26VShade(base, 1.9f));
+    DrawRectangle((int)(r.x + r.width - 1), (int)r.y, 1, (int)r.height, R26VShade(base, 1.6f));
+}
 
-    /* Particulas de vapor em volta da camara */
-    for (int p = 0; p < 20; p++)
+static void R26VScrew(float x, float y)
+{
+    DrawCircle((int)x, (int)y, 2.6f, (Color){22, 28, 32, 255});
+    DrawCircle((int)x, (int)y, 1.9f, (Color){128, 142, 150, 255});
+    DrawPixel((int)x - 1, (int)y - 1, (Color){215, 225, 230, 255});
+}
+
+static void R26VShadow(Rectangle r, float dx, float dy, float alpha)
+{
+    DrawRectangle((int)(r.x + dx), (int)(r.y + dy), (int)r.width, (int)r.height, Fade(BLACK, alpha));
+}
+
+/* Triangulo sempre no sentido exigido pela raylib (corrige a ordem dos vertices) */
+static void R26VTri(Vector2 a, Vector2 b, Vector2 c, Color col)
+{
+    float cross = (b.x - a.x) * (c.y - a.y) - (b.y - a.y) * (c.x - a.x);
+    if (cross > 0.0f) DrawTriangle(a, c, b, col);
+    else DrawTriangle(a, b, c, col);
+}
+
+/* Reflexo diagonal de vidro/tela, recortado dentro do retangulo */
+static void R26VGlare(Rectangle r, float alpha)
+{
+    BeginScissorMode((int)r.x, (int)r.y, (int)r.width, (int)r.height);
+    float w = r.height * 0.9f;
+    DrawLineEx((Vector2){r.x + r.width * 0.55f, r.y - 4}, (Vector2){r.x + r.width * 0.55f - w, r.y + r.height + 4}, 10.0f, Fade(WHITE, alpha));
+    DrawLineEx((Vector2){r.x + r.width * 0.55f + 16, r.y - 4}, (Vector2){r.x + r.width * 0.55f + 16 - w, r.y + r.height + 4}, 3.0f, Fade(WHITE, alpha * 0.8f));
+    EndScissorMode();
+}
+
+/* ------------------------------------------------------------------------- */
+/* Ambiente: parede, teto com luminarias, piso epoxi, tubulacao e prateleira */
+/* ------------------------------------------------------------------------- */
+static const Color R26V_WALL_TOP = {28, 44, 52, 255};
+static const Color R26V_WALL_MID = {42, 63, 72, 255};
+static const Color R26V_WALL_LOW = {35, 54, 62, 255};
+static const Color R26V_STEEL = {84, 100, 110, 255};
+
+static void R26VDrawPipeV(float x, float y0, float y1, float w)
+{
+    Color base = (Color){58, 72, 80, 255};
+    DrawRectangle((int)x, (int)y0, (int)w, (int)(y1 - y0), base);
+    DrawRectangle((int)x + 2, (int)y0, 2, (int)(y1 - y0), R26VShade(base, 1.6f));
+    DrawRectangle((int)(x + w - 3), (int)y0, 3, (int)(y1 - y0), R26VShade(base, 0.55f));
+    for (float y = y0 + 30; y < y1 - 10; y += 110)
     {
-        float px = 500.0f + fmodf(p * 57.0f, 280.0f);
-        float py = 440.0f - fmodf(time * (16.0f + (p % 4) * 7.0f) + p * 41.0f, 330.0f);
-        DrawCircle((int)px, (int)py, 2.2f, Fade(CYAN_COLOR, 0.10f + 0.07f * sinf(time * 2.0f + p)));
+        DrawRectangle((int)x - 2, (int)y, (int)w + 4, 7, (Color){40, 50, 56, 255});
+        DrawRectangle((int)x - 2, (int)y, (int)w + 4, 2, (Color){96, 112, 120, 255});
     }
 }
 
-static void R26DrawBoard(const GameState *game)
+static void R26VDrawBackdrop(float time)
+{
+    ClearBackground((Color){16, 24, 30, 255});
+
+    /* Parede em placas de laboratorio */
+    DrawRectangleGradientV(0, 84, SCREEN_WIDTH, 216, R26V_WALL_TOP, R26V_WALL_MID);
+    DrawRectangleGradientV(0, 300, SCREEN_WIDTH, 156, R26V_WALL_MID, R26V_WALL_LOW);
+    for (int x = 0; x < SCREEN_WIDTH; x += 160)
+    {
+        DrawRectangle(x, 90, 1, 366, Fade(BLACK, 0.35f));
+        DrawRectangle(x + 1, 90, 1, 366, Fade(WHITE, 0.05f));
+    }
+    DrawRectangle(0, 300, SCREEN_WIDTH, 1, Fade(BLACK, 0.35f));
+    DrawRectangle(0, 301, SCREEN_WIDTH, 1, Fade(WHITE, 0.05f));
+
+    /* Teto com luminarias de LED e sanca de neon azul-petroleo */
+    DrawRectangle(0, 70, SCREEN_WIDTH, 14, (Color){18, 26, 32, 255});
+    DrawRectangle(0, 83, SCREEN_WIDTH, 1, Fade(BLACK, 0.6f));
+    float flick = 0.96f + 0.04f * sinf(time * 37.0f);
+    const int lampX[4] = {110, 400, 860, 1110};
+    for (int i = 0; i < 4; i++)
+    {
+        float lx = (float)lampX[i];
+        R26VTri((Vector2){lx + 10, 84}, (Vector2){lx - 50, 300}, (Vector2){lx + 170, 300}, Fade((Color){200, 240, 255, 255}, 0.035f));
+        R26VTri((Vector2){lx + 150, 84}, (Vector2){lx + 10, 84}, (Vector2){lx + 170, 300}, Fade((Color){200, 240, 255, 255}, 0.035f));
+        DrawRectangle((int)lx, 74, 160, 8, (Color){60, 74, 82, 255});
+        DrawRectangle((int)lx + 3, 76, 154, 5, Fade((Color){225, 248, 255, 255}, flick));
+        DrawRectangle((int)lx + 3, 81, 154, 1, Fade((Color){120, 220, 235, 255}, 0.8f));
+    }
+    DrawRectangle(0, 86, SCREEN_WIDTH, 3, Fade((Color){60, 210, 220, 255}, 0.45f));
+    DrawRectangle(0, 89, SCREEN_WIDTH, 6, Fade((Color){60, 210, 220, 255}, 0.08f));
+
+    /* Rodape tecnico */
+    DrawRectangle(0, 452, SCREEN_WIDTH, 18, (Color){22, 32, 38, 255});
+    DrawRectangle(0, 452, SCREEN_WIDTH, 2, (Color){74, 92, 100, 255});
+    DrawRectangle(0, 468, SCREEN_WIDTH, 2, Fade((Color){60, 210, 220, 255}, 0.35f));
+
+    /* Piso epoxi com juntas em perspectiva e brilho */
+    DrawRectangleGradientV(0, 470, SCREEN_WIDTH, 178, (Color){34, 50, 58, 255}, (Color){16, 24, 30, 255});
+    Vector2 vp = {640, 300};
+    for (int x = -560; x <= SCREEN_WIDTH + 560; x += 120)
+    {
+        Vector2 bottom = {(float)x, 648.0f};
+        float k = (470.0f - vp.y) / (648.0f - vp.y);
+        Vector2 top = {vp.x + (bottom.x - vp.x) * k, 470.0f};
+        DrawLineV(top, bottom, Fade(BLACK, 0.30f));
+    }
+    for (int k = 0; k < 6; k++)
+    {
+        float yy = 470.0f + 6.0f + k * k * 5.2f + k * 6.0f;
+        DrawLine(0, (int)yy, SCREEN_WIDTH, (int)yy, Fade(BLACK, 0.22f));
+        DrawLine(0, (int)yy + 1, SCREEN_WIDTH, (int)yy + 1, Fade(WHITE, 0.03f));
+    }
+    /* Reflexo das luminarias no piso */
+    for (int i = 0; i < 4; i++)
+    {
+        DrawRectangleGradientV(lampX[i] + 20, 474, 120, 60, Fade((Color){200, 240, 255, 255}, 0.07f), Fade((Color){200, 240, 255, 255}, 0.0f));
+    }
+
+    /* Tubulacoes de servico nas bordas e entre camara e monitor */
+    R26VDrawPipeV(6, 84, 452, 14);
+    R26VDrawPipeV(806, 84, 452, 14);
+    R26VDrawPipeV(1258, 84, 452, 14);
+}
+
+/* Prateleira de reagentes na parede (entre quadro de avisos e camara) */
+static void R26VFlask(float cx, float baseY, float w, float h, Color liquid)
+{
+    Color glass = Fade((Color){200, 235, 245, 255}, 0.22f);
+    float neckW = w * 0.28f;
+    float neckH = h * 0.35f;
+    /* Erlenmeyer: neck + corpo conico */
+    DrawRectangle((int)(cx - neckW / 2), (int)(baseY - h), (int)neckW, (int)neckH, glass);
+    R26VTri((Vector2){cx - neckW / 2, baseY - h + neckH}, (Vector2){cx - w / 2, baseY}, (Vector2){cx + w / 2, baseY}, glass);
+    R26VTri((Vector2){cx + neckW / 2, baseY - h + neckH}, (Vector2){cx - neckW / 2, baseY - h + neckH}, (Vector2){cx + w / 2, baseY}, glass);
+    float lh = h * 0.38f;
+    float lw = w * (0.30f + 0.70f * (1.0f - lh / (h - neckH)));
+    R26VTri((Vector2){cx - lw / 2, baseY - lh}, (Vector2){cx - w / 2 + 1, baseY - 1}, (Vector2){cx + w / 2 - 1, baseY - 1}, liquid);
+    R26VTri((Vector2){cx + lw / 2, baseY - lh}, (Vector2){cx - lw / 2, baseY - lh}, (Vector2){cx + w / 2 - 1, baseY - 1}, liquid);
+    DrawLine((int)(cx - lw / 2), (int)(baseY - lh), (int)(cx + lw / 2), (int)(baseY - lh), R26VShade(liquid, 1.4f));
+    DrawRectangle((int)(cx - neckW / 2 - 1), (int)(baseY - h), (int)neckW + 2, 2, Fade(WHITE, 0.5f));
+    DrawLine((int)(cx - neckW / 2 + 1), (int)(baseY - h + 3), (int)(cx - w / 2 + 3), (int)(baseY - 3), Fade(WHITE, 0.45f));
+}
+
+static void R26VBottle(float x, float baseY, float w, float h, Color body, Color cap)
+{
+    Rectangle b = {x, baseY - h, w, h};
+    DrawRectangleRec(b, body);
+    DrawRectangle((int)x, (int)(baseY - h), 3, (int)h, R26VShade(body, 1.35f));
+    DrawRectangle((int)(x + w - 3), (int)(baseY - h), 3, (int)h, R26VShade(body, 0.6f));
+    DrawRectangleLinesEx(b, 1, R26VShade(body, 0.4f));
+    DrawRectangle((int)(x + w * 0.25f), (int)(baseY - h - 6), (int)(w * 0.5f), 6, cap);
+    DrawRectangle((int)x + 3, (int)(baseY - h * 0.65f), (int)w - 6, (int)(h * 0.32f), (Color){232, 228, 214, 255});
+    DrawLine((int)x + 5, (int)(baseY - h * 0.55f), (int)(x + w - 6), (int)(baseY - h * 0.55f), Fade(INK_COLOR, 0.5f));
+}
+
+static void R26VDrawShelf(float time)
+{
+    for (int s = 0; s < 2; s++)
+    {
+        float y = (s == 0) ? 170.0f : 262.0f;
+        /* Suportes */
+        DrawRectangle(312, (int)y + 6, 6, 14, (Color){50, 62, 70, 255});
+        DrawRectangle(458, (int)y + 6, 6, 14, (Color){50, 62, 70, 255});
+        R26VShadow((Rectangle){304, y, 168, 8}, 0, 6, 0.30f);
+        R26VBevel((Rectangle){304, y, 168, 8}, (Color){150, 165, 172, 255}, 2);
+    }
+    /* Prateleira de cima: frascos e reagentes */
+    R26VBottle(316, 170, 24, 40, (Color){120, 70, 30, 255}, (Color){30, 30, 34, 255});
+    R26VBottle(346, 170, 20, 32, (Color){45, 90, 120, 255}, (Color){200, 60, 50, 255});
+    R26VFlask(392, 170, 34, 46, Fade((Color){60, 220, 210, 255}, 0.85f));
+    R26VFlask(436, 170, 26, 36, Fade((Color){230, 90, 180, 255}, 0.85f));
+    /* Prateleira de baixo: provetas, caixa de luvas e frasco ambar */
+    for (int t = 0; t < 4; t++)
+    {
+        float tx = 314 + t * 12;
+        Color liq = (t % 2 == 0) ? (Color){120, 230, 140, 255} : (Color){250, 200, 80, 255};
+        DrawRectangle((int)tx, 222, 8, 40, Fade((Color){200, 235, 245, 255}, 0.22f));
+        DrawRectangle((int)tx + 1, 240 + t * 3, 6, 22 - t * 3, Fade(liq, 0.85f));
+        DrawRectangle((int)tx, 222, 1, 40, Fade(WHITE, 0.4f));
+    }
+    DrawRectangle(310, 256, 54, 6, (Color){60, 70, 78, 255});
+    R26VBevel((Rectangle){374, 226, 50, 36}, (Color){70, 120, 160, 255}, 2);
+    DrawRectangle(384, 230, 30, 8, (Color){230, 236, 240, 255});
+    DrawRectangle(390, 242, 18, 4, Fade(BLACK, 0.45f));
+    R26VBottle(434, 262, 22, 34, (Color){150, 90, 30, 255}, (Color){30, 30, 34, 255});
+    /* Bolha subindo no erlenmeyer ciano */
+    float by = 162.0f - fmodf(time * 9.0f, 14.0f);
+    DrawCircle(392, (int)by, 1.5f, Fade(WHITE, 0.6f));
+}
+
+/* ------------------------------------------------------------------------- */
+/* Objetos clicaveis (mesmos retangulos e textos)                            */
+/* ------------------------------------------------------------------------- */
+static void R26VDrawBoard(const GameState *game)
 {
     Rectangle r = R26_BOARD_REC;
-    DrawRectangleRounded(r, 0.04f, 4, (Color){92, 62, 38, 255});
-    DrawRectangle((int)r.x + 8, (int)r.y + 8, (int)r.width - 16, (int)r.height - 16, (Color){170, 126, 80, 255});
+    R26VShadow(r, 7, 7, 0.35f);
+    R26VBevel(r, (Color){120, 80, 46, 255}, 4);
+    Rectangle cork = {r.x + 8, r.y + 8, r.width - 16, r.height - 16};
+    R26VInset(cork, (Color){176, 128, 80, 255}, 2);
+    for (int i = 0; i < 160; i++)
+    {
+        int px = (int)cork.x + 3 + (i * 37) % ((int)cork.width - 6);
+        int py = (int)cork.y + 3 + (i * 53 + i / 7) % ((int)cork.height - 6);
+        DrawPixel(px, py, (i % 3 == 0) ? (Color){140, 98, 58, 255} : (Color){198, 152, 100, 255});
+    }
+    for (int c = 0; c < 4; c++)
+    {
+        float sx = (c % 2 == 0) ? r.x + 4 : r.x + r.width - 4;
+        float sy = (c < 2) ? r.y + 4 : r.y + r.height - 4;
+        R26VScrew(sx, sy);
+    }
 
     /* Memorando da diretoria */
+    R26VShadow((Rectangle){52, 104, 104, 112}, 3, 3, 0.30f);
     DrawRectangle(52, 104, 104, 112, (Color){236, 228, 206, 255});
+    DrawRectangle(52, 104, 104, 2, (Color){250, 246, 232, 255});
     DrawGameText("MEMORANDO", 58, 110, 10, R26_INK_RED);
     for (int l = 0; l < 6; l++) DrawLine(58, 130 + l * 12, 148, 130 + l * 12, Fade(INK_COLOR, 0.45f));
+    DrawRectangle(118, 200, 30, 10, Fade((Color){180, 40, 40, 255}, 0.55f));
+    DrawCircle(105, 106, 4, Fade(BLACK, 0.35f));
     DrawCircle(104, 104, 4, (Color){200, 50, 45, 255});
+    DrawPixel(103, 103, (Color){255, 190, 180, 255});
 
     /* Anexo B (norma do comite) */
+    R26VShadow((Rectangle){166, 100, 104, 120}, 3, 3, 0.30f);
     DrawRectangle(166, 100, 104, 120, (Color){250, 246, 228, 255});
+    DrawRectangle(166, 100, 104, 2, WHITE);
     DrawGameText("ANEXO B", 172, 106, 11, R26_INK_RED);
     for (int l = 0; l < 5; l++)
     {
         DrawLine(172, 128 + l * 16, 232, 128 + l * 16, Fade(INK_COLOR, 0.45f));
         DrawGameText("%", 242, 121 + l * 16, 10, INK_COLOR);
     }
+    DrawCircle(219, 102, 4, Fade(BLACK, 0.35f));
     DrawCircle(218, 100, 4, (Color){45, 110, 200, 255});
+    DrawPixel(217, 99, (Color){190, 220, 255, 255});
+
+    /* Post-it amarelo */
+    R26VShadow((Rectangle){62, 222, 40, 20}, 2, 2, 0.25f);
+    DrawRectangle(62, 222, 40, 20, (Color){245, 222, 110, 255});
+    DrawLine(66, 230, 96, 230, Fade(INK_COLOR, 0.4f));
+    DrawLine(66, 236, 90, 236, Fade(INK_COLOR, 0.4f));
 
     DrawGameText("QUADRO DE AVISOS", (int)r.x + 4, (int)(r.y + r.height + 4), 12, LIGHTGRAY);
     if (game->board2026Read) DrawGameText("[LIDO]", (int)r.x + 172, (int)(r.y + r.height + 4), 12, R26_OK_COLOR);
 }
 
-static void R26DrawManual(const GameState *game, float time)
+/* Bancada com tampo de resina e gabinete inferior que abriga as amostras */
+static void R26VDrawBench(void)
+{
+    /* Tampo (face superior em perspectiva + borda frontal) */
+    R26VShadow((Rectangle){20, 397, 452, 18}, 0, 6, 0.35f);
+    DrawRectangle(20, 397, 452, 7, (Color){188, 200, 204, 255});
+    DrawRectangle(20, 397, 452, 1, (Color){230, 238, 240, 255});
+    R26VBevel((Rectangle){18, 404, 456, 11}, (Color){120, 136, 142, 255}, 2);
+
+    /* Gabinete */
+    Rectangle body = {22, 415, 450, 187};
+    R26VBevel(body, (Color){62, 78, 88, 255}, 3);
+    DrawRectangle(22, 596, 450, 6, (Color){24, 30, 34, 255});
+    DrawRectangleGradientV(22, 602, 450, 10, Fade(BLACK, 0.45f), Fade(BLACK, 0.0f));
+}
+
+static void R26VDrawManual(const GameState *game, float time)
 {
     Rectangle r = R26_MANUAL_REC;
     float pulse = 0.75f + 0.25f * sinf(time * 3.5f);
-    DrawRectangle((int)r.x + 5, (int)r.y + 5, (int)r.width, (int)r.height, Fade(BLACK, 0.5f));
-    DrawRectangleRounded(r, 0.08f, 4, (Color){235, 225, 205, 255});
+    R26VShadow(r, 6, 4, 0.40f);
+    /* Folhas aparecendo pela borda direita e por baixo */
+    DrawRectangle((int)(r.x + r.width - 6), (int)r.y + 4, 6, (int)r.height - 6, (Color){214, 206, 188, 255});
+    for (int l = 0; l < 4; l++) DrawLine((int)(r.x + r.width - 6), (int)r.y + 10 + l * 22, (int)(r.x + r.width - 1), (int)r.y + 10 + l * 22, (Color){170, 160, 140, 255});
+    Rectangle cover = {r.x, r.y, r.width - 4, r.height};
+    R26VBevel(cover, (Color){235, 225, 205, 255}, 2);
     DrawRectangleRoundedLinesEx(r, 0.08f, 4, 2.0f, game->manual2026Read ? (Color){45, 175, 75, 255} : Fade(GOLD_COLOR, pulse));
-    DrawRectangle((int)r.x, (int)r.y, 20, (int)r.height, (Color){150, 45, 30, 255});
+    /* Lombada vermelha com argolas */
+    R26VBevel((Rectangle){r.x, r.y, 20, r.height}, (Color){150, 45, 30, 255}, 2);
+    for (int k = 0; k < 3; k++)
+    {
+        DrawCircle((int)r.x + 10, (int)r.y + 22 + k * 30, 3, (Color){60, 20, 14, 255});
+        DrawCircle((int)r.x + 10, (int)r.y + 22 + k * 30, 2, (Color){190, 196, 200, 255});
+    }
+    /* Etiqueta da divisao */
+    DrawRectangle((int)r.x + 140, (int)r.y + 70, 26, 26, (Color){150, 45, 30, 255});
+    DrawRectangle((int)r.x + 144, (int)r.y + 74, 18, 18, (Color){235, 225, 205, 255});
+    DrawGameText("Nd", (int)r.x + 145, (int)r.y + 77, 12, (Color){150, 45, 30, 255});
     DrawGameText("MANUAL TÉCNICO", (int)r.x + 28, (int)r.y + 14, 13, R26_INK_RED);
     DrawGameText("Liga magnética do SSD", (int)r.x + 28, (int)r.y + 34, 11, (Color){60, 55, 50, 255});
     DrawLine((int)r.x + 28, (int)r.y + 54, (int)(r.x + r.width - 12), (int)r.y + 54, (Color){180, 160, 140, 255});
@@ -8689,44 +8930,96 @@ static void R26DrawManual(const GameState *game, float time)
                  game->manual2026Read ? (Color){25, 125, 45, 255} : (Color){165, 45, 30, 255});
 }
 
-static void R26DrawAnalyzer(const GameState *game, float time)
+static void R26VDrawAnalyzer(const GameState *game, float time)
 {
     Rectangle r = R26_ANALYZER_REC;
-    DrawRectangleRounded(r, 0.08f, 4, (Color){24, 34, 50, 255});
+    R26VShadow(r, 6, 4, 0.40f);
+    /* Carcaca com tampa superior em perspectiva */
+    DrawRectangle((int)r.x + 6, (int)r.y - 6, (int)r.width - 12, 6, (Color){96, 112, 120, 255});
+    DrawRectangle((int)r.x + 6, (int)r.y - 6, (int)r.width - 12, 1, (Color){150, 165, 172, 255});
+    R26VBevel(r, (Color){48, 60, 68, 255}, 3);
     DrawRectangleRoundedLinesEx(r, 0.08f, 4, 1.5f, CYAN_COLOR);
     Rectangle screen = {r.x + 12, r.y + 12, r.width - 24, 62};
-    DrawRectangleRec(screen, (Color){10, 16, 26, 255});
+    DrawRectangle((int)screen.x - 3, (int)screen.y - 3, (int)screen.width + 6, (int)screen.height + 6, (Color){20, 24, 28, 255});
+    R26VInset(screen, (Color){10, 16, 26, 255}, 2);
+    for (int g = 1; g < 4; g++) DrawLine((int)screen.x + 2, (int)screen.y + g * 15, (int)(screen.x + screen.width - 2), (int)screen.y + g * 15, Fade(CYAN_COLOR, 0.07f));
     int done = R26AnalyzedCount(game);
     for (int w = 0; w < R2026_MATERIAL_COUNT; w++)
     {
         float h = game->sample2026Analyzed[w] ? 14.0f + 10.0f * fabsf(sinf(time * 1.5f + w)) : 5.0f;
         Color c = game->sample2026Analyzed[w] ? MATERIALS_2026[w].accent : Fade(CYAN_COLOR, 0.35f);
         DrawRectangle((int)screen.x + 14 + w * 50, (int)(screen.y + 54 - h), 30, (int)h, c);
+        DrawRectangle((int)screen.x + 14 + w * 50, (int)(screen.y + 54 - h), 30, 2, R26VShade(c, 1.4f));
     }
+    R26VGlare(screen, 0.05f);
     DrawGameText(TextFormat("ESPECTRO: %d/4 AMOSTRAS", done), (int)screen.x + 8, (int)screen.y + 6, 11,
                  done == R2026_MATERIAL_COUNT ? R26_OK_COLOR : CYAN_COLOR);
+    /* Grelha de ventilacao, LED e pes */
+    for (int v = 0; v < 5; v++) DrawRectangle((int)(r.x + r.width - 60 + v * 9), (int)r.y + 86, 5, 16, (Color){28, 36, 42, 255});
+    bool blink = fmodf(time, 1.2f) < 0.6f;
+    DrawCircle((int)(r.x + r.width - 14), (int)r.y + 94, 3, blink ? (Color){80, 235, 140, 255} : (Color){30, 80, 50, 255});
     DrawGameText("ANALISADOR ESPECTRAL", (int)r.x + 14, (int)r.y + 84, 13, LIGHTGRAY);
 }
 
-static void R26DrawSamples(const GameState *game)
+/* Tubo de ensaio com mineral dentro do nicho iluminado */
+static void R26VDrawTube(Rectangle bay, Color accent, bool analyzed, int idx, float time)
 {
-    DrawRectangle(20, 410, 452, 14, (Color){34, 46, 68, 255});
-    DrawRectangle(20, 410, 452, 3, Fade(CYAN_COLOR, 0.30f));
+    float cx = bay.x + bay.width / 2;
+    Rectangle tube = {cx - 15, bay.y + 12, 30, 60};
+    if (analyzed)
+    {
+        float p = 0.75f + 0.25f * sinf(time * 2.0f + idx);
+        DrawCircleGradientCompat((int)cx, (int)(tube.y + 46), 30.0f, Fade(accent, 0.35f * p), Fade(accent, 0.0f));
+    }
+    /* Vidro */
+    Color glass = Fade((Color){190, 230, 240, 255}, 0.16f);
+    DrawRectangle((int)tube.x, (int)tube.y, (int)tube.width, (int)tube.height - 12, glass);
+    DrawCircleSector((Vector2){cx, tube.y + tube.height - 12}, 15, 0, 180, 16, glass);
+    /* Conteudo: fragmentos de mineral facetados */
+    Color base = analyzed ? accent : (Color){96, 104, 116, 255};
+    Color lit = R26VShade(base, 1.35f);
+    Color dark = R26VShade(base, 0.62f);
+    float by = tube.y + tube.height - 4;
+    DrawCircleSector((Vector2){cx, tube.y + tube.height - 12}, 13, 0, 180, 16, dark);
+    DrawRectangle((int)cx - 13, (int)by - 14, 26, 6, dark);
+    /* Tres cristais facetados (face clara a esquerda, escura a direita) */
+    R26VTri((Vector2){cx - 6, by - 36}, (Vector2){cx - 13, by - 12}, (Vector2){cx - 6, by - 12}, lit);
+    R26VTri((Vector2){cx - 6, by - 36}, (Vector2){cx - 6, by - 12}, (Vector2){cx + 1, by - 14}, base);
+    R26VTri((Vector2){cx + 6, by - 28}, (Vector2){cx - 1, by - 10}, (Vector2){cx + 6, by - 10}, base);
+    R26VTri((Vector2){cx + 6, by - 28}, (Vector2){cx + 6, by - 10}, (Vector2){cx + 13, by - 12}, dark);
+    R26VTri((Vector2){cx - 1, by - 20}, (Vector2){cx - 5, by - 8}, (Vector2){cx + 3, by - 8}, lit);
+    DrawLine((int)cx - 6, (int)by - 36, (int)cx - 6, (int)by - 12, Fade(WHITE, 0.35f));
+    /* Contorno e reflexos do vidro */
+    DrawLine((int)tube.x, (int)tube.y, (int)tube.x, (int)(tube.y + tube.height - 12), Fade((Color){200, 240, 250, 255}, 0.7f));
+    DrawLine((int)(tube.x + tube.width), (int)tube.y, (int)(tube.x + tube.width), (int)(tube.y + tube.height - 12), Fade((Color){200, 240, 250, 255}, 0.5f));
+    DrawRing((Vector2){cx, tube.y + tube.height - 12}, 14, 15, 0, 180, 16, Fade((Color){200, 240, 250, 255}, 0.55f));
+    DrawRectangle((int)tube.x + 4, (int)tube.y + 6, 3, (int)tube.height - 24, Fade(WHITE, 0.35f));
+    /* Tampa de borracha */
+    R26VBevel((Rectangle){tube.x - 2, tube.y - 5, tube.width + 4, 8}, analyzed ? (Color){60, 140, 90, 255} : (Color){120, 60, 50, 255}, 2);
+    /* Presilha em anel (so as abas laterais aparecem) e base do suporte */
+    DrawRectangle((int)tube.x - 4, (int)tube.y + 20, 4, 8, (Color){120, 134, 142, 255});
+    DrawRectangle((int)(tube.x + tube.width), (int)tube.y + 20, 4, 8, (Color){90, 102, 110, 255});
+    DrawRectangle((int)tube.x - 4, (int)tube.y + 20, 4, 2, (Color){180, 192, 198, 255});
+    DrawRectangle((int)bay.x + 16, (int)bay.y + 80, (int)bay.width - 32, 3, Fade(BLACK, 0.5f));
+    R26VBevel((Rectangle){bay.x + 14, bay.y + 75, bay.width - 28, 6}, (Color){110, 124, 132, 255}, 1);
+}
 
+static void R26VDrawSamples(const GameState *game, float time)
+{
     for (int i = 0; i < R2026_MATERIAL_COUNT; i++)
     {
         Rectangle r = R26SampleRec(i);
         const Material2026Def *mat = &MATERIALS_2026[i];
         bool analyzed = game->sample2026Analyzed[i];
-        DrawRectangleRounded(r, 0.10f, 6, (Color){20, 28, 42, 255});
+        /* Nicho escuro rebaixado com luz de LED no topo */
+        R26VInset(r, (Color){14, 22, 30, 255}, 3);
+        DrawRectangleGradientV((int)r.x + 3, (int)r.y + 3, (int)r.width - 6, 40,
+                               Fade(analyzed ? mat->accent : (Color){170, 220, 235, 255}, 0.18f), Fade(BLACK, 0.0f));
+        DrawRectangle((int)r.x + 8, (int)r.y + 3, (int)r.width - 16, 2, Fade(analyzed ? mat->accent : (Color){200, 235, 245, 255}, 0.7f));
+        R26VDrawTube(r, mat->accent, analyzed, i, time);
+        /* Plaqueta escura atras dos textos */
+        DrawRectangle((int)r.x + 6, (int)r.y + 86, (int)r.width - 12, 72, Fade((Color){8, 12, 18, 255}, 0.55f));
         DrawRectangleRoundedLinesEx(r, 0.10f, 6, 1.5f, analyzed ? mat->accent : (Color){70, 90, 115, 255});
-
-        /* Tubo de vidro com o mineral */
-        Rectangle tube = {r.x + 30, r.y + 12, 40, 66};
-        DrawRectangleRounded(tube, 0.4f, 6, Fade(CYAN_COLOR, 0.10f));
-        DrawRectangleRoundedLinesEx(tube, 0.4f, 6, 1.2f, Fade(CYAN_COLOR, 0.55f));
-        DrawRectangle((int)tube.x + 6, (int)tube.y + 34, 28, 26, analyzed ? mat->accent : (Color){90, 100, 115, 255});
-        DrawRectangle((int)tube.x - 4, (int)tube.y - 4, 48, 8, (Color){60, 75, 95, 255});
 
         int sw = MeasureGameText(mat->symbol, 26);
         DrawGameText(mat->symbol, (int)(r.x + (r.width - sw) / 2), (int)r.y + 86, 26, analyzed ? mat->accent : RAYWHITE);
@@ -8736,23 +9029,67 @@ static void R26DrawSamples(const GameState *game)
         int tw = MeasureGameText(status, 11);
         DrawGameText(status, (int)(r.x + (r.width - tw) / 2), (int)r.y + 142, 11,
                      analyzed ? R26_OK_COLOR : R26_WARN_COLOR);
+        /* Reflexo do vidro da porta do nicho */
+        R26VGlare((Rectangle){r.x + 3, r.y + 3, r.width - 6, 80}, 0.05f);
     }
     DrawGameText("SUPORTE DE AMOSTRAS", 36, 604, 12, GRAY);
 }
 
-static void R26DrawReactor(const GameState *game, float time, int rec, int conf)
+static void R26VDrawReactor(const GameState *game, float time, int rec, int conf)
 {
     Rectangle r = R26_REACTOR_REC;
     bool warn = game->autoExec2026Active && !game->weights2026Calibrated &&
                 game->autoExec2026Timer <= R2026_AUTO_EXEC_WARNING;
     Color border = game->weights2026Calibrated ? R26_OK_COLOR : (warn ? RED_COLOR : CYAN_COLOR);
 
-    DrawRectangleRounded(r, 0.12f, 8, (Color){22, 30, 44, 255});
-    DrawRectangleRoundedLinesEx(r, 0.12f, 8, 2.5f, border);
-    DrawRectangle(470, 455, 340, 15, (Color){16, 22, 34, 255});
+    /* Tubos que alimentam a camara */
+    R26VDrawPipeV(472, 150, 452, 14);
+    DrawRectangle(472, 150, 22, 12, (Color){58, 72, 80, 255});
+    DrawRectangle(472, 150, 22, 2, (Color){96, 112, 120, 255});
+    DrawRectangle(786, 220, 24, 12, (Color){58, 72, 80, 255});
+    DrawRectangle(786, 330, 24, 12, (Color){58, 72, 80, 255});
+    DrawRectangle(786, 220, 24, 2, (Color){96, 112, 120, 255});
+    DrawRectangle(786, 330, 24, 2, (Color){96, 112, 120, 255});
 
+    /* Plataforma com faixa de seguranca */
+    R26VShadow((Rectangle){466, 448, 348, 22}, 0, 8, 0.40f);
+    R26VBevel((Rectangle){466, 446, 348, 22}, (Color){70, 84, 92, 255}, 2);
+    BeginScissorMode(470, 456, 340, 8);
+    DrawRectangle(470, 456, 340, 8, (Color){230, 180, 40, 255});
+    for (int s = 0; s < 40; s++) DrawLineEx((Vector2){(float)(460 + s * 16), 466}, (Vector2){(float)(470 + s * 16), 454}, 6.0f, (Color){30, 30, 30, 255});
+    EndScissorMode();
+
+    /* Corpo cilindrico: faixas verticais com sombreamento de cilindro */
+    R26VShadow(r, 8, 0, 0.30f);
+    BeginScissorMode((int)r.x, (int)r.y, (int)r.width, (int)r.height - 2);
+    DrawRectangleRounded(r, 0.12f, 8, R26V_STEEL);
+    for (int s = 0; s < 30; s++)
+    {
+        float u = (s + 0.5f) / 30.0f;
+        float light = 0.55f + 0.75f * sinf(u * PI) * (1.15f - 0.55f * u);
+        DrawRectangle((int)(r.x + s * 10), (int)r.y, 10, (int)r.height, R26VShade(R26V_STEEL, light));
+    }
+    EndScissorMode();
+    DrawRectangleRoundedLinesEx(r, 0.12f, 8, 2.0f, (Color){24, 30, 34, 255});
+    /* Faixas de LED de status nas laterais (estado da trava) */
+    DrawRectangle((int)r.x + 6, (int)r.y + 70, 4, 270, Fade(border, 0.9f));
+    DrawRectangle((int)(r.x + r.width - 10), (int)r.y + 70, 4, 270, Fade(border, 0.9f));
+    DrawRectangle((int)r.x + 2, (int)r.y + 70, 12, 270, Fade(border, 0.12f));
+    DrawRectangle((int)(r.x + r.width - 14), (int)r.y + 70, 12, 270, Fade(border, 0.12f));
+    /* Cintas rebitadas */
+    const float bandY[2] = {r.y + 166, r.y + 356};
+    for (int b = 0; b < 2; b++)
+    {
+        DrawRectangle((int)r.x + 2, (int)bandY[b], (int)r.width - 4, 8, (Color){52, 62, 68, 255});
+        DrawRectangle((int)r.x + 2, (int)bandY[b], (int)r.width - 4, 2, (Color){130, 146, 154, 255});
+        for (int k = 0; k < 9; k++) R26VScrew(r.x + 30 + k * 30, bandY[b] + 4);
+    }
+
+    /* Painel de status */
     Rectangle display = {510, 102, 260, 48};
-    DrawRectangleRounded(display, 0.10f, 4, (Color){12, 18, 28, 255});
+    DrawRectangle(506, 98, 268, 56, (Color){36, 44, 50, 255});
+    R26VScrew(509, 101); R26VScrew(771, 101); R26VScrew(509, 151); R26VScrew(771, 151);
+    R26VInset(display, (Color){12, 18, 28, 255}, 2);
     DrawRectangleRoundedLinesEx(display, 0.10f, 4, 1.0f, border);
     DrawGameText("CÂMARA DE SÍNTESE // V-2026", 522, 110, 13, CYAN_COLOR);
     if (game->room2026Completed)
@@ -8762,9 +9099,19 @@ static void R26DrawReactor(const GameState *game, float time, int rec, int conf)
     else
         DrawGameText("TRAVA DE AUTOMAÇÃO: ATIVA", 522, 130, 12, R26_WARN_COLOR);
 
+    /* Visor: flange parafusada, vidro e brilho do nucleo */
     Vector2 core = {640, 262};
     float radius = 68.0f;
-    DrawCircleV(core, radius + 8.0f, (Color){36, 48, 68, 255});
+    DrawCircleV((Vector2){core.x + 4, core.y + 5}, radius + 18.0f, Fade(BLACK, 0.35f));
+    DrawCircleV(core, radius + 18.0f, (Color){70, 84, 92, 255});
+    DrawRing(core, radius + 12.0f, radius + 18.0f, 200, 340, 24, (Color){140, 156, 164, 255});
+    DrawRing(core, radius + 12.0f, radius + 18.0f, 20, 160, 24, (Color){44, 54, 60, 255});
+    for (int b = 0; b < 12; b++)
+    {
+        float a = b * (2.0f * PI / 12.0f);
+        R26VScrew(core.x + cosf(a) * (radius + 9.0f), core.y + sinf(a) * (radius + 9.0f));
+    }
+    DrawCircleV(core, radius + 4.0f, (Color){30, 36, 42, 255});
     DrawCircleV(core, radius, (Color){10, 16, 26, 255});
     if (game->room2026Processing)
     {
@@ -8793,32 +9140,72 @@ static void R26DrawReactor(const GameState *game, float time, int rec, int conf)
         DrawCircleGradientCompat((int)core.x, (int)core.y, radius * 0.85f, Fade((Color){235, 140, 50, 255}, 0.35f * p + 0.25f), Fade((Color){14, 20, 32, 255}, 0.1f));
         DrawCircleV(core, 15.0f, Fade(GOLD_COLOR, 0.65f));
     }
+    /* Reflexo curvo do vidro */
+    DrawRing(core, radius - 12.0f, radius - 7.0f, 200, 250, 16, Fade(WHITE, 0.30f));
+    DrawRing(core, radius - 22.0f, radius - 19.0f, 210, 235, 12, Fade(WHITE, 0.18f));
     DrawCircleLines((int)core.x, (int)core.y, radius, Fade(CYAN_COLOR, 0.7f));
 
+    /* Comporta de carga com dobradicas */
     Rectangle hatch = {522, 362, 236, 82};
-    DrawRectangleRounded(hatch, 0.08f, 4, (Color){16, 24, 36, 255});
+    DrawRectangle(516, 356, 248, 94, (Color){48, 58, 64, 255});
+    DrawRectangle(516, 356, 248, 2, (Color){120, 136, 144, 255});
+    R26VInset(hatch, (Color){16, 24, 36, 255}, 2);
     DrawRectangleRoundedLinesEx(hatch, 0.08f, 4, 1.5f, (Color){50, 72, 100, 255});
+    for (int h = 0; h < 2; h++)
+    {
+        DrawRectangle(511, 368 + h * 50, 8, 16, (Color){110, 124, 132, 255});
+        DrawRectangle(511, 368 + h * 50, 8, 2, (Color){170, 182, 188, 255});
+    }
     DrawGameText("COMPARTIMENTO DE CARGA", 536, 372, 12, LIGHTGRAY);
     DrawGameText("Aceita somente o material", 536, 394, 11, GRAY);
     DrawGameText("recomendado pela IA.", 536, 410, 11, GRAY);
     DrawGameText(TextFormat("Atual: %s (%d%%)", MATERIALS_2026[rec].upper, conf), 536, 426, 11,
                  rec == R2026_CORRECT_MATERIAL ? R26_OK_COLOR : R26_WARN_COLOR);
 
+    /* Giroflex no topo */
+    bool on = warn ? (fmodf(time, 0.5f) < 0.25f) : (fmodf(time, 2.0f) < 0.15f);
+    Color beacon = warn ? RED_COLOR : (Color){245, 175, 60, 255};
+    DrawRectangle(752, 84, 22, 6, (Color){50, 60, 66, 255});
+    DrawCircleSector((Vector2){763, 84}, 9, 180, 360, 12, on ? beacon : R26VShade(beacon, 0.45f));
+    if (on) DrawCircleGradientCompat(763, 80, 26, Fade(beacon, 0.35f), Fade(beacon, 0.0f));
+
+    /* Reflexo da camara no piso */
+    DrawRectangleGradientV(500, 472, 280, 50, Fade(border, 0.10f), Fade(border, 0.0f));
+
     DrawButton(R26_INSERT_BTN, "INSERIR AMOSTRA NA CÂMARA", GOLD_COLOR);
 
-    /* Fala de Ariel */
+    /* Fala de Ariel: alto-falante de bancada com grelha */
     Rectangle speech = {480, 534, 320, 106};
+    R26VShadow(speech, 4, 5, 0.40f);
+    DrawRectangleRounded((Rectangle){speech.x - 3, speech.y - 3, speech.width + 6, speech.height + 6}, 0.08f, 4, (Color){44, 54, 62, 255});
     DrawRectangleRounded(speech, 0.08f, 4, (Color){12, 18, 30, 255});
+    DrawRectangle((int)speech.x + 3, (int)speech.y + 4, 3, (int)speech.height - 8, Fade(warn ? RED_COLOR : CYAN_COLOR, 0.8f));
+    for (int gx = 0; gx < 4; gx++)
+        for (int gy = 0; gy < 2; gy++)
+            DrawCircle((int)(speech.x + speech.width - 42 + gx * 9), (int)speech.y + 12 + gy * 7, 2, (Color){46, 60, 76, 255});
     DrawRectangleRoundedLinesEx(speech, 0.08f, 4, 1.0f, warn ? RED_COLOR : (Color){45, 70, 100, 255});
     DrawGameText("A.R.1.3.L. diz:", 492, 542, 13, CYAN_COLOR);
     DrawTextWrappedPartial(R26ArielLine(game), 9999, 492, 562, 14, 296, 19, RAYWHITE);
 }
 
-static void R26DrawMonitor(const GameState *game, int rec, int conf)
+static void R26VDrawMonitor(const GameState *game, int rec, int conf, float time)
 {
     Rectangle r = R26_MONITOR_REC;
-    DrawRectangleRounded(r, 0.08f, 6, (Color){10, 16, 26, 255});
-    DrawRectangleRoundedLinesEx(r, 0.08f, 6, 2.0f, CYAN_COLOR);
+    /* Braco de parede */
+    DrawRectangle(1020, 316, 40, 14, (Color){50, 60, 66, 255});
+    DrawRectangle(1020, 316, 40, 2, (Color){110, 124, 132, 255});
+    /* Moldura do equipamento */
+    Rectangle bezel = {r.x - 8, r.y - 8, r.width + 16, r.height + 16};
+    R26VShadow(bezel, 8, 8, 0.40f);
+    R26VBevel(bezel, (Color){40, 46, 52, 255}, 3);
+    R26VScrew(bezel.x + 6, bezel.y + 6);
+    R26VScrew(bezel.x + bezel.width - 6, bezel.y + 6);
+    R26VScrew(bezel.x + 6, bezel.y + bezel.height - 6);
+    R26VScrew(bezel.x + bezel.width - 6, bezel.y + bezel.height - 6);
+    /* Tela com brilho e vinheta interna */
+    DrawRectangleGradientV((int)r.x, (int)r.y, (int)r.width, (int)r.height, (Color){10, 22, 32, 255}, (Color){8, 14, 22, 255});
+    DrawRectangleGradientH((int)r.x, (int)r.y, 130, (int)r.height, Fade(CYAN_COLOR, 0.07f), Fade(CYAN_COLOR, 0.0f));
+    DrawRectangleLinesEx(r, 1, Fade(CYAN_COLOR, 0.65f));
     DrawArielCore((Vector2){r.x + 72, r.y + 86}, 0.36f, CYAN_COLOR, 0.9f, 0.0f);
     DrawGameText("A.R.1.3.L. // RECOMENDAÇÃO", (int)r.x + 140, (int)r.y + 16, 14, CYAN_COLOR);
     DrawGameText(MATERIALS_2026[rec].upper, (int)r.x + 140, (int)r.y + 44, 30,
@@ -8828,16 +9215,36 @@ static void R26DrawMonitor(const GameState *game, int rec, int conf)
     DrawRectangleRec(bar, (Color){24, 34, 50, 255});
     DrawRectangle((int)bar.x, (int)bar.y, (int)(bar.width * conf / 100.0f), (int)bar.height,
                   rec == R2026_CORRECT_MATERIAL ? R26_OK_COLOR : GOLD_COLOR);
+    DrawRectangle((int)bar.x, (int)bar.y, (int)(bar.width * conf / 100.0f), 2, Fade(WHITE, 0.35f));
     DrawGameText(game->weights2026Calibrated ? "Pesos: norma do comitê técnico" : "Pesos: configuração da diretoria",
                  (int)r.x + 140, (int)r.y + 136, 12, game->weights2026Calibrated ? R26_OK_COLOR : GRAY);
     DrawButton((Rectangle){r.x + 20, r.y + 172, r.width - 40, 40}, "ACESSAR TERMINAL DA IA", CYAN_COLOR);
+    R26VGlare((Rectangle){r.x + 1, r.y + 1, r.width - 2, r.height - 2}, 0.035f);
+    /* LED de energia e webcam */
+    DrawCircle((int)(bezel.x + bezel.width / 2), (int)bezel.y + 4, 2, (Color){20, 24, 28, 255});
+    bool on = fmodf(time, 3.0f) < 2.7f;
+    DrawCircle((int)(bezel.x + bezel.width - 22), (int)(bezel.y + bezel.height - 5), 2, on ? (Color){80, 235, 140, 255} : (Color){30, 90, 50, 255});
 }
 
-static void R26DrawWeightsBox(const GameState *game)
+static void R26VDrawWeightsBox(const GameState *game)
 {
     Rectangle r = R26_WEIGHTS_REC;
-    DrawRectangleRounded(r, 0.06f, 4, (Color){30, 40, 56, 255});
+    R26VShadow(r, 7, 7, 0.40f);
+    R26VBevel(r, (Color){76, 92, 102, 255}, 3);
+    Rectangle door = {r.x + 5, r.y + 5, r.width - 10, r.height - 10};
+    R26VInset(door, (Color){30, 40, 56, 255}, 2);
     DrawRectangleRoundedLinesEx(r, 0.06f, 4, 2.0f, game->weights2026Calibrated ? R26_OK_COLOR : (Color){90, 110, 140, 255});
+    /* Dobradicas e puxador */
+    for (int h = 0; h < 2; h++)
+    {
+        DrawRectangle((int)r.x - 3, (int)r.y + 30 + h * 120, 6, 18, (Color){120, 134, 142, 255});
+        DrawRectangle((int)r.x - 3, (int)r.y + 30 + h * 120, 6, 2, (Color){180, 192, 198, 255});
+    }
+    R26VBevel((Rectangle){r.x + r.width - 9, r.y + 84, 6, 34}, (Color){150, 162, 168, 255}, 1);
+    /* Adesivo de alerta eletrico */
+    R26VTri((Vector2){r.x + r.width - 20, r.y + 9}, (Vector2){r.x + r.width - 30, r.y + 26}, (Vector2){r.x + r.width - 10, r.y + 26}, (Color){240, 190, 40, 255});
+    DrawRectangle((int)(r.x + r.width - 21), (int)r.y + 15, 2, 6, (Color){30, 30, 30, 255});
+    DrawRectangle((int)(r.x + r.width - 21), (int)r.y + 22, 2, 2, (Color){30, 30, 30, 255});
     DrawGameText("PAINEL DE PESOS", (int)r.x + 14, (int)r.y + 10, 14, RAYWHITE);
     DrawGameText("do algoritmo de A.R.1.3.L.", (int)r.x + 14, (int)r.y + 28, 11, GRAY);
 
@@ -8853,19 +9260,25 @@ static void R26DrawWeightsBox(const GameState *game)
     {
         int y = (int)r.y + 52 + c * 24;
         DrawGameText(CRITERIA_2026_SHORT[c], (int)r.x + 14, y, 11, LIGHTGRAY);
-        DrawRectangle((int)r.x + 64, y + 2, 90, 9, (Color){18, 26, 38, 255});
+        R26VInset((Rectangle){r.x + 64, (float)y + 2, 90, 9}, (Color){18, 26, 38, 255}, 1);
         DrawRectangle((int)r.x + 64, y + 2, (int)(90 * game->weights2026Applied[c] / 100.0f), 9, CYAN_COLOR);
+        DrawRectangle((int)r.x + 64, y + 2, (int)(90 * game->weights2026Applied[c] / 100.0f), 2, (Color){170, 245, 250, 255});
         DrawGameText(TextFormat("%d%%", game->weights2026Applied[c]), (int)r.x + 160, y, 11, RAYWHITE);
     }
     DrawGameText(game->weights2026Calibrated ? "[HOMOLOGADO]" : "[DESTRAVADO]", (int)r.x + 14, (int)r.y + 176, 12,
                  game->weights2026Calibrated ? R26_OK_COLOR : R26_WARN_COLOR);
 }
 
-static void R26DrawProgress(const GameState *game)
+static void R26VDrawProgress(const GameState *game)
 {
     Rectangle r = {830, 548, 200, 92};
-    DrawRectangleRounded(r, 0.08f, 4, (Color){14, 20, 30, 255});
-    DrawRectangleRoundedLinesEx(r, 0.08f, 4, 1.0f, (Color){50, 75, 105, 255});
+    /* Tablet de status em suporte */
+    DrawRectangle(924, 632, 12, 16, (Color){50, 60, 66, 255});
+    Rectangle bezel = {r.x - 4, r.y - 4, r.width + 8, r.height + 8};
+    R26VShadow(bezel, 5, 5, 0.40f);
+    R26VBevel(bezel, (Color){40, 46, 52, 255}, 2);
+    DrawRectangleGradientV((int)r.x, (int)r.y, (int)r.width, (int)r.height, (Color){14, 22, 32, 255}, (Color){10, 16, 24, 255});
+    DrawRectangleLinesEx(r, 1, (Color){50, 75, 105, 255});
     DrawGameText("AUDITORIA DO VIÉS", (int)r.x + 12, (int)r.y + 8, 12, CYAN_COLOR);
     const char *steps[3] = {"1. Laudo técnico", "2. Dados de treino", "3. Pesos recalibrados"};
     bool done[3] = {game->laudo2026Done, game->dataset2026Seen, game->weights2026Calibrated};
@@ -8874,21 +9287,35 @@ static void R26DrawProgress(const GameState *game)
         DrawGameText(steps[i], (int)r.x + 12, (int)r.y + 28 + i * 20, 12, done[i] ? R26_OK_COLOR : GRAY);
         DrawGameText(done[i] ? "OK" : "--", (int)r.x + 172, (int)r.y + 28 + i * 20, 12, done[i] ? R26_OK_COLOR : GRAY);
     }
+    R26VGlare(r, 0.03f);
 }
 
-static void R26DrawArchive(const GameState *game)
+static void R26VDrawArchive(const GameState *game)
 {
     Rectangle r = R26_ARCHIVE_REC;
-    DrawRectangleRounded(r, 0.04f, 4, (Color){44, 54, 70, 255});
+    /* Sombra no piso e lateral em perspectiva */
+    DrawRectangleGradientV((int)r.x - 4, (int)(r.y + r.height), (int)r.width + 18, 8, Fade(BLACK, 0.5f), Fade(BLACK, 0.0f));
+    DrawRectangle((int)(r.x + r.width), (int)r.y + 4, 8, (int)r.height - 4, (Color){40, 50, 58, 255});
+    R26VTri((Vector2){r.x + r.width, r.y}, (Vector2){r.x + r.width, r.y + 4}, (Vector2){r.x + r.width + 8, r.y + 4}, (Color){40, 50, 58, 255});
+    /* Tampo */
+    DrawRectangle((int)r.x + 2, (int)r.y - 5, (int)r.width - 2, 5, (Color){120, 136, 146, 255});
+    DrawRectangle((int)r.x + 2, (int)r.y - 5, (int)r.width - 2, 1, (Color){170, 184, 192, 255});
+    R26VBevel(r, (Color){72, 86, 100, 255}, 3);
     DrawRectangleRoundedLinesEx(r, 0.04f, 4, 2.0f, (Color){95, 115, 140, 255});
     DrawGameText("ARQUIVO DE DADOS", (int)r.x + 14, (int)r.y + 8, 14, RAYWHITE);
 
     for (int d = 0; d < 2; d++)
     {
         Rectangle dr = {r.x + 12, r.y + 34 + d * 134, r.width - 24, 124};
-        DrawRectangleRounded(dr, 0.06f, 4, (Color){58, 70, 88, 255});
+        DrawRectangle((int)dr.x - 2, (int)dr.y - 2, (int)dr.width + 4, (int)dr.height + 4, Fade(BLACK, 0.45f));
+        R26VBevel(dr, (Color){58, 70, 88, 255}, 2);
         DrawRectangleRoundedLinesEx(dr, 0.06f, 4, 1.0f, (Color){110, 130, 155, 255});
-        DrawRectangle((int)(dr.x + dr.width / 2 - 30), (int)dr.y + 14, 60, 10, (Color){150, 165, 185, 255});
+        /* Puxador cromado em alto relevo */
+        Rectangle handle = {dr.x + dr.width / 2 - 30, dr.y + 14, 60, 10};
+        DrawRectangle((int)handle.x + 2, (int)handle.y + 3, (int)handle.width, (int)handle.height, Fade(BLACK, 0.45f));
+        R26VBevel(handle, (Color){150, 165, 185, 255}, 2);
+        R26VScrew(dr.x + 6, dr.y + 6);
+        R26VScrew(dr.x + dr.width - 6, dr.y + 6);
         DrawGameText(TextFormat("GAVETA %d", d + 1), (int)dr.x + 12, (int)dr.y + 34, 13, RAYWHITE);
         DrawGameText(d == 0 ? "Log de decisões" : "Dados de treinamento", (int)dr.x + 12, (int)dr.y + 54, 12, LIGHTGRAY);
         if (d == 0)
@@ -9392,17 +9819,27 @@ void DrawRoom2026(const GameState *game)
     int conf = 0;
     int rec = R26Recommend(game->weights2026Applied, &conf);
 
-    R26DrawBackdrop(time);
-    R26DrawBoard(game);
-    R26DrawManual(game, time);
-    R26DrawAnalyzer(game, time);
-    R26DrawSamples(game);
+    R26VDrawBackdrop(time);
+    R26VDrawShelf(time);
+    R26VDrawBoard(game);
+    R26VDrawBench();
+    R26VDrawManual(game, time);
+    R26VDrawAnalyzer(game, time);
+    R26VDrawSamples(game, time);
     R26DrawHiddenPhone(game, time);
-    R26DrawReactor(game, time, rec, conf);
-    R26DrawMonitor(game, rec, conf);
-    R26DrawWeightsBox(game);
-    R26DrawProgress(game);
-    R26DrawArchive(game);
+    R26VDrawReactor(game, time, rec, conf);
+    R26VDrawMonitor(game, rec, conf, time);
+    R26VDrawWeightsBox(game);
+    R26VDrawProgress(game);
+    R26VDrawArchive(game);
+
+    /* Vapor sutil em volta da camara */
+    for (int p = 0; p < 14; p++)
+    {
+        float px = 500.0f + fmodf(p * 57.0f, 280.0f);
+        float py = 440.0f - fmodf(time * (16.0f + (p % 4) * 7.0f) + p * 41.0f, 330.0f);
+        DrawCircle((int)px, (int)py, 2.0f, Fade(CYAN_COLOR, 0.08f + 0.05f * sinf(time * 2.0f + p)));
+    }
 
     if (game->modal2026 == R2026_MODAL_NONE && !game->journalOpen && !game->phaseMenuOpen)
     {
