@@ -292,6 +292,7 @@ typedef struct RankingEntry
     int score;
     int seconds;        /* tempo de conclusao em segundos */
     char date[20];      /* "DD/MM/AAAA HH:MM" */
+    char ending[48];    /* US03: final alcancado (ex.: "Final Padrão - Trégua Frágil") */
 } RankingEntry;
 
 typedef struct CrawlEntry
@@ -356,8 +357,17 @@ typedef enum FinalEnding
     ENDING_FRAGILE_TRUCE,   /* Ferramenta sem compreensao total */
     ENDING_SILENCE,         /* Desligar + compreensao total */
     ENDING_BLACKOUT,        /* Desligar sem compreensao total */
-    ENDING_AUTOPILOT        /* Ariel continua decidindo */
+    ENDING_AUTOPILOT,       /* Ariel continua decidindo */
+    ENDING_GOLDEN_PACT      /* Rota Dourada: humanos e Ariel trabalham juntos (G && K) */
 } FinalEnding;
+
+/* Categoria formal do final (secao 25 do documento do projeto) */
+typedef enum EndingCategory
+{
+    ENDING_CAT_RUIM = 0,    /* R = !V || !T */
+    ENDING_CAT_PADRAO,      /* V && T && !(G && K) */
+    ENDING_CAT_OTIMO        /* G && K, com G = V && M && O */
+} EndingCategory;
 
 typedef struct DialogueLine
 {
@@ -444,10 +454,11 @@ const char *FormatRunTime(double seconds);
 
 /* UH19 - Ranking (arquivo TXT: Nome | Pontuacao | MM:SS - DD/MM/AAAA HH:MM) */
 int CalculateScore(const GameState *game);
-bool SaveRankingEntry(const char *name, int score, int seconds);
+bool SaveRankingEntry(const char *name, int score, int seconds, const char *ending);
 int LoadRanking(void);
 const RankingEntry *GetRankingEntries(int *count);
 void FinalizeRun(GameState *game);
+void FinalizeFailedRun(GameState *game);   /* Final Ruim: vidas esgotadas */
 void DrawRanking(const GameState *game);
 void UpdateRanking(GameState *game);
 
@@ -565,9 +576,16 @@ int DrawTextWrappedPartial(const char *text, int visibleBytes, int x, int y, int
 const char **GetFinalOptions(int stage);
 const DialogueLine *GetFinalLines(const GameState *game, int *count);
 int GetFinalEnding(const GameState *game);
+/* Logica central dos finais (V, T, M, O, K) */
+bool HasMainArtifact(const GameState *game, int index);  /* 0..3 = A (1990), B (2008), C (2026), D (2048) */
+int MainArtifactCount(const GameState *game);
+bool UsedGoldenDialogue(const GameState *game);         /* K */
+int GetEndingCategory(const GameState *game);            /* EndingCategory */
+const char *GetEndingResultName(const GameState *game);  /* texto gravado no TXT/ranking */
+int FinalOptionCount(const GameState *game);             /* 3, ou 4 com os ocultos (O) */
 bool FinalIsChoiceMode(const GameState *game);
-Rectangle FinalBoxRect(bool choiceMode);
-Rectangle FinalOptionRect(int index);
+Rectangle FinalBoxRect(bool choiceMode, int optionCount);
+Rectangle FinalOptionRect(int index, int optionCount);
 void DrawArielCore(Vector2 c, float s, Color core, float energy, float lookX);
 void DrawEliraPortrait(Rectangle dest, bool speaking);
 void DrawFinalDialogue(const GameState *game);

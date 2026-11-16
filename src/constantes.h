@@ -107,5 +107,9 @@
 /* COLECIONAVEIS OCULTOS E ROTA DOURADA                                       */
 /* ========================================================================= */
 #define JOURNAL_TAB_HIDDEN 4   /* aba OCULTOS do diario (aparece apos o 1o achado) */
+#define FINAL_GOLDEN_CHOICE 3  /* indice da 4a opcao (dourada) em cada escolha do confronto */
+#define ENDING_NAME_RUIM   "Final Ruim"
+#define ENDING_NAME_PADRAO "Final Padrão"
+#define ENDING_NAME_OTIMO  "Rota Dourada"
 
 #endif /* CONSTANTES_H */
