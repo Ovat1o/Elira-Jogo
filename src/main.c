@@ -309,6 +309,7 @@ int main(int argc, char **argv)
                 UpdateRanking(&game);
                 break;
             case SCREEN_FAILURE:
+                FinalizeFailedRun(&game);   /* Final Ruim gravado uma unica vez no TXT */
                 if (Clicked((Rectangle){490, 460, 300, 60}) || IsKeyPressed(KEY_ENTER))
                 {
                     ResetDemo(&game);

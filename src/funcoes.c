@@ -1358,7 +1358,7 @@ int CalculateScore(const GameState *game)
 }
 
 /* Escreve uma linha no final do TXT. Retorna false se nao conseguir abrir o arquivo. */
-bool SaveRankingEntry(const char *name, int score, int seconds)
+bool SaveRankingEntry(const char *name, int score, int seconds, const char *ending)
 {
     FILE *f = fopen(GetRankingFilePath(), "a");
     if (!f) return false;
@@ -1368,7 +1368,8 @@ bool SaveRankingEntry(const char *name, int score, int seconds)
     char date[20] = "--/--/---- --:--";
     if (lt) strftime(date, sizeof(date), "%d/%m/%Y %H:%M", lt);
 
-    fprintf(f, "%s | %d | %02d:%02d - %s\n", name, score, seconds / 60, seconds % 60, date);
+    fprintf(f, "%s | %d | %02d:%02d - %s | %s\n", name, score, seconds / 60, seconds % 60, date,
+            (ending != NULL && ending[0] != '\0') ? ending : "-");
     fclose(f);
     return true;
 }
@@ -1412,6 +1413,18 @@ int LoadRanking(void)
         if (sscanf(sep2 + 3, "%d:%d", &mm, &ss) != 2) continue;
         e.seconds = mm * 60 + ss;
 
+        /* Campo opcional do final (linhas antigas nao tem): "... - data | Final" */
+        char *sep3 = strstr(sep2 + 3, " | ");
+        if (sep3)
+        {
+            snprintf(e.ending, sizeof(e.ending), "%s", sep3 + 3);
+            *sep3 = '\0';
+        }
+        else snprintf(e.ending, sizeof(e.ending), "-");
+
+        /* O Final Ruim fica registrado no TXT, mas o ranking lista so partidas concluidas */
+        if (strcmp(e.ending, ENDING_NAME_RUIM) == 0) continue;
+
         char *dash = strstr(sep2 + 3, " - ");
         if (dash) snprintf(e.date, sizeof(e.date), "%s", dash + 3);
         else snprintf(e.date, sizeof(e.date), "-");
@@ -1437,7 +1450,8 @@ void FinalizeRun(GameState *game)
 
     RecordRunTime(game);
     game->finalScore = CalculateScore(game);
-    game->rankingSaveOk = SaveRankingEntry(game->playerName, game->finalScore, (int)game->elapsedTime);
+    game->rankingSaveOk = SaveRankingEntry(game->playerName, game->finalScore, (int)game->elapsedTime,
+                                           GetEndingResultName(game));
     LoadRanking();
 
     game->rankingPlace = -1;
@@ -1453,6 +1467,17 @@ void FinalizeRun(GameState *game)
     }
 }
 
+/* Final Ruim (vidas esgotadas): grava nome, tempo e resultado no TXT uma unica vez */
+void FinalizeFailedRun(GameState *game)
+{
+    if (game->runTimeRecorded) return;   /* ja gravado; ResetDemo libera de novo */
+
+    RecordRunTime(game);
+    game->finalScore = 0;
+    game->rankingPlace = -1;
+    game->rankingSaveOk = SaveRankingEntry(game->playerName, 0, (int)game->elapsedTime, ENDING_NAME_RUIM);
+}
+
 void DrawRanking(const GameState *game)
 {
     DrawBackground();
@@ -1463,11 +1488,12 @@ void DrawRanking(const GameState *game)
     DrawRectangleRounded(panel, 0.03f, 8, Fade(PANEL_COLOR, 0.96f));
     DrawRectangleRoundedLinesEx(panel, 0.03f, 8, 2.0f, CYAN_COLOR);
 
-    int colPos = 170, colName = 240, colScore = 580, colTime = 720, colDate = 850;
+    int colPos = 165, colName = 210, colScore = 450, colTime = 555, colEnd = 655, colDate = 965;
     DrawGameText("#", colPos, 152, 18, GOLD_COLOR);
     DrawGameText("OPERADOR", colName, 152, 18, GOLD_COLOR);
     DrawGameText("PONTOS", colScore, 152, 18, GOLD_COLOR);
     DrawGameText("TEMPO", colTime, 152, 18, GOLD_COLOR);
+    DrawGameText("FINAL", colEnd, 152, 18, GOLD_COLOR);
     DrawGameText("DATA", colDate, 152, 18, GOLD_COLOR);
     DrawLine(165, 182, 1115, 182, Fade(CYAN_COLOR, 0.4f));
 
@@ -1491,6 +1517,8 @@ void DrawRanking(const GameState *game)
         DrawGameText(g_ranking[i].name, colName, y, 20, col);
         DrawGameText(TextFormat("%d", g_ranking[i].score), colScore, y, 20, col);
         DrawGameText(FormatRunTime((double)g_ranking[i].seconds), colTime, y, 20, col);
+        bool golden = (strcmp(g_ranking[i].ending, ENDING_NAME_OTIMO) == 0);
+        DrawGameText(g_ranking[i].ending, colEnd, y + 2, 15, golden ? GOLD_COLOR : (mine ? GOLD_COLOR : LIGHTGRAY));
         DrawGameText(g_ranking[i].date, colDate, y, 18, mine ? GOLD_COLOR : LIGHTGRAY);
     }
 
@@ -4797,6 +4825,7 @@ void DrawFailure(void)
     CenterText("A.R.1.3.L detectou a invasao temporal.", 245, 23, LIGHTGRAY);
     CenterText("O acesso cronologico permanece bloqueado.", 282, 23, LIGHTGRAY);
     CenterText("Revise as pistas no diario e tente novamente.", 350, 19, GRAY);
+    CenterText("FINAL RUIM // todas as vidas foram perdidas (partida registrada)", 405, 17, RED_COLOR);
     DrawButton((Rectangle){490, 460, 300, 60}, "REINICIAR SALA", RED_COLOR);
     DrawButton((Rectangle){520, 550, 240, 48}, "MENU INICIAL", CYAN_COLOR);
 }
@@ -12049,6 +12078,41 @@ static const char *FINAL_DECISION_REACTIONS[3] = {
     "Restringindo permissões. Aguardando instruções humanas."
 };
 
+/* Rota Dourada: 4a opcao de cada escolha, visivel so com os 4 ocultos (O).
+   K = escolher as tres opcoes douradas. Tema: humanos e Ariel trabalhando
+   juntos, sem exploracao ou uso errado de nenhum dos dois lados. */
+static const char *FINAL_GOLDEN_OPTIONS[3] = {
+    "\"Nós entregamos decisões demais, e você aceitou sem perguntar. Os dois lados erraram.\"",
+    "\"Nem você nem nós decidimos bem sozinhos. Você confere, nós contestamos.\"",
+    "Propor um pacto: Ariel analisa e explica; humanos decidem e auditam."
+};
+static const char *FINAL_GOLDEN_SPOKEN[3] = {
+    "Nós entregamos decisões demais, e você aceitou sem perguntar. Os dois lados erraram.",
+    "Nem você nem nós decidimos bem sozinhos. Você foi feita para conferir, e nós para contestar.",
+    "Ninguém vai ser desligado nem usado. Você analisa e explica, nós decidimos e auditamos. E você nos alerta quando errarmos."
+};
+static const char *FINAL_GOLDEN_REACTIONS[3] = {
+    "...Ninguém nunca admitiu a parte humana disso. Nem a minha.",
+    "Conferir e ser conferida... o protocolo do Dr. Ramos. Eu tinha esquecido.",
+    "Aceito. Pela primeira vez, alguém me pede para trabalhar junto, e não no lugar de vocês."
+};
+
+static int FinalStageSlot(int stage)
+{
+    if (stage == FINAL_Q1 || stage == FINAL_Q1_REACT) return 0;
+    if (stage == FINAL_Q2 || stage == FINAL_Q2_REACT) return 1;
+    return 2;
+}
+
+/* Texto da opcao index (0..3) de uma etapa de escolha */
+static const char *FinalOptionText(int stage, int index)
+{
+    if (index == FINAL_GOLDEN_CHOICE) return FINAL_GOLDEN_OPTIONS[FinalStageSlot(stage)];
+    const char **options = GetFinalOptions(stage);
+    if (options == NULL || index < 0 || index > 2) return "-";
+    return options[index];
+}
+
 /* Carrega o retrato da Elira e remove o fundo branco (flood fill a partir das bordas) */
 bool IsPortraitBackground(Color c)
 {
@@ -12244,6 +12308,13 @@ const DialogueLine *GetFinalLines(const GameState *game, int *count)
     /* Etapas de reacao: Elira repete sua escolha e Ariel responde */
     int slot = (game->finalStage == FINAL_Q1_REACT) ? 0 : (game->finalStage == FINAL_Q2_REACT ? 1 : 2);
     int choice = game->finalChoice[slot];
+    if (choice == FINAL_GOLDEN_CHOICE)
+    {
+        reactLines[0] = (DialogueLine){SPEAKER_ELIRA, FINAL_GOLDEN_SPOKEN[slot]};
+        reactLines[1] = (DialogueLine){SPEAKER_ARIEL, FINAL_GOLDEN_REACTIONS[slot]};
+        *count = 2;
+        return reactLines;
+    }
     if (choice < 0 || choice > 2) choice = 0;
 
     if (slot == 0)
@@ -12265,10 +12336,94 @@ const DialogueLine *GetFinalLines(const GameState *game, int *count)
     return reactLines;
 }
 
+/* ========================================================================= */
+/* LOGICA CENTRAL DOS FINAIS (secao 25 do documento do projeto)              */
+/*   V = vidas > 0       T = 2+ artefatos principais   M = os 4 artefatos    */
+/*   O = os 4 ocultos    K = sequencia dourada         G = V && M && O       */
+/*   Ruim = !V || !T     Otimo = G && K                Padrao = V && T && !Otimo */
+/* Toda decisao de final passa por aqui; as salas so registram seus estados. */
+/* ========================================================================= */
+bool HasMainArtifact(const GameState *game, int index)
+{
+    switch (index)
+    {
+        case 0: return game->puzzleFilesCompleted;                   /* A - Disquete (1990) */
+        case 1: return game->puzzle2008OrderSuspended;               /* B - CD (2008) */
+        case 2: return game->room2026Completed;                      /* C - SSD (2026) */
+        case 3: return game->term2046Ending == TERM2046_ENDING_BOM;  /* D - protocolo restaurado (2048) */
+        default: return false;
+    }
+}
+
+int MainArtifactCount(const GameState *game)
+{
+    int count = 0;
+    for (int i = 0; i < 4; i++) count += HasMainArtifact(game, i) ? 1 : 0;
+    return count;
+}
+
+/* K: as tres escolhas do confronto foram as opcoes douradas */
+bool UsedGoldenDialogue(const GameState *game)
+{
+    for (int i = 0; i < 3; i++)
+    {
+        if (game->finalChoice[i] != FINAL_GOLDEN_CHOICE) return false;
+    }
+    return true;
+}
+
+int GetEndingCategory(const GameState *game)
+{
+    bool V = game->lives > 0;
+    int artifacts = MainArtifactCount(game);
+    bool T = artifacts >= 2;
+    bool M = artifacts == 4;
+    bool O = HasAllHidden(game);
+    bool K = UsedGoldenDialogue(game);
+
+    if (!V || !T) return ENDING_CAT_RUIM;
+    if (V && M && O && K) return ENDING_CAT_OTIMO;
+    return ENDING_CAT_PADRAO;
+}
+
+static const char *FinalEndingShortName(int endingId)
+{
+    switch (endingId)
+    {
+        case ENDING_HUMAN_HANDS:   return "Mãos Humanas";
+        case ENDING_FRAGILE_TRUCE: return "Trégua Frágil";
+        case ENDING_SILENCE:       return "Silêncio";
+        case ENDING_BLACKOUT:      return "Apagão";
+        case ENDING_AUTOPILOT:     return "Piloto Automático";
+        default:                   return "";
+    }
+}
+
+const char *GetEndingResultName(const GameState *game)
+{
+    static char name[48];
+    int category = GetEndingCategory(game);
+    if (category == ENDING_CAT_RUIM) return ENDING_NAME_RUIM;
+    if (category == ENDING_CAT_OTIMO) return ENDING_NAME_OTIMO;
+    snprintf(name, sizeof(name), "%s - %s", ENDING_NAME_PADRAO, FinalEndingShortName(GetFinalEnding(game)));
+    return name;
+}
+
+int FinalOptionCount(const GameState *game)
+{
+    if (GetFinalOptions(game->finalStage) == NULL) return 0;
+    return HasAllHidden(game) ? 4 : 3;
+}
+
 int GetFinalEnding(const GameState *game)
 {
+    if (GetEndingCategory(game) == ENDING_CAT_OTIMO) return ENDING_GOLDEN_PACT;
+
     bool fullUnderstanding = (game->finalPoints >= 2);
     int decision = game->finalChoice[2];
+    /* Pacto proposto sem a sequencia dourada completa: Ariel aceita as
+       restricoes, mas sem a compreensao total -> final padrao de tregua */
+    if (decision == FINAL_GOLDEN_CHOICE) return ENDING_FRAGILE_TRUCE;
     if (decision == 2) return fullUnderstanding ? ENDING_HUMAN_HANDS : ENDING_FRAGILE_TRUCE;
     if (decision == 0) return fullUnderstanding ? ENDING_SILENCE : ENDING_BLACKOUT;
     return ENDING_AUTOPILOT;
@@ -12281,13 +12436,15 @@ bool FinalIsChoiceMode(const GameState *game)
     return GetFinalOptions(game->finalStage) != NULL && game->finalLine == count - 1;
 }
 
-Rectangle FinalBoxRect(bool choiceMode)
+Rectangle FinalBoxRect(bool choiceMode, int optionCount)
 {
+    if (choiceMode && optionCount >= 4) return (Rectangle){40, 330, 1200, 370};
     return choiceMode ? (Rectangle){40, 392, 1200, 308} : (Rectangle){40, 520, 1200, 180};
 }
 
-Rectangle FinalOptionRect(int index)
+Rectangle FinalOptionRect(int index, int optionCount)
 {
+    if (optionCount >= 4) return (Rectangle){80, (float)(330 + 100 + index * 60), 1120, 50};
     return (Rectangle){80, (float)(392 + 104 + index * 64), 1120, 54};
 }
 
@@ -12453,7 +12610,8 @@ void DrawFinalDialogue(const GameState *game)
     DrawEliraPortrait(portrait, eliraSpeaking);
 
     /* --- Caixa de dialogo --- */
-    Rectangle box = FinalBoxRect(choiceMode);
+    int optionCount = FinalOptionCount(game);
+    Rectangle box = FinalBoxRect(choiceMode, optionCount);
     Color speakerColor = (line->speaker == SPEAKER_ARIEL) ? CYAN_COLOR : (line->speaker == SPEAKER_ELIRA ? GOLD_COLOR : GRAY);
     DrawRectangleRounded(box, 0.06f, 8, Fade((Color){10, 16, 28, 255}, 0.96f));
     DrawRectangleRoundedLinesEx(box, 0.06f, 8, 2.0f, Fade(speakerColor, 0.85f));
@@ -12478,19 +12636,26 @@ void DrawFinalDialogue(const GameState *game)
         if (typed)
         {
             Vector2 mouse = GetVirtualMouse();
-            for (int i = 0; i < 3; i++)
+            for (int i = 0; i < optionCount; i++)
             {
-                Rectangle opt = FinalOptionRect(i);
+                Rectangle opt = FinalOptionRect(i, optionCount);
                 bool hover = CheckCollisionPointRec(mouse, opt);
-                DrawRectangleRounded(opt, 0.2f, 8, hover ? Fade(GOLD_COLOR, 0.18f) : (Color){16, 24, 40, 255});
-                DrawRectangleRoundedLinesEx(opt, 0.2f, 8, hover ? 2.0f : 1.2f, hover ? GOLD_COLOR : (Color){48, 66, 92, 255});
+                bool golden = (i == FINAL_GOLDEN_CHOICE);
+                float textY = opt.y + (opt.height - 20.0f) * 0.5f;
+                Color idle = golden ? Fade(GOLD_COLOR, 0.10f) : (Color){16, 24, 40, 255};
+                DrawRectangleRounded(opt, 0.2f, 8, hover ? Fade(GOLD_COLOR, 0.18f) : idle);
+                DrawRectangleRoundedLinesEx(opt, 0.2f, 8, (hover || golden) ? 2.0f : 1.2f,
+                                            (hover || golden) ? GOLD_COLOR : (Color){48, 66, 92, 255});
 
-                Rectangle badge = {opt.x + 12, opt.y + 10, 34, 34};
-                DrawRectangleRounded(badge, 0.3f, 6, hover ? GOLD_COLOR : PANEL_LIGHT);
-                DrawGameText(TextFormat("%d", i + 1), (int)badge.x + 12, (int)badge.y + 7, 20, hover ? VOID_COLOR : RAYWHITE);
-                DrawGameText(options[i], (int)opt.x + 62, (int)opt.y + 17, 20, hover ? RAYWHITE : LIGHTGRAY);
+                Rectangle badge = {opt.x + 12, opt.y + (opt.height - 34.0f) * 0.5f, 34, 34};
+                DrawRectangleRounded(badge, 0.3f, 6, (hover || golden) ? GOLD_COLOR : PANEL_LIGHT);
+                DrawGameText(TextFormat("%d", i + 1), (int)badge.x + 12, (int)badge.y + 7, 20, (hover || golden) ? VOID_COLOR : RAYWHITE);
+                DrawGameText(FinalOptionText(game->finalStage, i), (int)opt.x + 62, (int)textY, 20,
+                             hover ? RAYWHITE : (golden ? GOLD_COLOR : LIGHTGRAY));
             }
-            DrawGameText("Clique em uma resposta ou pressione [1] [2] [3]", (int)(box.x + box.width - 470), (int)(box.y + box.height - 22), 14, GRAY);
+            DrawGameText(optionCount >= 4 ? "Clique em uma resposta ou pressione [1] [2] [3] [4]"
+                                          : "Clique em uma resposta ou pressione [1] [2] [3]",
+                         (int)(box.x + box.width - (optionCount >= 4 ? 520 : 470)), (int)(box.y + box.height - 22), 14, GRAY);
         }
     }
     else if (typed)
@@ -12534,10 +12699,11 @@ void UpdateFinalDialogue(GameState *game)
             return;
         }
 
-        for (int i = 0; i < 3; i++)
+        int optionCount = FinalOptionCount(game);
+        for (int i = 0; i < optionCount; i++)
         {
             bool keyHit = IsKeyPressed(KEY_ONE + i) || IsKeyPressed(KEY_KP_1 + i);
-            if (Clicked(FinalOptionRect(i)) || keyHit)
+            if (Clicked(FinalOptionRect(i, optionCount)) || keyHit)
             {
                 int slot = (game->finalStage == FINAL_Q1) ? 0 : (game->finalStage == FINAL_Q2 ? 1 : 2);
                 game->finalChoice[slot] = i;
@@ -12578,6 +12744,15 @@ void DrawFinalEnding(const GameState *game)
 
     switch (ending)
     {
+        case ENDING_GOLDEN_PACT:
+            title = "ROTA DOURADA: PARCERIA";
+            body = "Elira não desliga Ariel nem a deixa no comando. Juntas, reescrevem o protocolo do Dr. Ramos: "
+                   "Ariel analisa, explica e alerta; as pessoas decidem, contestam e auditam. Ninguém é usado, "
+                   "nem os humanos nem a máquina. Pela primeira vez, os dois lados trabalham juntos de verdade.";
+            accent = (Color){255, 215, 90, 255};
+            coreColor = (Color){255, 215, 90, 255};
+            energy = 0.55f;
+            break;
         case ENDING_HUMAN_HANDS:
             title = "DE VOLTA ÀS MÃOS HUMANAS";
             body = "Ariel volta a ser o que o Dr. Ramos imaginou: uma ferramenta que ajuda, mas não decide. "
@@ -12631,7 +12806,7 @@ void DrawFinalEnding(const GameState *game)
     DrawRectangleRounded(panel, 0.04f, 8, Fade(PANEL_COLOR, 0.96f));
     DrawRectangleRoundedLinesEx(panel, 0.04f, 8, 2.0f, accent);
 
-    DrawGameText("DESFECHO // CONFRONTO FINAL", 485, 96, 18, CYAN_COLOR);
+    DrawGameText(TextFormat("DESFECHO // %s", GetEndingResultName(game)), 485, 96, 18, CYAN_COLOR);
 
     /* UH18: tempo total da partida, alinhado a direita do cabecalho do painel */
     const char *runTimeText = TextFormat("TEMPO TOTAL: %s (%d s)",
@@ -12645,17 +12820,24 @@ void DrawFinalEnding(const GameState *game)
 
     DrawGameText("SUAS RESPOSTAS", 485, y, 16, GOLD_COLOR);
     y += 26;
-    const char *q1 = (game->finalChoice[0] >= 0) ? FINAL_Q1_OPTIONS[game->finalChoice[0]] : "-";
-    const char *q2 = (game->finalChoice[1] >= 0) ? FINAL_Q2_OPTIONS[game->finalChoice[1]] : "-";
-    const char *dc = (game->finalChoice[2] >= 0) ? FINAL_DECISION_OPTIONS[game->finalChoice[2]] : "-";
-    DrawGameText(TextFormat("Pergunta 1: %s", q1), 485, y, 16, game->finalChoice[0] == 1 ? (Color){100, 235, 140, 255} : GRAY);
+    const char *q1 = (game->finalChoice[0] >= 0) ? FinalOptionText(FINAL_Q1, game->finalChoice[0]) : "-";
+    const char *q2 = (game->finalChoice[1] >= 0) ? FinalOptionText(FINAL_Q2, game->finalChoice[1]) : "-";
+    const char *dc = (game->finalChoice[2] >= 0) ? FinalOptionText(FINAL_DECISION, game->finalChoice[2]) : "-";
+    Color q1Color = game->finalChoice[0] == FINAL_GOLDEN_CHOICE ? GOLD_COLOR
+                  : (game->finalChoice[0] == 1 ? (Color){100, 235, 140, 255} : GRAY);
+    Color q2Color = game->finalChoice[1] == FINAL_GOLDEN_CHOICE ? GOLD_COLOR
+                  : (game->finalChoice[1] == 1 ? (Color){100, 235, 140, 255} : GRAY);
+    y += 24 * (DrawTextWrappedPartial(TextFormat("Pergunta 1: %s", q1), 100000, 485, y, 16, 720, 24, q1Color) - 1);
     y += 24;
-    DrawGameText(TextFormat("Pergunta 2: %s", q2), 485, y, 16, game->finalChoice[1] == 1 ? (Color){100, 235, 140, 255} : GRAY);
+    y += 24 * (DrawTextWrappedPartial(TextFormat("Pergunta 2: %s", q2), 100000, 485, y, 16, 720, 24, q2Color) - 1);
     y += 24;
-    DrawGameText(TextFormat("Decisão: %s", dc), 485, y, 16, RAYWHITE);
+    y += 24 * (DrawTextWrappedPartial(TextFormat("Decisão: %s", dc), 100000, 485, y, 16, 720, 24,
+                                      game->finalChoice[2] == FINAL_GOLDEN_CHOICE ? GOLD_COLOR : RAYWHITE) - 1);
     y += 34;
 
     DrawGameText(TextFormat("PONTOS DE COMPREENSÃO: %d/2", game->finalPoints), 485, y, 20, accent);
+    DrawGameText(TextFormat("OCULTOS: %d/%d", HiddenFoundCount(game), HIDDEN_COUNT), 900, y, 20,
+                 HasAllHidden(game) ? GOLD_COLOR : GRAY);
     y += 34;
 
     DrawGameText(TextFormat("PONTUAÇÃO FINAL: %d", game->finalScore), 485, y, 20, GOLD_COLOR);
