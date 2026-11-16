@@ -190,28 +190,35 @@ typedef struct GameState
     int activeDocument2008;            /* -1 = nenhum, 0..3 = registros, 4 = pai, 5 = memorando */
     int terminal2008ActiveTab;         /* 0 = Ordem/Evidencias, 1 = Configuracao Local */
 
-    /* --- FASE 2026: SALA DE HIDROGENIO (ALUCINACAO IA & TERRAS RARAS) --- */
-    bool manual2026Read;               /* Jogador leu o manual tecnico */
-    bool manual2026Open;               /* Modal de leitura do manual tecnico aberto */
-    bool terminal2026Open;             /* Modal/visao do terminal da Ariel */
-    int selectedMaterial2026;          /* -1 = nenhum, 0 = A-17, 1 = B-04, 2 = C-22, 3 = D-09 */
-    bool confirmModal2026Open;         /* Caixa de confirmacao aberta */
-    int pendingConfirmMaterial2026;    /* Material pendente de confirmacao (0..3) */
-    bool feedbackModal2026Open;        /* Modal de alerta de erro ativo */
-    int lastErrorMaterial2026;         /* Material do ultimo erro (0, 1, 3) */
-    bool room2026Processing;           /* Reator processando a liga metalica */
+    /* --- SALA 2026: LABORATORIO DE SINTESE (VIES ALGORITMICO) --- */
+    int modal2026;                     /* Room2026Modal: painel aberto na sala */
+    bool manual2026Read;               /* Etapa 1: manual tecnico consultado */
+    bool sample2026Analyzed[R2026_MATERIAL_COUNT]; /* Amostras varridas no analisador */
+    int sample2026Viewing;             /* Amostra exibida no analisador (-1 = nenhuma) */
+    float sample2026ScanTimer;         /* Animacao da varredura espectral */
+    bool contest2026Picking;           /* Terminal: escolhendo o material do laudo */
+    bool laudo2026Done;                /* Etapa 1: laudo correto (Neodimio) registrado */
+    bool decisionLog2026Read;          /* Gaveta 1: log de decisoes consultado */
+    bool dataset2026Seen;              /* Etapa 2: dados de treinamento auditados */
+    bool board2026Read;                /* Quadro de avisos (memorando + Anexo B) lido */
+    char padlock2026Input[R2026_CODE_LEN + 1]; /* Digitos do cadeado do painel */
+    int padlock2026Length;
+    int padlock2026Attempts;           /* Tentativas erradas no cadeado */
+    bool weights2026Unlocked;          /* Cadeado do painel de pesos aberto */
+    int weights2026Draft[R2026_CRITERIA_COUNT];   /* Pesos em edicao no painel (%) */
+    int weights2026Applied[R2026_CRITERIA_COUNT]; /* Pesos ativos no algoritmo de Ariel (%) */
+    bool weights2026Calibrated;        /* Etapa 3: norma aplicada, Ariel recomenda Neodimio */
+    bool autoExec2026Active;           /* Ariel ameaca executar a recomendacao sozinha */
+    float autoExec2026Timer;           /* Contagem local ate a execucao automatica */
+    int feedback2026Tone;              /* 0 = aviso, 1 = erro, 2 = sucesso */
+    bool feedback2026Fatal;            /* Vidas esgotadas: o modal leva a SCREEN_FAILURE */
+    char feedback2026Title[64];
+    char feedback2026Lines[4][160];
+    bool room2026Processing;           /* Camara sintetizando a liga do SSD */
     float room2026ProcessTimer;        /* Temporizador da barra de progresso */
-    bool room2026Completed;            /* Reator estabilizado / SSD obtido */
-    bool room2026FirstTrySuccess;      /* Bonus: acertou na primeira tentativa sem errar */
-    int room2026MistakesCount;         /* Contagem de erros cometidos */
-    bool room2026ThermalCollapse;      /* Colapso termico ao zerar vidas */
-    bool sample2026Analyzed[4];        /* Amostras A-17, B-04, C-22, D-09 analisadas */
-    bool analyzingSample2026;          /* Espectro em processo de analise (~2s) */
-    float analyzingTimer2026;          /* Timer da animacao do espectro */
-    int analyzingSampleIndex2026;      /* Indice da amostra sendo analisada */
-    bool reactorCountdownActive2026;   /* Countdown local do reator ativo (inicia no terminal) */
-    float reactorTimer2026;            /* Contador local de estabilidade (50s) */
-    bool room2026TimeOut;              /* Colapso por tempo esgotado no reator */
+    bool room2026Completed;            /* SSD obtido */
+    bool room2026FirstTrySuccess;      /* Bonus: sala concluida sem nenhum erro */
+    int room2026MistakesCount;         /* Erros cometidos (laudo errado, sintese falha) */
 
     /* --- SALA 2048: TERMINAL DE RECUPERACAO DA A.R.1.3.L --- */
     int term2046State;                 /* Term2046State */
@@ -280,18 +287,35 @@ typedef struct CrawlEntry
     int type; /* 0: Titulo ELIRA, 1: Corpo, 2: Destaque/Citacao, 3: Ano 1990, 4: Espaco vazio */
 } CrawlEntry;
 
+/* Sala 2026: paineis/modais do laboratorio (apenas um aberto por vez) */
+typedef enum Room2026Modal
+{
+    R2026_MODAL_NONE = 0,
+    R2026_MODAL_MANUAL,      /* manual tecnico: 4 requisitos da liga */
+    R2026_MODAL_SAMPLE,      /* analisador espectral de uma amostra */
+    R2026_MODAL_TERMINAL,    /* terminal de Ariel: ranking, laudo/contestacao */
+    R2026_MODAL_ARCHIVE,     /* arquivo: log de decisoes + dados de treinamento */
+    R2026_MODAL_BOARD,       /* quadro de avisos: memorando + Anexo B */
+    R2026_MODAL_PADLOCK,     /* cadeado do painel de pesos */
+    R2026_MODAL_WEIGHTS,     /* painel de pesos do algoritmo */
+    R2026_MODAL_REACTOR,     /* escolha da amostra para a camara */
+    R2026_MODAL_FEEDBACK,    /* resultado de uma acao (acerto/erro) */
+    R2026_MODAL_PROCESSING   /* sintese final em andamento */
+} Room2026Modal;
+
 typedef struct Material2026Def
 {
-    const char *idLetter;       /* "A-17", "B-04", "C-22", "D-09" */
-    const char *code;           /* "AMOSTRA A-17", etc. */
-    const char *realName;       /* "Magnetita", "Gas Hidrogenio", "Mineral de Terras Raras (Nd)", "Acido Cloridrico" */
-    const char *state;          /* "solido", "gasoso", "solido", "liquido" */
-    const char *origin;         /* "mineral", "gasoso", "mineral", "solucao" */
-    const char *elements;       /* "Fe, O", "H2", "Nd, Ce, La", "HCl" */
-    const char *classification; /* "Magnetita", "Hidrogenio", "Mineral portador de Terras Raras", "Solucao corrosiva" */
-    bool hasRareEarth;          /* false, false, true, false */
-    bool isCorrect;             /* false, false, true, false */
-    Color accentColor;
+    const char *name;           /* "Ferro", "Cobalto", "Neodímio", "Níquel" */
+    const char *upper;          /* nome em maiusculas (UTF-8) */
+    const char *symbol;         /* "Fe", "Co", "Nd", "Ni" */
+    const char *state;          /* estado fisico */
+    const char *origin;         /* origem mineral */
+    const char *magnetism;      /* propriedade magnetica */
+    bool rareEarth;             /* apenas o Neodimio */
+    int trainingRecords;        /* registros nos dados de treinamento de Ariel */
+    const char *verdict;        /* comparacao com os 4 requisitos do manual */
+    int criteria[R2026_CRITERIA_COUNT]; /* notas 0-100 por criterio do algoritmo */
+    Color accent;
 } Material2026Def;
 
 typedef enum FinalStage
@@ -496,7 +520,7 @@ void UpdatePuzzle2008(GameState *game);
 void DrawResult2008(const GameState *game);
 void UpdateResult2008(GameState *game);
 
-/* Fase 3 (Ano 2026) - Sala de Hidrogenio & Sintese de Terras Raras (SSD) */
+/* Fase 3 (Ano 2026) - Laboratorio de Sintese: Vies Algoritmico (SSD) */
 void DrawHudRoom2026(const GameState *game);
 void DrawRoom2026(const GameState *game);
 void UpdateRoom2026(GameState *game);

@@ -62,6 +62,23 @@
 #define FINAL_TYPE_SPEED 48.0f /* bytes por segundo no efeito maquina de escrever */
 
 /* ========================================================================= */
+/* SALA 2026 - LABORATORIO DE SINTESE (VIES ALGORITMICO)                     */
+/* ========================================================================= */
+#define R2026_MATERIAL_COUNT     4       /* Ferro, Cobalto, Neodimio, Niquel */
+#define R2026_CRITERIA_COUNT     5       /* Adequacao, Estabilidade, Disponib., Custo, Historico */
+#define R2026_CORRECT_MATERIAL   2       /* indice do Neodimio (unica Terra Rara) */
+#define R2026_PADLOCK_CODE       "118"   /* registros de Terras Raras no treinamento */
+#define R2026_CODE_LEN           3       /* digitos do cadeado do painel de pesos */
+#define R2026_WEIGHT_STEP        5       /* passo (%) dos botoes -/+ do painel */
+#define R2026_AUTO_EXEC_SECONDS  180.0f  /* prazo ate Ariel executar a propria recomendacao */
+#define R2026_AUTO_EXEC_WARNING  30.0f   /* abaixo disso o HUD entra em alerta */
+#define R2026_SCAN_SECONDS       1.2f    /* varredura de uma amostra no analisador */
+#define R2026_PROCESS_SECONDS    3.6f    /* sintese final na camara */
+/* Pesos (%) na ordem: Adequacao tecnica, Estabilidade, Disponibilidade, Custo, Historico de uso */
+#define R2026_WEIGHTS_BIASED     {5, 0, 40, 35, 20}   /* configuracao da diretoria (enviesada) */
+#define R2026_WEIGHTS_NORM       {50, 25, 15, 10, 0}  /* norma do comite tecnico (Anexo B) */
+
+/* ========================================================================= */
 /* SALA 2048 - TERMINAL DA A.R.1.3.L (prefixo T2046_ mantido no codigo)  */
 /* ========================================================================= */
 #define T2046_INFLUENCE_MAX          100    /* influencia que da a vitoria a Ariel */

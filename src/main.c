@@ -209,8 +209,8 @@ int main(int argc, char **argv)
                     game.year2026Unlocked = true;
                     game.journalYearTab = 2;
                     game.journalPage = 0;
-                    game.screen = SCREEN_ROOM;
-                    SetMessage(&game, "Salto temporal concluido: Laboratorio do Prototipo // ANO 2026.");
+                    game.screen = SCREEN_ROOM_2026;
+                    SetMessage(&game, "Salto temporal concluido: Laboratorio de Sintese // ANO 2026.");
                 }
                 break;
             case SCREEN_INTRO_2046:
