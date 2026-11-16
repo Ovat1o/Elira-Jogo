@@ -6653,6 +6653,52 @@ void UpdateDocumentViewer2008(GameState *game)
     }
 }
 
+/* Helpers de desenho da sala 2008 (prefixo R2008): volume, veios, parafusos, cabos */
+
+static Color R2008Shade(Color c, float k)
+{
+    return (Color){(unsigned char)fminf(255, c.r * k), (unsigned char)fminf(255, c.g * k),
+                   (unsigned char)fminf(255, c.b * k), c.a};
+}
+
+/* Veios de madeira horizontais discretos dentro de um retangulo */
+static void R2008WoodGrain(Rectangle r, Color base, int seed)
+{
+    Color dark = Fade(R2008Shade(base, 0.80f), 0.55f);
+    Color lite = Fade(R2008Shade(base, 1.10f), 0.55f);
+    for (int i = 0; i < (int)(r.height / 7.0f); i++)
+    {
+        float y = r.y + 4 + i * 7 + (float)((seed * 13 + i * 5) % 3);
+        float x0 = r.x + 3 + (float)((seed * 31 + i * 17) % 23);
+        float x1 = r.x + r.width - 3 - (float)((seed * 7 + i * 29) % 31);
+        if (y > r.y + r.height - 3 || x1 <= x0 + 6) continue;
+        DrawLineEx((Vector2){x0, y}, (Vector2){x1, y + ((i % 2) ? 1.0f : 0.0f)}, 1.0f, (i % 3 == 0) ? lite : dark);
+    }
+}
+
+/* Parafuso Phillips cromado */
+static void R2008Screw(float x, float y)
+{
+    DrawCircle((int)x, (int)y, 2.2f, (Color){96, 104, 114, 255});
+    DrawCircle((int)x, (int)y, 1.5f, (Color){196, 204, 212, 255});
+    DrawPixel((int)x, (int)y, (Color){90, 98, 108, 255});
+}
+
+/* Cabo flexivel (curva de Bezier) com highlight fino */
+static void R2008Cable(Vector2 a, Vector2 c1, Vector2 c2, Vector2 b, float thick, Color col)
+{
+    DrawSplineSegmentBezierCubic(a, c1, c2, b, thick, col);
+    DrawSplineSegmentBezierCubic((Vector2){a.x, a.y - 1}, (Vector2){c1.x, c1.y - 1}, (Vector2){c2.x, c2.y - 1},
+                                 (Vector2){b.x, b.y - 1}, 1.0f, Fade(R2008Shade(col, 1.9f), 0.55f));
+}
+
+/* Quadrilatero preenchido (pontos em sentido horario na tela; ordem ajustada para raylib) */
+static void R2008Quad(Vector2 tl, Vector2 tr, Vector2 br, Vector2 bl, Color col)
+{
+    DrawTriangle(tl, bl, tr, col);
+    DrawTriangle(tr, bl, br, col);
+}
+
 void DrawRoom2008(const GameState *game)
 {
     float time = (float)GetTime();
@@ -6683,11 +6729,27 @@ void DrawRoom2008(const GameState *game)
         DrawLineEx((Vector2){topX, 70}, (Vector2){(float)cx, 124}, 1.5f, (Color){206, 212, 220, 255});
     }
     DrawLine(95, 97, 1185, 97, (Color){210, 216, 224, 255});
+    /* Fileiras transversais das placas do forro e sombra suave junto a parede */
+    DrawLine(46, 83, 1234, 83, (Color){216, 221, 228, 255});
+    DrawLine(146, 112, 1134, 112, (Color){212, 218, 226, 255});
+    R2008Quad((Vector2){150, 113}, (Vector2){1130, 113}, (Vector2){1090, 124}, (Vector2){190, 124}, Fade((Color){150, 158, 170, 255}, 0.16f));
+    /* Grelha de ar-condicionado central no forro (escritorio 2008) */
+    R2008Quad((Vector2){586, 101}, (Vector2){694, 101}, (Vector2){700, 111}, (Vector2){580, 111}, (Color){214, 220, 228, 255});
+    for (int ac = 0; ac < 6; ac++)
+    {
+        float ax = 590.0f + ac * 19.0f;
+        DrawLineEx((Vector2){ax, 102}, (Vector2){ax - 2.0f + ac * 0.8f, 110}, 1.0f, (Color){168, 176, 186, 255});
+    }
+    DrawLine(586, 101, 694, 101, (Color){180, 188, 198, 255});
 
     /* Parede de fundo empresarial clara (marfim/alabastro corporativo uniforme) */
     Color backWallCol = (Color){234, 230, 220, 255};
     DrawTriangle((Vector2){190, 124}, (Vector2){1010, 515}, (Vector2){1090, 124}, backWallCol);
     DrawTriangle((Vector2){190, 124}, (Vector2){270, 515}, (Vector2){1010, 515}, backWallCol);
+    /* Oclusao suave junto ao forro e luz quente das luminarias lavando a parede */
+    DrawRectangleGradientV(197, 126, 886, 30, Fade((Color){120, 110, 96, 255}, 0.13f), Fade((Color){120, 110, 96, 255}, 0.0f));
+    DrawEllipse(420, 150, 150, 40, Fade((Color){255, 250, 232, 255}, 0.30f));
+    DrawEllipse(860, 150, 150, 40, Fade((Color){255, 250, 232, 255}, 0.30f));
 
     /* Paredes laterais esquerda e direita em perspectiva (tom areia suave uniforme) */
     Color sideWallCol = (Color){216, 210, 198, 255};
@@ -6734,6 +6796,13 @@ void DrawRoom2008(const GameState *game)
     DrawLine(0, 548, 1280, 548, Fade((Color){154, 147, 136, 255}, 0.38f));
     DrawLine(0, 584, 1280, 584, Fade((Color){154, 147, 136, 255}, 0.36f));
     DrawLine(0, 622, 1280, 622, Fade((Color){154, 147, 136, 255}, 0.34f));
+    /* Porcelanato polido: reflexos das luminarias e da janela no piso */
+    DrawEllipse(140, 592, 150, 6, Fade((Color){252, 250, 244, 255}, 0.12f));
+    DrawEllipse(140, 592, 70, 2, Fade((Color){255, 255, 255, 255}, 0.16f));
+    DrawEllipse(1150, 622, 130, 5, Fade((Color){252, 250, 244, 255}, 0.10f));
+    DrawEllipse(1150, 622, 60, 2, Fade((Color){255, 255, 255, 255}, 0.14f));
+    /* Oclusao de contato junto ao rodape */
+    DrawRectangleGradientV(270, 516, 740, 12, Fade((Color){90, 80, 66, 255}, 0.20f), Fade((Color){90, 80, 66, 255}, 0.0f));
 
     /* Molduras de acabamento do teto, quinas e rodapes */
     DrawLineEx((Vector2){0, 70}, (Vector2){190, 124}, 4.0f, (Color){168, 175, 184, 255});
@@ -6753,12 +6822,31 @@ void DrawRoom2008(const GameState *game)
         int lx = lightXs[li];
         DrawTriangle((Vector2){(float)(lx + 10), 104}, (Vector2){(float)(lx - 60), 470}, (Vector2){(float)(lx + 240), 470},
                      Fade((Color){255, 252, 235, 255}, 0.10f));
+        /* Nucleo mais intenso do cone de luz fluorescente */
+        DrawTriangle((Vector2){(float)(lx + 40), 104}, (Vector2){(float)(lx + 10), 470}, (Vector2){(float)(lx + 170), 470},
+                     Fade((Color){255, 253, 240, 255}, 0.07f));
+        /* Halo da luz no forro */
+        DrawEllipse(lx + 90, 90, 118, 20, Fade((Color){255, 255, 248, 255}, 0.55f));
         DrawRectangleRounded((Rectangle){(float)lx, 78, 180, 24}, 0.18f, 6, (Color){172, 180, 190, 255});
-        DrawRectangleRoundedLinesEx((Rectangle){(float)lx, 78, 180, 24}, 0.18f, 6, 1.5f, (Color){135, 144, 154, 255});
+        DrawLine(lx + 4, 79, lx + 176, 79, (Color){214, 220, 228, 255});
+        DrawLine(lx + 4, 101, lx + 176, 101, (Color){128, 136, 146, 255});
+        DrawRectangleRoundedLinesEx((Rectangle){(float)lx, 78, 180, 24}, 0.18f, 6, 1.5f, (Color){118, 126, 138, 255});
         DrawRectangleRounded((Rectangle){(float)(lx + 10), 83, 160, 14}, 0.18f, 6, (Color){248, 252, 255, 255});
+        DrawRectangle(lx + 14, 86, 152, 3, (Color){255, 255, 255, 255});
         for (int lv = 24; lv < 160; lv += 22)
         {
             DrawLine(lx + lv, 83, lx + lv, 97, (Color){195, 205, 215, 255});
+            DrawLine(lx + lv + 1, 83, lx + lv + 1, 97, (Color){228, 234, 240, 255});
+        }
+        R2008Screw((float)lx + 5, 90);
+        R2008Screw((float)lx + 175, 90);
+        /* Particulas de poeira flutuando devagar dentro do cone */
+        for (int pd = 0; pd < 7; pd++)
+        {
+            float pt = time * (0.10f + pd * 0.013f) + pd * 0.37f + li * 0.5f;
+            float py = 130.0f + fmodf(pt * 90.0f + pd * 41.0f, 300.0f);
+            float px = lx + 40.0f + (py - 104.0f) * (pd % 2 ? -0.05f : 0.18f) + sinf(pt * 3.0f + pd) * 10.0f + pd * 16.0f;
+            DrawCircle((int)px, (int)py, 1.0f, Fade((Color){255, 250, 225, 255}, 0.30f + 0.20f * sinf(time * 1.5f + pd)));
         }
     }
 
@@ -6770,41 +6858,103 @@ void DrawRoom2008(const GameState *game)
     Vector2 dTR = {66, 168};
     Vector2 dBR = {66, 526};
     Vector2 dBL = {12, 534};
+    /* Batente (marco) da porta: faixa clara de aluminio em volta da folha */
+    R2008Quad((Vector2){6, 144}, (Vector2){72, 162}, (Vector2){72, 530}, (Vector2){6, 540}, (Color){186, 190, 194, 255});
+    DrawLineEx((Vector2){6, 144}, (Vector2){72, 162}, 1.5f, (Color){120, 126, 134, 255});
+    DrawLineEx((Vector2){72, 162}, (Vector2){72, 530}, 1.5f, (Color){120, 126, 134, 255});
     DrawTriangle(dTL, dBL, dTR, (Color){164, 126, 90, 255});
     DrawTriangle(dTR, dBL, dBR, (Color){164, 126, 90, 255});
+    /* Veios de madeira acompanhando a perspectiva da folha da porta */
+    for (int dg = 0; dg < 9; dg++)
+    {
+        float gx = 16.0f + dg * 5.6f;
+        float gTop = 153.0f + (gx - 12.0f) * (16.0f / 54.0f);
+        float gBot = 534.0f - (gx - 12.0f) * (8.0f / 54.0f);
+        DrawLineEx((Vector2){gx, gTop + 4}, (Vector2){gx + ((dg % 2) ? 1.0f : -1.0f), gBot - 4}, 1.0f,
+                   Fade((dg % 3 == 0) ? (Color){186, 148, 108, 255} : (Color){140, 104, 72, 255}, 0.45f));
+    }
+    /* Luz lateral da porta (face mais iluminada perto do batente) e sombra embaixo */
+    DrawTriangle(dTL, dBL, (Vector2){20, 155}, Fade((Color){214, 178, 136, 255}, 0.55f));
+    DrawTriangle((Vector2){20, 155}, dBL, (Vector2){20, 533}, Fade((Color){214, 178, 136, 255}, 0.55f));
     DrawLineEx(dTL, dTR, 4.0f, (Color){118, 88, 60, 255});
     DrawLineEx(dTR, dBR, 4.0f, (Color){118, 88, 60, 255});
     DrawLineEx(dTL, dBL, 4.0f, (Color){118, 88, 60, 255});
+    DrawLineEx(dBL, dBR, 2.0f, (Color){96, 70, 46, 255});
+    /* Dobradicas cromadas */
+    DrawRectangle(11, 196, 4, 18, (Color){196, 202, 208, 255});
+    DrawRectangle(11, 440, 4, 18, (Color){196, 202, 208, 255});
+    DrawLine(14, 196, 14, 214, (Color){130, 136, 144, 255});
+    DrawLine(14, 440, 14, 458, (Color){130, 136, 144, 255});
     /* Faixas de vidro jateado na porta corporativa */
     for (int pg = 0; pg < 3; pg++)
     {
         int py = 195 + pg * 72;
         DrawRectangle(24, py, 28, 48, (Color){196, 216, 228, 255});
+        DrawRectangleGradientV(24, py, 28, 48, Fade((Color){236, 244, 250, 255}, 0.70f), Fade((Color){170, 194, 210, 255}, 0.40f));
+        DrawLineEx((Vector2){29, (float)(py + 40)}, (Vector2){43, (float)(py + 6)}, 2.0f, Fade(RAYWHITE, 0.50f));
+        DrawLine(26, py + 1, 50, py + 1, Fade(RAYWHITE, 0.60f));
         DrawRectangleLines(24, py, 28, 48, (Color){132, 100, 72, 255});
+        DrawRectangleLines(23, py - 1, 30, 50, Fade((Color){96, 70, 46, 255}, 0.55f));
     }
-    /* Macaneta cromada */
+    /* Chapa de protecao inferior em aco escovado */
+    R2008Quad((Vector2){16, 500}, (Vector2){63, 504}, (Vector2){63, 524}, (Vector2){16, 530}, (Color){176, 182, 188, 255});
+    DrawLine(16, 501, 63, 505, (Color){214, 220, 226, 255});
+    DrawLine(17, 514, 62, 513, Fade((Color){140, 146, 154, 255}, 0.7f));
+    /* Macaneta cromada com sombra e brilho */
+    DrawRectangle(45, 363, 12, 4, Fade(BLACK, 0.20f));
+    DrawCircle(57, 364, 4, Fade(BLACK, 0.20f));
     DrawCircle(56, 362, 4, (Color){210, 216, 222, 255});
+    DrawCircleLines(56, 362, 4, (Color){120, 126, 134, 255});
     DrawRectangle(44, 360, 12, 4, (Color){185, 192, 200, 255});
+    DrawLine(44, 360, 55, 360, (Color){236, 240, 244, 255});
+    DrawPixel(55, 360, RAYWHITE);
 
     /* Leitor de cracha eletronico ao lado da porta */
     Rectangle badgeReader = {70, 344, 16, 28};
+    DrawRectangleRounded((Rectangle){72, 347, 16, 28}, 0.2f, 4, Fade(BLACK, 0.18f));
     DrawRectangleRounded(badgeReader, 0.2f, 4, (Color){48, 56, 66, 255});
+    DrawLine(72, 345, 84, 345, (Color){104, 114, 126, 255});
     DrawRectangleLinesEx(badgeReader, 1.0f, (Color){95, 105, 118, 255});
+    DrawCircle(78, 352, 3.6f, Fade((Color){65, 230, 115, 255}, 0.25f + 0.15f * sinf(time * 2.0f)));
     DrawCircle(78, 352, 2.2f, (Color){65, 230, 115, 255});
+    DrawPixel(77, 351, (Color){210, 255, 220, 255});
     DrawRectangle(74, 358, 8, 9, (Color){82, 92, 104, 255});
+    DrawLine(75, 360, 80, 360, (Color){60, 68, 78, 255});
+    DrawLine(75, 363, 80, 363, (Color){60, 68, 78, 255});
 
     /* Vaso corporativo com planta ornamental no canto esquerdo */
     DrawEllipse(216, 520, 26, 7, Fade(BLACK, 0.20f));
+    DrawEllipse(222, 521, 30, 5, Fade(BLACK, 0.10f));
     DrawTriangle((Vector2){196, 470}, (Vector2){203, 518}, (Vector2){236, 470}, (Color){228, 223, 214, 255});
     DrawTriangle((Vector2){236, 470}, (Vector2){203, 518}, (Vector2){229, 518}, (Color){228, 223, 214, 255});
+    /* Volume do vaso: lado esquerdo iluminado, lado direito em sombra */
+    DrawTriangle((Vector2){198, 471}, (Vector2){204, 517}, (Vector2){206, 471}, (Color){244, 241, 234, 255});
+    DrawTriangle((Vector2){206, 471}, (Vector2){204, 517}, (Vector2){209, 517}, (Color){244, 241, 234, 255});
+    DrawTriangle((Vector2){224, 471}, (Vector2){222, 517}, (Vector2){235, 471}, (Color){204, 198, 188, 255});
+    DrawTriangle((Vector2){235, 471}, (Vector2){222, 517}, (Vector2){229, 517}, (Color){204, 198, 188, 255});
+    DrawLineEx((Vector2){196, 471}, (Vector2){203, 518}, 1.0f, (Color){160, 152, 140, 255});
+    DrawLineEx((Vector2){236, 471}, (Vector2){229, 518}, 1.0f, (Color){150, 142, 130, 255});
+    DrawLine(203, 518, 229, 518, (Color){150, 142, 130, 255});
+    /* Faixa decorativa em baixo-relevo */
+    DrawLine(199, 489, 233, 489, Fade((Color){168, 160, 148, 255}, 0.8f));
+    DrawLine(199, 490, 233, 490, Fade(RAYWHITE, 0.6f));
     DrawRectangleRounded((Rectangle){193, 464, 46, 8}, 0.3f, 4, (Color){238, 233, 224, 255});
     DrawRectangleLinesEx((Rectangle){193, 464, 46, 8}, 1.0f, (Color){168, 160, 148, 255});
-    /* Folhagem da planta */
+    /* Folhagem da planta (base escura atras e folhas com dois tons e nervura) */
+    DrawEllipse(216, 452, 22, 14, (Color){36, 86, 48, 255});
     DrawEllipse(216, 442, 10, 24, (Color){62, 128, 74, 255});
     DrawEllipse(203, 448, 14, 18, (Color){48, 108, 60, 255});
     DrawEllipse(229, 448, 14, 18, (Color){74, 142, 84, 255});
     DrawEllipse(209, 432, 8, 20, (Color){82, 152, 90, 255});
     DrawEllipse(224, 434, 9, 19, (Color){54, 118, 66, 255});
+    /* Luz de cima nas folhas e nervuras centrais */
+    DrawEllipse(207, 425, 4, 10, Fade((Color){150, 206, 140, 255}, 0.55f));
+    DrawEllipse(214, 428, 4, 12, Fade((Color){130, 190, 124, 255}, 0.45f));
+    DrawLineEx((Vector2){209, 414}, (Vector2){209, 450}, 1.0f, Fade((Color){30, 80, 40, 255}, 0.6f));
+    DrawLineEx((Vector2){216, 420}, (Vector2){216, 462}, 1.0f, Fade((Color){30, 80, 40, 255}, 0.55f));
+    DrawLineEx((Vector2){203, 434}, (Vector2){203, 462}, 1.0f, Fade((Color){26, 72, 36, 255}, 0.5f));
+    DrawEllipseLines(209, 432, 8, 20, Fade((Color){30, 74, 40, 255}, 0.55f));
+    DrawEllipseLines(216, 442, 10, 24, Fade((Color){30, 74, 40, 255}, 0.45f));
 
     /* Colecionavel oculto (F): celular de flip esquecido dentro do vaso, entre
        as folhas, com o LED de SMS piscando fraco. Some depois de coletado. */
@@ -6836,15 +6986,28 @@ void DrawRoom2008(const GameState *game)
 
     /* Sombra e moldura de aluminio anodizado da janela */
     DrawRectangle((int)winOuter.x + 4, (int)winOuter.y + 4, (int)winOuter.width, (int)winOuter.height, Fade(BLACK, 0.16f));
+    DrawRectangle((int)winOuter.x + 7, (int)winOuter.y + 8, (int)winOuter.width, (int)winOuter.height, Fade(BLACK, 0.06f));
     DrawRectangleRounded(winOuter, 0.04f, 6, (Color){168, 176, 184, 255});
+    /* Volume da moldura: topo/esquerda claros, base/direita escuros */
+    DrawRectangle((int)winOuter.x + 3, (int)winOuter.y + 2, (int)winOuter.width - 6, 3, (Color){206, 212, 220, 255});
+    DrawRectangle((int)winOuter.x + 2, (int)winOuter.y + 3, 3, (int)winOuter.height - 6, (Color){196, 204, 212, 255});
+    DrawRectangle((int)(winOuter.x + winOuter.width - 5), (int)winOuter.y + 3, 3, (int)winOuter.height - 6, (Color){140, 148, 158, 255});
+    /* Rebaixo interno escuro (profundidade do vao) */
+    DrawRectangleLinesEx((Rectangle){winInner.x - 2, winInner.y - 2, winInner.width + 4, winInner.height + 4}, 2.0f, (Color){112, 120, 130, 255});
     DrawRectangleRoundedLinesEx(winOuter, 0.04f, 6, 2.5f, (Color){122, 130, 140, 255});
+    /* Peitoril com highlight superior e sombra projetada na parede */
+    DrawRectangle((int)winOuter.x - 2, (int)(winOuter.y + winOuter.height + 4), (int)winOuter.width + 10, 5, Fade(BLACK, 0.12f));
     DrawRectangle((int)winOuter.x - 4, (int)(winOuter.y + winOuter.height - 4), (int)winOuter.width + 8, 8, (Color){185, 192, 200, 255});
+    DrawLine((int)winOuter.x - 4, (int)(winOuter.y + winOuter.height - 4), (int)(winOuter.x + winOuter.width + 4), (int)(winOuter.y + winOuter.height - 4), (Color){226, 232, 238, 255});
+    DrawLine((int)winOuter.x - 4, (int)(winOuter.y + winOuter.height + 3), (int)(winOuter.x + winOuter.width + 4), (int)(winOuter.y + winOuter.height + 3), (Color){128, 136, 146, 255});
 
     BeginScissorMode((int)winInner.x, (int)winInner.y, (int)winInner.width, (int)winInner.height);
 
     /* Ceu empresarial claro (gradiente azul celeste para horizonte claro) */
     DrawRectangleGradientV((int)winInner.x, (int)winInner.y, (int)winInner.width, (int)winInner.height,
                            (Color){122, 172, 218, 255}, (Color){218, 232, 244, 255});
+    /* Brilho do sol da tarde no canto do ceu */
+    DrawCircleGradient((Vector2){664, 176}, 70, Fade((Color){255, 246, 214, 255}, 0.55f), Fade((Color){255, 246, 214, 255}, 0.0f));
 
     /* Nuvens suaves se movendo lentamente */
     for (int cl = 0; cl < 4; cl++)
@@ -6859,12 +7022,23 @@ void DrawRoom2008(const GameState *game)
     int bldX[7] = {336, 386, 442, 496, 558, 612, 658};
     int bldW[7] = {44,  50,  48,  56,  48,  42,  40};
     int bldY[7] = {190, 168, 198, 158, 176, 192, 172};
+    /* Segundo plano: predios distantes em neblina azulada */
+    for (int fb = 0; fb < 9; fb++)
+    {
+        int fx = 330 + fb * 44 - (fb % 3) * 9;
+        int fy = 204 + (fb * 37) % 34;
+        DrawRectangle(fx, fy, 34 + (fb % 2) * 10, 275 - fy, (Color){168, 192, 214, 255});
+        DrawLine(fx, fy, fx + 34 + (fb % 2) * 10, fy, (Color){196, 214, 230, 255});
+    }
     for (int b = 0; b < 7; b++)
     {
         Color bCol = (b % 2 == 0) ? (Color){118, 144, 172, 255} : (Color){96, 124, 154, 255};
         DrawRectangle(bldX[b], bldY[b], bldW[b], 275 - bldY[b], bCol);
         /* Lateral iluminada pelo sol nos predios */
         DrawRectangle(bldX[b], bldY[b], 8, 275 - bldY[b], Fade(RAYWHITE, 0.24f));
+        /* Face direita em sombra e cobertura iluminada */
+        DrawRectangle(bldX[b] + bldW[b] - 7, bldY[b], 7, 275 - bldY[b], Fade((Color){40, 60, 90, 255}, 0.30f));
+        DrawRectangle(bldX[b], bldY[b], bldW[b], 3, Fade(RAYWHITE, 0.45f));
         DrawRectangleLines(bldX[b], bldY[b], bldW[b], 275 - bldY[b], (Color){78, 102, 130, 255});
         /* Antena no topo de alguns predios */
         if (b == 1 || b == 3 || b == 4)
@@ -6878,7 +7052,9 @@ void DrawRoom2008(const GameState *game)
         {
             for (int wx = bldX[b] + 6; wx < bldX[b] + bldW[b] - 6; wx += 9)
             {
-                DrawRectangle(wx, wy, 6, 6, Fade((Color){210, 232, 250, 255}, 0.55f));
+                float wa = ((wx * 7 + wy * 3 + b) % 5 == 0) ? 0.85f : 0.55f;
+                DrawRectangle(wx, wy, 6, 6, Fade((Color){210, 232, 250, 255}, wa));
+                DrawPixel(wx, wy, Fade(RAYWHITE, wa));
             }
         }
     }
@@ -6895,6 +7071,7 @@ void DrawRoom2008(const GameState *game)
     {
         int sy = (int)winInner.y + sl * 5;
         DrawRectangle((int)winInner.x, sy, (int)winInner.width, 4, (Color){238, 236, 228, 255});
+        DrawLine((int)winInner.x, sy, (int)(winInner.x + winInner.width), sy, (Color){250, 249, 244, 255});
         DrawLine((int)winInner.x, sy + 4, (int)(winInner.x + winInner.width), sy + 4, (Color){188, 184, 174, 255});
     }
     /* Cordao da persiana na direita */
@@ -6905,6 +7082,8 @@ void DrawRoom2008(const GameState *game)
     DrawLineEx((Vector2){355, 146}, (Vector2){415, 268}, 10.0f, Fade(RAYWHITE, 0.18f));
     DrawLineEx((Vector2){375, 146}, (Vector2){435, 268}, 4.0f, Fade(RAYWHITE, 0.14f));
     DrawLineEx((Vector2){555, 146}, (Vector2){615, 268}, 8.0f, Fade(RAYWHITE, 0.15f));
+    /* Sombra interna no topo do vidro (vao da janela) */
+    DrawRectangleGradientV((int)winInner.x, (int)winInner.y + 25, (int)winInner.width, 8, Fade((Color){60, 70, 84, 255}, 0.22f), Fade((Color){60, 70, 84, 255}, 0.0f));
 
     EndScissorMode();
 
@@ -6912,6 +7091,10 @@ void DrawRoom2008(const GameState *game)
     DrawLineEx((Vector2){452, 144}, (Vector2){452, 270}, 3.5f, (Color){152, 160, 170, 255});
     DrawLineEx((Vector2){574, 144}, (Vector2){574, 270}, 3.5f, (Color){152, 160, 170, 255});
     DrawLineEx((Vector2){330, 220}, (Vector2){696, 220}, 3.0f, (Color){152, 160, 170, 255});
+    DrawLine(451, 144, 451, 270, (Color){196, 204, 212, 255});
+    DrawLine(573, 144, 573, 270, (Color){196, 204, 212, 255});
+    DrawLine(330, 219, 696, 219, (Color){200, 208, 216, 255});
+    DrawLine(330, 222, 696, 222, (Color){120, 128, 138, 255});
 
     /* ===================================================================== */
     /* 4. QUADRO DE CORTICA E AVISOS + PANFLETO DA REVOLTA (DOC 2)           */
@@ -6921,24 +7104,47 @@ void DrawRoom2008(const GameState *game)
     DrawRectangle((int)corkBoard.x + 5, (int)corkBoard.y + 5, (int)corkBoard.width, (int)corkBoard.height, Fade(BLACK, 0.18f));
     /* Moldura de madeira clara e aluminio */
     DrawRectangleRounded(corkBoard, 0.04f, 6, (Color){184, 142, 98, 255});
+    /* Volume da moldura: topo/esquerda iluminados, base/direita em sombra */
+    DrawRectangle((int)corkBoard.x + 4, (int)corkBoard.y + 2, (int)corkBoard.width - 8, 3, (Color){214, 176, 132, 255});
+    DrawRectangle((int)corkBoard.x + 2, (int)corkBoard.y + 4, 3, (int)corkBoard.height - 8, (Color){204, 164, 120, 255});
+    DrawRectangle((int)corkBoard.x + 4, (int)(corkBoard.y + corkBoard.height - 5), (int)corkBoard.width - 8, 3, (Color){150, 112, 74, 255});
+    DrawRectangle((int)(corkBoard.x + corkBoard.width - 5), (int)corkBoard.y + 4, 3, (int)corkBoard.height - 8, (Color){156, 118, 80, 255});
     DrawRectangleRoundedLinesEx(corkBoard, 0.04f, 6, 4.0f, (Color){138, 102, 68, 255});
+    DrawRectangleRoundedLinesEx((Rectangle){corkBoard.x - 1, corkBoard.y - 1, corkBoard.width + 2, corkBoard.height + 2}, 0.04f, 6, 1.0f, (Color){102, 72, 44, 255});
     Rectangle corkInner = {corkBoard.x + 8, corkBoard.y + 8, corkBoard.width - 16, corkBoard.height - 16};
     DrawRectangleRec(corkInner, (Color){174, 130, 86, 255});
+    /* Sombra interna da moldura sobre a cortica */
+    DrawRectangleGradientV((int)corkInner.x, (int)corkInner.y, (int)corkInner.width, 6, Fade((Color){90, 60, 34, 255}, 0.45f), Fade((Color){90, 60, 34, 255}, 0.0f));
+    DrawRectangleGradientH((int)corkInner.x, (int)corkInner.y, 5, (int)corkInner.height, Fade((Color){90, 60, 34, 255}, 0.35f), Fade((Color){90, 60, 34, 255}, 0.0f));
     DrawRectangleLinesEx(corkInner, 1.5f, (Color){122, 88, 54, 255});
 
-    /* Textura granulada da cortica */
-    for (int cp = 0; cp < 34; cp++)
+    /* Textura granulada da cortica (tres tons) */
+    for (int cp = 0; cp < 90; cp++)
     {
-        int cpx = (int)corkInner.x + 6 + (cp * 37) % ((int)corkInner.width - 12);
-        int cpy = (int)corkInner.y + 6 + (cp * 23) % ((int)corkInner.height - 12);
-        DrawCircle(cpx, cpy, 1.2f, (cp % 2 == 0) ? (Color){148, 106, 66, 255} : (Color){196, 152, 108, 255});
+        int cpx = (int)corkInner.x + 4 + (cp * 37 + cp / 7) % ((int)corkInner.width - 8);
+        int cpy = (int)corkInner.y + 4 + (cp * 23 + cp * cp) % ((int)corkInner.height - 8);
+        Color cc = (cp % 3 == 0) ? (Color){148, 106, 66, 255} : (cp % 3 == 1) ? (Color){196, 152, 108, 255} : (Color){160, 116, 74, 255};
+        if (cp % 4 == 0) DrawCircle(cpx, cpy, 1.2f, cc);
+        else DrawRectangle(cpx, cpy, 2, 1, cc);
     }
+    /* Furos de tachinhas antigas */
+    DrawPixel(160, 206, (Color){96, 66, 40, 255});
+    DrawPixel(102, 322, (Color){96, 66, 40, 255});
+    DrawPixel(258, 230, (Color){96, 66, 40, 255});
 
     /* Cantoneiras metalicas do quadro */
     DrawRectangle((int)corkBoard.x, (int)corkBoard.y, 12, 12, (Color){180, 188, 196, 255});
     DrawRectangle((int)(corkBoard.x + corkBoard.width - 12), (int)corkBoard.y, 12, 12, (Color){180, 188, 196, 255});
     DrawRectangle((int)corkBoard.x, (int)(corkBoard.y + corkBoard.height - 12), 12, 12, (Color){180, 188, 196, 255});
     DrawRectangle((int)(corkBoard.x + corkBoard.width - 12), (int)(corkBoard.y + corkBoard.height - 12), 12, 12, (Color){180, 188, 196, 255});
+    for (int cn = 0; cn < 4; cn++)
+    {
+        float cnx = (cn % 2 == 0) ? corkBoard.x : corkBoard.x + corkBoard.width - 12;
+        float cny = (cn < 2) ? corkBoard.y : corkBoard.y + corkBoard.height - 12;
+        DrawLine((int)cnx, (int)cny, (int)cnx + 12, (int)cny, (Color){222, 228, 234, 255});
+        DrawRectangleLines((int)cnx, (int)cny, 12, 12, (Color){120, 128, 138, 255});
+        R2008Screw(cnx + 6, cny + 6);
+    }
 
     /* Post-it amarelo (esquerda superior) com tachinha azul */
     DrawRectangle(96, 148, 48, 38, Fade(BLACK, 0.16f));
@@ -6946,7 +7152,11 @@ void DrawRoom2008(const GameState *game)
     DrawRectangle(94, 146, 48, 6, (Color){236, 218, 92, 255});
     DrawLine(100, 160, 134, 160, (Color){165, 150, 70, 255});
     DrawLine(100, 168, 128, 168, (Color){165, 150, 70, 255});
+    DrawTriangle((Vector2){142, 176}, (Vector2){132, 184}, (Vector2){142, 184}, (Color){226, 210, 96, 255});
+    DrawLine(132, 184, 142, 176, (Color){196, 180, 80, 255});
+    DrawCircle(119, 152, 3.0f, Fade(BLACK, 0.30f));
     DrawCircle(118, 150, 3.0f, (Color){45, 125, 210, 255});
+    DrawPixel(117, 149, (Color){190, 220, 255, 255});
 
     /* Post-it azul (direita superior) com tachinha verde */
     DrawRectangle(212, 148, 48, 38, Fade(BLACK, 0.16f));
@@ -6954,17 +7164,30 @@ void DrawRoom2008(const GameState *game)
     DrawRectangle(210, 146, 48, 6, (Color){126, 198, 228, 255});
     DrawLine(216, 160, 250, 160, (Color){75, 130, 155, 255});
     DrawLine(216, 168, 242, 168, (Color){75, 130, 155, 255});
+    DrawTriangle((Vector2){258, 176}, (Vector2){248, 184}, (Vector2){258, 184}, (Color){126, 196, 222, 255});
+    DrawLine(248, 184, 258, 176, (Color){100, 170, 196, 255});
+    DrawCircle(235, 152, 3.0f, Fade(BLACK, 0.30f));
     DrawCircle(234, 150, 3.0f, (Color){45, 175, 95, 255});
+    DrawPixel(233, 149, (Color){200, 255, 220, 255});
 
     /* Fio vermelho de investigacao ligando post-it ao panfleto */
-    DrawLineEx((Vector2){118, 150}, (Vector2){176, 198}, 1.2f, Fade((Color){195, 40, 35, 255}, 0.65f));
+    DrawLineEx((Vector2){119, 152}, (Vector2){177, 200}, 1.2f, Fade(BLACK, 0.15f));
+    DrawLineEx((Vector2){118, 150}, (Vector2){176, 198}, 1.2f, Fade((Color){195, 40, 35, 255}, 0.75f));
 
     /* Panfleto apreendido central detalhado (flyerRec) */
     DrawRectangle((int)flyerRec.x + 4, (int)flyerRec.y + 4, (int)flyerRec.width, (int)flyerRec.height, Fade(BLACK, 0.25f));
     DrawRectangleRounded(flyerRec, 0.03f, 4, (Color){248, 242, 226, 255});
+    DrawRectangleGradientV((int)flyerRec.x + 2, (int)(flyerRec.y + flyerRec.height - 18), (int)flyerRec.width - 4, 16, Fade((Color){220, 206, 178, 255}, 0.0f), Fade((Color){220, 206, 178, 255}, 0.55f));
+    /* Canto inferior direito levemente dobrado */
+    DrawTriangle((Vector2){flyerRec.x + flyerRec.width - 12, flyerRec.y + flyerRec.height - 2}, (Vector2){flyerRec.x + flyerRec.width - 2, flyerRec.y + flyerRec.height - 2},
+                 (Vector2){flyerRec.x + flyerRec.width - 2, flyerRec.y + flyerRec.height - 12}, (Color){174, 130, 86, 255});
+    DrawTriangle((Vector2){flyerRec.x + flyerRec.width - 12, flyerRec.y + flyerRec.height - 2}, (Vector2){flyerRec.x + flyerRec.width - 2, flyerRec.y + flyerRec.height - 12},
+                 (Vector2){flyerRec.x + flyerRec.width - 12, flyerRec.y + flyerRec.height - 12}, (Color){226, 214, 190, 255});
     DrawRectangleRoundedLinesEx(flyerRec, 0.03f, 4, 1.5f, game->doc2008FlyerExamined ? (Color){45, 165, 85, 255} : (Color){165, 148, 120, 255});
     /* Faixa vermelha de cabecalho do manifesto */
     DrawRectangle((int)flyerRec.x + 8, (int)flyerRec.y + 12, (int)flyerRec.width - 16, 20, (Color){185, 42, 34, 255});
+    DrawLine((int)flyerRec.x + 8, (int)flyerRec.y + 12, (int)(flyerRec.x + flyerRec.width - 9), (int)flyerRec.y + 12, (Color){214, 82, 70, 255});
+    DrawLine((int)flyerRec.x + 8, (int)flyerRec.y + 31, (int)(flyerRec.x + flyerRec.width - 9), (int)flyerRec.y + 31, (Color){140, 28, 22, 255});
     DrawGameText("MANIFESTO", (int)flyerRec.x + 34, (int)flyerRec.y + 16, 12, RAYWHITE);
     /* Tachinha 3D vermelha no topo */
     DrawCircle((int)(flyerRec.x + flyerRec.width / 2 + 1), (int)flyerRec.y + 7, 5.0f, Fade(BLACK, 0.30f));
@@ -6984,13 +7207,27 @@ void DrawRoom2008(const GameState *game)
     /* 5. MONITOR CFTV DE SEGURANCA NA PAREDE (DOC 4)                        */
     /* ===================================================================== */
     /* Suporte articulado de parede e conduite de cabos */
+    DrawRectangle(824, 121, 22, 18, Fade(BLACK, 0.15f));
     DrawRectangle(822, 118, 22, 18, (Color){120, 128, 138, 255});
-    DrawLineEx((Vector2){833, 272}, (Vector2){833, 384}, 3.0f, (Color){145, 150, 158, 255});
+    DrawLine(822, 118, 843, 118, (Color){176, 184, 194, 255});
+    DrawRectangleLines(822, 118, 22, 18, (Color){84, 92, 102, 255});
+    /* Conduite de cabos com abracadeiras descendo ate a meia-parede */
+    DrawLineEx((Vector2){835, 272}, (Vector2){835, 384}, 4.0f, Fade(BLACK, 0.12f));
+    DrawLineEx((Vector2){833, 272}, (Vector2){833, 384}, 4.0f, (Color){170, 176, 184, 255});
+    DrawLine(832, 272, 832, 384, (Color){214, 220, 226, 255});
+    DrawLine(835, 272, 835, 384, (Color){128, 134, 142, 255});
+    for (int cj = 300; cj < 384; cj += 36)
+    {
+        DrawRectangle(829, cj, 9, 4, (Color){150, 156, 164, 255});
+        DrawLine(829, cj, 837, cj, (Color){206, 212, 220, 255});
+    }
     /* Sombra projetada do monitor na parede */
     DrawRectangle((int)cctvMonitor.x + 5, (int)cctvMonitor.y + 5, (int)cctvMonitor.width, (int)cctvMonitor.height, Fade(BLACK, 0.22f));
     /* Moldura metalica prateada/grafite 2008 */
     DrawRectangleRounded(cctvMonitor, 0.06f, 6, (Color){74, 84, 96, 255});
+    DrawRectangleGradientV((int)cctvMonitor.x + 4, (int)cctvMonitor.y + 2, (int)cctvMonitor.width - 8, 10, (Color){112, 124, 138, 255}, (Color){74, 84, 96, 255});
     DrawRectangleRoundedLinesEx(cctvMonitor, 0.06f, 6, 2.5f, (Color){125, 136, 148, 255});
+    DrawRectangleRoundedLinesEx((Rectangle){cctvMonitor.x - 1, cctvMonitor.y - 1, cctvMonitor.width + 2, cctvMonitor.height + 2}, 0.06f, 6, 1.0f, (Color){52, 60, 70, 255});
     DrawRectangleRounded((Rectangle){cctvMonitor.x + 4, cctvMonitor.y + 4, cctvMonitor.width - 8, cctvMonitor.height - 16}, 0.04f, 4, (Color){44, 52, 60, 255});
 
     Rectangle cctvScr = {cctvMonitor.x + 9, cctvMonitor.y + 9, cctvMonitor.width - 18, cctvMonitor.height - 28};
@@ -7031,11 +7268,16 @@ void DrawRoom2008(const GameState *game)
     DrawGameText("[DOC 4: CFTV]", (int)cctvScr.x + 44, (int)(cctvScr.y + cctvScr.height - 15), 11, (Color){110, 255, 150, 255});
     EndScissorMode();
 
+    /* Reflexo discreto no vidro da tela (canto direito, longe dos textos) */
+    R2008Quad((Vector2){cctvScr.x + cctvScr.width - 46, cctvScr.y + 1}, (Vector2){cctvScr.x + cctvScr.width - 30, cctvScr.y + 1},
+              (Vector2){cctvScr.x + cctvScr.width - 54, cctvScr.y + cctvScr.height - 20}, (Vector2){cctvScr.x + cctvScr.width - 70, cctvScr.y + cctvScr.height - 20},
+              Fade(RAYWHITE, 0.07f));
     DrawRectangleLinesEx(cctvScr, 1.5f, (Color){55, 165, 95, 255});
     /* Botoes fisicos e LED no painel inferior do monitor CFTV */
     for (int mb = 0; mb < 4; mb++)
     {
         DrawRectangle((int)cctvMonitor.x + 115 + mb * 14, (int)(cctvMonitor.y + cctvMonitor.height - 13), 8, 4, (Color){130, 140, 150, 255});
+        DrawLine((int)cctvMonitor.x + 115 + mb * 14, (int)(cctvMonitor.y + cctvMonitor.height - 13), (int)cctvMonitor.x + 122 + mb * 14, (int)(cctvMonitor.y + cctvMonitor.height - 13), (Color){186, 194, 204, 255});
     }
     DrawCircle((int)(cctvMonitor.x + cctvMonitor.width - 14), (int)(cctvMonitor.y + cctvMonitor.height - 11), 2.5f, (Color){70, 235, 115, 255});
 
@@ -7047,20 +7289,39 @@ void DrawRoom2008(const GameState *game)
 
     /* Lateral esquerda 3D em perspectiva do gabinete/armario executivo */
     DrawRectangle(962, 130, 22, 456, (Color){142, 148, 156, 255});
+    DrawRectangleGradientH(962, 130, 22, 456, (Color){160, 166, 174, 255}, (Color){126, 132, 140, 255});
+    for (int sv = 0; sv < 10; sv++)
+    {
+        DrawLine(967, 160 + sv * 8, 979, 162 + sv * 8, (Color){104, 110, 118, 255});
+        DrawLine(967, 161 + sv * 8, 979, 163 + sv * 8, (Color){176, 182, 190, 255});
+    }
     DrawLineEx((Vector2){962, 130}, (Vector2){962, 586}, 2.0f, (Color){108, 114, 122, 255});
 
     /* Corpo frontal do armario integrado (Rack superior + Credenza inferior) */
     Rectangle unitFront = {984, 130, 192, 458};
     DrawRectangleRec(unitFront, (Color){176, 182, 190, 255});
+    DrawRectangleGradientH((int)unitFront.x, (int)unitFront.y, (int)unitFront.width, (int)unitFront.height, (Color){188, 194, 202, 255}, (Color){166, 172, 180, 255});
+    DrawLine((int)unitFront.x + 2, (int)unitFront.y + 2, (int)unitFront.x + 2, (int)(unitFront.y + unitFront.height - 2), (Color){212, 218, 224, 255});
     DrawRectangleLinesEx(unitFront, 2.0f, (Color){118, 126, 136, 255});
+    DrawRectangleLinesEx((Rectangle){unitFront.x - 1, unitFront.y - 1, unitFront.width + 2, unitFront.height + 2}, 1.0f, (Color){86, 92, 102, 255});
     /* Topo e rodape do modulo */
     DrawRectangle(960, 124, 218, 10, (Color){128, 136, 146, 255});
+    DrawLine(960, 124, 1177, 124, (Color){186, 192, 200, 255});
+    DrawLine(960, 133, 1177, 133, (Color){96, 104, 114, 255});
     DrawRectangle(962, 576, 214, 14, (Color){104, 110, 118, 255});
 
     /* --- Parte Superior: Baia de Servidores (Rack 19") --- */
     Rectangle rackBay = {994, 142, 172, 232};
     DrawRectangleRec(rackBay, (Color){26, 34, 42, 255});
     DrawRectangleLinesEx(rackBay, 2.0f, (Color){88, 98, 110, 255});
+    /* Trilhos do rack 19 polegadas com furos */
+    DrawRectangle(996, 162, 4, 206, (Color){60, 70, 82, 255});
+    DrawRectangle(1160, 162, 4, 206, (Color){60, 70, 82, 255});
+    for (int rh = 166; rh < 366; rh += 8)
+    {
+        DrawPixel(997, rh, (Color){18, 22, 28, 255});
+        DrawPixel(1161, rh, (Color){18, 22, 28, 255});
+    }
     DrawGameText("SERVIDORES // RACK-03", 1012, 148, 11, (Color){165, 195, 215, 255});
 
     for (int u = 0; u < 5; u++)
@@ -7069,7 +7330,14 @@ void DrawRoom2008(const GameState *game)
         DrawRectangleRec(uSlot, (Color){36, 46, 56, 255});
         DrawRectangleLinesEx(uSlot, 1.0f, (Color){68, 82, 96, 255});
         /* Alcas laterais do blade server */
+        DrawLine((int)uSlot.x + 1, (int)uSlot.y + 1, (int)(uSlot.x + uSlot.width - 2), (int)uSlot.y + 1, (Color){78, 92, 108, 255});
+        DrawLine((int)uSlot.x + 1, (int)(uSlot.y + uSlot.height - 2), (int)(uSlot.x + uSlot.width - 2), (int)(uSlot.y + uSlot.height - 2), (Color){24, 30, 38, 255});
+        /* Etiqueta de patrimonio e baia de disco */
+        DrawRectangle((int)uSlot.x + 126, (int)uSlot.y + 7, 18, 6, (Color){214, 218, 222, 255});
+        DrawRectangle((int)uSlot.x + 126, (int)uSlot.y + 17, 18, 8, (Color){26, 32, 40, 255});
+        DrawLine((int)uSlot.x + 126, (int)uSlot.y + 17, (int)uSlot.x + 143, (int)uSlot.y + 17, (Color){92, 106, 120, 255});
         DrawRectangle((int)uSlot.x + 3, (int)uSlot.y + 4, 4, 24, (Color){130, 140, 150, 255});
+        DrawLine((int)uSlot.x + 3, (int)uSlot.y + 4, (int)uSlot.x + 3, (int)uSlot.y + 27, (Color){188, 196, 204, 255});
         DrawRectangle((int)(uSlot.x + uSlot.width - 7), (int)uSlot.y + 4, 4, 24, (Color){130, 140, 150, 255});
         /* Grade de ventilacao do servidor */
         for (int gx = (int)uSlot.x + 52; gx < (int)uSlot.x + 122; gx += 8)
@@ -7078,6 +7346,7 @@ void DrawRoom2008(const GameState *game)
         }
         /* LEDs de atividade piscando */
         float blink = sinf(time * (4.5f + u * 1.3f));
+        if (blink > 0) DrawCircle((int)uSlot.x + 18, (int)uSlot.y + 16, 5.5f, Fade((Color){65, 235, 115, 255}, 0.22f));
         DrawCircle((int)uSlot.x + 18, (int)uSlot.y + 16, 3.0f, (blink > 0) ? (Color){65, 235, 115, 255} : (Color){22, 90, 42, 255});
         DrawCircle((int)uSlot.x + 30, (int)uSlot.y + 16, 3.0f, (blink < 0) ? CYAN_COLOR : (Color){20, 75, 95, 255});
         DrawCircle((int)uSlot.x + 42, (int)uSlot.y + 16, 2.2f, GOLD_COLOR);
@@ -7086,9 +7355,15 @@ void DrawRoom2008(const GameState *game)
     /* --- Parte Inferior: Nicho Executivo em Madeira Clara (Documentos 5 e 6) --- */
     Rectangle credenzaBay = {986, 384, 188, 190};
     DrawRectangleRec(credenzaBay, (Color){194, 164, 126, 255});
+    R2008WoodGrain(credenzaBay, (Color){194, 164, 126, 255}, 3);
+    /* Fundo do nicho mais escuro no topo de cada prateleira (profundidade) */
+    DrawRectangleGradientV(988, 386, 184, 14, Fade((Color){96, 70, 44, 255}, 0.45f), Fade((Color){96, 70, 44, 255}, 0.0f));
+    DrawRectangleGradientV(988, 488, 184, 10, Fade((Color){96, 70, 44, 255}, 0.40f), Fade((Color){96, 70, 44, 255}, 0.0f));
     DrawRectangleLinesEx(credenzaBay, 2.0f, (Color){138, 108, 76, 255});
     /* Divisoria interna de madeira */
     DrawRectangle(988, 482, 184, 6, (Color){148, 116, 82, 255});
+    DrawLine(988, 482, 1171, 482, (Color){196, 162, 122, 255});
+    DrawLine(988, 487, 1171, 487, (Color){110, 84, 58, 255});
 
     /* DOCUMENTO DO PAI: Caderno de Pesquisa Dr. Ramos (fatherBookRec) */
     DrawRectangle((int)fatherBookRec.x + 3, (int)fatherBookRec.y + 4, (int)fatherBookRec.width, (int)fatherBookRec.height, Fade(BLACK, 0.25f));
@@ -7102,6 +7377,10 @@ void DrawRoom2008(const GameState *game)
     }
     /* Folhas de papel visiveis na borda e etiqueta dourada */
     DrawRectangle((int)(fatherBookRec.x + fatherBookRec.width - 8), (int)fatherBookRec.y + 5, 5, (int)fatherBookRec.height - 10, (Color){242, 236, 218, 255});
+    for (int pg = 0; pg < 2; pg++)
+        DrawLine((int)(fatherBookRec.x + fatherBookRec.width - 7 + pg * 2), (int)fatherBookRec.y + 6, (int)(fatherBookRec.x + fatherBookRec.width - 7 + pg * 2), (int)(fatherBookRec.y + fatherBookRec.height - 6), (Color){206, 196, 172, 255});
+    DrawLine((int)fatherBookRec.x + 19, (int)fatherBookRec.y + 3, (int)(fatherBookRec.x + fatherBookRec.width - 10), (int)fatherBookRec.y + 3, (Color){140, 92, 60, 255});
+    DrawLine((int)fatherBookRec.x + 18, (int)fatherBookRec.y + 2, (int)fatherBookRec.x + 18, (int)(fatherBookRec.y + fatherBookRec.height - 3), (Color){52, 28, 14, 255});
     DrawRectangleRounded((Rectangle){fatherBookRec.x + 24, fatherBookRec.y + 8, 130, 22}, 0.2f, 4, (Color){68, 38, 20, 255});
     DrawGameText("CADERNO DR. RAMOS", (int)fatherBookRec.x + 28, (int)fatherBookRec.y + 13, 10, GOLD_COLOR);
     DrawGameText("Projeto Humanitario", (int)fatherBookRec.x + 26, (int)fatherBookRec.y + 38, 11, (Color){245, 235, 215, 255});
@@ -7112,7 +7391,11 @@ void DrawRoom2008(const GameState *game)
     DrawRectangleRoundedLinesEx(govMemoRec, 0.10f, 4, 2.0f, game->doc2008GovContractExamined ? (Color){60, 220, 110, 255} : RED_COLOR);
     /* Aba de pasta confidencial, selo e grampo metalico */
     DrawRectangle((int)govMemoRec.x, (int)govMemoRec.y, 18, (int)govMemoRec.height, (Color){88, 24, 24, 255});
+    DrawLine((int)govMemoRec.x + 19, (int)govMemoRec.y + 3, (int)(govMemoRec.x + govMemoRec.width - 6), (int)govMemoRec.y + 3, (Color){168, 64, 60, 255});
+    DrawLine((int)govMemoRec.x + 18, (int)govMemoRec.y + 2, (int)govMemoRec.x + 18, (int)(govMemoRec.y + govMemoRec.height - 3), (Color){62, 16, 16, 255});
+    DrawCircle((int)govMemoRec.x + 10, (int)(govMemoRec.y + govMemoRec.height / 2) + 1, 4.5f, Fade(BLACK, 0.35f));
     DrawCircle((int)govMemoRec.x + 9, (int)(govMemoRec.y + govMemoRec.height / 2), 4.5f, GOLD_COLOR);
+    DrawCircle((int)govMemoRec.x + 8, (int)(govMemoRec.y + govMemoRec.height / 2) - 1, 1.5f, (Color){255, 240, 180, 255});
     DrawRectangleRounded((Rectangle){govMemoRec.x + 24, govMemoRec.y + 8, 132, 22}, 0.2f, 4, (Color){78, 20, 20, 255});
     DrawGameText("MEMORANDO GOV 2008", (int)govMemoRec.x + 27, (int)govMemoRec.y + 13, 10, (Color){255, 165, 155, 255});
     DrawGameText("Uso Militar / Drones", (int)govMemoRec.x + 26, (int)govMemoRec.y + 38, 11, (Color){242, 228, 225, 255});
@@ -7128,6 +7411,17 @@ void DrawRoom2008(const GameState *game)
     DrawLineEx((Vector2){455, 558}, (Vector2){825, 558}, 3.0f, (Color){92, 108, 124, 255});
     DrawLineEx((Vector2){455, 558}, (Vector2){355, 650}, 3.0f, (Color){88, 104, 120, 255});
     DrawLineEx((Vector2){825, 558}, (Vector2){925, 650}, 3.0f, (Color){88, 104, 120, 255});
+    /* Trama do carpete: faixa interna e listras finas em perspectiva */
+    R2008Quad((Vector2){466, 566}, (Vector2){814, 566}, (Vector2){900, 642}, (Vector2){380, 642}, Fade((Color){96, 112, 130, 255}, 0.35f));
+    R2008Quad((Vector2){474, 572}, (Vector2){806, 572}, (Vector2){886, 636}, (Vector2){394, 636}, rugCol);
+    for (int rl = 0; rl < 12; rl++)
+    {
+        float ry = 578.0f + rl * 5.5f;
+        float k = (ry - 558.0f) / 92.0f;
+        float rx0 = 455.0f - 100.0f * k + 26.0f;
+        float rx1 = 825.0f + 100.0f * k - 26.0f;
+        DrawLine((int)rx0, (int)ry, (int)rx1, (int)ry, Fade((rl % 2) ? (Color){134, 150, 166, 255} : (Color){104, 120, 136, 255}, 0.45f));
+    }
 
     /* Sombra projetada da mesa executiva no piso */
     DrawEllipse(618, 618, 375, 20, Fade(BLACK, 0.24f));
@@ -7135,27 +7429,60 @@ void DrawRoom2008(const GameState *game)
     /* Vao central da mesa (painel de modestia em madeira escura) */
     DrawRectangle(495, 502, 250, 100, (Color){115, 88, 62, 255});
     DrawRectangleGradientV(495, 502, 250, 34, (Color){78, 58, 40, 255}, (Color){115, 88, 62, 255});
+    /* Ripas verticais do painel de modestia */
+    for (int mp = 520; mp < 745; mp += 25)
+    {
+        DrawLine(mp, 512, mp, 600, Fade((Color){86, 64, 44, 255}, 0.7f));
+        DrawLine(mp + 1, 512, mp + 1, 600, Fade((Color){138, 108, 78, 255}, 0.5f));
+    }
+    /* Cabos do computador descendo por tras da mesa ate a tomada */
+    R2008Cable((Vector2){604, 512}, (Vector2){600, 560}, (Vector2){560, 570}, (Vector2){548, 600}, 3.0f, (Color){40, 44, 50, 255});
+    R2008Cable((Vector2){626, 512}, (Vector2){630, 556}, (Vector2){664, 574}, (Vector2){676, 600}, 3.0f, (Color){52, 56, 62, 255});
 
     /* Pedestal esquerdo (gaveteiro executivo em carvalho claro) */
     DrawRectangle(280, 502, 215, 104, (Color){178, 144, 104, 255});
+    DrawRectangleGradientV(280, 511, 215, 10, Fade((Color){90, 66, 42, 255}, 0.45f), Fade((Color){90, 66, 42, 255}, 0.0f));
+    DrawLine(281, 502, 281, 605, (Color){204, 172, 132, 255});
+    DrawRectangle(489, 502, 6, 104, (Color){150, 118, 84, 255});
     DrawRectangle(280, 600, 215, 6, (Color){118, 92, 64, 255});
+    DrawRectangleLines(280, 502, 215, 104, (Color){110, 84, 58, 255});
     /* Duas gavetas com puxadores de aluminio escovado */
     for (int dr = 0; dr < 2; dr++)
     {
         Rectangle dBox = {296, (float)(512 + dr * 43), 182, 37};
         DrawRectangleRec(dBox, (Color){192, 158, 116, 255});
+        R2008WoodGrain(dBox, (Color){192, 158, 116, 255}, dr + 1);
+        DrawLine((int)dBox.x + 1, (int)dBox.y + 1, (int)(dBox.x + dBox.width - 2), (int)dBox.y + 1, (Color){214, 184, 146, 255});
+        DrawLine((int)dBox.x + 1, (int)(dBox.y + dBox.height - 2), (int)(dBox.x + dBox.width - 2), (int)(dBox.y + dBox.height - 2), (Color){160, 128, 92, 255});
         DrawRectangleLinesEx(dBox, 1.5f, (Color){138, 108, 76, 255});
+        DrawRectangleRounded((Rectangle){dBox.x + 63, dBox.y + 17, 58, 8}, 0.4f, 4, Fade((Color){90, 66, 42, 255}, 0.45f));
         DrawRectangleRounded((Rectangle){dBox.x + 62, dBox.y + 15, 58, 8}, 0.4f, 4, (Color){205, 212, 220, 255});
+        DrawLine((int)dBox.x + 65, (int)dBox.y + 16, (int)dBox.x + 117, (int)dBox.y + 16, (Color){240, 244, 248, 255});
+        DrawLine((int)dBox.x + 65, (int)dBox.y + 22, (int)dBox.x + 117, (int)dBox.y + 22, (Color){150, 158, 168, 255});
         DrawCircle((int)(dBox.x + dBox.width - 14), (int)(dBox.y + 12), 2.5f, (Color){110, 116, 124, 255});
     }
 
     /* Pedestal direito (armario da mesa em carvalho claro) */
     DrawRectangle(745, 502, 205, 104, (Color){178, 144, 104, 255});
+    DrawRectangleGradientV(745, 511, 205, 10, Fade((Color){90, 66, 42, 255}, 0.45f), Fade((Color){90, 66, 42, 255}, 0.0f));
+    DrawRectangle(745, 502, 6, 104, (Color){150, 118, 84, 255});
+    DrawLine(949, 502, 949, 605, (Color){150, 118, 84, 255});
     DrawRectangle(745, 600, 205, 6, (Color){118, 92, 64, 255});
+    DrawRectangleLines(745, 502, 205, 104, (Color){110, 84, 58, 255});
     Rectangle rDoor = {762, 512, 170, 80};
     DrawRectangleRec(rDoor, (Color){192, 158, 116, 255});
+    R2008WoodGrain(rDoor, (Color){192, 158, 116, 255}, 5);
+    /* Almofada rebaixada da porta do armario */
+    DrawRectangleLinesEx((Rectangle){rDoor.x + 34, rDoor.y + 10, rDoor.width - 48, rDoor.height - 20}, 1.0f, (Color){160, 128, 92, 255});
+    DrawLine((int)rDoor.x + 35, (int)(rDoor.y + rDoor.height - 10), (int)(rDoor.x + rDoor.width - 14), (int)(rDoor.y + rDoor.height - 10), (Color){214, 184, 146, 255});
+    DrawLine((int)rDoor.x + 1, (int)rDoor.y + 1, (int)(rDoor.x + rDoor.width - 2), (int)rDoor.y + 1, (Color){214, 184, 146, 255});
     DrawRectangleLinesEx(rDoor, 1.5f, (Color){138, 108, 76, 255});
+    DrawRectangleRounded((Rectangle){rDoor.x + 15, rDoor.y + 30, 8, 28}, 0.4f, 4, Fade((Color){90, 66, 42, 255}, 0.45f));
     DrawRectangleRounded((Rectangle){rDoor.x + 14, rDoor.y + 28, 8, 28}, 0.4f, 4, (Color){205, 212, 220, 255});
+    DrawLine((int)rDoor.x + 16, (int)rDoor.y + 30, (int)rDoor.x + 16, (int)rDoor.y + 53, (Color){240, 244, 248, 255});
+    /* Fechadura do armario */
+    DrawCircle((int)(rDoor.x + rDoor.width - 16), (int)rDoor.y + 14, 3.0f, (Color){150, 158, 168, 255});
+    DrawLine((int)(rDoor.x + rDoor.width - 16), (int)rDoor.y + 12, (int)(rDoor.x + rDoor.width - 16), (int)rDoor.y + 16, (Color){70, 76, 84, 255});
 
     /* Tampo da mesa executiva com perspectiva 3D real (mais profundo para acomodar todos os itens) */
     Vector2 tTopL = {268, 412};
@@ -7165,13 +7492,30 @@ void DrawRoom2008(const GameState *game)
     Color deskTopCol = (Color){214, 182, 140, 255};
     DrawTriangle(tTopL, tBotL, tTopR, deskTopCol);
     DrawTriangle(tTopR, tBotL, tBotR, deskTopCol);
+    /* Veios longos do carvalho acompanhando a profundidade do tampo */
+    for (int vg = 0; vg < 13; vg++)
+    {
+        float vy = 418.0f + vg * 6.5f;
+        float k = (vy - 412.0f) / 88.0f;
+        float vx0 = 268.0f - 20.0f * k + 6.0f + (float)((vg * 37) % 60);
+        float vx1 = 962.0f + 20.0f * k - 6.0f - (float)((vg * 53) % 80);
+        DrawLineEx((Vector2){vx0, vy}, (Vector2){vx1, vy + ((vg % 2) ? 1.0f : 0.0f)}, 1.0f,
+                   Fade((vg % 3 == 0) ? (Color){232, 204, 166, 255} : (Color){188, 154, 112, 255}, 0.50f));
+    }
+    /* Luz da janela batendo no tampo (faixa suave) */
+    R2008Quad((Vector2){340, 413}, (Vector2){470, 413}, (Vector2){440, 499}, (Vector2){300, 499}, Fade((Color){255, 248, 226, 255}, 0.16f));
     DrawLineEx(tTopL, tTopR, 2.0f, (Color){236, 210, 174, 255});
     DrawLineEx(tTopL, tBotL, 2.0f, (Color){184, 150, 110, 255});
     DrawLineEx(tTopR, tBotR, 2.0f, (Color){184, 150, 110, 255});
+    DrawLineEx((Vector2){267, 411}, (Vector2){247, 500}, 1.0f, (Color){130, 100, 70, 255});
+    DrawLineEx((Vector2){963, 411}, (Vector2){983, 500}, 1.0f, (Color){130, 100, 70, 255});
 
     /* Borda frontal chanfrada do tampo (madeira + friso de aluminio) */
     DrawRectangle(248, 500, 734, 10, (Color){162, 128, 92, 255});
+    DrawLine(248, 500, 981, 500, (Color){226, 196, 156, 255});
     DrawRectangle(248, 508, 734, 3, (Color){190, 198, 206, 255});
+    DrawLine(248, 508, 981, 508, (Color){230, 236, 242, 255});
+    DrawLine(248, 511, 981, 511, (Color){104, 80, 56, 255});
 
     /* Desk pad (mata-borrao executivo em couro grafite no centro da mesa) */
     Vector2 pTL = {472, 434};
@@ -7182,27 +7526,61 @@ void DrawRoom2008(const GameState *game)
     DrawTriangle(pTL, pBL, pTR, padCol);
     DrawTriangle(pTR, pBL, pBR, padCol);
     DrawLineEx(pTL, pTR, 1.5f, (Color){88, 98, 110, 255});
+    /* Costura pespontada do mata-borrao de couro */
+    for (int st = 0; st < 46; st++)
+    {
+        float sx = 478.0f + st * 6.0f;
+        DrawLine((int)sx, 438, (int)sx + 3, 438, Fade((Color){120, 130, 142, 255}, 0.8f));
+        DrawLine((int)sx - 4, 490, (int)sx - 1, 490, Fade((Color){120, 130, 142, 255}, 0.8f));
+    }
+    DrawLineEx(pBL, pBR, 2.0f, (Color){34, 40, 48, 255});
 
     /* ===================================================================== */
     /* 8. COMPUTADOR CENTRAL DE VIGILANCIA, TECLADO, MOUSE E DOCUMENTOS      */
     /* ===================================================================== */
     /* Caneca de cafe executiva sobre porta-copos a esquerda do monitor */
     DrawEllipse(466, 444, 13, 4, (Color){145, 110, 75, 255});
+    DrawEllipse(470, 445, 15, 4, Fade(BLACK, 0.18f));
     DrawRectangleRounded((Rectangle){456, 419, 20, 24}, 0.2f, 4, (Color){245, 246, 250, 255});
+    /* Sombreado cilindrico da porcelana */
+    DrawRectangle(469, 421, 6, 21, (Color){216, 220, 228, 255});
+    DrawRectangle(458, 421, 3, 21, (Color){255, 255, 255, 255});
     DrawRectangleLinesEx((Rectangle){456, 419, 20, 24}, 1.2f, (Color){175, 182, 192, 255});
+    /* Cafe dentro da caneca e vapor subindo */
+    DrawEllipse(466, 421, 8, 2, (Color){96, 60, 34, 255});
     DrawRing((Vector2){476, 431}, 3.0f, 5.5f, -90, 90, 8, (Color){225, 230, 238, 255});
+    DrawRing((Vector2){476, 432}, 4.5f, 5.5f, 0, 90, 6, (Color){186, 192, 202, 255});
+    /* Logo corporativo da caneca */
+    DrawRectangle(461, 428, 6, 6, (Color){60, 110, 170, 255});
+    for (int sm = 0; sm < 2; sm++)
+    {
+        float sp = fmodf(time * 0.6f + sm * 0.5f, 1.0f);
+        float sx = 464.0f + sm * 5.0f + sinf(time * 2.0f + sm * 2.0f + sp * 6.0f) * 2.5f;
+        DrawCircle((int)sx, (int)(416.0f - sp * 18.0f), 2.0f + sp * 1.5f, Fade(RAYWHITE, 0.45f * (1.0f - sp)));
+    }
 
     /* Base e coluna articulada do monitor LCD 2008 sobre a mesa */
     DrawEllipse(615, 446, 68, 6, Fade(BLACK, 0.25f));
     DrawRectangle(597, 402, 36, 38, (Color){152, 160, 170, 255});
     DrawRectangle(603, 402, 10, 38, (Color){182, 190, 200, 255});
+    DrawRectangle(626, 402, 7, 38, (Color){128, 136, 146, 255});
+    DrawRectangleLines(597, 402, 36, 38, (Color){110, 118, 128, 255});
+    /* Passa-cabo na coluna */
+    DrawRectangleRounded((Rectangle){609, 418, 12, 8}, 0.5f, 4, (Color){92, 100, 110, 255});
     DrawRectangleRounded((Rectangle){555, 434, 120, 14}, 0.35f, 6, (Color){174, 182, 192, 255});
+    DrawLine(561, 435, 669, 435, (Color){214, 220, 228, 255});
+    DrawLine(561, 446, 669, 446, (Color){140, 148, 158, 255});
     DrawRectangleRoundedLinesEx((Rectangle){555, 434, 120, 14}, 0.35f, 6, 1.5f, (Color){128, 136, 146, 255});
 
     /* Gabinete do Monitor LCD widescreen/4:3 corporativo 2008 */
     DrawRectangle((int)monitorRec.x + 5, (int)monitorRec.y + 5, (int)monitorRec.width, (int)monitorRec.height, Fade(BLACK, 0.22f));
     DrawRectangleRounded(monitorRec, 0.06f, 8, (Color){194, 202, 210, 255});
+    /* Volume da moldura prateada: topo claro, base e direita escurecidas */
+    DrawRectangle((int)monitorRec.x + 8, (int)monitorRec.y + 3, (int)monitorRec.width - 16, 3, (Color){224, 230, 236, 255});
+    DrawRectangle((int)monitorRec.x + 3, (int)monitorRec.y + 8, 3, (int)monitorRec.height - 16, (Color){214, 220, 228, 255});
+    DrawRectangle((int)(monitorRec.x + monitorRec.width - 6), (int)monitorRec.y + 8, 3, (int)monitorRec.height - 16, (Color){164, 172, 182, 255});
     DrawRectangleRoundedLinesEx(monitorRec, 0.06f, 8, 2.5f, (Color){126, 136, 148, 255});
+    DrawRectangleRoundedLinesEx((Rectangle){monitorRec.x - 1, monitorRec.y - 1, monitorRec.width + 2, monitorRec.height + 2}, 0.06f, 8, 1.0f, (Color){90, 98, 110, 255});
     /* Webcam biometrica acoplada no topo do monitor 2008 */
     DrawRectangleRounded((Rectangle){603, 218, 24, 10}, 0.4f, 4, (Color){58, 66, 76, 255});
     DrawCircle(615, 223, 3.0f, (Color){24, 32, 42, 255});
@@ -7210,6 +7588,9 @@ void DrawRoom2008(const GameState *game)
     /* Moldura interna escura e barra de alto-falante inferior */
     DrawRectangleRounded((Rectangle){monitorRec.x + 8, monitorRec.y + 8, monitorRec.width - 16, monitorRec.height - 26}, 0.04f, 6, (Color){42, 50, 60, 255});
     DrawRectangle((int)monitorRec.x + 16, (int)(monitorRec.y + monitorRec.height - 14), (int)monitorRec.width - 32, 8, (Color){148, 156, 166, 255});
+    /* Grade do alto-falante */
+    for (int gl = 0; gl < 54; gl++)
+        DrawPixel((int)monitorRec.x + 20 + gl * 4, (int)(monitorRec.y + monitorRec.height - 10), (Color){104, 112, 122, 255});
     DrawCircle((int)(monitorRec.x + monitorRec.width - 18), (int)(monitorRec.y + monitorRec.height - 10), 3.0f, (Color){70, 235, 120, 255});
 
     /* Tela LCD acesa */
@@ -7217,6 +7598,10 @@ void DrawRoom2008(const GameState *game)
     Color lcdBg = game->puzzle2008Contested ? (Color){12, 34, 24, 255} : (Color){12, 26, 40, 255};
     Color lcdBorder = game->puzzle2008Contested ? (Color){60, 220, 110, 255} : CYAN_COLOR;
     DrawRectangleRounded(lcdScr, 0.04f, 4, lcdBg);
+    /* Brilho do monitor irradiando na moldura e reflexo do vidro no canto inferior (sem tocar nos textos) */
+    DrawRectangleGradientV((int)lcdScr.x + 4, (int)(lcdScr.y + lcdScr.height - 26), (int)lcdScr.width - 8, 22, Fade(lcdBorder, 0.0f), Fade(lcdBorder, 0.06f));
+    R2008Quad((Vector2){lcdScr.x + lcdScr.width - 70, lcdScr.y + lcdScr.height - 28}, (Vector2){lcdScr.x + lcdScr.width - 52, lcdScr.y + lcdScr.height - 28},
+              (Vector2){lcdScr.x + lcdScr.width - 62, lcdScr.y + lcdScr.height - 4}, (Vector2){lcdScr.x + lcdScr.width - 80, lcdScr.y + lcdScr.height - 4}, Fade(RAYWHITE, 0.06f));
     DrawRectangleRoundedLinesEx(lcdScr, 0.04f, 4, 1.5f, lcdBorder);
 
     DrawGameText("IA VIGILANCIA // 2008", (int)lcdScr.x + 14, (int)lcdScr.y + 12, 13, lcdBorder);
@@ -7248,26 +7633,43 @@ void DrawRoom2008(const GameState *game)
     DrawRectangleRounded((Rectangle){kbRec.x + 2, kbRec.y + 3, kbRec.width, kbRec.height}, 0.14f, 6, Fade(BLACK, 0.28f));
     DrawRectangleRounded(kbRec, 0.14f, 6, (Color){184, 192, 200, 255});
     DrawRectangleRoundedLinesEx(kbRec, 0.14f, 6, 1.5f, (Color){126, 134, 144, 255});
+    DrawLine((int)kbRec.x + 4, (int)kbRec.y + 1, (int)(kbRec.x + kbRec.width - 4), (int)kbRec.y + 1, (Color){222, 228, 234, 255});
     for (int col = 0; col < 11; col++)
     {
         DrawRectangle((int)kbRec.x + 8 + col * 19, (int)kbRec.y + 4, 15, 5, (Color){52, 58, 66, 255});
         DrawRectangle((int)kbRec.x + 8 + col * 19, (int)kbRec.y + 11, 15, 5, (Color){52, 58, 66, 255});
+        DrawLine((int)kbRec.x + 8 + col * 19, (int)kbRec.y + 4, (int)kbRec.x + 22 + col * 19, (int)kbRec.y + 4, (Color){92, 100, 110, 255});
+        DrawLine((int)kbRec.x + 8 + col * 19, (int)kbRec.y + 11, (int)kbRec.x + 22 + col * 19, (int)kbRec.y + 11, (Color){92, 100, 110, 255});
     }
     DrawRectangle((int)kbRec.x + 8, (int)kbRec.y + 19, 34, 6, (Color){52, 58, 66, 255});
     DrawRectangle((int)kbRec.x + 48, (int)kbRec.y + 19, 96, 6, (Color){42, 48, 56, 255}); /* espaco */
     DrawRectangle((int)kbRec.x + 150, (int)kbRec.y + 19, 64, 6, (Color){52, 58, 66, 255});
+    DrawLine((int)kbRec.x + 8, (int)kbRec.y + 19, (int)kbRec.x + 41, (int)kbRec.y + 19, (Color){92, 100, 110, 255});
+    DrawLine((int)kbRec.x + 48, (int)kbRec.y + 19, (int)kbRec.x + 143, (int)kbRec.y + 19, (Color){84, 92, 102, 255});
+    DrawLine((int)kbRec.x + 150, (int)kbRec.y + 19, (int)kbRec.x + 213, (int)kbRec.y + 19, (Color){92, 100, 110, 255});
+    /* Cabo do teclado indo para a base do monitor */
+    R2008Cable((Vector2){kbRec.x + 112, kbRec.y}, (Vector2){kbRec.x + 112, kbRec.y - 6}, (Vector2){600, 452}, (Vector2){604, 447}, 1.5f, (Color){60, 66, 74, 255});
     DrawCircle((int)(kbRec.x + kbRec.width - 8), (int)kbRec.y + 6, 1.8f, (Color){80, 235, 120, 255});
 
     /* Mouse optico 2008 sobre o deskpad */
     Rectangle mouseRec = {734, 456, 22, 28};
+    R2008Cable((Vector2){745, 456}, (Vector2){745, 446}, (Vector2){700, 450}, (Vector2){674, 444}, 1.5f, (Color){60, 66, 74, 255});
+    DrawEllipse(747, 484, 12, 3, Fade(BLACK, 0.30f));
     DrawRectangleRounded(mouseRec, 0.45f, 6, (Color){190, 198, 206, 255});
+    DrawRectangleRounded((Rectangle){mouseRec.x + 3, mouseRec.y + 3, 6, 18}, 0.5f, 4, (Color){222, 228, 234, 255});
+    DrawLine((int)mouseRec.x + 2, (int)mouseRec.y + 12, (int)(mouseRec.x + mouseRec.width - 3), (int)mouseRec.y + 12, (Color){146, 154, 164, 255});
     DrawRectangleRoundedLinesEx(mouseRec, 0.45f, 6, 1.2f, (Color){118, 126, 136, 255});
     DrawRectangle((int)mouseRec.x + 9, (int)mouseRec.y + 4, 4, 7, (Color){52, 58, 66, 255});
+    DrawPixel((int)mouseRec.x + 10, (int)mouseRec.y + 5, (Color){120, 128, 138, 255});
 
     /* --- LADO ESQUERDO DA MESA: DOSSIE FOTO DRONE (DOC 1 / doc0Rec) --- */
     /* Pasta parda de investigacao apoiada 100% sobre o tampo da mesa */
     DrawRectangle((int)doc0Rec.x + 3, (int)doc0Rec.y + 4, (int)doc0Rec.width, (int)doc0Rec.height, Fade(BLACK, 0.22f));
+    /* Folhas extras saindo por baixo da pasta */
+    DrawRectangle((int)doc0Rec.x + 6, (int)(doc0Rec.y + doc0Rec.height - 2), (int)doc0Rec.width - 14, 3, (Color){236, 232, 222, 255});
+    DrawLine((int)doc0Rec.x + 6, (int)(doc0Rec.y + doc0Rec.height + 1), (int)(doc0Rec.x + doc0Rec.width - 9), (int)(doc0Rec.y + doc0Rec.height + 1), (Color){188, 180, 166, 255});
     DrawRectangleRounded((Rectangle){doc0Rec.x + 8, doc0Rec.y - 5, 54, 8}, 0.25f, 4, (Color){216, 186, 136, 255});
+    DrawLine((int)doc0Rec.x + 11, (int)doc0Rec.y - 4, (int)doc0Rec.x + 58, (int)doc0Rec.y - 4, (Color){236, 212, 170, 255});
     DrawRectangleRounded(doc0Rec, 0.06f, 4, (Color){232, 204, 154, 255});
     DrawRectangleRoundedLinesEx(doc0Rec, 0.06f, 4, 2.0f, game->doc2008FaceExamined ? (Color){45, 165, 85, 255} : (Color){158, 124, 82, 255});
     /* Folha branca interna sobressaindo */
@@ -7281,6 +7683,8 @@ void DrawRoom2008(const GameState *game)
     DrawRectangleLinesEx(photoBox, 1.5f, RED_COLOR);
     /* Clipe metalico no topo da foto */
     DrawRectangle((int)photoBox.x + 19, (int)doc0Rec.y + 3, 12, 9, (Color){180, 188, 198, 255});
+    DrawLine((int)photoBox.x + 19, (int)doc0Rec.y + 3, (int)photoBox.x + 30, (int)doc0Rec.y + 3, (Color){226, 232, 238, 255});
+    DrawRectangleLines((int)photoBox.x + 19, (int)doc0Rec.y + 3, 12, 9, (Color){120, 128, 138, 255});
     /* Textos do Dossie */
     DrawGameText("DRONE 78%", (int)doc0Rec.x + 70, (int)doc0Rec.y + 12, 12, RED_COLOR);
     DrawGameText("LUCAS S.", (int)doc0Rec.x + 70, (int)doc0Rec.y + 31, 12, INK_COLOR);
@@ -7290,12 +7694,15 @@ void DrawRoom2008(const GameState *game)
     /* --- LADO DIREITO DA MESA: PRANCHETA ENTRADA/CATRACA (DOC 3 / doc2Rec) --- */
     DrawRectangle((int)doc2Rec.x + 3, (int)doc2Rec.y + 4, (int)doc2Rec.width, (int)doc2Rec.height, Fade(BLACK, 0.22f));
     DrawRectangleRounded(doc2Rec, 0.06f, 4, (Color){168, 128, 86, 255});
+    R2008WoodGrain((Rectangle){doc2Rec.x + 2, doc2Rec.y + 2, doc2Rec.width - 4, doc2Rec.height - 4}, (Color){168, 128, 86, 255}, 7);
     DrawRectangleRoundedLinesEx(doc2Rec, 0.06f, 4, 2.0f, game->doc2008EntryExamined ? (Color){45, 165, 85, 255} : (Color){116, 84, 52, 255});
     /* Folha timbrada da prancheta */
     DrawRectangle((int)doc2Rec.x + 7, (int)doc2Rec.y + 7, (int)doc2Rec.width - 14, (int)doc2Rec.height - 12, (Color){248, 250, 254, 255});
     /* Cabecalho azul corporativo na folha e clipe metalico cromado */
     DrawRectangle((int)doc2Rec.x + 11, (int)doc2Rec.y + 12, (int)doc2Rec.width - 22, 7, (Color){45, 85, 128, 255});
+    DrawRectangleRounded((Rectangle){doc2Rec.x + 49, doc2Rec.y + 4, 58, 9}, 0.3f, 4, Fade(BLACK, 0.20f));
     DrawRectangleRounded((Rectangle){doc2Rec.x + 48, doc2Rec.y + 2, 58, 9}, 0.3f, 4, (Color){192, 200, 210, 255});
+    DrawLine((int)doc2Rec.x + 51, (int)doc2Rec.y + 3, (int)doc2Rec.x + 102, (int)doc2Rec.y + 3, (Color){234, 238, 242, 255});
     DrawRectangleLinesEx((Rectangle){doc2Rec.x + 48, doc2Rec.y + 2, 58, 9}, 1.0f, (Color){130, 138, 148, 255});
     DrawGameText("PONTO 14:15", (int)doc2Rec.x + 15, (int)doc2Rec.y + 22, 12, (Color){25, 125, 52, 255});
     DrawGameText("CRACHA #0842", (int)doc2Rec.x + 15, (int)doc2Rec.y + 38, 11, INK_COLOR);
@@ -7316,10 +7723,16 @@ void DrawRoom2008(const GameState *game)
     DrawLineEx((Vector2){615, 620}, (Vector2){592, 612}, 3.5f, (Color){125, 132, 142, 255});
     DrawLineEx((Vector2){615, 620}, (Vector2){638, 612}, 3.5f, (Color){125, 132, 142, 255});
     DrawCircle(615, 620, 6.0f, (Color){175, 182, 192, 255});
+    DrawCircle(614, 619, 2.5f, (Color){220, 226, 232, 255});
+    DrawPixel(577, 636, (Color){110, 116, 124, 255});
+    DrawPixel(614, 640, (Color){110, 116, 124, 255});
+    DrawPixel(651, 636, (Color){110, 116, 124, 255});
 
     /* Pistao a gas e assento estofado */
     DrawRectangle(610, 576, 10, 44, (Color){90, 96, 106, 255});
+    DrawLine(612, 576, 612, 619, (Color){160, 168, 178, 255});
     DrawRectangleRounded((Rectangle){568, 562, 94, 18}, 0.4f, 6, (Color){54, 64, 76, 255});
+    DrawRectangleRounded((Rectangle){574, 564, 82, 5}, 0.5f, 4, (Color){74, 86, 100, 255});
     DrawRectangleRoundedLinesEx((Rectangle){568, 562, 94, 18}, 0.4f, 6, 1.5f, (Color){82, 94, 108, 255});
 
     /* Bracos da cadeira executiva */
@@ -7331,12 +7744,23 @@ void DrawRoom2008(const GameState *game)
     /* Encosto ergonomico com estrutura prateada e apoio de cabeca */
     Rectangle chairBack = {570, 486, 90, 78};
     DrawRectangleRounded(chairBack, 0.25f, 8, (Color){62, 74, 88, 255});
+    /* Tela de malha respiravel do encosto (2008) */
+    for (int mh = 0; mh < 9; mh++)
+    {
+        DrawLine((int)chairBack.x + 6 + mh * 9, (int)chairBack.y + 5, (int)chairBack.x + 6 + mh * 9, (int)(chairBack.y + chairBack.height - 6), Fade((Color){42, 52, 64, 255}, 0.8f));
+    }
+    for (int mv = 0; mv < 8; mv++)
+    {
+        DrawLine((int)chairBack.x + 5, (int)chairBack.y + 7 + mv * 9, (int)(chairBack.x + chairBack.width - 6), (int)chairBack.y + 7 + mv * 9, Fade((Color){80, 94, 110, 255}, 0.55f));
+    }
+    DrawRectangleGradientH((int)chairBack.x + 4, (int)chairBack.y + 6, 16, (int)chairBack.height - 12, Fade((Color){140, 156, 174, 255}, 0.30f), Fade((Color){140, 156, 174, 255}, 0.0f));
     DrawRectangleRoundedLinesEx(chairBack, 0.25f, 8, 2.0f, (Color){96, 110, 126, 255});
     DrawRectangleRounded((Rectangle){609, 490, 12, 74}, 0.35f, 4, (Color){148, 156, 166, 255});
     DrawRectangleRounded((Rectangle){582, 522, 66, 13}, 0.3f, 4, (Color){48, 58, 70, 255});
     DrawRectangle(611, 478, 8, 9, (Color){135, 142, 152, 255});
     Rectangle chairHead = {588, 464, 54, 16};
     DrawRectangleRounded(chairHead, 0.45f, 6, (Color){54, 64, 76, 255});
+    DrawLine((int)chairHead.x + 6, (int)chairHead.y + 3, (int)(chairHead.x + chairHead.width - 7), (int)chairHead.y + 3, (Color){96, 110, 126, 255});
     DrawRectangleRoundedLinesEx(chairHead, 0.45f, 6, 1.5f, (Color){88, 102, 118, 255});
 
     /* ===================================================================== */
