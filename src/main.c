@@ -219,7 +219,7 @@ int main(int argc, char **argv)
                 {
                     InitTerminal2046(&game);
                     game.screen = SCREEN_TERMINAL_2046;
-                    SetMessage(&game, "Salto temporal concluÃ­do: Terminal de RecuperaÃ§Ã£o // ANO 2046.");
+                    SetMessage(&game, "Salto temporal concluído: Terminal de Recuperação // ANO 2048.");
                 }
                 break;
             case SCREEN_INTRO_2048:

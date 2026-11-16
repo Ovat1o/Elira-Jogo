@@ -62,7 +62,7 @@
 #define FINAL_TYPE_SPEED 48.0f /* bytes por segundo no efeito maquina de escrever */
 
 /* ========================================================================= */
-/* FASE 2046 - TERMINAL DA A.R.1.3.L                                         */
+/* SALA 2048 - TERMINAL DA A.R.1.3.L (prefixo T2046_ mantido no codigo)  */
 /* ========================================================================= */
 #define T2046_INFLUENCE_MAX          100    /* influencia que da a vitoria a Ariel */
 #define T2046_INFLUENCE_HIGH         50     /* sabotagens mais frequentes; abrir protocolo vira sugestao */

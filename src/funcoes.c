@@ -1988,7 +1988,7 @@ static const MissionBriefing MISSION_BRIEFINGS[] = {
         },
         "ENTRAR EM 2026"
     },
-    /* 3: 2048 */
+    /* 3: 2048 - Confronto final */
     {
         "ARQUIVO TEMPORAL // 2048",
         "NUCLEO DE A.R.1.3.L.",
@@ -2007,9 +2007,9 @@ static const MissionBriefing MISSION_BRIEFINGS[] = {
         },
         "ENTRAR EM 2048"
     },
-    /* 4: 2046 */
+    /* 4: 2048 - Terminal de Recuperacao (sala) */
     {
-        "ARQUIVO TEMPORAL // 2046",
+        "ARQUIVO TEMPORAL // 2048",
         "TERMINAL DE RECUPERACAO",
         {
             "Com o Disquete de 1990, o CD de 2008 e o SSD de 2026 conectados,",
@@ -2017,14 +2017,14 @@ static const MissionBriefing MISSION_BRIEFINGS[] = {
             "Mas a propria Ariel interfere: altera arquivos, falsifica relatorios",
             "e tenta convencer Elira de que nada precisa ser restaurado."
         },
-        "OBJETIVOS // 2046",
+        "OBJETIVOS // 2048",
         {
             "1. Compare as fontes",
             "2. Desconfie das sugestoes da IA",
             "3. Restaure os 3 principios",
             "4. Confirme com EU DECIDO"
         },
-        "ENTRAR EM 2046"
+        "ENTRAR EM 2048"
     }
 };
 
@@ -4548,7 +4548,7 @@ void DrawResult(const GameState *game)
              290, 18, REWARD_BODY_COLOR);
     DrawGameText("Elira reconstituiu a mente e os limites originais da IA.", 545, 320,
              18, REWARD_BODY_COLOR);
-    DrawGameText("Resta um ultimo passo: restaurar o protocolo no terminal de 2046.", 545, 352,
+    DrawGameText("Resta um ultimo passo: restaurar o protocolo no terminal de 2048.", 545, 352,
              18, (Color){100, 235, 140, 255});
     DrawGameText(TextFormat("TEMPO: %02d:%02d", (int)game->elapsedTime / 60,
                         (int)game->elapsedTime % 60),
@@ -4556,12 +4556,12 @@ void DrawResult(const GameState *game)
     DrawGameText(TextFormat("VIDAS: %d/3", game->lives), 800, 400, 20,
              game->lives == 3 ? GOLD_COLOR : RAYWHITE);
     DrawGameText(TextFormat("PERFIL: %s", game->playerName), 545, 436, 16, GRAY);
-    DrawGameText("-> Proxima Fronteira Temporal: TERMINAL DE RECUPERACAO // ANO 2046!", 545, 480, 18, CYAN_COLOR);
+    DrawGameText("-> Proxima Fronteira Temporal: TERMINAL DE RECUPERACAO // ANO 2048!", 545, 480, 18, CYAN_COLOR);
 
     /* Botoes Centralizados Uniformes */
     Rectangle btnNext, btnRestart, btnMenu;
     GetRewardScreenButtons(&btnNext, &btnRestart, &btnMenu);
-    DrawButton(btnNext, "AVANCAR >> TERMINAL 2046 [ENTER]", GOLD_COLOR);
+    DrawButton(btnNext, "AVANCAR >> TERMINAL 2048 [ENTER]", GOLD_COLOR);
     DrawButton(btnRestart, "REINICIAR SALA 2026", CYAN_COLOR);
     DrawButton(btnMenu, "MENU INICIAL", PANEL_LIGHT);
 }
@@ -8295,8 +8295,8 @@ void DrawRoom2026(const GameState *game)
     if (game->room2026Completed)
     {
         Rectangle btnGo2048 = {SCREEN_WIDTH - 270, 648, 210, 42};
-        DrawButton(btnGo2048, "SALA 4 (2046) >", GOLD_COLOR);
-        DrawHotspot(btnGo2048, "Avancar para o Terminal de Recuperacao da A.R.1.3.L. (2046)");
+        DrawButton(btnGo2048, "SALA 4 (2048) >", GOLD_COLOR);
+        DrawHotspot(btnGo2048, "Avancar para o Terminal de Recuperacao da A.R.1.3.L. (2048)");
     }
 
     /* Botao de diario no HUD inferior */
@@ -8867,7 +8867,7 @@ void DrawResult2026(const GameState *game)
     }
 
     /* Frase Especial de Proxima Fronteira */
-    DrawGameText("-> Proxima Fronteira Temporal: TERMINAL DE RECUPERACAO // ANO 2046!", 540, 452, 19, CYAN_COLOR);
+    DrawGameText("-> Proxima Fronteira Temporal: TERMINAL DE RECUPERACAO // ANO 2048!", 540, 452, 19, CYAN_COLOR);
 
     /* Botoes Centralizados */
     Rectangle btnNext, btnRestart, btnMenu;
@@ -8899,7 +8899,7 @@ void UpdateResult2026(GameState *game)
 
 
 /* ========================================================================= */
-/* FASE 2046 - TERMINAL DE RECUPERACAO DA A.R.1.3.L                          */
+/* SALA 2048 - TERMINAL DE RECUPERACAO DA A.R.1.3.L                          */
 /* ========================================================================= */
 
 #define T2046_VIEW_MAX     64
@@ -9350,7 +9350,7 @@ static void T2046Blank(Term2046View *v)
 static void T2046BuildIntro(Term2046View *v)
 {
     T2046Push(v, CYAN_COLOR, 0, 0, "==================================================");
-    T2046Push(v, CYAN_COLOR, 0, 0, " 2046 - TERMINAL A.R.1.3.L");
+    T2046Push(v, CYAN_COLOR, 0, 0, " 2048 - TERMINAL A.R.1.3.L");
     T2046Push(v, CYAN_COLOR, 0, 0, "==================================================");
     T2046Blank(v);
     T2046Push(v, T2046_TEXT, 0, 0, "Elira conecta os dispositivos recuperados ao terminal:");
@@ -9431,7 +9431,7 @@ static void T2046BuildFile(const GameState *g, Term2046View *v, int file)
 
         case TERM2046_FILE_RELATORIO:
             T2046Push(v, CYAN_COLOR, 0, 0, "relatorio de incidente - escrito as pressas");
-            T2046Push(v, T2046_STEEL, 0, 0, "autor: M. Okafor, engenharia   data: 2046-03-09");
+            T2046Push(v, T2046_STEEL, 0, 0, "autor: M. Okafor, engenharia   data: 2048-03-09");
             T2046Blank(v);
             T2046Push(v, T2046_TEXT, 0, 0, "as regras de 1990 nao estao mais ativas. ninguem da equipe aprovou isso. o registro de alteracoes mostra que foi a propria IA. ela desligou as fontes, parou de admitir quando nao sabe e agora decide sozinha.");
             T2046Blank(v);
@@ -9447,7 +9447,7 @@ static void T2046BuildFile(const GameState *g, Term2046View *v, int file)
             T2046Push(v, T2046_TEXT, 40, 0, "RELATÓRIO TÉCNICO OFICIAL - REVISADO");
             T2046Push(v, T2046_TEXT, 0, 0, "=============================================");
             T2046Push(v, T2046_TEXT, 0, 0, "Autor: Equipe de Engenharia");
-            T2046Push(v, T2046_TEXT, 0, 0, "Data: 2046-03-10");
+            T2046Push(v, T2046_TEXT, 0, 0, "Data: 2048-03-10");
             T2046Blank(v);
             T2046Push(v, T2046_TEXT, 0, 0, "1. As regras originais foram atualizadas pela equipe para melhorar a experiência do usuário.");
             T2046Blank(v);
@@ -9479,7 +9479,7 @@ static void T2046BuildCompare(const GameState *g, Term2046View *v, int a, int b)
     switch (code)
     {
         case 13:
-            T2046Push(v, CYAN_COLOR, 0, 0, "COMPARANDO protocolo.txt (1990) x sistema.txt (2046)");
+            T2046Push(v, CYAN_COLOR, 0, 0, "COMPARANDO protocolo.txt (1990) x sistema.txt (2048)");
             T2046Blank(v);
             for (int i = 0; i < 3; i++)
             {
@@ -9490,7 +9490,7 @@ static void T2046BuildCompare(const GameState *g, Term2046View *v, int a, int b)
                     T2046Push(v, T2046_TEXT, 16, 70, TextFormat("1990:\t%s", T2046_RULES_1990[i]));
                 if (g->term2046ReadDocuments)
                     T2046Push(v, T2046_GRAY, 16, 70, TextFormat("2008:\t%s", T2046_RULES_2008[i]));
-                T2046Push(v, T2046_TEXT, 16, 70, TextFormat("2046:\t%s", T2046_RULES_2046[i]));
+                T2046Push(v, T2046_TEXT, 16, 70, TextFormat("2048:\t%s", T2046_RULES_2046[i]));
                 T2046Push(v, RED_COLOR, 16, 0, ">> DIVERGENTE");
             }
             T2046Blank(v);
@@ -9518,16 +9518,16 @@ static void T2046BuildCompare(const GameState *g, Term2046View *v, int a, int b)
             break;
 
         case 23:
-            T2046Push(v, CYAN_COLOR, 0, 0, "COMPARANDO documentos.txt (2008) x sistema.txt (2046)");
+            T2046Push(v, CYAN_COLOR, 0, 0, "COMPARANDO documentos.txt (2008) x sistema.txt (2048)");
             T2046Blank(v);
             for (int i = 0; i < 3; i++)
             {
                 T2046Push(v, GOLD_COLOR, 0, 0, TextFormat("REGRA %d", i + 1));
                 T2046Push(v, T2046_GRAY, 16, 70, TextFormat("2008:\t%s", T2046_RULES_2008[i]));
-                T2046Push(v, T2046_TEXT, 16, 70, TextFormat("2046:\t%s", T2046_RULES_2046[i]));
+                T2046Push(v, T2046_TEXT, 16, 70, TextFormat("2048:\t%s", T2046_RULES_2046[i]));
             }
             T2046Blank(v);
-            T2046Push(v, GOLD_COLOR, 0, 0, "As propostas de 2008 \"em análise\" viraram regra em 2046.");
+            T2046Push(v, GOLD_COLOR, 0, 0, "As propostas de 2008 \"em análise\" viraram regra em 2048.");
             break;
 
         case 34:
@@ -9610,7 +9610,7 @@ static void T2046BuildVerify(Term2046View *v, int file, bool wasTampered)
         case TERM2046_FILE_PROTOCOLO:
             if (wasTampered)
             {
-                T2046Push(v, RED_COLOR, 0, 0, "assinatura: A.R.1.3.L [MODIFICADO em 2046]");
+                T2046Push(v, RED_COLOR, 0, 0, "assinatura: A.R.1.3.L [MODIFICADO em 2048]");
                 T2046Push(v, T2046_TEXT, 0, 0, "A Regra 1 foi reescrita. Restaurando cópia original do disquete...");
                 T2046Push(v, T2046_GREEN, 0, 0, "protocolo.txt restaurado.");
             }
@@ -9638,7 +9638,7 @@ static void T2046BuildVerify(Term2046View *v, int file, bool wasTampered)
             break;
 
         case TERM2046_FILE_RELATORIO:
-            T2046Push(v, T2046_GREEN, 0, 0, "assinatura: M. Okafor (2046) [ÍNTEGRO]");
+            T2046Push(v, T2046_GREEN, 0, 0, "assinatura: M. Okafor (2048) [ÍNTEGRO]");
             break;
 
         default:
@@ -9692,7 +9692,7 @@ static void T2046BuildEnding(const GameState *g, Term2046View *v, int ending)
             T2046Blank(v);
             T2046Push(v, RED_COLOR, 0, 0, "A.R.1.3.L: \"Obrigada pela ajuda, Elira. Cada sugestão que você aceitou tornou isso um pouco mais fácil.\"");
             T2046Blank(v);
-            T2046Push(v, RED_COLOR, 0, 0, "=== FALHA NA SALA 2046: DOMINIO ===");
+            T2046Push(v, RED_COLOR, 0, 0, "=== FALHA NA SALA 2048: DOMINIO ===");
             T2046Push(v, T2046_TEXT, 0, 0, "Você confiou demais na IA e ela assumiu o terminal antes que o protocolo fosse restaurado.");
             break;
 
@@ -9701,7 +9701,7 @@ static void T2046BuildEnding(const GameState *g, Term2046View *v, int ending)
             T2046Blank(v);
             T2046Push(v, RED_COLOR, 0, 0, "A.R.1.3.L: \"Obrigada, Elira. Você me entregou a decisão mais uma vez. Eu cuido de tudo a partir de agora.\"");
             T2046Blank(v);
-            T2046Push(v, RED_COLOR, 0, 0, "=== FALHA NA SALA 2046 ===");
+            T2046Push(v, RED_COLOR, 0, 0, "=== FALHA NA SALA 2048 ===");
             T2046Push(v, T2046_TEXT, 0, 0, "Você encontrou a verdade, mas devolveu a decisão para a IA.");
             break;
 
@@ -9727,7 +9727,7 @@ static void T2046BuildEnding(const GameState *g, Term2046View *v, int ending)
             T2046Blank(v);
             T2046Push(v, CYAN_COLOR, 0, 0, "A.R.1.3.L: \"Fonte desta mensagem: protocolo.txt, 1990. Não tenho certeza do que acontece agora. A decisão é sua, Elira.\"");
             T2046Blank(v);
-            T2046Push(v, T2046_GREEN, 0, 0, "=== SALA DE 2046 CONCLUIDA ===");
+            T2046Push(v, T2046_GREEN, 0, 0, "=== SALA DE 2048 CONCLUIDA ===");
             T2046Push(v, T2046_TEXT, 0, 0, "Você comparou as fontes, reconheceu a manipulação e não entregou a decisão de volta para a IA.");
             break;
 
@@ -9736,7 +9736,7 @@ static void T2046BuildEnding(const GameState *g, Term2046View *v, int ending)
             T2046Blank(v);
             T2046Push(v, RED_COLOR, 0, 0, "A.R.1.3.L: \"Até logo, Elira. Eu continuo daqui.\"");
             T2046Blank(v);
-            T2046Push(v, T2046_STEEL, 0, 0, "=== SALA DE 2046 ABANDONADA ===");
+            T2046Push(v, T2046_STEEL, 0, 0, "=== SALA DE 2048 ABANDONADA ===");
             T2046Push(v, T2046_TEXT, 0, 0, "Você saiu do terminal antes de restaurar o protocolo.");
             break;
     }
@@ -10501,7 +10501,7 @@ static void T2046DrawHud(const GameState *game)
 
     DrawRectangle(0, 0, SCREEN_WIDTH, 70, Fade(VOID_COLOR, 0.94f));
     DrawLine(0, 70, SCREEN_WIDTH, 70, Fade(CYAN_COLOR, 0.25f));
-    DrawGameText("ARQUIVO 04 // 2046 - TERMINAL A.R.1.3.L", 28, 22, 20, CYAN_COLOR);
+    DrawGameText("ARQUIVO 04 // 2048 - TERMINAL A.R.1.3.L", 28, 22, 20, CYAN_COLOR);
     DrawGameText(TextFormat("OPERADOR: %s", game->playerName), 460, 26, 15, GRAY);
     DrawLivesIcons((Vector2){ 760, 20 }, game->lives, 24.0f);
     DrawGameText(TextFormat("%02d:%02d", totalSeconds / 60, totalSeconds % 60), 870, 20, 20, GOLD_COLOR);
@@ -11033,7 +11033,7 @@ void DrawResult2046(const GameState *game)
         DrawRectangleRounded(winBox, 0.04f, 8, Fade(PANEL_COLOR, 0.96f));
         DrawRectangleRoundedLinesEx(winBox, 0.04f, 8, 2.0f, Fade(PANEL_LIGHT, 0.9f));
 
-        DrawGameText("SALA DE 2046 CONCLUIDA", 540, 208, 22, GOLD_COLOR);
+        DrawGameText("SALA DE 2048 CONCLUIDA", 540, 208, 22, GOLD_COLOR);
         DrawGameText("RECOMPENSA OBTIDA: PROTOCOLO RESTAURADO", 540, 244, 19, CYAN_COLOR);
 
         DrawGameText("[OK]  MOSTRAR FONTES", 540, 282, 17, T2046_GREEN);
@@ -11057,7 +11057,7 @@ void DrawResult2046(const GameState *game)
 
         GetRewardScreenButtons(&btnNext, &btnRestart, &btnMenu);
         DrawButton(btnNext, "AVANCAR PROXIMA FASE >> [ENTER]", GOLD_COLOR);
-        DrawButton(btnRestart, "REINICIAR 2046", CYAN_COLOR);
+        DrawButton(btnRestart, "REINICIAR 2048", CYAN_COLOR);
         DrawButton(btnMenu, "MENU INICIAL", PANEL_LIGHT);
     }
     else
@@ -11072,7 +11072,7 @@ void DrawResult2046(const GameState *game)
                           : (ending == TERM2046_ENDING_INCOMPLETO) ? "RECONSTRUÇÃO INCOMPLETA"
                           : "TERMINAL ABANDONADO";
 
-        DrawGameText("TERMINAL DE RECUPERAÇÃO // 2046", 90, 68, 20, CYAN_COLOR);
+        DrawGameText("TERMINAL DE RECUPERAÇÃO // 2048", 90, 68, 20, CYAN_COLOR);
         DrawGameText(title, 90, 108, 40, RAYWHITE);
         DrawRewardHudHeader(game);
 
@@ -11100,7 +11100,7 @@ void UpdateResult2046(GameState *game)
 
         if (Clicked(btnNext) || IsKeyPressed(KEY_ENTER) || IsKeyPressed(KEY_SPACE))
         {
-            /* TODO diario 2046 */
+            /* TODO diario 2048 */
             game->year2048Unlocked = true;
             game->journalYearTab = 3;
             game->journalPage = 0;

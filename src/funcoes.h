@@ -42,7 +42,7 @@ typedef enum GameScreen
     SCREEN_RESULT_2046
 } GameScreen;
 
-/* --- FASE 2046: subestados, arquivos e desfechos do terminal --- */
+/* --- SALA 2048 (identificadores com sufixo 2046 por historico): subestados, arquivos e desfechos do terminal --- */
 typedef enum Term2046State
 {
     TERM2046_STATE_TERMINAL = 0,    /* menu de acoes da investigacao */
@@ -213,7 +213,7 @@ typedef struct GameState
     float reactorTimer2026;            /* Contador local de estabilidade (50s) */
     bool room2026TimeOut;              /* Colapso por tempo esgotado no reator */
 
-    /* --- FASE 2046: TERMINAL DE RECUPERACAO DA A.R.1.3.L --- */
+    /* --- SALA 2048: TERMINAL DE RECUPERACAO DA A.R.1.3.L --- */
     int term2046State;                 /* Term2046State */
     int term2046Influence;             /* 0 a T2046_INFLUENCE_MAX */
     bool term2046ReadProtocol;         /* leu_protocolo */
@@ -503,7 +503,7 @@ void UpdateRoom2026(GameState *game);
 void DrawResult2026(const GameState *game);
 void UpdateResult2026(GameState *game);
 
-/* Fase 4 (Ano 2046) - Terminal de Recuperacao da A.R.1.3.L */
+/* Fase 4 (Ano 2048) - Terminal de Recuperacao da A.R.1.3.L */
 void InitTerminal2046(GameState *game);
 void DrawIntro2046(const GameState *game);
 void DrawTerminal2046(const GameState *game);
