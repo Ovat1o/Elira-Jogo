@@ -5019,6 +5019,36 @@ void DrawRoom2(const GameState *game)
     DrawRectangle(770, 514, 24, 95, (Color){45, 52, 58, 255});
     DrawRectangle(1110, 514, 24, 95, (Color){45, 52, 58, 255});
 
+    /* Colecionavel oculto (E): radio portatil a pilha no chao, na sombra sob a mesa */
+    Rectangle radio1990 = {930, 562, 72, 40};
+    DrawTriangle((Vector2){794, 514}, (Vector2){1110, 514}, (Vector2){1110, 612}, Fade(BLACK, 0.40f));
+    DrawTriangle((Vector2){794, 514}, (Vector2){1110, 612}, (Vector2){794, 612}, Fade(BLACK, 0.40f));
+    if (!game->hiddenFound[HIDDEN_1990])
+    {
+        DrawEllipse(966, 603, 40, 5, Fade(BLACK, 0.45f));
+        /* Antena telescopica inclinada */
+        DrawLineEx((Vector2){990, 572}, (Vector2){1022, 536}, 2.0f, (Color){92, 98, 102, 255});
+        DrawCircle(1022, 536, 2, (Color){105, 112, 116, 255});
+        /* Alca e corpo do radio */
+        DrawRectangleLinesEx((Rectangle){946, 562, 40, 12}, 2.0f, (Color){38, 40, 42, 255});
+        DrawRectangleRounded((Rectangle){930, 570, 72, 32}, 0.25f, 6, (Color){38, 40, 42, 255});
+        DrawRectangleRoundedLinesEx((Rectangle){930, 570, 72, 32}, 0.25f, 6, 1.5f, (Color){54, 58, 60, 255});
+        /* Grade do alto-falante */
+        DrawCircle(950, 586, 11, (Color){30, 32, 34, 255});
+        for (int g = -8; g <= 8; g += 4)
+        {
+            DrawLine(942, 586 + g, 958, 586 + g, (Color){58, 60, 62, 255});
+        }
+        /* Dial de sintonia e LED vermelho fraco */
+        DrawRectangle(968, 576, 28, 8, (Color){66, 62, 48, 255});
+        DrawLine(980, 576, 980, 584, (Color){130, 50, 42, 255});
+        DrawCircle(974, 594, 3, (Color){70, 72, 74, 255});
+        DrawCircle(988, 594, 3, (Color){70, 72, 74, 255});
+        float ledPulse = 0.35f + 0.25f * sinf(time * 1.7f);
+        DrawCircle(997, 591, 1.8f, Fade((Color){230, 40, 30, 255}, ledPulse));
+        DrawHiddenGlint(radio1990, 0.8f);
+    }
+
     /* Monitor CRT do Terminal de Indexação */
     DrawRectangleRounded((Rectangle){810, 245, 300, 220}, 0.08f, 8, (Color){185, 178, 152, 255});
     DrawRectangleRoundedLinesEx((Rectangle){810, 245, 300, 220}, 0.08f, 8, 2, (Color){145, 138, 115, 255});
@@ -5193,6 +5223,14 @@ void UpdateRoom2(GameState *game)
             Rectangle tabRect = {(float)(bookX + 1040), (float)(bookY + 42 + i * 66), 86, 54};
             if (Clicked(tabRect)) { game->journalYearTab = i; break; }
         }
+        return;
+    }
+
+    /* Colecionavel oculto (E): radio portatil sob a mesa, fora de todos os hotspots */
+    Rectangle radio1990 = {930, 562, 72, 40};
+    if (!game->hiddenFound[HIDDEN_1990] && !game->phaseMenuOpen && Clicked(radio1990))
+    {
+        CollectHidden(game, HIDDEN_1990);
         return;
     }
 
