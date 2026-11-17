@@ -1943,6 +1943,7 @@ void DrawPlayerName(const GameState *game)
     if (game->messageTimer > 0)
         CenterText(game->message, 425, 18, RED_COLOR);
     CenterText("Pressione ENTER para continuar", 560, 16, DARKGRAY);
+    DrawButton((Rectangle){490, 600, 300, 54}, "< VOLTAR AO MENU [ESC]", CYAN_COLOR);
 }
 
 typedef struct MissionBriefing

@@ -187,6 +187,12 @@ int main(int argc, char **argv)
                     InitCinematicIntro(&game);
                     game.screen = SCREEN_CINEMATIC_INTRO;
                 }
+                else if (Clicked((Rectangle){490, 600, 300, 54}) || IsKeyPressed(KEY_ESCAPE))
+                {
+                    game.message[0] = '\0';
+                    game.messageTimer = 0.0f;
+                    game.screen = SCREEN_TITLE;
+                }
                 break;
             case SCREEN_CINEMATIC_INTRO:
                 UpdateCinematicIntro(&game);
