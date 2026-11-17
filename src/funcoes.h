@@ -569,6 +569,7 @@ void UpdateTerminal2046(GameState *game);
 void DrawResult2046(const GameState *game);
 void UpdateResult2046(GameState *game);
 bool Terminal2046WantsTextInput(const GameState *game);   /* true no estado EU_DECIDO */
+bool ScreenWantsTextInput(const GameState *game);         /* true quando o teclado esta digitando texto (atalhos de letra ficam desligados) */
 
 /* Confronto Final (2048) - Sala de Dialogo Elira x Ariel */
 bool IsPortraitBackground(Color c);

@@ -134,7 +134,7 @@ int main(int argc, char **argv)
 
         /* Alternar audio com tecla M ou clique no HUD */
         Rectangle audioHudBtn = {840, 665, 175, 40};
-        bool musicKeyBlocked = (game.screen == SCREEN_TERMINAL_2046 && Terminal2046WantsTextInput(&game));
+        bool musicKeyBlocked = ScreenWantsTextInput(&game);
         bool toggleAudio = !game.phaseMenuOpen &&
                            ((IsKeyPressed(KEY_M) && !musicKeyBlocked) ||
                             ((game.screen == SCREEN_ROOM || game.screen == SCREEN_ROOM_2 ||

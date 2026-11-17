@@ -12393,6 +12393,15 @@ bool Terminal2046WantsTextInput(const GameState *game)
     return game->term2046State == TERM2046_STATE_EU_DECIDO;
 }
 
+/* Telas em que as letras do teclado viram texto digitado (nome do operador, terminal de 2048).
+   Nelas, atalhos de letra como o M (musica) nao podem disparar. */
+bool ScreenWantsTextInput(const GameState *game)
+{
+    if (game->screen == SCREEN_PLAYER_NAME) return true;
+    if (game->screen == SCREEN_TERMINAL_2046) return Terminal2046WantsTextInput(game);
+    return false;
+}
+
 /* Colecionavel oculto H: clicar no cracha "passa no leitor" e abre o arquivo oculto.
    So funciona nos subestados de investigacao (sem avisos da Ariel, configuracao ou
    frase final abertos). Nao e uma rodada: nao conta para o ciclo de sabotagem nem
