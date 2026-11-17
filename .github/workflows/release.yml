@@ -32,7 +32,7 @@ jobs:
             package_suffix: Linux-x64
             installer_name: ELIRA-Linux-x64.deb
             cmake_extra_args: ""
-          - os: macos-14
+          - os: macos-15
             package_suffix: macOS-Apple-Silicon
             installer_name: ELIRA-macOS-Apple-Silicon.pkg
             cmake_extra_args: -DCMAKE_OSX_DEPLOYMENT_TARGET=12.0
@@ -135,7 +135,7 @@ jobs:
             ASSETS="$APP/Contents/Resources/assets"
             (cd "$RUNNER_TEMP" && "$GITHUB_WORKSPACE/$APP/Contents/MacOS/ELIRA" --verify-assets)
             pkgutil --check-signature "release-assets/${{ matrix.installer_name }}" || true
-            pkgutil --payload-files "release-assets/${{ matrix.installer_name }}" | grep -q 'GeistPixel-Square.ttf'
+            (set +o pipefail; pkgutil --payload-files "release-assets/${{ matrix.installer_name }}" | grep -q 'GeistPixel-Square.ttf')
           else
             test -x "package-check/lib/elira/ELIRA"
             test -x "package-check/bin/elira"
