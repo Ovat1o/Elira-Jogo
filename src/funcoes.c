@@ -1963,7 +1963,7 @@ static const MissionBriefing MISSION_BRIEFINGS[] = {
         "SETOR DE ARQUIVOS",
         {
             "Em um futuro onde a humanidade entregou sua autonomia",
-            "a A.R.1.3.L, Elira invade a nave-arquivo da IA.",
+            "a A.R.1.3.L, a única esperança que restou é Elira.",
             "Sua chance e viajar pela memoria da maquina e reconstruir",
             "a origem da entidade que controla o mundo."
         },
@@ -2060,15 +2060,13 @@ void DrawMissionBriefing(const GameState *game, int missionIndex)
     const MissionBriefing *b = &MISSION_BRIEFINGS[missionIndex];
 
     DrawBackground();
-    DrawGameText(b->tag, 90, 70, 20, CYAN_COLOR);
     DrawGameText(b->title, 90, 110, 48, RAYWHITE);
     DrawRectangle(90, 178, 1100, 2, Fade(CYAN_COLOR, 0.45f));
     DrawGameText(b->lines[0], 90, 230, 24, LIGHTGRAY);
     DrawGameText(b->lines[1], 90, 270, 24, LIGHTGRAY);
     DrawGameText(b->lines[2], 90, 310, 24, LIGHTGRAY);
     DrawGameText(b->lines[3], 90, 350, 24, LIGHTGRAY);
-    DrawGameText(TextFormat("OPERADOR: %s  |  PROTAGONISTA: ELIRA", game->playerName),
-                 90, 397, 18, GOLD_COLOR);
+    DrawGameText(TextFormat("OPERADOR: %s", game->playerName), 90, 397, 18, GOLD_COLOR);
 
     DrawRectangleRounded((Rectangle){850, 215, 340, 230}, 0.08f, 8,
                          Fade(PANEL_LIGHT, 0.85f));
