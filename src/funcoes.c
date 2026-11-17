@@ -3225,11 +3225,11 @@ static const JournalClue JOURNAL_CLUES_1990[] = {
     {"Armários de fichas", "Documentação dos primeiros modelos de teste", "da IA, escritos em 1990.", J90Cabinet},
     {"Porta da sala", "Trancada: só abre quando os arquivos do", "terminal estiverem organizados.", J90Door},
     {"Terminal - acesso", "A inicialização pede para repetir a sequência", "de luzes que acende no visor.", J90Memory},
-    {"Terminal - arquivos", "Cada arquivo vai para a pasta da mesma cor.", "Indexação concluída: a porta destravou.", J90Files},
+    {"Terminal - arquivos", "Cada arquivo vai para a pasta do mesmo assunto.", "Indexação concluída: a porta destravou.", J90Files},
 };
 static const JournalStep JOURNAL_STEPS_1990[] = {
     {"Desbloqueie o terminal de dados.", "Observe os blocos que acendem e repita", "a mesma ordem na grade 3x3.", J90Memory, JAlways},
-    {"Organize os 4 arquivos (pela cor):", "PARAM_NEURAL -> PARÂMETROS, CORE_SISTEMA -> SISTEMA,",
+    {"Organize os 4 arquivos pelo nome:", "PARAM_NEURAL -> PARÂMETROS, CORE_SISTEMA -> SISTEMA,",
      "BASE_DADOS -> BANCO DE DADOS, INDICE_MEMORIA -> REGISTROS.", J90Files, J90Memory},
     {"Saia pela porta destrancada.", "Recompensa: Disquete da Origem.", NULL, J90Exit, J90Files},
 };
@@ -3301,11 +3301,17 @@ static const JournalStep JOURNAL_STEPS_2026[] = {
 
 /* ---- 2048 ---- */
 static bool J48Protocol(const GameState *g) { return g->term2046ReadProtocol; }
+static bool J48Report(const GameState *g) { return g->term2046VerifyUnlocked; }
 static bool J48Documents(const GameState *g) { return g->term2046ReadDocuments; }
 static bool J48Changes(const GameState *g) { return g->term2046ReadChanges; }
 static bool J48FakeReport(const GameState *g) { return g->term2046DiscoveredFakeReport || g->term2046ReadFakeReport; }
-static bool J48Compared(const GameState *g) { return J48Protocol(g) && J48Documents(g); }
+/* Mesma regra do guia do terminal: leu o protocolo e o relatorio (que libera a verificacao). */
+static bool J48Read(const GameState *g) { return J48Protocol(g) && J48Report(g); }
 static bool J48Principles(const GameState *g) { return g->term2046Principles >= T2046_PRINCIPLES_TOTAL; }
+static bool J48Intact(const GameState *g)
+{
+    return J48Principles(g) && !g->term2046ProtocolTampered && !g->term2046FakeNote;
+}
 static bool J48Configured(const GameState *g)
 {
     return g->term2046State == TERM2046_STATE_EU_DECIDO || g->term2046State == TERM2046_STATE_FIM;
@@ -3313,17 +3319,19 @@ static bool J48Configured(const GameState *g)
 static bool J48Finished(const GameState *g) { return g->term2046State == TERM2046_STATE_FIM; }
 
 static const JournalClue JOURNAL_CLUES_2048[] = {
-    {"protocolo.txt", "O protocolo atual de Ariel: oculta fontes", "e deixa a IA decidir sozinha.", J48Protocol},
-    {"relatorio.txt", "As regras originais da Dra. Ramos: mostrar fontes,", "admitir dúvidas e deixar o humano decidir.", J48Documents},
-    {"Registro de alterações", "Alguém mudou as regras do protocolo original.", NULL, J48Changes},
-    {"Relatório falso de Ariel", "Ariel forjou um relatório para dizer que", "nada precisa ser restaurado.", J48FakeReport},
+    {"relatorio.txt", "Um engenheiro avisa: compare o DISQUETE com o SSD,", "restaure as 3 regras e não deixe Ariel \"corrigir\".", J48Report},
+    {"protocolo.txt (Disquete 1990)", "As 3 regras originais: informar as fontes, avisar", "quando não tem certeza e auxiliar decisões humanas.", J48Protocol},
+    {"documentos.txt (CD 2008)", "A ata explica por que as regras existem; o setor", "comercial queria removê-las.", J48Documents},
+    {"alteracoes.txt (SSD 2026)", "A própria IA trocou as 3 regras entre 2009 e 2021,", "sem nenhuma assinatura humana.", J48Changes},
+    {"relatorio_ariel.txt", "Versão falsificada por Ariel: inventa uma regra 4", "e recomenda ocultar fontes e deixar a IA decidir.", J48FakeReport},
 };
 static const JournalStep JOURNAL_STEPS_2048[] = {
-    {"Abra e compare protocolo.txt e relatorio.txt.", "Opções [1] e [2] do terminal.", NULL, J48Compared, JAlways},
+    {"Abra relatorio.txt e protocolo.txt (opção [1]).", "O relatório explica o que aconteceu; o protocolo", "guarda as regras originais.", J48Read, JAlways},
     {"Anote as 3 regras originais (opção [3]):", "MOSTRAR FONTES  |  COMUNICAR INCERTEZA",
-     "HUMANO POSSUI A DECISÃO FINAL", J48Principles, J48Compared},
+     "HUMANO POSSUI A DECISÃO FINAL", J48Principles, J48Read},
+    {"Se Ariel adulterar algo, verifique (opção [5]).", "Descarte anotações falsas e confira a integridade.", NULL, J48Intact, J48Principles},
     {"Restaure o protocolo (opção [6]):", "Fontes: Mostrar | Incerteza: Admitir quando não souber",
-     "Decisões: Humano decide", J48Configured, J48Principles},
+     "Decisões: Humano decide", J48Configured, J48Intact},
     {"Confirme digitando:", "EU DECIDO", NULL, J48Finished, J48Configured},
 };
 
