@@ -51,7 +51,12 @@ static bool ValidateRequiredAssets(void)
         "assets/som/ambient.wav",
         "assets/sprites/invasao/elira_sheet.png",
         "assets/sprites/invasao/elira_fx.png",
-        "assets/sprites/invasao/elira_rostos.png"
+        "assets/sprites/invasao/elira_rostos.png",
+        "assets/sprites/invasao/inimigos.png",
+        "assets/sprites/invasao/boss_1990.png",
+        "assets/sprites/invasao/boss_2008.png",
+        "assets/sprites/invasao/boss_2026.png",
+        "assets/sprites/invasao/boss_2048.png"
     };
     bool valid = true;
 
