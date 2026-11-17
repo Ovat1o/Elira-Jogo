@@ -1672,8 +1672,9 @@ void DrawTitleStartButton(Rectangle bounds, const char *label, Color accent)
 
 void DrawTitle(void)
 {
-    Rectangle startButton = {86, 436, 350, 56};
-    Rectangle settingsButton = {86, 506, 350, 52};
+    Rectangle startButton = {86, 326, 350, 54};
+    Rectangle invasionButton = {86, 392, 350, 54};
+    Rectangle settingsButton = {86, 458, 350, 50};
     float time = (float)GetTime();
 
     DrawTitleSpaceBackground();
@@ -1716,26 +1717,14 @@ void DrawTitle(void)
         DrawRectangleGradientH((int)(88 + scanX), 273, 35, 5, RAYWHITE, BLANK);
     }
 
-    /* 4. Subtitulos */
-    DrawGameText("ESCAPE RUN TEMPORAL", 90, 307, 29, CYAN_COLOR);
-    DrawGameText("ENTRE NAS MEMORIAS DA MAQUINA", 91, 355, 19,
-             Fade(RAYWHITE, 0.75f));
-    DrawGameText("Descubra o que existia antes de A.R.1.3.L. controlar o futuro.",
-             91, 386, 18, GRAY);
-
     /* 5. Botoes interativos */
     DrawTitleStartButton(startButton, "INICIAR MISSAO", CYAN_COLOR);
+    DrawTitleStartButton(invasionButton, "MODO INVASAO [I]", (Color){230, 90, 200, 255});
     DrawTitleStartButton(settingsButton, "CONFIGURACOES [C]", GOLD_COLOR);
 
     /* 6. Indicador de atalhos pulsante */
     float promptAlpha = 0.40f + 0.55f * (0.5f + 0.5f * sinf(time * 3.4f));
-    DrawGameText("> ENTER: Iniciar  |  C: Opcoes <", 93, 574, 15, Fade(GOLD_COLOR, promptAlpha));
-
-    /* 7. Rodape */
-    DrawGameText("DEMO TEMPORAL  //  1990 - 2048", 91, 638, 16,
-             Fade(LIGHTGRAY, 0.62f));
-    DrawGameText("Point & click narrativo", 946, 650, 16,
-             Fade(LIGHTGRAY, 0.50f));
+    DrawGameText("> ENTER: Iniciar  |  I: Invasao  |  C: Opcoes <", 93, 524, 15, Fade(GOLD_COLOR, promptAlpha));
 
     /* 8. Linhas CRT retro */
     for (int y = 0; y < SCREEN_HEIGHT; y += 4)
