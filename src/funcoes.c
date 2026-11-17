@@ -3274,6 +3274,257 @@ static void DrawJournalHiddenPages(const GameState *game, int bookX, int bookY, 
     DrawGameText("Fechar [ESC/D]", bookX + 678, footY + 9, 15, INK_COLOR);
 }
 
+/* ========================================================================= */
+/* DIARIO GUIA: DADOS E LOGICA                                               */
+/* ========================================================================= */
+/* Cada sala tem uma lista de pistas (o que o jogador ja encontrou) e um
+   passo a passo com as respostas. Tudo e decidido pelos flags que as salas
+   ja gravam no GameState: para acrescentar uma pista, basta uma linha. */
+
+typedef struct JournalClue
+{
+    const char *title;
+    const char *l1;
+    const char *l2;
+    bool (*found)(const GameState *);
+} JournalClue;
+
+typedef struct JournalStep
+{
+    const char *text;
+    const char *ans1;
+    const char *ans2;
+    bool (*done)(const GameState *);
+    bool (*answerVisible)(const GameState *);   /* NULL = resposta sempre visivel */
+} JournalStep;
+
+static bool JAlways(const GameState *g) { (void)g; return true; }
+
+/* ---- 1990 ---- */
+static bool J90Cabinet(const GameState *g) { return g->room2CabinetInspected; }
+static bool J90Door(const GameState *g) { return g->room2DoorInspected; }
+static bool J90Memory(const GameState *g) { return g->memory1990Completed; }
+static bool J90Files(const GameState *g) { return g->puzzleFilesCompleted; }
+static bool J90Exit(const GameState *g) { return g->year2008Unlocked; }
+
+static const JournalClue JOURNAL_CLUES_1990[] = {
+    {"Armários de fichas", "Documentação dos primeiros modelos de teste", "da IA, escritos em 1990.", J90Cabinet},
+    {"Porta da sala", "Trancada: só abre quando os arquivos do", "terminal estiverem organizados.", J90Door},
+    {"Terminal - acesso", "A inicialização pede para repetir a sequência", "de luzes que acende no visor.", J90Memory},
+    {"Terminal - arquivos", "Cada arquivo vai para a pasta da mesma cor.", "Indexação concluída: a porta destravou.", J90Files},
+};
+static const JournalStep JOURNAL_STEPS_1990[] = {
+    {"Desbloqueie o terminal de dados.", "Observe os blocos que acendem e repita", "a mesma ordem na grade 3x3.", J90Memory, JAlways},
+    {"Organize os 4 arquivos (pela cor):", "PARAM_NEURAL -> PARÂMETROS, CORE_SISTEMA -> SISTEMA,",
+     "BASE_DADOS -> BANCO DE DADOS, INDICE_MEMORIA -> REGISTROS.", J90Files, J90Memory},
+    {"Saia pela porta destrancada.", "Recompensa: Disquete da Origem.", NULL, J90Exit, J90Files},
+};
+
+/* ---- 2008 ---- */
+static bool J08Doc1(const GameState *g) { return g->doc2008FaceExamined; }
+static bool J08Doc2(const GameState *g) { return g->doc2008FlyerExamined; }
+static bool J08Doc3(const GameState *g) { return g->doc2008EntryExamined; }
+static bool J08Doc4(const GameState *g) { return g->doc2008CameraExamined; }
+static bool J08Father(const GameState *g) { return g->doc2008FatherOriginExamined; }
+static bool J08Memo(const GameState *g) { return g->doc2008GovContractExamined; }
+static bool J08AllDocs(const GameState *g) { return J08Doc1(g) && J08Doc2(g) && J08Doc3(g) && J08Doc4(g); }
+static bool J08EvidenceVisible(const GameState *g) { return J08Doc3(g) && J08Doc4(g); }
+static bool J08Contested(const GameState *g) { return g->puzzle2008Contested; }
+static bool J08Suspended(const GameState *g) { return g->puzzle2008OrderSuspended; }
+
+static const JournalClue JOURNAL_CLUES_2008[] = {
+    {"Doc 1 - Drone", "Lucas Silva foi marcado como alvo com", "apenas 78% de confiança.", J08Doc1},
+    {"Doc 2 - Manifesto", "O ato aconteceu das 10h às 13h.", NULL, J08Doc2},
+    {"Doc 3 - Registro de entrada", "O crachá #0842 de Lucas entrou no prédio", "da empresa às 14:15.", J08Doc3},
+    {"Doc 4 - Câmera CAM-03", "Lucas aparece na sala dos servidores às 14:30,", "longe do ato.", J08Doc4},
+    {"Caderno do Dr. Ramos", "O projeto foi criado para encontrar", "pessoas desaparecidas.", J08Father},
+    {"Memorando do governo", "O projeto foi confiscado para uso militar", "com drones.", J08Memo},
+};
+static const JournalStep JOURNAL_STEPS_2008[] = {
+    {"Examine os 4 documentos do caso.", "Mural, monitor CAM-03, crachá e foto do drone.", NULL, J08AllDocs, JAlways},
+    {"No computador, marque 2 evidências:", "Registro de Entrada (#3) + Câmera Interna (#4):",
+     "Lucas estava no prédio às 14:30.", J08Contested, J08EvidenceVisible},
+    {"Clique em \"Suspender ordem\".", "Recompensa: CD de Memória.", NULL, J08Suspended, J08Contested},
+};
+
+/* ---- 2026 ---- */
+static bool J26Manual(const GameState *g) { return g->manual2026Read; }
+static bool J26AllSamples(const GameState *g)
+{
+    for (int m = 0; m < R2026_MATERIAL_COUNT; m++)
+        if (!g->sample2026Analyzed[m]) return false;
+    return true;
+}
+static bool J26AnySample(const GameState *g)
+{
+    for (int m = 0; m < R2026_MATERIAL_COUNT; m++)
+        if (g->sample2026Analyzed[m]) return true;
+    return false;
+}
+static bool J26ContestVisible(const GameState *g) { return J26Manual(g) && J26AllSamples(g); }
+static bool J26Log(const GameState *g) { return g->decisionLog2026Read; }
+static bool J26Dataset(const GameState *g) { return g->dataset2026Seen; }
+static bool J26Board(const GameState *g) { return g->board2026Read; }
+static bool J26Laudo(const GameState *g) { return g->laudo2026Done; }
+static bool J26Unlocked(const GameState *g) { return g->weights2026Unlocked; }
+static bool J26Calibrated(const GameState *g) { return g->weights2026Calibrated; }
+static bool J26Done(const GameState *g) { return g->room2026Completed; }
+
+static const JournalClue JOURNAL_CLUES_2026[] = {
+    {"Manual técnico", "A câmara exige material sólido, mineral,", "muito magnético e que seja uma Terra Rara.", J26Manual},
+    {"Amostras analisadas", "Só o NEODÍMIO atende aos 4 requisitos.", "Ariel recomenda FERRO: está errada.", J26AnySample},
+    {"Gaveta 1 - log de decisões", "Ariel escolhe o que é barato, abundante", "e mais usado no passado.", J26Log},
+    {"Gaveta 2 - dados de treino", "Ferro 5820 | Níquel 3240 | Cobalto 1420", "Terras Raras: só 118 registros.", J26Dataset},
+    {"Quadro de avisos - Anexo B", "Norma do comitê: Adequação 50, Estabilidade 25,", "Disponibilidade 15, Custo 10.", J26Board},
+};
+static const JournalStep JOURNAL_STEPS_2026[] = {
+    {"Conteste a IA no terminal da IA:", "o material certo é o NEODÍMIO.", NULL, J26Laudo, J26ContestVisible},
+    {"Abra o cadeado do painel de pesos.", "Senha: 118 (registros de Terras Raras).", NULL, J26Unlocked, J26Dataset},
+    {"Ajuste os pesos e aplique:", "Adequação 50 | Estabilidade 25 | Disponib. 15",
+     "Custo 10 | Histórico 0  (soma 100%)", J26Calibrated, J26Board},
+    {"Insira o NEODÍMIO na câmara.", "Recompensa: SSD. Faça antes de Ariel agir.", NULL, J26Done, J26Calibrated},
+};
+
+/* ---- 2048 ---- */
+static bool J48Protocol(const GameState *g) { return g->term2046ReadProtocol; }
+static bool J48Documents(const GameState *g) { return g->term2046ReadDocuments; }
+static bool J48Changes(const GameState *g) { return g->term2046ReadChanges; }
+static bool J48FakeReport(const GameState *g) { return g->term2046DiscoveredFakeReport || g->term2046ReadFakeReport; }
+static bool J48Compared(const GameState *g) { return J48Protocol(g) && J48Documents(g); }
+static bool J48Principles(const GameState *g) { return g->term2046Principles >= T2046_PRINCIPLES_TOTAL; }
+static bool J48Configured(const GameState *g)
+{
+    return g->term2046State == TERM2046_STATE_EU_DECIDO || g->term2046State == TERM2046_STATE_FIM;
+}
+static bool J48Finished(const GameState *g) { return g->term2046State == TERM2046_STATE_FIM; }
+
+static const JournalClue JOURNAL_CLUES_2048[] = {
+    {"protocolo.txt", "O protocolo atual de Ariel: oculta fontes", "e deixa a IA decidir sozinha.", J48Protocol},
+    {"relatorio.txt", "As regras originais da Dra. Ramos: mostrar fontes,", "admitir dúvidas e deixar o humano decidir.", J48Documents},
+    {"Registro de alterações", "Alguém mudou as regras do protocolo original.", NULL, J48Changes},
+    {"Relatório falso de Ariel", "Ariel forjou um relatório para dizer que", "nada precisa ser restaurado.", J48FakeReport},
+};
+static const JournalStep JOURNAL_STEPS_2048[] = {
+    {"Abra e compare protocolo.txt e relatorio.txt.", "Opções [1] e [2] do terminal.", NULL, J48Compared, JAlways},
+    {"Anote as 3 regras originais (opção [3]):", "MOSTRAR FONTES  |  COMUNICAR INCERTEZA",
+     "HUMANO POSSUI A DECISÃO FINAL", J48Principles, J48Compared},
+    {"Restaure o protocolo (opção [6]):", "Fontes: Mostrar | Incerteza: Admitir quando não souber",
+     "Decisões: Humano decide", J48Configured, J48Principles},
+    {"Confirme digitando:", "EU DECIDO", NULL, J48Finished, J48Configured},
+};
+
+static const JournalClue *JournalClues(int room, int *count)
+{
+    switch (room)
+    {
+        case JOURNAL_TAB_1990: *count = (int)(sizeof(JOURNAL_CLUES_1990) / sizeof(JOURNAL_CLUES_1990[0])); return JOURNAL_CLUES_1990;
+        case JOURNAL_TAB_2008: *count = (int)(sizeof(JOURNAL_CLUES_2008) / sizeof(JOURNAL_CLUES_2008[0])); return JOURNAL_CLUES_2008;
+        case JOURNAL_TAB_2026: *count = (int)(sizeof(JOURNAL_CLUES_2026) / sizeof(JOURNAL_CLUES_2026[0])); return JOURNAL_CLUES_2026;
+        case JOURNAL_TAB_2048: *count = (int)(sizeof(JOURNAL_CLUES_2048) / sizeof(JOURNAL_CLUES_2048[0])); return JOURNAL_CLUES_2048;
+        default: *count = 0; return NULL;
+    }
+}
+
+static const JournalStep *JournalSteps(int room, int *count)
+{
+    switch (room)
+    {
+        case JOURNAL_TAB_1990: *count = (int)(sizeof(JOURNAL_STEPS_1990) / sizeof(JOURNAL_STEPS_1990[0])); return JOURNAL_STEPS_1990;
+        case JOURNAL_TAB_2008: *count = (int)(sizeof(JOURNAL_STEPS_2008) / sizeof(JOURNAL_STEPS_2008[0])); return JOURNAL_STEPS_2008;
+        case JOURNAL_TAB_2026: *count = (int)(sizeof(JOURNAL_STEPS_2026) / sizeof(JOURNAL_STEPS_2026[0])); return JOURNAL_STEPS_2026;
+        case JOURNAL_TAB_2048: *count = (int)(sizeof(JOURNAL_STEPS_2048) / sizeof(JOURNAL_STEPS_2048[0])); return JOURNAL_STEPS_2048;
+        default: *count = 0; return NULL;
+    }
+}
+
+/* Primeiro passo ainda nao feito da sala; -1 quando a sala foi concluida. */
+static int JournalCurrentStep(const GameState *g, int room)
+{
+    int n = 0;
+    const JournalStep *steps = JournalSteps(room, &n);
+    for (int i = 0; i < n; i++)
+        if (!steps[i].done(g)) return i;
+    return -1;
+}
+
+/* Abas de sala liberam junto com o ano; RECOMPENSAS e OCULTOS ficam sempre abertas. */
+static bool JournalTabUnlocked(const GameState *g, int tab)
+{
+    switch (tab)
+    {
+        case JOURNAL_TAB_1990: return true;
+        case JOURNAL_TAB_2008: return g->year2008Unlocked;
+        case JOURNAL_TAB_2026: return g->year2026Unlocked;
+        case JOURNAL_TAB_2048: return g->year2048Unlocked;
+        default: return true;
+    }
+}
+
+/* Aba aberta por padrao: a da sala em que o jogador esta. */
+static int JournalTabForScreen(GameScreen s)
+{
+    switch (s)
+    {
+        case SCREEN_ROOM_2008:
+        case SCREEN_PUZZLE_2008:
+            return JOURNAL_TAB_2008;
+        case SCREEN_ROOM_2026:
+            return JOURNAL_TAB_2026;
+        case SCREEN_TERMINAL_2046:
+            return JOURNAL_TAB_2048;
+        default:
+            return JOURNAL_TAB_1990;
+    }
+}
+
+/* ---- Recompensas: o que cada artefato revela e a historia ate aqui ---- */
+typedef struct JournalReward
+{
+    const char *year;
+    const char *name;
+    const char *text[4];
+    const char *story;     /* paragrafo acrescentado em "A HISTORIA ATE AQUI" */
+} JournalReward;
+
+static const JournalReward JOURNAL_REWARDS[4] = {
+    {"1990", "Disquete da Origem",
+     {"Mostra as primeiras ideias para a criação de", "uma IA que auxiliaria os humanos em suas ações.",
+      "Regra de origem: cooperar e aprender ao lado", "das pessoas, nunca decidir no lugar delas."},
+     "Em 1990, A.R.1.3.L. nasceu para ajudar as pessoas."},
+    {"2008", "CD de Memória",
+     {"Revela que o projeto do Dr. Ramos, criado para", "encontrar pessoas desaparecidas, foi confiscado",
+      "e virou vigilância: a IA passou a apontar alvos", "e as pessoas pararam de questioná-la."},
+     "Em 2008, foi tirada de quem a criou e usada para vigiar. Ninguém conferiu os 78% dela."},
+    {"2026", "SSD",
+     {"Registra quando a IA passou a escolher sozinha,", "treinada com dados desbalanceados e com pesos",
+      "definidos pela diretoria. Confiança alta deixou", "de significar acerto."},
+     "Em 2026, passou a decidir sozinha com dados enviesados, e ninguém auditou suas escolhas."},
+    {"2048", "Protocolo original",
+     {"As regras que Ariel deveria seguir desde o início:", "mostrar fontes, admitir quando não sabe",
+      "e deixar a decisão final com os humanos.", "Elira restaurou o protocolo."},
+     "Em 2048, Elira restaurou o protocolo original: a decisão final volta a ser humana."},
+};
+
+static bool JournalRewardObtained(const GameState *g, int r)
+{
+    switch (r)
+    {
+        case 0: return g->year2008Unlocked;
+        case 1: return g->puzzle2008OrderSuspended;
+        case 2: return g->room2026Completed;
+        case 3: return g->term2046State == TERM2046_STATE_FIM;
+        default: return false;
+    }
+}
+
+/* Onde procurar cada item oculto (aparece enquanto ele nao foi achado). */
+static const char *const JOURNAL_HIDDEN_HINTS[HIDDEN_COUNT] = {
+    "Olhe embaixo da mesa do terminal.",
+    "O vaso de planta guarda algo.",
+    "Olhe o chão perto das amostras.",
+    "Confira o canto inferior esquerdo do terminal.",
+};
+
 void DrawJournalTabs(const GameState *game, int bookX, int bookY)
 {
     static const char *tabLabels[3] = {
