@@ -112,7 +112,7 @@ Os botões sobem para ocupar o espaço. O título da janela continua "ELIRA - Es
 ### 5.4 Dentro do Modo Invasão
 
 - Controles iguais aos do protótipo: WASD move, setas atiram.
-- **ESC:** pausa / continua. A pausa mostra "**Q / clique: voltar ao menu**". No protótipo, Q
+- **ESC:** pausa / continua. A pausa mostra "**[Q] voltar ao menu**" (o modo é todo no teclado; o protótipo não usa mouse). No protótipo, Q
   fechava o programa; agora volta para `SCREEN_TITLE`.
 - **Derrota:** R tenta de novo o estágio (volta ao início do estágio), e ESC / Q volta ao menu.
 - **Vitória:** R começa um jogo novo, e ENTER / Q volta ao menu.
