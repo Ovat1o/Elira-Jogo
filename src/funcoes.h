@@ -497,7 +497,6 @@ void DrawRoom(const GameState *game);
 void DrawJournalHudButton(const GameState *game);
 void DrawHud(const GameState *game);
 void DrawPadlockIcon(int centerX, int centerY, float scale, Color bodyColor, Color shackleColor);
-void DrawJournalTabs(const GameState *game, int bookX, int bookY);
 void DrawJournal(const GameState *game);
 
 /* Colecionaveis ocultos (Rota Dourada) - logica centralizada em funcoes.c */
