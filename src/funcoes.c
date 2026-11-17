@@ -3287,7 +3287,7 @@ static bool J26Done(const GameState *g) { return g->room2026Completed; }
 static const JournalClue JOURNAL_CLUES_2026[] = {
     {"Manual técnico", "A câmara exige material sólido, mineral,", "muito magnético e que seja uma Terra Rara.", J26Manual},
     {"Amostras analisadas", "Só o NEODÍMIO atende aos 4 requisitos.", "Ariel recomenda FERRO: está errada.", J26AnySample},
-    {"Gaveta 1 - log de decisões", "Ariel escolhe o que é barato, abundante", "e mais usado no passado.", J26Log},
+    {"Gaveta 1 - log de decisões", "Nas últimas 312 recomendações, a IA nunca", "escolheu uma Terra Rara.", J26Log},
     {"Gaveta 2 - dados de treino", "Ferro 5820 | Níquel 3240 | Cobalto 1420", "Terras Raras: só 118 registros.", J26Dataset},
     {"Quadro de avisos - Anexo B", "Norma do comitê: Adequação 50, Estabilidade 25,", "Disponibilidade 15, Custo 10.", J26Board},
 };
