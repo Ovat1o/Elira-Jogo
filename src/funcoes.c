@@ -934,6 +934,14 @@ static void SkipCurrentPhase(GameState *game)
     }
 }
 
+/* ESC com o diario aberto fecha o diario em vez de abrir o menu da fase. */
+static bool PhaseEscClosesJournal(GameState *game)
+{
+    if (!game->journalOpen) return false;
+    game->journalOpen = false;
+    return true;
+}
+
 bool UpdatePhaseControls(GameState *game)
 {
     if (!IsPhaseScreen(game->screen))
@@ -964,6 +972,8 @@ bool UpdatePhaseControls(GameState *game)
         }
         return true;
     }
+
+    if (IsKeyPressed(KEY_ESCAPE) && PhaseEscClosesJournal(game)) return true;
 
     if (IsKeyPressed(KEY_ESCAPE) || Clicked(PhaseMenuButton()))
     {
@@ -2978,6 +2988,18 @@ void DrawJournalHudButton(const GameState *game)
             DrawGameText(TextFormat("%d", count), iconX + iconW - 1, iconY, 11, RAYWHITE);
         }
     }
+    else if (game->screen == SCREEN_TERMINAL_2046)
+    {
+        int count = game->term2046Principles;
+        DrawGameText(TextFormat("[D] Regras: %d/3", count), 1100, 688, 15,
+                 hover ? CYAN_COLOR : (Color){180, 195, 215, 255});
+        if (count > 0)
+        {
+            DrawCircle(iconX + iconW + 2, iconY + 4, 7, (Color){50, 205, 225, 255});
+            DrawCircleLines(iconX + iconW + 2, iconY + 4, 7, RAYWHITE);
+            DrawGameText(TextFormat("%d", count), iconX + iconW - 1, iconY, 11, RAYWHITE);
+        }
+    }
     else if (game->screen == SCREEN_ROOM_2008)
     {
         int count = ExaminedDocs2008Count(game);
@@ -3165,43 +3187,6 @@ void DrawHiddenGlint(Rectangle area, float phase)
     DrawCircleV(c, 1.5f + k, glint);
 }
 
-static Rectangle JournalHiddenTabRect(int bookX, int bookY)
-{
-    return (Rectangle){(float)(bookX + 1040), (float)(bookY + 42 + 3 * 66), 86, 54};
-}
-
-/* Trata a aba OCULTOS (so existe apos o primeiro achado). Retorna true quando
-   a entrada do diario foi consumida e a sala nao deve processar mais nada. */
-bool UpdateJournalHiddenTab(GameState *game, int bookX, int bookY)
-{
-    if (HiddenFoundCount(game) == 0) return false;
-
-    if (Clicked(JournalHiddenTabRect(bookX, bookY)))
-    {
-        game->journalYearTab = JOURNAL_TAB_HIDDEN;
-        game->journalPage = 0;
-        return true;
-    }
-    if (game->journalYearTab != JOURNAL_TAB_HIDDEN) return false;
-
-    Rectangle closeBtn = {(float)(bookX + 660), (float)(bookY + 542), 145, 36};
-    if (Clicked(closeBtn))
-    {
-        game->journalOpen = false;
-        return true;
-    }
-    for (int i = 0; i < 3; i++)
-    {
-        Rectangle tabRect = {(float)(bookX + 1040), (float)(bookY + 42 + i * 66), 86, 54};
-        if (Clicked(tabRect))
-        {
-            game->journalYearTab = i;
-            game->journalPage = 0;
-            return true;
-        }
-    }
-    return true;
-}
 
 /* ========================================================================= */
 /* DIARIO GUIA: DADOS E LOGICA                                               */
@@ -3798,6 +3783,41 @@ void DrawJournal(const GameState *game)
         DrawJournalRoomPages(game, tab);
 }
 
+/* D abre/fecha o diario, exceto enquanto o jogador digita texto (ex.: "EU DECIDO" em 2048). */
+static bool JournalWantsToggle(const GameState *g, bool keyD, bool hudClick)
+{
+    return hudClick || (keyD && !ScreenWantsTextInput(g));
+}
+
+/* Controla o diario em todas as salas. Retorna true quando a entrada foi do diario
+   (ele abriu, fechou ou esta aberto) e a sala nao deve processar mais nada. */
+bool UpdateJournal(GameState *game)
+{
+    Rectangle hudBtn = {1040, 658, 215, 54};
+    if (JournalWantsToggle(game, IsKeyPressed(KEY_D), Clicked(hudBtn)))
+    {
+        game->journalOpen = !game->journalOpen;
+        if (game->journalOpen) game->journalYearTab = JournalTabForScreen(game->screen);
+        return true;
+    }
+    if (!game->journalOpen) return false;
+
+    if (IsKeyPressed(KEY_ESCAPE) || Clicked(JournalCloseRect()))
+    {
+        game->journalOpen = false;
+        return true;
+    }
+    for (int i = 0; i < JOURNAL_TAB_COUNT; i++)
+    {
+        if (Clicked(JournalTabRect(i)))
+        {
+            game->journalYearTab = i;
+            break;
+        }
+    }
+    return true;
+}
+
 void UpdateRoom(GameState *game)
 {
     Rectangle calendar = {75, 115, 160, 185};
@@ -3807,94 +3827,7 @@ void UpdateRoom(GameState *game)
     Rectangle blueprint = {815, 132, 160, 125};
     Rectangle tape = {820, 396, 125, 75};
 
-    Rectangle journalHudBtn = {1040, 658, 215, 54};
-
-    /* Alterna diario com tecla D ou clique no botao do HUD */
-    if (IsKeyPressed(KEY_D) || Clicked(journalHudBtn))
-    {
-        game->journalOpen = !game->journalOpen;
-    }
-
-    if (game->journalOpen)
-    {
-        if (IsKeyPressed(KEY_ESCAPE))
-        {
-            game->journalOpen = false;
-            return;
-        }
-
-        /* Se estiver em um dos anos ativos (1990, 2008 ou 2026) */
-        bool isActiveYearUnlocked = (game->journalYearTab == 0) ||
-                                    (game->journalYearTab == 1 && game->year2008Unlocked) ||
-                                    (game->journalYearTab == 2 && game->year2026Unlocked);
-
-        if (isActiveYearUnlocked)
-        {
-            if (IsKeyPressed(KEY_Q) || IsKeyPressed(KEY_LEFT) || IsKeyPressed(KEY_ONE))
-            {
-                game->journalPage = 0;
-            }
-            if (IsKeyPressed(KEY_E) || IsKeyPressed(KEY_RIGHT) || IsKeyPressed(KEY_TWO))
-            {
-                game->journalPage = 1;
-            }
-        }
-
-        int bookX = 120;
-        int bookY = 56;
-        int footY = bookY + 542;
-
-        Rectangle prevBtn = {(float)(bookX + 32), (float)footY, 155, 36};
-        Rectangle closeBtn = {(float)(bookX + 660), (float)footY, 145, 36};
-        Rectangle nextBtn = {(float)(bookX + 835), (float)footY, 155, 36};
-
-        if (isActiveYearUnlocked)
-        {
-            if (Clicked(prevBtn) && game->journalPage > 0)
-            {
-                game->journalPage = 0;
-            }
-            else if (Clicked(nextBtn) && game->journalPage < 1)
-            {
-                game->journalPage = 1;
-            }
-        }
-        else
-        {
-            /* Se estiver em ano bloqueado, clique no botao de retorno volta para o ano ativo */
-            Rectangle retBtnL = {(float)(bookX + 50), (float)(bookY + 450), 410, 46};
-            if (Clicked(retBtnL))
-            {
-                int defaultTab = 0;
-                if ((game->screen == SCREEN_ROOM || game->screen == SCREEN_ROOM_2026 || game->screen == SCREEN_RESULT_2026) && game->year2026Unlocked) defaultTab = 2;
-                else if ((game->screen == SCREEN_ROOM_2008 || game->screen == SCREEN_PUZZLE_2008 || game->screen == SCREEN_RESULT_2008) && game->year2008Unlocked) defaultTab = 1;
-                game->journalYearTab = defaultTab;
-                game->journalPage = 0;
-            }
-        }
-
-        if (Clicked(closeBtn))
-        {
-            game->journalOpen = false;
-        }
-
-        /* Clique nas abas laterais a direita (1990, 2008, 2026) */
-        int tabX = bookX + 1040;
-        int tabGap = 66;
-        for (int i = 0; i < 3; i++)
-        {
-            int tabY = bookY + 42 + i * tabGap;
-            Rectangle tabRect = {(float)tabX, (float)tabY, 86, 54};
-            if (Clicked(tabRect))
-            {
-                game->journalYearTab = i;
-                game->journalPage = 0;
-                break;
-            }
-        }
-
-        return;
-    }
+    if (UpdateJournal(game)) return;
 
     Rectangle btnBack2008 = {70, 600, 240, 42};
     if (Clicked(btnBack2008))
@@ -4707,51 +4640,7 @@ void UpdateRoom2(GameState *game)
     Rectangle porta = {480, 155, 210, 360};
     Rectangle terminal = {790, 240, 340, 290};
     Rectangle btnVoltar = {70, 600, 240, 42};
-    Rectangle journalHudBtn = {1040, 658, 215, 54};
-
-    if (IsKeyPressed(KEY_D) || Clicked(journalHudBtn))
-    {
-        game->journalOpen = !game->journalOpen;
-    }
-
-    if (game->journalOpen)
-    {
-        if (IsKeyPressed(KEY_ESCAPE))
-        {
-            game->journalOpen = false;
-            return;
-        }
-
-        int bookX = 120;
-        int bookY = 56;
-        int footY = bookY + 542;
-        Rectangle prevBtn = {(float)(bookX + 32), (float)footY, 155, 36};
-        Rectangle closeBtn = {(float)(bookX + 660), (float)footY, 145, 36};
-        Rectangle nextBtn = {(float)(bookX + 835), (float)footY, 155, 36};
-
-        if (UpdateJournalHiddenTab(game, bookX, bookY)) return;
-
-        if (game->journalYearTab == 0)
-        {
-            if ((IsKeyPressed(KEY_Q) || Clicked(prevBtn)) && game->journalPage > 0) game->journalPage = 0;
-            if ((IsKeyPressed(KEY_E) || Clicked(nextBtn)) && game->journalPage < 1) game->journalPage = 1;
-        }
-        else
-        {
-            Rectangle retBtnL = {(float)(bookX + 50), (float)(bookY + 450), 410, 46};
-            if (Clicked(retBtnL)) { game->journalYearTab = 0; game->journalPage = 0; }
-        }
-
-        if (Clicked(closeBtn)) game->journalOpen = false;
-
-        /* Abas laterais */
-        for (int i = 0; i < 3; i++)
-        {
-            Rectangle tabRect = {(float)(bookX + 1040), (float)(bookY + 42 + i * 66), 86, 54};
-            if (Clicked(tabRect)) { game->journalYearTab = i; break; }
-        }
-        return;
-    }
+    if (UpdateJournal(game)) return;
 
     /* Colecionavel oculto (E): radio portatil sob a mesa, fora de todos os hotspots */
     Rectangle radio1990 = {930, 562, 72, 40};
@@ -7197,51 +7086,7 @@ void UpdateRoom2008(GameState *game)
     Rectangle fatherBookRec = {992, 410, 168, 68};
     Rectangle govMemoRec    = {992, 492, 168, 68};
     Rectangle btnVoltar1990 = {70, 600, 240, 42};
-    Rectangle journalHudBtn = {1040, 658, 215, 54};
-
-    if (IsKeyPressed(KEY_D) || Clicked(journalHudBtn))
-    {
-        game->journalOpen = !game->journalOpen;
-    }
-
-    if (game->journalOpen)
-    {
-        if (IsKeyPressed(KEY_ESCAPE))
-        {
-            game->journalOpen = false;
-            return;
-        }
-
-        int bookX = 120;
-        int bookY = 56;
-        int footY = bookY + 542;
-        Rectangle prevBtn = {(float)(bookX + 32), (float)footY, 155, 36};
-        Rectangle closeBtn = {(float)(bookX + 660), (float)footY, 145, 36};
-        Rectangle nextBtn = {(float)(bookX + 835), (float)footY, 155, 36};
-
-        if (UpdateJournalHiddenTab(game, bookX, bookY)) return;
-
-        if (game->journalYearTab == 1)
-        {
-            if ((IsKeyPressed(KEY_Q) || Clicked(prevBtn)) && game->journalPage > 0) game->journalPage = 0;
-            if ((IsKeyPressed(KEY_E) || Clicked(nextBtn)) && game->journalPage < 1) game->journalPage = 1;
-        }
-        else
-        {
-            Rectangle retBtnL = {(float)(bookX + 50), (float)(bookY + 450), 410, 46};
-            if (Clicked(retBtnL)) { game->journalYearTab = 1; game->journalPage = 0; }
-        }
-
-        if (Clicked(closeBtn)) game->journalOpen = false;
-
-        /* Abas laterais */
-        for (int i = 0; i < 3; i++)
-        {
-            Rectangle tabRect = {(float)(bookX + 1040), (float)(bookY + 42 + i * 66), 86, 54};
-            if (Clicked(tabRect)) { game->journalYearTab = i; game->journalPage = 0; break; }
-        }
-        return;
-    }
+    if (UpdateJournal(game)) return;
 
     if (game->activeDocument2008 >= 0)
     {
@@ -8406,7 +8251,6 @@ static const Rectangle R26_WEIGHTS_REC = {830, 335, 200, 200};
 static const Rectangle R26_ARCHIVE_REC = {1050, 335, 200, 305};
 static const Rectangle R26_BACK2008_BTN = {610, 664, 105, 38};
 static const Rectangle R26_BACK1990_BTN = {725, 664, 105, 38};
-static const Rectangle R26_JOURNAL_BTN = {1040, 658, 215, 54};
 
 /* Colecionavel oculto G (smartphone): no chao, sob o suporte de amostras */
 static const Rectangle R26_PHONE_REC = {376, 604, 60, 34};
@@ -9815,55 +9659,6 @@ static void R26OpenSample(GameState *game, int i)
     game->modal2026 = R2026_MODAL_SAMPLE;
 }
 
-static void R26UpdateJournal(GameState *game)
-{
-    if (IsKeyPressed(KEY_D))
-    {
-        game->journalOpen = false;
-        return;
-    }
-
-    int bookX = 120;
-    int bookY = 56;
-    int footY = bookY + 542;
-    Rectangle prevBtn = {(float)(bookX + 32), (float)footY, 155, 36};
-    Rectangle closeBtn = {(float)(bookX + 660), (float)footY, 145, 36};
-    Rectangle nextBtn = {(float)(bookX + 835), (float)footY, 155, 36};
-
-    if (UpdateJournalHiddenTab(game, bookX, bookY)) return;
-
-    bool unlocked = (game->journalYearTab == 0) ||
-                    (game->journalYearTab == 1 && game->year2008Unlocked) ||
-                    (game->journalYearTab == 2 && game->year2026Unlocked);
-    if (unlocked)
-    {
-        if ((IsKeyPressed(KEY_Q) || IsKeyPressed(KEY_LEFT) || Clicked(prevBtn)) && game->journalPage > 0) game->journalPage = 0;
-        if ((IsKeyPressed(KEY_E) || IsKeyPressed(KEY_RIGHT) || Clicked(nextBtn)) && game->journalPage < 1) game->journalPage = 1;
-    }
-    else
-    {
-        Rectangle retBtnL = {(float)(bookX + 50), (float)(bookY + 450), 410, 46};
-        if (Clicked(retBtnL))
-        {
-            game->journalYearTab = 2;
-            game->journalPage = 0;
-        }
-    }
-
-    if (Clicked(closeBtn)) game->journalOpen = false;
-
-    for (int i = 0; i < 3; i++)
-    {
-        Rectangle tabRect = {(float)(bookX + 1040), (float)(bookY + 42 + i * 66), 86, 54};
-        if (Clicked(tabRect))
-        {
-            game->journalYearTab = i;
-            game->journalPage = 0;
-            break;
-        }
-    }
-}
-
 static void R26UpdateTerminal(GameState *game)
 {
     if (game->contest2026Picking)
@@ -10074,12 +9869,8 @@ void UpdateRoom2026(GameState *game)
         }
     }
 
-    /* 4. Diario */
-    if (game->journalOpen)
-    {
-        R26UpdateJournal(game);
-        return;
-    }
+    /* 4. Diario (abre so com a sala livre; aberto, captura toda a entrada) */
+    if ((game->journalOpen || game->modal2026 == R2026_MODAL_NONE) && UpdateJournal(game)) return;
 
     /* 5. Modal aberto captura toda a entrada */
     if (game->modal2026 != R2026_MODAL_NONE)
@@ -10093,13 +9884,6 @@ void UpdateRoom2026(GameState *game)
     if (!game->hiddenFound[HIDDEN_2026] && Clicked(R26_PHONE_REC))
     {
         CollectHidden(game, HIDDEN_2026);
-        return;
-    }
-    if (IsKeyPressed(KEY_D) || Clicked(R26_JOURNAL_BTN))
-    {
-        game->journalOpen = true;
-        game->journalYearTab = 2;
-        game->journalPage = 0;
         return;
     }
 
@@ -11792,6 +11576,8 @@ void UpdateTerminal2046(GameState *game)
 {
     Term2046Round round = {0};
 
+    if (UpdateJournal(game)) return;
+
     /* Subestado FIM: animacao da barra de reconstrucao */
     if (game->term2046State == TERM2046_STATE_FIM)
     {
@@ -12697,6 +12483,7 @@ static void T2046DrawFooter(const GameState *game)
         DrawGameText("Compare as fontes, desconfie das sugestões da IA e restaure os 3 princípios.",
                      28, 676, 15, (Color){165, 180, 195, 255});
     }
+    DrawJournalHudButton(game);
 }
 
 void DrawTerminal2046(const GameState *game)
