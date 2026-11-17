@@ -12,6 +12,21 @@ O objetivo do jogador é atravessar as eras resolvendo enigmas e tomando decisõ
 
 ***
 
+## **Modos de jogo**
+
+O menu inicial oferece dois modos:
+
+| Modo | Como entrar | O que é |
+| --- | --- | --- |
+| **Escape room** (padrão) | `INICIAR MISSAO` ou `ENTER` | O jogo principal: salas de 1990, 2008, 2026 e 2048 com enigmas, diário, ranking e finais. |
+| **Modo Invasão** | `MODO INVASAO [I]` ou `I` | Ação top-down em salas. Cada era vira um estágio com o seu chefe (O Coletor, O Filtro, O Algoritmo e O Oráculo), e no fim Elira enfrenta A.R.1.3.L. no Núcleo. Não grava ranking nem altera os finais do escape room. |
+
+Controles do Modo Invasão: `WASD` move, `SETAS` atiram, `ESC` pausa, `Q` volta ao menu (na pausa ou na derrota), `R` recomeça o estágio, `ENTER` volta ao menu depois da vitória. Ao perder todos os corações, Elira volta ao início do estágio.
+
+O Modo Invasão fica em um módulo próprio (`src/invasao.c` + `src/invasao.h`), para não misturar o código de ação com as salas do escape room em `funcoes.c`. O `main.c` só faz o roteamento da tela `SCREEN_INVASION`. Os sprites do modo estão em `assets/sprites/invasao/`.
+
+***
+
 ## **Recompensas da jornada**
 
 Na progressão planejada, cada salto temporal revela uma peça da história de A.R.1.3.L. Estes três artefatos marcam a jornada pelas eras:

@@ -38,11 +38,13 @@ if(APPLE)
     add_executable(ELIRA MACOSX_BUNDLE
         src/main.c
         src/funcoes.c
+        src/invasao.c
     )
 else()
     add_executable(ELIRA
         src/main.c
         src/funcoes.c
+        src/invasao.c
     )
 endif()
 

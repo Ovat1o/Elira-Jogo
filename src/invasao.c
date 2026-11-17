@@ -1,9 +1,11 @@
-/* PROTOTIPO v2: MODO INVASAO do ELIRA (standalone, ainda nao integrado ao jogo).
-   4 estagios (1990, 2008, 2026, 2048), um chefe por era, e A.R.1.3.L. no nucleo final.
-   Elira usa sprite sheet PNG (teste); cenario, inimigos e chefes sao primitivas raylib.
-   Controles: WASD move, SETAS atiram, ESC pausa, R reinicia o estagio, 1-5 pula de estagio (teste).
-   "--shots <dir>" gera previas em PNG e sai. */
-#include "raylib.h"
+/* =============================================================================
+ * invasao.c - MODO INVASAO do ELIRA (segundo modo de jogo, acao top-down em salas).
+ * 4 estagios (1990, 2008, 2026, 2048), um chefe por era, e A.R.1.3.L. no nucleo final.
+ * Modulo separado de funcoes.c por decisao do grupo (ver docs/superpowers/specs/
+ * 2026-11-16-modo-invasao-design.md). Estado privado (static); interface em invasao.h.
+ * Controles: WASD move, SETAS atiram, ESC pausa, Q volta ao menu, R recomeca.
+ * ============================================================================= */
+#include "invasao.h"
 #include "rlgl.h"
 #include <math.h>
 #include <stdio.h>
@@ -13,7 +15,8 @@
 #define VW 1280
 #define VH 720
 #ifndef ASSETS
-#define ASSETS "../../assets/"   /* relativo a esta pasta; main() entra no diretorio do executavel */
+#define ASSETS "assets/" /* o main.c ja poe o diretorio de trabalho na raiz do jogo */
+#define INV_DEBUG_SKIP 1 /* teclas 1-5 pulam de estagio (teste); desligar antes de entregar */
 #endif
 
 /* ------------------------------------------------------------------ util */
@@ -305,7 +308,7 @@ static void AddBullet(Vector2 p, Vector2 v, float r, bool fromPlayer, int kind, 
     for (int i = 0; i < MAXB; i++)
         if (!bl[i].on)
         {
-            bl[i] = (Bullet){true, fromPlayer, kind, GetRandomValue(0, 1), p, v, r, life, dmg, -1};
+            bl[i] = (Bullet){true, fromPlayer, kind, GetRandomValue(0, 1), p, v, r, life, dmg, -1, 0.0f};
             return;
         }
 }
@@ -442,6 +445,9 @@ static const RoomDef LAYOUT[NSTAGE][5] = {
 };
 typedef struct { int type; float x, y; bool fake; } Spawn;
 #define END {-1, 0, 0, false}
+/* Entradas sem o 4o campo sao inimigos reais (fake = false). */
+#pragma GCC diagnostic push
+#pragma GCC diagnostic ignored "-Wmissing-field-initializers"
 static const Spawn SPAWN[4][2][9] = {
     {{{EN_TRACKER, 240, -120}, {EN_TRACKER, 300, 110}, {EN_TRACKER, -40, -150}, {EN_LEAK, 120, 20}, END},
      {{EN_LEAK, -200, -60}, {EN_LEAK, 200, 60}, {EN_POPUP, 0, -150}, {EN_POPUP, 300, 150}, {EN_TRACKER, 360, -140}, {EN_TRACKER, -330, 150}, END}},
@@ -452,6 +458,7 @@ static const Spawn SPAWN[4][2][9] = {
     {{{EN_MIRAGE, 240, -100}, {EN_MIRAGE, -240, 100}, {EN_TRACKER, 0, -150, true}, {EN_TRACKER, 320, 140, true}, {EN_TRACKER, -320, -140, true}, {EN_TRACKER, 0, 150}, END},
      {{EN_MIRAGE, 0, -150}, {EN_MIRAGE, 330, 60}, {EN_MIRAGE, -330, 60}, {EN_BUBBLE, 0, 120}, {EN_LEAK, 220, -130}, {EN_TRACKER, -220, -130, true}, {EN_TRACKER, 150, 150, true}, END}},
 };
+#pragma GCC diagnostic pop
 
 static void BuildMap(void)
 {
@@ -2038,9 +2045,9 @@ static void Draw(void)
     EndMode2D();
     DrawHUD();
     if (gs == GS_STORY) DrawStory();
-    if (gs == GS_PAUSE) DrawOverlay("PAUSA", "[ESC] continuar    [Q] sair", C_CYAN, 0);
-    if (gs == GS_OVER) DrawOverlay("CONEXÃO PERDIDA", "[R] recomeçar este estágio", C_RED, 3);
-    if (gs == GS_WIN) DrawOverlay("A.R.1.3.L. DESCONECTADA", "Os quatro protocolos caíram.   [R] jogar de novo", C_AMBER, 1);
+    if (gs == GS_PAUSE) DrawOverlay("PAUSA", "[ESC] continuar    [Q] voltar ao menu", C_CYAN, 0);
+    if (gs == GS_OVER) DrawOverlay("CONEXÃO PERDIDA", "[R] recomeçar este estágio    [Q] menu", C_RED, 3);
+    if (gs == GS_WIN) DrawOverlay("A.R.1.3.L. DESCONECTADA", "Os quatro protocolos caíram.   [R] jogar de novo   [ENTER] menu", C_AMBER, 1);
 }
 
 /* ------------------------------------------------------------------ input / previas / main */
@@ -2057,193 +2064,109 @@ static Input ReadInput(void)
     if (IsKeyDown(KEY_RIGHT)) in.shoot.x += 1;
     return in;
 }
-static RenderTexture2D target;
-static void Render(void)
+
+/* ------------------------------------------------------------------ interface do modulo */
+typedef struct InvKeys
 {
-    BeginTextureMode(target);
+    bool esc, q, r, enter, space;
+    int skipStage; /* -1 = nenhum; 0..NSTAGE-1 = pular para o estagio (so com INV_DEBUG_SKIP) */
+} InvKeys;
+
+static bool invLoaded = false;
+
+/* Aplica as teclas de controle do modo. Retorna true quando o jogador pediu para voltar ao menu. */
+static bool InvApplyKeys(InvKeys k)
+{
+    if (k.esc && (gs == GS_PLAY || gs == GS_PAUSE))
+    {
+        gs = (gs == GS_PLAY) ? GS_PAUSE : GS_PLAY;
+        return false;
+    }
+    if (gs == GS_PAUSE && k.q) return true;
+    if (gs == GS_OVER)
+    {
+        if (k.esc || k.q) return true;
+        if (k.r) RetryStage();
+    }
+    else if (gs == GS_WIN)
+    {
+        if (k.enter || k.q) return true;
+        if (k.r) NewGame(0);
+    }
+    else if (gs == GS_STORY && story.t > 0.4f && (k.space || k.enter))
+    {
+        gs = GS_PLAY;
+    }
+    if (INV_DEBUG_SKIP && k.skipStage >= 0 && k.skipStage < NSTAGE) NewGame(k.skipStage);
+    return false;
+}
+
+static void InvLeave(GameState *game)
+{
+    game->screen = SCREEN_TITLE;
+}
+
+void InvEnter(GameState *game)
+{
+    if (!invLoaded)
+    {
+        texFloppy = LoadTexSmooth(ASSETS "sprites/disquete.png");
+        texCd = LoadTexSmooth(ASSETS "sprites/cd.png");
+        texSsd = LoadTexSmooth(ASSETS "sprites/ssd.png");
+        LoadHeart(ASSETS "sprites/vidas.png");
+        texElira = LoadTexture(ASSETS "sprites/invasao/elira_sheet.png");
+        SetTextureFilter(texElira, TEXTURE_FILTER_POINT);
+        texFaces = LoadTexSmooth(ASSETS "sprites/invasao/elira_rostos.png");
+        texFx = LoadTexture(ASSETS "sprites/invasao/elira_fx.png");
+        SetTextureFilter(texFx, TEXTURE_FILTER_BILINEAR);
+        invLoaded = true;
+    }
+    NewGame(0);
+    game->screen = SCREEN_INVASION;
+}
+
+void InvUpdate(GameState *game, float dt)
+{
+    InvKeys k = {0};
+    k.esc = IsKeyPressed(KEY_ESCAPE);
+    k.q = IsKeyPressed(KEY_Q);
+    k.r = IsKeyPressed(KEY_R);
+    k.enter = IsKeyPressed(KEY_ENTER);
+    k.space = IsKeyPressed(KEY_SPACE);
+    k.skipStage = -1;
+    for (int s = 0; s < NSTAGE; s++)
+        if (IsKeyPressed(KEY_ONE + s)) k.skipStage = s;
+
+    if (InvApplyKeys(k))
+    {
+        InvLeave(game);
+        return;
+    }
+    Update(fminf(dt, 1.0f / 30), gs == GS_PLAY ? ReadInput() : (Input){0});
+}
+
+void InvDraw(void)
+{
+    /* Mistura separada para o alfa do render target nao "furar" os sprites transparentes. */
     rlSetBlendFactorsSeparate(RL_SRC_ALPHA, RL_ONE_MINUS_SRC_ALPHA, RL_ONE, RL_ONE_MINUS_SRC_ALPHA, RL_FUNC_ADD, RL_FUNC_ADD);
     BeginBlendMode(BLEND_CUSTOM_SEPARATE);
     Draw();
     EndBlendMode();
-    EndTextureMode();
-}
-static void Save(const char *dir, const char *name)
-{
-    Render();
-    Image img = LoadImageFromTexture(target.texture);
-    ImageFlipVertical(&img);
-    char path[512];
-    snprintf(path, sizeof path, "%s/%s", dir, name);
-    ExportImage(img, path);
-    UnloadImage(img);
-}
-/* simula sem perder vida (so para compor a previa) */
-static void Sim(int frames, Input in)
-{
-    for (int i = 0; i < frames; i++)
-    {
-        pl.inv = 0.5f;
-        pl.stolen = 0;
-        Update(1.0f / 60, in);
-    }
-    pl.inv = 0;
-}
-static void GoBoss(int s)
-{
-    NewGame(s);
-    for (int i = 0; i < 5; i++)
-        if (LAYOUT[s][i].type != RT_NONE) map[LAYOUT[s][i].y][LAYOUT[s][i].x].visited = true;
-    int bi = s == 4 ? 1 : 4;
-    EnterRoom(LAYOUT[s][bi].x, LAYOUT[s][bi].y, DIR_S);
-    bannerT = 0;
-    msgT = 0;
-}
-static void Shots(const char *dir)
-{
-    SetRandomSeed(7);
-    NewGame(0);
-    Sim(20, (Input){0});
-    bannerT = 0;
-    Save(dir, "v2_01_inicio_1990.png");
-
-    /* Elira nas 4 direcoes */
-    NewGame(0);
-    bannerT = 0; msgT = 0;
-    Vector2 c = FloorCenter();
-    static const Vector2 dirs[4] = {{0, 1}, {1, 0}, {0, -1}, {-1, 0}};
-    for (int k = 0; k < 4; k++)
-    {
-        pl.p = V2(c.x - 240 + k * 160, c.y + 130);
-        Sim(8 + k * 5, (Input){dirs[k], V2(0, 0)});
-        char nm[64];
-        snprintf(nm, sizeof nm, "v2_02_elira_dir%d.png", k);
-        Save(dir, nm);
-    }
-
-    for (int s = 0; s < 4; s++)
-    {
-        NewGame(s);
-        map[LAYOUT[s][0].y][LAYOUT[s][0].x].visited = true;
-        EnterRoom(LAYOUT[s][1].x, LAYOUT[s][1].y, DIR_W);
-        bannerT = 0;
-        Sim(60, (Input){V2(0.3f, -0.2f), V2(1, 0)});
-        Sim(70, (Input){V2(0.1f, 0.5f), V2(1, 0)});
-        msgT = 0;
-        char nm[64];
-        snprintf(nm, sizeof nm, "v2_1%d_combate_%s.png", s, ST[s].year);
-        Save(dir, nm);
-    }
-    for (int s = 0; s < 5; s++)
-    {
-        GoBoss(s);
-        Sim(150, (Input){V2(0, 0), V2(0, -1)});
-        for (int i = 0; i < MAXE; i++)
-            if (en[i].on && en[i].type == EN_BOSS) en[i].hp = en[i].maxhp * (s == 4 ? 0.70f : 0.45f);
-        for (int k = 0; k < 8; k++) Sim(40, (Input){V2(k % 2 ? 0.8f : -0.8f, 0), V2(0, -1)});
-        bannerT = 0;
-        msgT = 0;
-        char nm[64];
-        snprintf(nm, sizeof nm, "v2_2%d_chefe_%s.png", s, s == 4 ? "nucleo" : ST[s].year);
-        Save(dir, nm);
-    }
-    GoBoss(4);
-    Sim(150, (Input){0});
-    for (int i = 0; i < MAXE; i++)
-        if (en[i].on && en[i].type == EN_BOSS) en[i].hp = en[i].maxhp * 0.2f;
-    for (int k = 0; k < 6; k++) Sim(40, (Input){V2(k % 2 ? 0.8f : -0.8f, 0), V2(0, -1)});
-    bannerT = 0;
-    Save(dir, "v2_25_chefe_nucleo_fase4.png");
-    pl.hp = 0;
-    gs = GS_OVER;
-    Save(dir, "v2_30_derrota.png");
-
-    NewGame(1);
-    EnterRoom(LAYOUT[1][3].x, LAYOUT[1][3].y, DIR_S);
-    bannerT = 0;
-    pl.p = FloorCenter();
-    Sim(3, (Input){0});
-    for (int i = 0; i < 40; i++) Update(1.0f / 60, (Input){0});
-    Save(dir, "v2_40_narrativa_cd.png");
-
-    GoBoss(0);
-    Sim(150, (Input){0});
-    for (int i = 0; i < MAXE; i++)
-        if (en[i].on && en[i].type == EN_BOSS) { KillEnemy(&en[i]); break; }
-    Sim(50, (Input){0});
-    Save(dir, "v2_41_escolha_melhoria.png");
-    pl.p = V2(FloorCenter().x - 190, FloorCenter().y + 60);
-    Sim(3, (Input){0});
-    for (int i = 0; i < 40; i++) Update(1.0f / 60, (Input){0});
-    Save(dir, "v2_42_narrativa_melhoria.png");
-
-    NewGame(0);
-    map[LAYOUT[0][0].y][LAYOUT[0][0].x].visited = true;
-    EnterRoom(LAYOUT[0][1].x, LAYOUT[0][1].y, DIR_W);
-    bannerT = 0;
-    pl.p = V2(FloorCenter().x - 260, FloorCenter().y + 40);
-    Sim(46, (Input){V2(0, 0), V2(1, 0)});
-    msgT = 0;
-    Save(dir, "v2_50_ataque_direita.png");
-    pl.p = V2(FloorCenter().x + 60, FloorCenter().y + 120);
-    Sim(40, (Input){V2(0, 0), V2(-1, 0)});
-    Save(dir, "v2_51_ataque_esquerda.png");
-    pl.p = V2(FloorCenter().x - 120, FloorCenter().y + 150);
-    Sim(40, (Input){V2(0, 0), V2(0, -1)});
-    Save(dir, "v2_52_ataque_cima.png");
-    pl.p = V2(FloorCenter().x - 120, FloorCenter().y - 150);
-    Sim(40, (Input){V2(0, 0), V2(0, 1)});
-    Save(dir, "v2_53_ataque_baixo.png");
-    Sim(20, (Input){V2(1, 0), V2(0, 0)});
-    Save(dir, "v2_54_andando.png");
 }
 
-int main(int argc, char **argv)
+void InvUnload(void)
 {
-    bool shots = argc >= 3 && strcmp(argv[1], "--shots") == 0;
-    SetConfigFlags(FLAG_WINDOW_RESIZABLE | FLAG_VSYNC_HINT | (shots ? FLAG_WINDOW_HIDDEN : 0));
-    InitWindow(VW, VH, "ELIRA - Modo Invasão (protótipo v2)");
-    ChangeDirectory(GetApplicationDirectory()); /* ASSETS e relativo a pasta do executavel */
-    SetExitKey(KEY_NULL);
-    texFloppy = LoadTexSmooth(ASSETS "sprites/disquete.png");
-    texCd = LoadTexSmooth(ASSETS "sprites/cd.png");
-    texSsd = LoadTexSmooth(ASSETS "sprites/ssd.png");
-    LoadHeart(ASSETS "sprites/vidas.png");
-    texElira = LoadTexture(TextFormat("%selira_sheet.png", GetApplicationDirectory()));
-    SetTextureFilter(texElira, TEXTURE_FILTER_POINT);
-    texFaces = LoadTexSmooth(TextFormat("%selira_rostos.png", GetApplicationDirectory()));
-    texFx = LoadTexture(TextFormat("%selira_fx.png", GetApplicationDirectory()));
-    SetTextureFilter(texFx, TEXTURE_FILTER_BILINEAR);
-    target = LoadRenderTexture(VW, VH);
-    SetTextureFilter(target.texture, TEXTURE_FILTER_BILINEAR);
-
-    if (shots)
+    if (!invLoaded) return;
+    Texture2D *texs[] = {&texFloppy, &texCd, &texSsd, &texHeart, &texHeartEmpty, &texElira, &texFaces, &texFx};
+    for (int i = 0; i < (int)(sizeof texs / sizeof texs[0]); i++)
     {
-        Shots(argv[2]);
-        CloseWindow();
-        return 0;
+        if (texs[i]->id) UnloadTexture(*texs[i]);
+        *texs[i] = (Texture2D){0};
     }
-    SetTargetFPS(60);
-    NewGame(0);
-    bool quit = false;
-    while (!WindowShouldClose() && !quit)
+    for (int px = 0; px < 97; px++)
     {
-        float dt = fminf(GetFrameTime(), 1.0f / 30);
-        if (IsKeyPressed(KEY_ESCAPE) && (gs == GS_PLAY || gs == GS_PAUSE)) gs = gs == GS_PLAY ? GS_PAUSE : GS_PLAY;
-        if (gs == GS_PAUSE && IsKeyPressed(KEY_Q)) quit = true;
-        if (gs == GS_OVER && IsKeyPressed(KEY_R)) RetryStage();
-        if (gs == GS_WIN && IsKeyPressed(KEY_R)) NewGame(0);
-        if (gs == GS_STORY && story.t > 0.4f && (IsKeyPressed(KEY_SPACE) || IsKeyPressed(KEY_ENTER))) gs = GS_PLAY;
-        for (int k = 0; k < NSTAGE; k++)
-            if (IsKeyPressed(KEY_ONE + k)) NewGame(k);
-        Update(dt, gs == GS_PLAY ? ReadInput() : (Input){0});
-        Render();
-        BeginDrawing();
-        ClearBackground(BLACK);
-        float sc = fminf(GetScreenWidth() / (float)VW, GetScreenHeight() / (float)VH);
-        float w = VW * sc, h = VH * sc;
-        DrawTexturePro(target.texture, (Rectangle){0, 0, VW, -VH}, (Rectangle){(GetScreenWidth() - w) / 2, (GetScreenHeight() - h) / 2, w, h}, V2(0, 0), 0, WHITE);
-        EndDrawing();
+        if (g_fontOk[px]) UnloadFont(g_font[px]);
+        g_fontOk[px] = false;
     }
-    CloseWindow();
-    return 0;
+    invLoaded = false;
 }

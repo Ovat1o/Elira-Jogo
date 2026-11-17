@@ -47,14 +47,16 @@ endif
 
 # Arquivos-fonte (.c) do projeto
 SRC := $(SRC_DIR)/main.c \
-       $(SRC_DIR)/funcoes.c
+       $(SRC_DIR)/funcoes.c \
+       $(SRC_DIR)/invasao.c
 
 # Objetos (.o) gerados na compilacao
 OBJ := $(SRC:.c=.o)
 
 # Cabecalhos (.h) proprios do projeto
 PROJECT_HEADERS := $(SRC_DIR)/constantes.h \
-                   $(SRC_DIR)/funcoes.h
+                   $(SRC_DIR)/funcoes.h \
+                   $(SRC_DIR)/invasao.h
 
 # Arquivos de cabecalho da biblioteca Raylib presentes na pasta src/raylib/
 RAYLIB_HEADERS  := $(SRC_RAYLIB_DIR)/raylib.h \
