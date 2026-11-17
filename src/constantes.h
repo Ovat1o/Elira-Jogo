@@ -106,7 +106,14 @@
 /* ========================================================================= */
 /* COLECIONAVEIS OCULTOS E ROTA DOURADA                                       */
 /* ========================================================================= */
-#define JOURNAL_TAB_HIDDEN 4   /* aba OCULTOS do diario (aparece apos o 1o achado) */
+/* Abas do diario guia: uma por sala, RECOMPENSAS e OCULTOS */
+#define JOURNAL_TAB_1990    0
+#define JOURNAL_TAB_2008    1
+#define JOURNAL_TAB_2026    2
+#define JOURNAL_TAB_2048    3
+#define JOURNAL_TAB_REWARDS 4
+#define JOURNAL_TAB_HIDDEN  5
+#define JOURNAL_TAB_COUNT   6
 #define FINAL_GOLDEN_CHOICE 3  /* indice da 4a opcao (dourada) em cada escolha do confronto */
 #define ENDING_NAME_RUIM   "Final Ruim"
 #define ENDING_NAME_PADRAO "Final Padrão"

@@ -397,6 +397,7 @@ int main(int argc, char **argv)
                 break;
             case SCREEN_TERMINAL_2046:
                 DrawTerminal2046(&game);
+                if (game.journalOpen) DrawJournal(&game);
                 break;
             case SCREEN_RESULT_2046:
                 DrawResult2046(&game);

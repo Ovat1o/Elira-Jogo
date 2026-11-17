@@ -497,7 +497,6 @@ void DrawRoom(const GameState *game);
 void DrawJournalHudButton(const GameState *game);
 void DrawHud(const GameState *game);
 void DrawPadlockIcon(int centerX, int centerY, float scale, Color bodyColor, Color shackleColor);
-void DrawJournalTabs(const GameState *game, int bookX, int bookY);
 void DrawJournal(const GameState *game);
 
 /* Colecionaveis ocultos (Rota Dourada) - logica centralizada em funcoes.c */
@@ -506,7 +505,7 @@ int HiddenFoundCount(const GameState *game);
 bool HasAllHidden(const GameState *game);               /* O = E && F && G && H */
 const char *HiddenItemName(int item);
 void DrawHiddenGlint(Rectangle area, float phase);      /* brilho discreto sobre o objeto escondido */
-bool UpdateJournalHiddenTab(GameState *game, int bookX, int bookY); /* true = entrada consumida */
+bool UpdateJournal(GameState *game);  /* diario guia: abre/fecha e trata abas; true = entrada consumida */
 void UpdateRoom(GameState *game);
 void AddDigit(GameState *game, char digit);
 void CheckCode(GameState *game);
