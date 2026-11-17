@@ -3269,12 +3269,6 @@ static bool J26AllSamples(const GameState *g)
         if (!g->sample2026Analyzed[m]) return false;
     return true;
 }
-static bool J26AnySample(const GameState *g)
-{
-    for (int m = 0; m < R2026_MATERIAL_COUNT; m++)
-        if (g->sample2026Analyzed[m]) return true;
-    return false;
-}
 static bool J26ContestVisible(const GameState *g) { return J26Manual(g) && J26AllSamples(g); }
 static bool J26Log(const GameState *g) { return g->decisionLog2026Read; }
 static bool J26Dataset(const GameState *g) { return g->dataset2026Seen; }
@@ -3286,7 +3280,7 @@ static bool J26Done(const GameState *g) { return g->room2026Completed; }
 
 static const JournalClue JOURNAL_CLUES_2026[] = {
     {"Manual técnico", "A câmara exige material sólido, mineral,", "muito magnético e que seja uma Terra Rara.", J26Manual},
-    {"Amostras analisadas", "Só o NEODÍMIO atende aos 4 requisitos.", "Ariel recomenda FERRO: está errada.", J26AnySample},
+    {"Amostras analisadas (4/4)", "Só o NEODÍMIO atende aos 4 requisitos.", "Ariel recomenda FERRO: está errada.", J26AllSamples},
     {"Gaveta 1 - log de decisões", "Nas últimas 312 recomendações, a IA nunca", "escolheu uma Terra Rara.", J26Log},
     {"Gaveta 2 - dados de treino", "Ferro 5820 | Níquel 3240 | Cobalto 1420", "Terras Raras: só 118 registros.", J26Dataset},
     {"Quadro de avisos - Anexo B", "Norma do comitê: Adequação 50, Estabilidade 25,", "Disponibilidade 15, Custo 10.", J26Board},
@@ -3312,11 +3306,16 @@ static bool J48Intact(const GameState *g)
 {
     return J48Principles(g) && !g->term2046ProtocolTampered && !g->term2046FakeNote;
 }
+/* Configuracao restaurada = as 3 escolhas certas (opcao 2: Mostrar / Admitir / Humano decide). */
 static bool J48Configured(const GameState *g)
 {
-    return g->term2046State == TERM2046_STATE_EU_DECIDO || g->term2046State == TERM2046_STATE_FIM;
+    bool right = g->term2046Config[0] == 2 && g->term2046Config[1] == 2 && g->term2046Config[2] == 2;
+    return right && (g->term2046State == TERM2046_STATE_EU_DECIDO || g->term2046State == TERM2046_STATE_FIM);
 }
-static bool J48Finished(const GameState *g) { return g->term2046State == TERM2046_STATE_FIM; }
+static bool J48Finished(const GameState *g)
+{
+    return g->term2046State == TERM2046_STATE_FIM && g->term2046Ending == TERM2046_ENDING_BOM;
+}
 
 static const JournalClue JOURNAL_CLUES_2048[] = {
     {"relatorio.txt", "Um engenheiro avisa: compare o DISQUETE com o SSD,", "restaure as 3 regras e não deixe Ariel \"corrigir\".", J48Report},
@@ -3326,12 +3325,12 @@ static const JournalClue JOURNAL_CLUES_2048[] = {
     {"relatorio_ariel.txt", "Versão falsificada por Ariel: inventa uma regra 4", "e recomenda ocultar fontes e deixar a IA decidir.", J48FakeReport},
 };
 static const JournalStep JOURNAL_STEPS_2048[] = {
-    {"Abra relatorio.txt e protocolo.txt (opção [1]).", "O relatório explica o que aconteceu; o protocolo", "guarda as regras originais.", J48Read, JAlways},
+    {"Abra relatorio.txt e protocolo.txt (opção [1]).", "Se Ariel sugerir outro arquivo, responda [2] Não.", "O protocolo guarda as regras originais.", J48Read, JAlways},
     {"Anote as 3 regras originais (opção [3]):", "MOSTRAR FONTES  |  COMUNICAR INCERTEZA",
      "HUMANO POSSUI A DECISÃO FINAL", J48Principles, J48Read},
-    {"Se Ariel adulterar algo, verifique (opção [5]).", "Descarte anotações falsas e confira a integridade.", NULL, J48Intact, J48Principles},
-    {"Restaure o protocolo (opção [6]):", "Fontes: Mostrar | Incerteza: Admitir quando não souber",
-     "Decisões: Humano decide", J48Configured, J48Intact},
+    {"Se Ariel adulterar algo, use [4] e [5].", "[4]: descarte a anotação falsa.", "[5]: verifique a integridade do protocolo.", J48Intact, J48Principles},
+    {"Restaure o protocolo (opção [6]):", "Mostrar | Admitir quando não souber | Humano decide",
+     "Depois de aplicar, recuse a correção de Ariel: [2] NÃO.", J48Configured, J48Intact},
     {"Confirme digitando:", "EU DECIDO", NULL, J48Finished, J48Configured},
 };
 
@@ -3359,14 +3358,24 @@ static const JournalStep *JournalSteps(int room, int *count)
     }
 }
 
-/* Primeiro passo ainda nao feito da sala; -1 quando a sala foi concluida. */
-static int JournalCurrentStep(const GameState *g, int room)
+/* Indice do ultimo passo feito (-1 = nenhum). Passos anteriores a ele contam como feitos:
+   o jogador pode resolver fora da ordem (ex.: suspender a ordem sem examinar os documentos). */
+static int JournalLastDoneStep(const GameState *g, int room)
 {
     int n = 0;
     const JournalStep *steps = JournalSteps(room, &n);
-    for (int i = 0; i < n; i++)
-        if (!steps[i].done(g)) return i;
+    for (int i = n - 1; i >= 0; i--)
+        if (steps[i].done(g)) return i;
     return -1;
+}
+
+/* Primeiro passo ainda nao feito depois do ultimo feito; -1 quando a sala foi concluida. */
+static int JournalCurrentStep(const GameState *g, int room)
+{
+    int n = 0;
+    JournalSteps(room, &n);
+    int next = JournalLastDoneStep(g, room) + 1;
+    return (next < n) ? next : -1;
 }
 
 /* Abas de sala liberam junto com o ano; RECOMPENSAS e OCULTOS ficam sempre abertas. */
@@ -3434,7 +3443,7 @@ static bool JournalRewardObtained(const GameState *g, int r)
         case 0: return g->year2008Unlocked;
         case 1: return g->puzzle2008OrderSuspended;
         case 2: return g->room2026Completed;
-        case 3: return g->term2046State == TERM2046_STATE_FIM;
+        case 3: return g->term2046State == TERM2046_STATE_FIM && g->term2046Ending == TERM2046_ENDING_BOM;
         default: return false;
     }
 }
@@ -3615,7 +3624,7 @@ static void DrawJournalBookShell(const GameState *game)
     bool hoverClose = CheckCollisionPointRec(mouse, close);
     DrawRectangleRounded(close, 0.25f, 6, hoverClose ? (Color){195, 170, 140, 255} : (Color){226, 216, 196, 255});
     DrawRectangleRoundedLinesEx(close, 0.25f, 6, 1, (Color){145, 115, 85, 255});
-    DrawGameText("Fechar [ESC/D]", (int)close.x + 24, (int)close.y + 9, 15, INK_COLOR);
+    DrawGameText(ScreenWantsTextInput(game) ? "Fechar [ESC]" : "Fechar [ESC/D]", (int)close.x + 24, (int)close.y + 9, 15, INK_COLOR);
 }
 
 static void DrawJournalRoomPages(const GameState *game, int room)
@@ -3661,7 +3670,7 @@ static void DrawJournalRoomPages(const GameState *game, int room)
     y = by + 90;
     for (int i = 0; i < nSteps; i++)
     {
-        bool done = steps[i].done(game);
+        bool done = (i <= JournalLastDoneStep(game, room));
         int state = done ? 1 : (i == current ? 2 : 0);
         bool answer = done || steps[i].answerVisible == NULL || steps[i].answerVisible(game);
         Color textColor = (state == 0) ? JOURNAL_MUTED : INK_COLOR;
@@ -3708,7 +3717,7 @@ static void DrawJournalRewardCard(const GameState *game, int r, int x, int y, in
     }
     JournalText(rw->name, textX, y + 18, 18, JOURNAL_PAGE_W - (textX - x) - 14, JOURNAL_RED);
     DrawGameText(TextFormat("Recuperado em %s", rw->year), textX, y + 44, 14, JOURNAL_GREEN);
-    int lines = (h >= 200) ? 4 : 2;
+    int lines = (h >= 200) ? 4 : 0;   /* cartao compacto: so nome e ano */
     for (int i = 0; i < lines && rw->text[i]; i++)
         JournalText(rw->text[i], x + 18, y + 90 + i * 25, 15, JOURNAL_PAGE_W - 36, INK_COLOR);
 }
@@ -3731,7 +3740,7 @@ static void DrawJournalRewardsPages(const GameState *game)
         got++;
     }
     JournalParagraph(story, rx + 4, by + 84, 16, JOURNAL_PAGE_W - 8, 23, INK_COLOR);
-    DrawJournalRewardCard(game, 2, rx, by + 222, 226);
+    DrawJournalRewardCard(game, 2, rx, by + 232, 216);
     DrawJournalRewardCard(game, 3, rx, by + 458, 74);
 }
 
