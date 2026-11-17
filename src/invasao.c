@@ -16,7 +16,7 @@
 #define VH 720
 #ifndef ASSETS
 #define ASSETS "assets/" /* o main.c ja poe o diretorio de trabalho na raiz do jogo */
-#define INV_DEBUG_SKIP 1 /* teclas 1-5 pulam de estagio (teste); desligar antes de entregar */
+#define INV_DEBUG_SKIP 0 /* 1 = teclas 1-5 pulam de estagio (so para testes; deixar 0 nas entregas) */
 #endif
 
 /* ------------------------------------------------------------------ util */
@@ -1957,7 +1957,7 @@ static void DrawHUD(void)
         Txt(msgBot, 28, 702, 14, Alpha(C_WHITE, a));
     }
     else
-        Txt("[WASD] mover   [SETAS] atirar   [ESC] pausa   [1-5] pular estágio (teste)", 28, 692, 16, C_DIM);
+        Txt("[WASD] mover   [SETAS] atirar   [ESC] pausa", 28, 692, 16, C_DIM);
     for (int i = 0; i < MAXE; i++)
         if (en[i].on && en[i].type == EN_BOSS)
         {
