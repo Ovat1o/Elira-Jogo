@@ -2,6 +2,7 @@
 #include <stdio.h>
 #include <string.h>
 #include "funcoes.h"
+#include "invasao.h"
 
 static bool TryUseAssetBase(const char *baseDirectory)
 {
@@ -47,7 +48,10 @@ static bool ValidateRequiredAssets(void)
         "assets/sprites/cd.png",
         "assets/sprites/ssd.png",
         "assets/sprites/elira_portrait.png",
-        "assets/som/ambient.wav"
+        "assets/som/ambient.wav",
+        "assets/sprites/invasao/elira_sheet.png",
+        "assets/sprites/invasao/elira_fx.png",
+        "assets/sprites/invasao/elira_rostos.png"
     };
     bool valid = true;
 
@@ -299,6 +303,9 @@ int main(int argc, char **argv)
             case SCREEN_RESULT_2046:
                 UpdateResult2046(&game);
                 break;
+            case SCREEN_INVASION:
+                InvUpdate(&game, delta);
+                break;
             case SCREEN_FINAL_DIALOGUE:
                 UpdateFinalDialogue(&game);
                 break;
@@ -384,6 +391,9 @@ int main(int argc, char **argv)
             case SCREEN_RESULT_2046:
                 DrawResult2046(&game);
                 break;
+            case SCREEN_INVASION:
+                InvDraw();
+                break;
             case SCREEN_FINAL_DIALOGUE:
                 DrawFinalDialogue(&game);
                 break;
@@ -422,6 +432,7 @@ int main(int argc, char **argv)
         UnloadTexture(g_eliraPortrait);
     }
     UnloadRewardSprites();
+    InvUnload();
     if (bgmLoaded)
     {
         UnloadMusicStream(ambientBgm);
