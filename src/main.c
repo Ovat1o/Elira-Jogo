@@ -2,6 +2,7 @@
 #include <stdio.h>
 #include <string.h>
 #include "funcoes.h"
+#include "invasao.h"
 
 static bool TryUseAssetBase(const char *baseDirectory)
 {
@@ -47,7 +48,10 @@ static bool ValidateRequiredAssets(void)
         "assets/sprites/cd.png",
         "assets/sprites/ssd.png",
         "assets/sprites/elira_portrait.png",
-        "assets/som/ambient.wav"
+        "assets/som/ambient.wav",
+        "assets/sprites/invasao/elira_sheet.png",
+        "assets/sprites/invasao/elira_fx.png",
+        "assets/sprites/invasao/elira_rostos.png"
     };
     bool valid = true;
 
@@ -130,7 +134,7 @@ int main(int argc, char **argv)
 
         /* Alternar audio com tecla M ou clique no HUD */
         Rectangle audioHudBtn = {840, 665, 175, 40};
-        bool musicKeyBlocked = (game.screen == SCREEN_TERMINAL_2046 && Terminal2046WantsTextInput(&game));
+        bool musicKeyBlocked = ScreenWantsTextInput(&game);
         bool toggleAudio = !game.phaseMenuOpen &&
                            ((IsKeyPressed(KEY_M) && !musicKeyBlocked) ||
                             ((game.screen == SCREEN_ROOM || game.screen == SCREEN_ROOM_2 ||
@@ -152,12 +156,16 @@ int main(int argc, char **argv)
         if (!phaseControlsCapturedInput) switch (game.screen)
         {
             case SCREEN_TITLE:
-                if (Clicked((Rectangle){86, 436, 350, 56}) ||
+                if (Clicked((Rectangle){86, 326, 350, 54}) ||
                     IsKeyPressed(KEY_ENTER) || IsKeyPressed(KEY_SPACE))
                 {
                     game.screen = SCREEN_PLAYER_NAME;
                 }
-                else if (Clicked((Rectangle){86, 506, 350, 52}) || IsKeyPressed(KEY_C))
+                else if (Clicked((Rectangle){86, 392, 350, 54}) || IsKeyPressed(KEY_I))
+                {
+                    InvEnter(&game);
+                }
+                else if (Clicked((Rectangle){86, 458, 350, 50}) || IsKeyPressed(KEY_C))
                 {
                     game.screen = SCREEN_SETTINGS;
                 }
@@ -178,6 +186,12 @@ int main(int argc, char **argv)
                     game.messageTimer = 0.0f;
                     InitCinematicIntro(&game);
                     game.screen = SCREEN_CINEMATIC_INTRO;
+                }
+                else if (Clicked((Rectangle){490, 600, 300, 54}) || IsKeyPressed(KEY_ESCAPE))
+                {
+                    game.message[0] = '\0';
+                    game.messageTimer = 0.0f;
+                    game.screen = SCREEN_TITLE;
                 }
                 break;
             case SCREEN_CINEMATIC_INTRO:
@@ -209,8 +223,8 @@ int main(int argc, char **argv)
                     game.year2026Unlocked = true;
                     game.journalYearTab = 2;
                     game.journalPage = 0;
-                    game.screen = SCREEN_ROOM;
-                    SetMessage(&game, "Salto temporal concluido: Laboratorio do Prototipo // ANO 2026.");
+                    game.screen = SCREEN_ROOM_2026;
+                    SetMessage(&game, "Salto temporal concluido: Laboratorio de Sintese // ANO 2026.");
                 }
                 break;
             case SCREEN_INTRO_2046:
@@ -219,7 +233,7 @@ int main(int argc, char **argv)
                 {
                     InitTerminal2046(&game);
                     game.screen = SCREEN_TERMINAL_2046;
-                    SetMessage(&game, "Salto temporal concluÃ­do: Terminal de RecuperaÃ§Ã£o // ANO 2046.");
+                    SetMessage(&game, "Salto temporal concluído: Terminal de Recuperação // ANO 2048.");
                 }
                 break;
             case SCREEN_INTRO_2048:
@@ -299,6 +313,9 @@ int main(int argc, char **argv)
             case SCREEN_RESULT_2046:
                 UpdateResult2046(&game);
                 break;
+            case SCREEN_INVASION:
+                InvUpdate(&game, delta);
+                break;
             case SCREEN_FINAL_DIALOGUE:
                 UpdateFinalDialogue(&game);
                 break;
@@ -309,6 +326,7 @@ int main(int argc, char **argv)
                 UpdateRanking(&game);
                 break;
             case SCREEN_FAILURE:
+                FinalizeFailedRun(&game);   /* Final Ruim gravado uma unica vez no TXT */
                 if (Clicked((Rectangle){490, 460, 300, 60}) || IsKeyPressed(KEY_ENTER))
                 {
                     ResetDemo(&game);
@@ -379,9 +397,13 @@ int main(int argc, char **argv)
                 break;
             case SCREEN_TERMINAL_2046:
                 DrawTerminal2046(&game);
+                if (game.journalOpen) DrawJournal(&game);
                 break;
             case SCREEN_RESULT_2046:
                 DrawResult2046(&game);
+                break;
+            case SCREEN_INVASION:
+                InvDraw();
                 break;
             case SCREEN_FINAL_DIALOGUE:
                 DrawFinalDialogue(&game);
@@ -421,6 +443,7 @@ int main(int argc, char **argv)
         UnloadTexture(g_eliraPortrait);
     }
     UnloadRewardSprites();
+    InvUnload();
     if (bgmLoaded)
     {
         UnloadMusicStream(ambientBgm);

@@ -39,10 +39,11 @@ typedef enum GameScreen
     SCREEN_INTRO_2048,
     SCREEN_INTRO_2046,
     SCREEN_TERMINAL_2046,
-    SCREEN_RESULT_2046
+    SCREEN_RESULT_2046,
+    SCREEN_INVASION     /* Modo Invasao (src/invasao.c); manter sempre por ultimo */
 } GameScreen;
 
-/* --- FASE 2046: subestados, arquivos e desfechos do terminal --- */
+/* --- SALA 2048 (identificadores com sufixo 2046 por historico): subestados, arquivos e desfechos do terminal --- */
 typedef enum Term2046State
 {
     TERM2046_STATE_TERMINAL = 0,    /* menu de acoes da investigacao */
@@ -96,7 +97,8 @@ typedef enum Term2046ViewKind
     TERM2046_VIEW_FILE,
     TERM2046_VIEW_COMPARE,
     TERM2046_VIEW_VERIFY,
-    TERM2046_VIEW_VERIFY_NOTES
+    TERM2046_VIEW_VERIFY_NOTES,
+    TERM2046_VIEW_CRACHA            /* arquivo oculto do cracha de M. Okafor (colecionavel H) */
 } Term2046ViewKind;
 
 typedef enum Term2046Sabotage
@@ -115,6 +117,16 @@ typedef enum Term2046Ending
     TERM2046_ENDING_DOMINIO,
     TERM2046_ENDING_ABANDONO        /* jogador escolheu [0] Sair */
 } Term2046Ending;
+
+/* --- COLECIONAVEIS OCULTOS (um por epoca; logica formal E, F, G, H) --- */
+typedef enum HiddenItem
+{
+    HIDDEN_1990 = 0,   /* E - Radio portatil */
+    HIDDEN_2008,       /* F - Celular de flip */
+    HIDDEN_2026,       /* G - Smartphone */
+    HIDDEN_2048,       /* H - Cracha digital */
+    HIDDEN_COUNT
+} HiddenItem;
 
 typedef struct GameState
 {
@@ -190,30 +202,37 @@ typedef struct GameState
     int activeDocument2008;            /* -1 = nenhum, 0..3 = registros, 4 = pai, 5 = memorando */
     int terminal2008ActiveTab;         /* 0 = Ordem/Evidencias, 1 = Configuracao Local */
 
-    /* --- FASE 2026: SALA DE HIDROGENIO (ALUCINACAO IA & TERRAS RARAS) --- */
-    bool manual2026Read;               /* Jogador leu o manual tecnico */
-    bool manual2026Open;               /* Modal de leitura do manual tecnico aberto */
-    bool terminal2026Open;             /* Modal/visao do terminal da Ariel */
-    int selectedMaterial2026;          /* -1 = nenhum, 0 = A-17, 1 = B-04, 2 = C-22, 3 = D-09 */
-    bool confirmModal2026Open;         /* Caixa de confirmacao aberta */
-    int pendingConfirmMaterial2026;    /* Material pendente de confirmacao (0..3) */
-    bool feedbackModal2026Open;        /* Modal de alerta de erro ativo */
-    int lastErrorMaterial2026;         /* Material do ultimo erro (0, 1, 3) */
-    bool room2026Processing;           /* Reator processando a liga metalica */
+    /* --- SALA 2026: LABORATORIO DE SINTESE (VIES ALGORITMICO) --- */
+    int modal2026;                     /* Room2026Modal: painel aberto na sala */
+    bool manual2026Read;               /* Etapa 1: manual tecnico consultado */
+    bool sample2026Analyzed[R2026_MATERIAL_COUNT]; /* Amostras varridas no analisador */
+    int sample2026Viewing;             /* Amostra exibida no analisador (-1 = nenhuma) */
+    float sample2026ScanTimer;         /* Animacao da varredura espectral */
+    bool contest2026Picking;           /* Terminal: escolhendo o material do laudo */
+    bool laudo2026Done;                /* Etapa 1: laudo correto (Neodimio) registrado */
+    bool decisionLog2026Read;          /* Gaveta 1: log de decisoes consultado */
+    bool dataset2026Seen;              /* Etapa 2: dados de treinamento auditados */
+    bool board2026Read;                /* Quadro de avisos (memorando + Anexo B) lido */
+    char padlock2026Input[R2026_CODE_LEN + 1]; /* Digitos do cadeado do painel */
+    int padlock2026Length;
+    int padlock2026Attempts;           /* Tentativas erradas no cadeado */
+    bool weights2026Unlocked;          /* Cadeado do painel de pesos aberto */
+    int weights2026Draft[R2026_CRITERIA_COUNT];   /* Pesos em edicao no painel (%) */
+    int weights2026Applied[R2026_CRITERIA_COUNT]; /* Pesos ativos no algoritmo de Ariel (%) */
+    bool weights2026Calibrated;        /* Etapa 3: norma aplicada, Ariel recomenda Neodimio */
+    bool autoExec2026Active;           /* Ariel ameaca executar a recomendacao sozinha */
+    float autoExec2026Timer;           /* Contagem local ate a execucao automatica */
+    int feedback2026Tone;              /* 0 = aviso, 1 = erro, 2 = sucesso */
+    bool feedback2026Fatal;            /* Vidas esgotadas: o modal leva a SCREEN_FAILURE */
+    char feedback2026Title[64];
+    char feedback2026Lines[4][160];
+    bool room2026Processing;           /* Camara sintetizando a liga do SSD */
     float room2026ProcessTimer;        /* Temporizador da barra de progresso */
-    bool room2026Completed;            /* Reator estabilizado / SSD obtido */
-    bool room2026FirstTrySuccess;      /* Bonus: acertou na primeira tentativa sem errar */
-    int room2026MistakesCount;         /* Contagem de erros cometidos */
-    bool room2026ThermalCollapse;      /* Colapso termico ao zerar vidas */
-    bool sample2026Analyzed[4];        /* Amostras A-17, B-04, C-22, D-09 analisadas */
-    bool analyzingSample2026;          /* Espectro em processo de analise (~2s) */
-    float analyzingTimer2026;          /* Timer da animacao do espectro */
-    int analyzingSampleIndex2026;      /* Indice da amostra sendo analisada */
-    bool reactorCountdownActive2026;   /* Countdown local do reator ativo (inicia no terminal) */
-    float reactorTimer2026;            /* Contador local de estabilidade (50s) */
-    bool room2026TimeOut;              /* Colapso por tempo esgotado no reator */
+    bool room2026Completed;            /* SSD obtido */
+    bool room2026FirstTrySuccess;      /* Bonus: sala concluida sem nenhum erro */
+    int room2026MistakesCount;         /* Erros cometidos (laudo errado, sintese falha) */
 
-    /* --- FASE 2046: TERMINAL DE RECUPERACAO DA A.R.1.3.L --- */
+    /* --- SALA 2048: TERMINAL DE RECUPERACAO DA A.R.1.3.L --- */
     int term2046State;                 /* Term2046State */
     int term2046Influence;             /* 0 a T2046_INFLUENCE_MAX */
     bool term2046ReadProtocol;         /* leu_protocolo */
@@ -260,6 +279,9 @@ typedef struct GameState
     int finalPoints;                   /* Pontos de compreensao (0 a 2) */
     int finalChoice[3];                /* Escolhas: P1, P2, Decisao final (-1 = pendente) */
 
+    /* --- COLECIONAVEIS OCULTOS: hiddenFound[i] = E, F, G, H --- */
+    bool hiddenFound[HIDDEN_COUNT];
+
     /* --- INTRODUCAO CINEMATOGRAFICA NARRATIVA --- */
     float crawlScroll;
     float cinematicTimer;
@@ -272,6 +294,7 @@ typedef struct RankingEntry
     int score;
     int seconds;        /* tempo de conclusao em segundos */
     char date[20];      /* "DD/MM/AAAA HH:MM" */
+    char ending[48];    /* US03: final alcancado (ex.: "Final Padrão - Trégua Frágil") */
 } RankingEntry;
 
 typedef struct CrawlEntry
@@ -280,18 +303,35 @@ typedef struct CrawlEntry
     int type; /* 0: Titulo ELIRA, 1: Corpo, 2: Destaque/Citacao, 3: Ano 1990, 4: Espaco vazio */
 } CrawlEntry;
 
+/* Sala 2026: paineis/modais do laboratorio (apenas um aberto por vez) */
+typedef enum Room2026Modal
+{
+    R2026_MODAL_NONE = 0,
+    R2026_MODAL_MANUAL,      /* manual tecnico: 4 requisitos da liga */
+    R2026_MODAL_SAMPLE,      /* analisador espectral de uma amostra */
+    R2026_MODAL_TERMINAL,    /* terminal de Ariel: ranking, laudo/contestacao */
+    R2026_MODAL_ARCHIVE,     /* arquivo: log de decisoes + dados de treinamento */
+    R2026_MODAL_BOARD,       /* quadro de avisos: memorando + Anexo B */
+    R2026_MODAL_PADLOCK,     /* cadeado do painel de pesos */
+    R2026_MODAL_WEIGHTS,     /* painel de pesos do algoritmo */
+    R2026_MODAL_REACTOR,     /* escolha da amostra para a camara */
+    R2026_MODAL_FEEDBACK,    /* resultado de uma acao (acerto/erro) */
+    R2026_MODAL_PROCESSING   /* sintese final em andamento */
+} Room2026Modal;
+
 typedef struct Material2026Def
 {
-    const char *idLetter;       /* "A-17", "B-04", "C-22", "D-09" */
-    const char *code;           /* "AMOSTRA A-17", etc. */
-    const char *realName;       /* "Magnetita", "Gas Hidrogenio", "Mineral de Terras Raras (Nd)", "Acido Cloridrico" */
-    const char *state;          /* "solido", "gasoso", "solido", "liquido" */
-    const char *origin;         /* "mineral", "gasoso", "mineral", "solucao" */
-    const char *elements;       /* "Fe, O", "H2", "Nd, Ce, La", "HCl" */
-    const char *classification; /* "Magnetita", "Hidrogenio", "Mineral portador de Terras Raras", "Solucao corrosiva" */
-    bool hasRareEarth;          /* false, false, true, false */
-    bool isCorrect;             /* false, false, true, false */
-    Color accentColor;
+    const char *name;           /* "Ferro", "Cobalto", "Neodímio", "Níquel" */
+    const char *upper;          /* nome em maiusculas (UTF-8) */
+    const char *symbol;         /* "Fe", "Co", "Nd", "Ni" */
+    const char *state;          /* estado fisico */
+    const char *origin;         /* origem mineral */
+    const char *magnetism;      /* propriedade magnetica */
+    bool rareEarth;             /* apenas o Neodimio */
+    int trainingRecords;        /* registros nos dados de treinamento de Ariel */
+    const char *verdict;        /* comparacao com os 4 requisitos do manual */
+    int criteria[R2026_CRITERIA_COUNT]; /* notas 0-100 por criterio do algoritmo */
+    Color accent;
 } Material2026Def;
 
 typedef enum FinalStage
@@ -319,8 +359,17 @@ typedef enum FinalEnding
     ENDING_FRAGILE_TRUCE,   /* Ferramenta sem compreensao total */
     ENDING_SILENCE,         /* Desligar + compreensao total */
     ENDING_BLACKOUT,        /* Desligar sem compreensao total */
-    ENDING_AUTOPILOT        /* Ariel continua decidindo */
+    ENDING_AUTOPILOT,       /* Ariel continua decidindo */
+    ENDING_GOLDEN_PACT      /* Rota Dourada: humanos e Ariel trabalham juntos (G && K) */
 } FinalEnding;
+
+/* Categoria formal do final (secao 25 do documento do projeto) */
+typedef enum EndingCategory
+{
+    ENDING_CAT_RUIM = 0,    /* R = !V || !T */
+    ENDING_CAT_PADRAO,      /* V && T && !(G && K) */
+    ENDING_CAT_OTIMO        /* G && K, com G = V && M && O */
+} EndingCategory;
 
 typedef struct DialogueLine
 {
@@ -407,10 +456,11 @@ const char *FormatRunTime(double seconds);
 
 /* UH19 - Ranking (arquivo TXT: Nome | Pontuacao | MM:SS - DD/MM/AAAA HH:MM) */
 int CalculateScore(const GameState *game);
-bool SaveRankingEntry(const char *name, int score, int seconds);
+bool SaveRankingEntry(const char *name, int score, int seconds, const char *ending);
 int LoadRanking(void);
 const RankingEntry *GetRankingEntries(int *count);
 void FinalizeRun(GameState *game);
+void FinalizeFailedRun(GameState *game);   /* Final Ruim: vidas esgotadas */
 void DrawRanking(const GameState *game);
 void UpdateRanking(GameState *game);
 
@@ -447,8 +497,15 @@ void DrawRoom(const GameState *game);
 void DrawJournalHudButton(const GameState *game);
 void DrawHud(const GameState *game);
 void DrawPadlockIcon(int centerX, int centerY, float scale, Color bodyColor, Color shackleColor);
-void DrawJournalTabs(const GameState *game, int bookX, int bookY);
 void DrawJournal(const GameState *game);
+
+/* Colecionaveis ocultos (Rota Dourada) - logica centralizada em funcoes.c */
+void CollectHidden(GameState *game, int item);          /* marca o oculto e avisa o jogador */
+int HiddenFoundCount(const GameState *game);
+bool HasAllHidden(const GameState *game);               /* O = E && F && G && H */
+const char *HiddenItemName(int item);
+void DrawHiddenGlint(Rectangle area, float phase);      /* brilho discreto sobre o objeto escondido */
+bool UpdateJournal(GameState *game);  /* diario guia: abre/fecha e trata abas; true = entrada consumida */
 void UpdateRoom(GameState *game);
 void AddDigit(GameState *game, char digit);
 void CheckCode(GameState *game);
@@ -465,6 +522,8 @@ void UnloadRewardSprites(void);
 void LoadHeartSprites(void);
 void UnloadHeartSprites(void);
 void DrawLivesIcons(Vector2 position, int lives, float heartSize);
+void DrawHudYearOperator(const char *year, const char *playerName, int y);  /* topo das salas: ano na ponta + operador */
+Rectangle DrawHudLivesTimer(int lives, int totalSeconds);                   /* topo das salas: vida | tempo centralizados; devolve a area ocupada */
 void GetRewardScreenButtons(Rectangle *outNext, Rectangle *outRestart, Rectangle *outMenu);
 void DrawRewardHudHeader(const GameState *game);
 void DrawRewardSpriteItem(int year, Vector2 center, float maxSize);
@@ -496,14 +555,14 @@ void UpdatePuzzle2008(GameState *game);
 void DrawResult2008(const GameState *game);
 void UpdateResult2008(GameState *game);
 
-/* Fase 3 (Ano 2026) - Sala de Hidrogenio & Sintese de Terras Raras (SSD) */
+/* Fase 3 (Ano 2026) - Laboratorio de Sintese: Vies Algoritmico (SSD) */
 void DrawHudRoom2026(const GameState *game);
 void DrawRoom2026(const GameState *game);
 void UpdateRoom2026(GameState *game);
 void DrawResult2026(const GameState *game);
 void UpdateResult2026(GameState *game);
 
-/* Fase 4 (Ano 2046) - Terminal de Recuperacao da A.R.1.3.L */
+/* Fase 4 (Ano 2048) - Terminal de Recuperacao da A.R.1.3.L */
 void InitTerminal2046(GameState *game);
 void DrawIntro2046(const GameState *game);
 void DrawTerminal2046(const GameState *game);
@@ -511,6 +570,7 @@ void UpdateTerminal2046(GameState *game);
 void DrawResult2046(const GameState *game);
 void UpdateResult2046(GameState *game);
 bool Terminal2046WantsTextInput(const GameState *game);   /* true no estado EU_DECIDO */
+bool ScreenWantsTextInput(const GameState *game);         /* true quando o teclado esta digitando texto (atalhos de letra ficam desligados) */
 
 /* Confronto Final (2048) - Sala de Dialogo Elira x Ariel */
 bool IsPortraitBackground(Color c);
@@ -520,9 +580,16 @@ int DrawTextWrappedPartial(const char *text, int visibleBytes, int x, int y, int
 const char **GetFinalOptions(int stage);
 const DialogueLine *GetFinalLines(const GameState *game, int *count);
 int GetFinalEnding(const GameState *game);
+/* Logica central dos finais (V, T, M, O, K) */
+bool HasMainArtifact(const GameState *game, int index);  /* 0..3 = A (1990), B (2008), C (2026), D (2048) */
+int MainArtifactCount(const GameState *game);
+bool UsedGoldenDialogue(const GameState *game);         /* K */
+int GetEndingCategory(const GameState *game);            /* EndingCategory */
+const char *GetEndingResultName(const GameState *game);  /* texto gravado no TXT/ranking */
+int FinalOptionCount(const GameState *game);             /* 3, ou 4 com os ocultos (O) */
 bool FinalIsChoiceMode(const GameState *game);
-Rectangle FinalBoxRect(bool choiceMode);
-Rectangle FinalOptionRect(int index);
+Rectangle FinalBoxRect(bool choiceMode, int optionCount);
+Rectangle FinalOptionRect(int index, int optionCount);
 void DrawArielCore(Vector2 c, float s, Color core, float energy, float lookX);
 void DrawEliraPortrait(Rectangle dest, bool speaking);
 void DrawFinalDialogue(const GameState *game);
