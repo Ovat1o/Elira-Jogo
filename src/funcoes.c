@@ -1679,13 +1679,6 @@ void DrawTitle(void)
 
     DrawTitleSpaceBackground();
 
-    /* 1. Telemetria com ponto de transmissao piscando */
-    float blink = sinf(time * 4.5f);
-    Color dotColor = (blink > 0.0f) ? (Color){80, 245, 190, 255} : (Color){25, 75, 55, 255};
-    DrawCircle(76, 125, 4, dotColor);
-    DrawGameText("ARQUIVO DE MEMORIA  //  TRANSMISSAO 01", 90, 116, 17,
-             Fade(CYAN_COLOR, 0.82f));
-
     /* 2. Titulo ELIRA com aura neon e micro-glitch sci-fi */
     const char *titleText = "ELIRA";
     int titleW = MeasureGameText(titleText, 96);

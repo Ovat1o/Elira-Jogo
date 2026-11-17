@@ -90,7 +90,6 @@ void InvUnload(void);                      /* libera texturas e fontes do modo (
 ### 5.3 Menu inicial
 
 ```
-  ARQUIVO DE MEMORIA // TRANSMISSAO 01
   ELIRA
   ───────────
   [ INICIAR MISSAO      ]   {86, 326, 350, 54}  ciano
@@ -100,7 +99,7 @@ void InvUnload(void);                      /* libera texturas e fontes do modo (
 ```
 
 Prévia aprovada pelo Victor (2026-11-16), com os seguintes textos **removidos** do menu a pedido dele:
-"ESCAPE RUN TEMPORAL", "ENTRE NAS MEMORIAS DA MAQUINA", "Descubra o que existia antes de
+"ARQUIVO DE MEMORIA // TRANSMISSAO 01" (com o ponto piscando), "ESCAPE RUN TEMPORAL", "ENTRE NAS MEMORIAS DA MAQUINA", "Descubra o que existia antes de
 A.R.1.3.L. controlar o futuro.", o rodapé "DEMO TEMPORAL // 1990 - 2048" e "Point & click narrativo".
 Os botões sobem para ocupar o espaço. O título da janela continua "ELIRA - Escape Run Temporal".
 
