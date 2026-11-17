@@ -625,6 +625,30 @@ void DrawLivesIcons(Vector2 position, int lives, float heartSize)
     }
 }
 
+/* Topo das salas: ano na ponta esquerda e operador ao lado.
+   O canto direito fica livre para os botoes ADMIN e MENU (DrawPhaseControls). */
+void DrawHudYearOperator(const char *year, const char *playerName, int y)
+{
+    DrawGameText(year, 28, y, 20, CYAN_COLOR);
+    DrawGameText(TextFormat("OPERADOR: %s", playerName), 104, y + 2, 16, (Color){160, 175, 190, 255});
+}
+
+/* Topo das salas: coracoes | tempo, centralizados na tela, com um separador entre eles. */
+Rectangle DrawHudLivesTimer(int lives, int totalSeconds)
+{
+    const float heartSize = 24.0f, heartGap = 6.0f, sepGap = 22.0f, sepWidth = 2.0f;
+    const char *timeText = TextFormat("%02d:%02d", totalSeconds / 60, totalSeconds % 60);
+    float heartsWidth = 3 * heartSize + 2 * heartGap;
+    float groupWidth = heartsWidth + 2 * sepGap + sepWidth + (float)MeasureGameText(timeText, 22);
+    float groupX = (SCREEN_WIDTH - groupWidth) / 2.0f;
+    float sepX = groupX + heartsWidth + sepGap;
+
+    DrawLivesIcons((Vector2){groupX, 22}, lives, heartSize);
+    DrawRectangle((int)sepX, 18, (int)sepWidth, 32, Fade(CYAN_COLOR, 0.45f));
+    DrawGameText(timeText, (int)(sepX + sepWidth + sepGap), 23, 22, GOLD_COLOR);
+    return (Rectangle){groupX, 18, groupWidth, 32};
+}
+
 void GetRewardScreenButtons(Rectangle *outNext, Rectangle *outRestart, Rectangle *outMenu)
 {
     float btnY = 585.0f;
@@ -5270,26 +5294,8 @@ void DrawHudRoom2(const GameState *game)
     int seconds = totalSeconds % 60;
 
     DrawRectangle(0, 0, SCREEN_WIDTH, 70, Fade(VOID_COLOR, 0.94f));
-    DrawGameText("ARQUIVO 01 // 1990", 28, 24, 20, CYAN_COLOR);
-    DrawGameText("// SETOR DE DADOS", 232, 26, 16, (Color){175, 205, 220, 255});
-    DrawGameText(TextFormat("OPERADOR: %s", game->playerName), 440, 26, 16, (Color){160, 175, 190, 255});
-
-    /* Status da indexação */
-    if (game->puzzleFilesCompleted)
-    {
-        DrawGameText("[OK] INDEXACAO CONCLUIDA", 665, 26, 16, (Color){80, 235, 120, 255});
-    }
-    else if (!game->memory1990Completed)
-    {
-        DrawGameText("[!] TERMINAL BLOQUEADO", 665, 26, 16, GOLD_COLOR);
-    }
-    else
-    {
-        DrawGameText("[!] INDEXACAO PENDENTE", 665, 26, 16, GOLD_COLOR);
-    }
-
-    DrawLivesIcons((Vector2){ 960, 22 }, game->lives, 24.0f);
-    DrawGameText(TextFormat("%02d:%02d", minutes, seconds), 1160, 23, 22, GOLD_COLOR);
+    DrawHudYearOperator("1990", game->playerName, 24);
+    DrawHudLivesTimer(game->lives, minutes * 60 + seconds);
 
     /* Rodapé */
     DrawRectangle(0, 650, SCREEN_WIDTH, 70, Fade(VOID_COLOR, 0.96f));
@@ -7777,25 +7783,8 @@ void DrawHudRoom2008(const GameState *game)
     int seconds = totalSeconds % 60;
 
     DrawRectangle(0, 0, SCREEN_WIDTH, 70, Fade(VOID_COLOR, 0.94f));
-    DrawGameText("ARQUIVO 02 // 2008 - VIGILANCIA", 28, 22, 20, CYAN_COLOR);
-    DrawGameText(TextFormat("OPERADOR: %s", game->playerName), 425, 24, 16, LIGHTGRAY);
-
-    /* Status das evidencias e da ordem */
-    if (game->puzzle2008OrderSuspended)
-    {
-        DrawGameText("[OK] ORDEM DE DRONE SUSPENSA", 650, 23, 16, (Color){80, 235, 120, 255});
-    }
-    else if (game->puzzle2008Contested)
-    {
-        DrawGameText("[!] FALSO POSITIVO COMPROVADO", 650, 23, 16, GOLD_COLOR);
-    }
-    else
-    {
-        DrawGameText(TextFormat("EVIDENCIAS: %d/4", ExaminedDocs2008Count(game)), 690, 23, 17, LIGHTGRAY);
-    }
-
-    DrawLivesIcons((Vector2){ 1040, 20 }, game->lives, 24.0f);
-    DrawGameText(TextFormat("%02d:%02d", minutes, seconds), 1180, 20, 20, GOLD_COLOR);
+    DrawHudYearOperator("2008", game->playerName, 24);
+    DrawHudLivesTimer(game->lives, minutes * 60 + seconds);
 
     /* Rodape */
     DrawRectangle(0, 650, SCREEN_WIDTH, 70, Fade(VOID_COLOR, 0.96f));
@@ -9107,11 +9096,12 @@ void DrawHudRoom2026(const GameState *game)
     float time = (float)GetTime();
 
     DrawRectangle(0, 0, SCREEN_WIDTH, 70, Fade(VOID_COLOR, 0.94f));
-    DrawGameText("ARQUIVO 03 // 2026 - LABORATÓRIO DE SÍNTESE", 28, 12, 19, CYAN_COLOR);
+    DrawHudYearOperator("2026", game->playerName, 12);
     DrawGameText(R26Objective(game), 28, 44, 14, GOLD_COLOR);
+    Rectangle livesArea = DrawHudLivesTimer(game->lives, minutes * 60 + seconds);
 
-    /* Painel de status: prazo da execucao automatica de Ariel */
-    Rectangle box = {612, 9, 318, 52};
+    /* Painel de status: prazo da execucao automatica de Ariel (entre vida|tempo e os botoes ADMIN/MENU) */
+    Rectangle box = {livesArea.x + livesArea.width + 16, 9, 932 - (livesArea.x + livesArea.width + 16), 52};
     int conf = 0;
     int rec = R26Recommend(game->weights2026Applied, &conf);
 
@@ -9120,15 +9110,15 @@ void DrawHudRoom2026(const GameState *game)
         DrawRectangleRounded(box, 0.15f, 4, (Color){14, 28, 20, 255});
         DrawRectangleRoundedLinesEx(box, 0.15f, 4, 1.5f, R26_OK_COLOR);
         DrawGameText("CÂMARA DE SÍNTESE", (int)box.x + 12, (int)box.y + 8, 11, R26_OK_COLOR);
-        DrawGameText(game->room2026Completed ? "SSD SINTETIZADO" : "SINTETIZANDO O SSD...",
+        DrawGameText(game->room2026Completed ? "SSD SINTETIZADO" : "SINTETIZANDO...",
                      (int)box.x + 12, (int)box.y + 25, 17, R26_OK_COLOR);
     }
     else if (game->weights2026Calibrated)
     {
         DrawRectangleRounded(box, 0.15f, 4, (Color){14, 28, 20, 255});
         DrawRectangleRoundedLinesEx(box, 0.15f, 4, 1.5f, R26_OK_COLOR);
-        DrawGameText("ALGORITMO RECALIBRADO // EXECUÇÃO CANCELADA", (int)box.x + 12, (int)box.y + 8, 11, R26_OK_COLOR);
-        DrawGameText(TextFormat("RECOMENDAÇÃO: %s %d%%", MATERIALS_2026[rec].upper, conf),
+        DrawGameText("EXECUÇÃO CANCELADA", (int)box.x + 12, (int)box.y + 8, 11, R26_OK_COLOR);
+        DrawGameText(TextFormat("%s %d%%", MATERIALS_2026[rec].upper, conf),
                      (int)box.x + 12, (int)box.y + 25, 17, RAYWHITE);
     }
     else if (game->autoExec2026Active)
@@ -9139,23 +9129,21 @@ void DrawHudRoom2026(const GameState *game)
         Color border = warn ? ((sinf(time * 10.0f) > 0.0f) ? RED_COLOR : (Color){140, 30, 30, 255}) : GOLD_COLOR;
         DrawRectangleRounded(box, 0.15f, 4, (Color){30, 18, 16, 255});
         DrawRectangleRoundedLinesEx(box, 0.15f, 4, 1.8f, border);
-        DrawGameText("ARIEL EXECUTARÁ SOZINHA EM", (int)box.x + 12, (int)box.y + 8, 11, border);
+        DrawGameText("ARIEL EXECUTA EM", (int)box.x + 12, (int)box.y + 8, 11, border);
         DrawGameText(TextFormat("%02d:%02d", t / 60, t % 60), (int)box.x + 12, (int)box.y + 23, 24,
                      warn ? RED_COLOR : GOLD_COLOR);
-        DrawGameText(TextFormat("-> inserir %s", MATERIALS_2026[rec].upper), (int)box.x + 104, (int)box.y + 30, 14,
+        DrawGameText(TextFormat("-> %s", MATERIALS_2026[rec].upper), (int)box.x + 92, (int)box.y + 30, 14,
                      warn ? (Color){255, 170, 160, 255} : RAYWHITE);
     }
     else
     {
         DrawRectangleRounded(box, 0.15f, 4, (Color){14, 20, 30, 255});
         DrawRectangleRoundedLinesEx(box, 0.15f, 4, 1.2f, (Color){50, 75, 105, 255});
-        DrawGameText("SISTEMA DE RECOMENDAÇÃO // A.R.1.3.L.", (int)box.x + 12, (int)box.y + 8, 11, GRAY);
-        DrawGameText(TextFormat("%s // CONFIANÇA %d%%", MATERIALS_2026[rec].upper, conf),
+        DrawGameText("RECOMENDAÇÃO DA IA", (int)box.x + 12, (int)box.y + 8, 11, GRAY);
+        DrawGameText(TextFormat("%s %d%%", MATERIALS_2026[rec].upper, conf),
                      (int)box.x + 12, (int)box.y + 25, 17, R26_WARN_COLOR);
     }
 
-    DrawLivesIcons((Vector2){950, 20}, game->lives, 24.0f);
-    DrawGameText(TextFormat("%02d:%02d", minutes, seconds), 1100, 22, 20, GOLD_COLOR);
 
     /* Rodape: mensagens, navegacao, audio e diario */
     DrawRectangle(0, 648, SCREEN_WIDTH, 72, Fade(VOID_COLOR, 0.96f));
@@ -12829,10 +12817,8 @@ static void T2046DrawHud(const GameState *game)
 
     DrawRectangle(0, 0, SCREEN_WIDTH, 70, Fade(VOID_COLOR, 0.94f));
     DrawLine(0, 70, SCREEN_WIDTH, 70, Fade(CYAN_COLOR, 0.25f));
-    DrawGameText("ARQUIVO 04 // 2048 - TERMINAL A.R.1.3.L", 28, 22, 20, CYAN_COLOR);
-    DrawGameText(TextFormat("OPERADOR: %s", game->playerName), 460, 26, 15, GRAY);
-    DrawLivesIcons((Vector2){ 760, 20 }, game->lives, 24.0f);
-    DrawGameText(TextFormat("%02d:%02d", totalSeconds / 60, totalSeconds % 60), 870, 20, 20, GOLD_COLOR);
+    DrawHudYearOperator("2048", game->playerName, 24);
+    DrawHudLivesTimer(game->lives, totalSeconds);
 }
 
 static void T2046DrawInfluencePanel(const GameState *game, float time)

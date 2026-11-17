@@ -523,6 +523,8 @@ void UnloadRewardSprites(void);
 void LoadHeartSprites(void);
 void UnloadHeartSprites(void);
 void DrawLivesIcons(Vector2 position, int lives, float heartSize);
+void DrawHudYearOperator(const char *year, const char *playerName, int y);  /* topo das salas: ano na ponta + operador */
+Rectangle DrawHudLivesTimer(int lives, int totalSeconds);                   /* topo das salas: vida | tempo centralizados; devolve a area ocupada */
 void GetRewardScreenButtons(Rectangle *outNext, Rectangle *outRestart, Rectangle *outMenu);
 void DrawRewardHudHeader(const GameState *game);
 void DrawRewardSpriteItem(int year, Vector2 center, float maxSize);
