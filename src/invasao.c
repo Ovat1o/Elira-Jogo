@@ -1439,6 +1439,49 @@ static void DrawElira(void)
     }
 }
 
+/* Folhas de sprites dos inimigos e chefes (4 quadros por linha). Sem o PNG, volta ao desenho por primitivas. */
+static Texture2D texEnemies, texBoss[4];
+#define INV_ENEMY_CELL 128
+#define INV_BOSS_CELL 256
+/* altura na tela de cada linha da folha: rastreador, vazamento, pop-up, sirene, bolha, mini bolha, miragem */
+static const float ENEMY_SPRITE_H[7] = {48, 54, 52, 54, 68, 34, 56};
+
+static void RestoreSeparateBlend(void)
+{
+    rlSetBlendFactorsSeparate(RL_SRC_ALPHA, RL_ONE_MINUS_SRC_ALPHA, RL_ONE, RL_ONE_MINUS_SRC_ALPHA, RL_FUNC_ADD, RL_FUNC_ADD);
+    BeginBlendMode(BLEND_CUSTOM_SEPARATE);
+}
+
+/* Desenha um quadro da folha com a base em 'bottom'; 'flash' clareia o sprite (dano). */
+static void DrawSheetFrame(Texture2D t, int cell, int row, int frame, Vector2 bottom, float h, Color tint, bool flash)
+{
+    Rectangle src = {(float)(frame * cell), (float)(row * cell), (float)cell, (float)cell};
+    Rectangle dst = {bottom.x - h / 2, bottom.y - h, h, h};
+    DrawTexturePro(t, src, dst, V2(0, 0), 0, tint);
+    if (flash)
+    {
+        EndBlendMode();
+        BeginBlendMode(BLEND_ADDITIVE);
+        DrawTexturePro(t, src, dst, V2(0, 0), 0, Alpha(C_WHITE, 0.75f));
+        EndBlendMode();
+        RestoreSeparateBlend();
+    }
+}
+
+static bool DrawEnemySprite(Enemy *e, Vector2 p, bool fl)
+{
+    if (!texEnemies.id || e->type < EN_TRACKER || e->type > EN_MIRAGE) return false;
+    int row = e->type;
+    float h = ENEMY_SPRITE_H[row];
+    float baseY = p.y + e->r * 0.9f;
+    float jitter = (e->type == EN_POPUP && e->state == 1) ? (float)GetRandomValue(-2, 2) : 0;
+    if (!e->fake) Shadow(V2(p.x, baseY), e->r * 0.85f, 5, 0.4f);
+    int frame = ((int)(gtime * 7 + fabsf(e->t) * 2.3f)) & 3;
+    DrawSheetFrame(texEnemies, INV_ENEMY_CELL, row, frame, V2(p.x + jitter, baseY), h, WHITE, fl);
+    if (e->type == EN_ALARM && e->state == 1) DrawCircleLines((int)p.x, (int)p.y - 4, 30 + sinf(gtime * 30) * 3, Alpha(C_RED, 0.8f));
+    return true;
+}
+
 /* ------------------------------------------------------------------ desenho: chefes */
 static void DrawCollector(Vector2 p, Enemy *e, bool decoy)
 {
@@ -1592,8 +1635,22 @@ static void DrawAriel(Vector2 p, Enemy *e, bool decoy)
     Txt("A.R.1.3.L.", body.x + 14, body.y + body.height - 18, 12, (Color){90, 84, 70, 255});
     DrawCircle((int)(body.x + body.width - 18), (int)(body.y + body.height - 12), 4, glow);
 }
+static void DrawBossSprite(Vector2 p, Enemy *e, bool decoy)
+{
+    bool attack = (e->look == 3) ? (e->t3 < 0.6f) : ((e->state < 0) || (e->t2 > 0 && e->t2 < 0.45f));
+    int frame = ((int)(gtime * 6)) & 3;
+    Vector2 bottom = V2(p.x, p.y + e->r * 0.95f);
+    if (!decoy) Shadow(V2(p.x, bottom.y), 72, 14, 0.45f);
+    DrawSheetFrame(texBoss[e->look], INV_BOSS_CELL, attack ? 1 : 0, frame, bottom, 200, decoy ? Alpha(C_WHITE, 0.9f) : WHITE, e->flash > 0);
+}
+
 static void DrawBossLook(Vector2 p, Enemy *e, bool decoy)
 {
+    if (e->look >= 0 && e->look < 4 && texBoss[e->look].id)
+    {
+        DrawBossSprite(p, e, decoy);
+        return;
+    }
     switch (e->look)
     {
     case 0: DrawCollector(p, e, decoy); break;
@@ -1610,6 +1667,7 @@ static void DrawEnemy(Enemy *e)
     Vector2 p = e->p;
     bool fl = e->flash > 0;
     if (e->wake > 0 && e->type != EN_BOSS && fmodf(e->wake, 0.16f) < 0.08f) return; /* surgindo */
+    if (DrawEnemySprite(e, p, fl)) return;
     switch (e->type)
     {
     case EN_TRACKER:
@@ -2118,6 +2176,11 @@ void InvEnter(GameState *game)
         SetTextureFilter(texElira, TEXTURE_FILTER_POINT);
         texFaces = LoadTexSmooth(ASSETS "sprites/invasao/elira_rostos.png");
         texFx = LoadTexture(ASSETS "sprites/invasao/elira_fx.png");
+        texEnemies = LoadTexSmooth(ASSETS "sprites/invasao/inimigos.png");
+        texBoss[0] = LoadTexSmooth(ASSETS "sprites/invasao/boss_1990.png");
+        texBoss[1] = LoadTexSmooth(ASSETS "sprites/invasao/boss_2008.png");
+        texBoss[2] = LoadTexSmooth(ASSETS "sprites/invasao/boss_2026.png");
+        texBoss[3] = LoadTexSmooth(ASSETS "sprites/invasao/boss_2048.png");
         SetTextureFilter(texFx, TEXTURE_FILTER_BILINEAR);
         invLoaded = true;
     }
@@ -2157,7 +2220,8 @@ void InvDraw(void)
 void InvUnload(void)
 {
     if (!invLoaded) return;
-    Texture2D *texs[] = {&texFloppy, &texCd, &texSsd, &texHeart, &texHeartEmpty, &texElira, &texFaces, &texFx};
+    Texture2D *texs[] = {&texFloppy, &texCd, &texSsd, &texHeart, &texHeartEmpty, &texElira, &texFaces, &texFx,
+                         &texEnemies, &texBoss[0], &texBoss[1], &texBoss[2], &texBoss[3]};
     for (int i = 0; i < (int)(sizeof texs / sizeof texs[0]); i++)
     {
         if (texs[i]->id) UnloadTexture(*texs[i]);
