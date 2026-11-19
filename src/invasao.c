@@ -1043,6 +1043,13 @@ static const Spawn SPAWN[4][2][9] = {
     {{{EN_MIRAGE, 240, -100}, {EN_MIRAGE, -240, 100}, {EN_TRACKER, 0, -150, true}, {EN_TRACKER, 320, 140, true}, {EN_TRACKER, -320, -140, true}, {EN_TRACKER, 0, 150}, END},
      {{EN_MIRAGE, 0, -150}, {EN_MIRAGE, 330, 60}, {EN_MIRAGE, -330, 60}, {EN_BUBBLE, 0, 120}, {EN_LEAK, 220, -130}, {EN_TRACKER, -220, -130, true}, {EN_TRACKER, 150, 150, true}, END}},
 };
+/* Guardas da sala de item: cercam o pedestal do artefato da era. */
+static const Spawn SPAWN_ITEM[4][9] = {
+    {{EN_TRACKER, -330, -140}, {EN_TRACKER, 330, -140}, {EN_LEAK, -300, 130}, {EN_LEAK, 300, 130}, {EN_POPUP, 0, -160}, END},
+    {{EN_ALARM, -340, -120}, {EN_ALARM, 340, -120}, {EN_POPUP, -260, 140}, {EN_POPUP, 260, 140}, {EN_LEAK, 0, -160}, END},
+    {{EN_BUBBLE, -300, -110}, {EN_BUBBLE, 300, -110}, {EN_TRACKER, -330, 140}, {EN_TRACKER, 330, 140}, {EN_POPUP, 0, -160}, END},
+    {{EN_MIRAGE, -320, -110}, {EN_MIRAGE, 320, -110}, {EN_BUBBLE, 0, -160}, {EN_TRACKER, -300, 140}, {EN_TRACKER, 300, 140, true}, {EN_TRACKER, -150, -150, true}, END},
+};
 #pragma GCC diagnostic pop
 
 static void BuildMap(void)
@@ -1052,7 +1059,7 @@ static void BuildMap(void)
     {
         RoomDef d = LAYOUT[stage][i];
         if (d.type == RT_NONE) continue;
-        map[d.y][d.x] = (Room){d.type, d.slot, false, d.type == RT_START || d.type == RT_ITEM, false};
+        map[d.y][d.x] = (Room){d.type, d.slot, false, d.type == RT_START, false};
     }
 }
 
@@ -1091,6 +1098,15 @@ static void LoadRoomContent(int x, int y)
     else if (rm->type == RT_ITEM)
     {
         if (!rm->taken) AddPickup(ST[stage].reward, c);
+        if (!rm->cleared)
+        {
+            for (const Spawn *s = SPAWN_ITEM[stage]; s->type >= 0; s++)
+            {
+                if (s->fake) AddIllusion(c.x + s->x, c.y + s->y);
+                else AddEnemy(s->type, c.x + s->x, c.y + s->y);
+            }
+            Msg("ARTEFATO PROTEGIDO", "Derrote os guardas para liberar a recompensa.");
+        }
     }
     else if (rm->type == RT_BOSS)
     {
@@ -1104,6 +1120,10 @@ static void LoadRoomContent(int x, int y)
             AddPickup(PK_PORTAL, c);
     }
 }
+
+/* O artefato da sala de item fica atras de uma barreira ate a sala ser limpa. */
+#define ITEM_SHIELD_R 52
+static bool ItemLocked(void) { return map[curY][curX].type == RT_ITEM && !map[curY][curX].cleared; }
 
 static void EnterRoom(int x, int y, int fromDir)
 {
@@ -1601,6 +1621,11 @@ static void OnRoomCleared(void)
             AddPU(pool[b2], V2(c.x + 190, c.y + 60), 1);
         }
     }
+    else if (rm->type == RT_ITEM)
+    {
+        Burst(V2(c.x, c.y - 10), 40, ST[stage].accent, 280);
+        Msg("RECOMPENSA LIBERADA", "A barreira caiu. Pegue o artefato da era.");
+    }
     else
     {
         if (rm->slot == 0) AddPickup(PK_HEART, PointInObs(c) ? V2(c.x, c.y + 90) : c);
@@ -1698,6 +1723,12 @@ static void Update(float dt, Input in)
         return;
     }
     Confine(&pl.p, pl.r);
+    if (ItemLocked())
+    {
+        Vector2 c0 = FloorCenter(), d = VSub(pl.p, c0);
+        float dist = VLen(d), minD = ITEM_SHIELD_R + pl.r;
+        if (dist < minD) pl.p = VAdd(c0, VScale(dist > 0.01f ? VScale(d, 1.0f / dist) : V2(0, 1), minD));
+    }
     if (pl.p.y < f.y + 40) pl.p.y = f.y + 40; /* a cabeca do sprite nao sobe alem da parede */
 
     pl.cd -= dt;
@@ -1812,7 +1843,7 @@ static void Update(float dt, Input in)
         if (pk[i].on)
         {
             pk[i].t += dt;
-            if (VLen(VSub(pk[i].p, pl.p)) < pl.r + 26) { Collect(&pk[i]); if (gs != GS_PLAY || pk[i].kind == PK_PORTAL) return; }
+            if (!ItemLocked() && VLen(VSub(pk[i].p, pl.p)) < pl.r + 26) { Collect(&pk[i]); if (gs != GS_PLAY || pk[i].kind == PK_PORTAL) return; }
         }
 }
 
@@ -2412,6 +2443,31 @@ static void DrawChip(Vector2 c, float s, int id)
     TxtC(PU[id].glyph, c.x, c.y - px / 2.0f, px, col);
 }
 
+/* Cupula de energia com cadeado sobre o artefato protegido. */
+static void DrawItemShield(Vector2 c)
+{
+    Color a = ST[stage].accent;
+    float pulse = 0.5f + 0.5f * sinf(gtime * 3);
+    Vector2 o = V2(c.x, c.y - 8);
+    DrawCircleV(o, ITEM_SHIELD_R, Alpha(a, 0.10f + 0.05f * pulse));
+    for (int i = 0; i < 6; i++) /* hexagonos girando na superficie */
+    {
+        float an = gtime * 0.8f + i * PI / 3;
+        DrawPolyLinesEx(V2(o.x + cosf(an) * ITEM_SHIELD_R * 0.62f, o.y + sinf(an) * ITEM_SHIELD_R * 0.62f), 6, 11, an * 57.3f, 1.5f, Alpha(a, 0.35f));
+    }
+    DrawRing(o, ITEM_SHIELD_R - 3, ITEM_SHIELD_R, 0, 360, 48, Alpha(a, 0.55f + 0.35f * pulse));
+    DrawRing(o, ITEM_SHIELD_R + 4, ITEM_SHIELD_R + 6, gtime * 90, gtime * 90 + 250, 32, Alpha(a, 0.5f));
+    /* cadeado */
+    Vector2 l = V2(o.x + ITEM_SHIELD_R * 0.68f, o.y - ITEM_SHIELD_R * 0.68f);
+    DrawRing(V2(l.x, l.y - 6), 5, 8, 180, 360, 12, C_OL);
+    DrawRing(V2(l.x, l.y - 6), 6, 7, 180, 360, 12, a);
+    DrawRectangle((int)l.x - 10, (int)l.y - 6, 20, 16, C_OL);
+    DrawRectangle((int)l.x - 8, (int)l.y - 4, 16, 12, a);
+    DrawRectangle((int)l.x - 1, (int)l.y - 1, 3, 5, C_OL);
+    int left = EnemiesAlive();
+    TxtC(TextFormat("BLOQUEADO  //  %d %s", left, left == 1 ? "GUARDA" : "GUARDAS"), c.x, c.y + ITEM_SHIELD_R + 6, 14, Alpha(a, 0.75f + 0.25f * pulse));
+}
+
 static void DrawPickup(Pickup *k)
 {
     float f = sinf(k->t * 3) * 4;
@@ -2817,6 +2873,9 @@ static void Draw(void)
     for (int i = 0; i < nObs; i++) DrawObstacle(obs[i], i);
     for (int i = 0; i < MAXP; i++)
         if (pk[i].on) DrawPickup(&pk[i]);
+    if (ItemLocked())
+        for (int i = 0; i < MAXP; i++)
+            if (pk[i].on) DrawItemShield(pk[i].p);
     int order[MAXE + 1], n = 0;
     for (int i = 0; i < MAXE; i++)
         if (en[i].on) order[n++] = i;
