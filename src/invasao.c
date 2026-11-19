@@ -846,7 +846,7 @@ typedef struct
 static Player pl, plStart;
 static float deadT; /* tempo desde a derrota (animacao) */
 
-enum { GS_PLAY, GS_PAUSE, GS_OVER, GS_WIN, GS_STORY };
+enum { GS_PLAY, GS_PAUSE, GS_OVER, GS_WIN, GS_STORY, GS_CRAWL, GS_TALK };
 static struct
 {
     char title[64], tag[64], l1[120], l2[120], quote[120], effect[90];
@@ -994,6 +994,126 @@ static void Banner(const char *title, const char *sub, Color c, float t)
     snprintf(bannerSub, sizeof bannerSub, "%s", sub);
     bannerCol = c;
     bannerT = t;
+}
+
+/* ------------------------------------------------------------------ falas da Elira no inicio de cada estagio */
+/* Rostos de elira_rostos.png: 0 seria, 1 sorrindo, 2 determinada, 3 assustada. */
+#define TALK_MAX 3
+typedef struct { int n; const char *text[TALK_MAX]; int face[TALK_MAX]; } InvTalk;
+static const InvTalk TALKS[NSTAGE] = {
+    {3,
+     {"Estou em 1990, dentro do arquivo da A.R.1.3.L. Foi aqui que ela começou a guardar os dados de todo mundo, sem pedir licença.",
+      "Preciso limpar as salas desta era e pegar o artefato que ela protege: o disquete. A sala dele tem guardas.",
+      "Depois, derrubo O Coletor. [WASD] para andar, [SETAS] para atirar. Vamos lá."},
+     {0, 2, 1}},
+    {1, {"2008. Aqui ela trata inocentes como ameaça. Nem todo alerta é real: tiro vazado não fere. Vou buscar o CD e derrubar O Filtro."}, {2}},
+    {1, {"2026. O sistema aprendeu com dados tortos e castiga o lado em que eu mais fico. Preciso do SSD e de vencer O Algoritmo."}, {0}},
+    {1, {"2048. Ela inventa respostas com total confiança. Não posso acreditar em tudo o que vejo. O Oráculo me espera."}, {2}},
+    {1, {"O núcleo. Tudo o que enfrentei até aqui era ela. Hora de desconectar a A.R.1.3.L."}, {2}},
+};
+static int talkStage, talkPage;
+static float talkT;
+static bool talkSeen[NSTAGE]; /* a fala aparece uma vez por estagio (nao repete ao recomecar apos derrota) */
+
+/* Abre as falas do estagio e pausa o jogo; o banner e a dica do estagio esperam a conversa acabar. */
+static void TalkOpen(int s)
+{
+    if (s < 0 || s >= NSTAGE || talkSeen[s]) return;
+    talkSeen[s] = true;
+    talkStage = s;
+    talkPage = 0;
+    talkT = 0;
+    gs = GS_TALK;
+    bannerT = 0;
+    msgT = 0;
+}
+static void TalkNext(bool skipAll)
+{
+    talkT = 0;
+    if (!skipAll && ++talkPage < TALKS[talkStage].n) return;
+    gs = GS_PLAY;
+    bannerT = 2.4f;
+    msgT = 3.4f;
+}
+
+/* ------------------------------------------------------------------ abertura do modo (texto subindo em perspectiva) */
+/* Mesma tecnica da abertura do modo historia (funcoes.c): constantes CRAWL_*, projecao
+   conica e DrawCrawlTextEx. tipo: 0 titulo, 1 texto, 2 linha de era (cor da era), 3 ano, 4 pausa. */
+typedef struct { const char *text; int type, era; } InvCrawlLine;
+static const InvCrawlLine INV_CRAWL[] = {
+    {"MODO INVASÃO", 0, -1},
+    {"", 4, -1},
+    {"A.R.1.3.L. espalhou suas falhas", 1, -1},
+    {"por quatro eras da própria memória.", 1, -1},
+    {"", 4, -1},
+    {"Cada era guarda um protocolo dela:", 1, -1},
+    {"1990: privacidade de dados", 2, 0},
+    {"2008: falsos positivos", 2, 1},
+    {"2026: viés algorítmico", 2, 2},
+    {"2048: alucinação", 2, 3},
+    {"", 4, -1},
+    {"Elira invade a nave-arquivo para derrubar", 1, -1},
+    {"os quatro protocolos e desconectar o núcleo.", 1, -1},
+    {"", 4, -1},
+    {"1990", 3, 0},
+};
+#define INV_CRAWL_N ((int)(sizeof INV_CRAWL / sizeof INV_CRAWL[0]))
+static float crawlScroll;
+
+static void UpdateInvCrawl(float dt)
+{
+    crawlScroll += CRAWL_SPEED * dt;
+    float total = 0;
+    for (int i = 0; i < INV_CRAWL_N; i++) total += INV_CRAWL[i].type == 4 ? CRAWL_PARAGRAPH_SPACING : CRAWL_LINE_SPACING;
+    /* termina quando a ultima linha passa do horizonte; segue para a fala da Elira */
+    if (total - CRAWL_LINE_SPACING - crawlScroll + CRAWL_BOTTOM_Y + 30.0f < CRAWL_HORIZON_Y - 40.0f)
+    {
+        gs = GS_TALK;
+        talkT = 0;
+    }
+}
+
+static void DrawInvCrawl(void)
+{
+    ClearBackground((Color){5, 7, 12, 255});
+    for (int i = 0; i < 90; i++)
+    {
+        float sx = (float)((i * 97 + i * i * 13 + 31) % VW);
+        float sy = (float)((i * 53 + i * i * 5 + 19) % VH);
+        float a = 0.35f + 0.30f * sinf(gtime * (0.6f + (i % 4) * 0.2f) + (float)i);
+        Color c = (i % 7 == 0) ? C_CYAN : ((i % 11 == 0) ? C_AMBER : C_WHITE);
+        DrawCircle((int)sx, (int)sy, (i % 17 == 0) ? 1.6f : 1.0f, Alpha(c, a));
+    }
+    float worldY = 0, startY = CRAWL_BOTTOM_Y + 30.0f, viewH = CRAWL_BOTTOM_Y - CRAWL_HORIZON_Y;
+    for (int i = 0; i < INV_CRAWL_N; i++)
+    {
+        const InvCrawlLine *e = &INV_CRAWL[i];
+        float h = e->type == 4 ? CRAWL_PARAGRAPH_SPACING : CRAWL_LINE_SPACING;
+        float u = (worldY - crawlScroll + startY - CRAWL_HORIZON_Y) / viewH;
+        worldY += h;
+        if (e->type == 4 || u < -0.05f || u > 1.15f) continue;
+        float p = Clampf(u / (1.0f + (1.0f - u) * CRAWL_PERSPECTIVE_K), 0, 1);
+        float y = CRAWL_HORIZON_Y + p * viewH;
+        float scale = CRAWL_MIN_SCALE + (CRAWL_MAX_SCALE - CRAWL_MIN_SCALE) * p;
+        float size = e->type == 0 ? CRAWL_FONT_SIZE_TITLE : e->type == 3 ? CRAWL_FONT_SIZE_YEAR : CRAWL_FONT_SIZE_BODY;
+        Color c = e->type == 2 ? ST[e->era].accent : (e->type == 1 ? (Color){252, 222, 68, 255} : (Color){255, 230, 80, 255});
+        float fs = size * scale, sp = 1.8f * scale;
+        float x = (VW - MeasureCrawlTextEx(e->text, fs, sp).x) * 0.5f;
+        float a = p < 0.20f ? p / 0.20f : (p > 0.82f ? (1.0f - p) / 0.18f : 1.0f);
+        a = Clampf(a, 0, 1);
+        if (a <= 0.01f) continue;
+        if (e->type == 0 || e->type == 3)
+        {
+            float o = 1.4f * scale;
+            DrawCrawlTextEx(e->text, V2(x - o, y), fs, sp, Alpha(c, a * 0.35f));
+            DrawCrawlTextEx(e->text, V2(x + o, y), fs, sp, Alpha(c, a * 0.35f));
+            DrawCrawlTextEx(e->text, V2(x, y - o), fs, sp, Alpha(c, a * 0.35f));
+            DrawCrawlTextEx(e->text, V2(x, y + o), fs, sp, Alpha(c, a * 0.35f));
+        }
+        DrawCrawlTextEx(e->text, V2(x, y), fs, sp, Alpha(c, a));
+    }
+    DrawRectangleGradientV(0, 0, VW, (int)CRAWL_HORIZON_Y + 25, (Color){5, 7, 12, 255}, (Color){5, 7, 12, 0});
+    TxtC("[ ENTER / ESPAÇO / ESC ] pular", VW / 2, 688, 14, Alpha(C_DIM, 0.45f + 0.25f * sinf(gtime * 3.2f)));
 }
 static Vector2 FloorCenter(void)
 {
@@ -1162,6 +1282,7 @@ static void StartStage(int s)
     else snprintf(t, sizeof t, "NÚCLEO DA A.R.1.3.L.");
     Banner(t, ST[s].theme, ST[s].accent, 2.4f);
     Msg(ST[s].theme, ST[s].hint);
+    TalkOpen(s);
 }
 static void GrantUpTo(int s) /* teste: pular estagio ja com as melhorias anteriores */
 {
@@ -1183,6 +1304,7 @@ static void NewGame(int s)
     pl.speed = 250;
     pl.shotSpeed = 560;
     pl.face = V2(0, 1);
+    memset(talkSeen, 0, sizeof talkSeen);
     GrantUpTo(s);
     StartStage(s);
 }
@@ -1685,6 +1807,8 @@ static void Update(float dt, Input in)
     if (msgT > 0) msgT -= dt;
     if (bannerT > 0) bannerT -= dt;
     if (gs == GS_STORY) story.t += dt;
+    if (gs == GS_TALK) talkT += dt;
+    if (gs == GS_CRAWL) UpdateInvCrawl(dt);
     deadT = gs == GS_OVER ? deadT + dt : 0;
     for (int i = 0; i < MAXFX; i++)
         if (fx[i].on) { fx[i].t += dt; if (fx[i].t > (fx[i].kind ? 0.20f : 0.24f)) fx[i].on = false; }
@@ -2845,6 +2969,45 @@ static void DrawStory(void)
     if (story.t > 0.4f) Txt("[ESPAÇO] continuar", r.x + r.width - 190, r.y + r.height - 28, 16, Alpha(C_WHITE, 0.6f + 0.4f * sinf(gtime * 5)));
 }
 
+/* Balao de fala da Elira no topo da sala (o jogo fica pausado enquanto ele esta aberto). */
+static void DrawTalk(void)
+{
+    const InvTalk *t = &TALKS[talkStage];
+    Color acc = ST[talkStage].accent;
+    float a = Clampf(talkT * 5, 0, 1);
+    DrawRectangle(0, 94, VW, 582, Alpha(C_BG, 0.45f));
+    float slide = (1 - a) * -14;
+    /* retrato */
+    Rectangle fr = {150, 124 + slide, 156, 196};
+    DrawRectangleRec(fr, C_PANEL);
+    DrawFace(t->face[talkPage], fr.x + 8, fr.y + 6, 186);
+    DrawRectangle((int)fr.x, (int)(fr.y + fr.height - 26), (int)fr.width, 26, C_PANEL);
+    DrawRectangle((int)fr.x, (int)(fr.y + fr.height - 26), (int)fr.width, 2, acc);
+    TxtC("ELIRA", fr.x + fr.width / 2, fr.y + fr.height - 21, 16, acc);
+    DrawRectangleLinesEx(fr, 2, acc);
+    /* balao com rabicho apontando para o retrato */
+    Rectangle b = {330, 132 + slide, 800, 156};
+    DrawRectangleRounded((Rectangle){b.x + 6, b.y + 8, b.width, b.height}, 0.10f, 8, Alpha(BLACK, 0.35f));
+    DrawRectangleRounded(b, 0.10f, 8, C_PANEL);
+    DrawRectangleRoundedLinesEx(b, 0.10f, 8, 2, acc);
+    DrawTriangle(V2(b.x + 1, b.y + 58), V2(b.x - 22, b.y + 74), V2(b.x + 1, b.y + 90), acc);
+    DrawTriangle(V2(b.x + 4, b.y + 61), V2(b.x - 17, b.y + 74), V2(b.x + 4, b.y + 87), C_PANEL);
+    DrawRectangle((int)b.x + 18, (int)b.y + 14, 6, 18, acc);
+    Txt(TextFormat("ELIRA // %s", talkStage < 4 ? ST[talkStage].year : "NÚCLEO"), b.x + 32, b.y + 14, 16, acc);
+    if (t->n > 1)
+    {
+        const char *pg = TextFormat("%d/%d", talkPage + 1, t->n);
+        Txt(pg, b.x + b.width - 22 - TxtW(pg, 16), b.y + 14, 16, C_DIM);
+    }
+    DrawRectangle((int)b.x + 18, (int)b.y + 42, (int)b.width - 36, 1, C_LINE);
+    DrawWrappedBalText(t->text[talkPage], b.x + 24, b.y + 56, b.width - 48, 22, 30, C_WHITE);
+    if (talkT > 0.2f)
+    {
+        const char *hint = talkPage + 1 < t->n ? "[ESPAÇO] continuar" : "[ESPAÇO] começar";
+        Txt(hint, b.x + b.width - 24 - TxtW(hint, 16), b.y + b.height - 28, 16, Alpha(C_WHITE, 0.6f + 0.4f * sinf(gtime * 5)));
+    }
+}
+
 static Camera2D gcam;
 static void BeginScaled(Vector2 anchor, float z)
 {
@@ -2863,6 +3026,11 @@ static void EndScaled(void)
 
 static void Draw(void)
 {
+    if (gs == GS_CRAWL)
+    {
+        DrawInvCrawl();
+        return;
+    }
     ClearBackground(C_BG);
     gcam = (Camera2D){0};
     gcam.zoom = 1;
@@ -2928,6 +3096,7 @@ static void Draw(void)
     EndMode2D();
     DrawHUD();
     if (gs == GS_STORY) DrawStory();
+    if (gs == GS_TALK) DrawTalk();
     if (gs == GS_PAUSE) DrawOverlay("PAUSA", "[ESC] continuar    [Q] voltar ao menu", C_CYAN, 0);
     if (gs == GS_OVER) DrawOverlay("CONEXÃO PERDIDA", "[R] recomeçar este estágio    [Q] menu", C_RED, 3);
     if (gs == GS_WIN) DrawOverlay("A.R.1.3.L. DESCONECTADA", "Os quatro protocolos caíram.   [R] jogar de novo   [ENTER] menu", C_AMBER, 1);
@@ -2960,6 +3129,17 @@ static bool invLoaded = false;
 /* Aplica as teclas de controle do modo. Retorna true quando o jogador pediu para voltar ao menu. */
 static bool InvApplyKeys(InvKeys k)
 {
+    if (gs == GS_CRAWL) /* abertura: ENTER/ESPACO/ESC pulam direto para a fala da Elira */
+    {
+        if (k.enter || k.space || k.esc) { gs = GS_TALK; talkT = 0; }
+        return false;
+    }
+    if (gs == GS_TALK) /* ESPACO/ENTER avancam o balao; ESC fecha a conversa inteira */
+    {
+        if (talkT > 0.2f && (k.space || k.enter)) TalkNext(false);
+        else if (k.esc) TalkNext(true);
+        return false;
+    }
     if (k.esc && (gs == GS_PLAY || gs == GS_PAUSE))
     {
         gs = (gs == GS_PLAY) ? GS_PAUSE : GS_PLAY;
@@ -3013,6 +3193,8 @@ void InvEnter(GameState *game)
     }
     invAudioMuted = game ? game->musicMuted : false;
     NewGame(0);
+    crawlScroll = 0; /* abre com o texto rolando; a fala de 1990 ja ficou preparada pelo NewGame */
+    gs = GS_CRAWL;
     game->screen = SCREEN_INVASION;
 }
 
