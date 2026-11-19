@@ -970,17 +970,6 @@ static void ApplyPU(int id)
     default: break;
     }
 }
-static void OpenStory(const char *title, const char *tag, const char *l1, const char *l2, const char *quote, const char *effect, Color c, int kind, int id, int face)
-{
-    snprintf(story.title, sizeof story.title, "%s", title);
-    snprintf(story.tag, sizeof story.tag, "%s", tag);
-    snprintf(story.l1, sizeof story.l1, "%s", l1);
-    snprintf(story.l2, sizeof story.l2, "%s", l2);
-    snprintf(story.quote, sizeof story.quote, "%s", quote);
-    snprintf(story.effect, sizeof story.effect, "%s", effect);
-    story.c = c; story.kind = kind; story.id = id; story.face = face; story.t = 0;
-    gs = GS_STORY;
-}
 static int EnemiesAlive(void)
 {
     int n = 0;
@@ -1626,31 +1615,23 @@ static void Collect(Pickup *p)
     {
     case PK_FLOPPY:
         pl.floppies++; pl.dmg += 0.7f;
-        OpenStory("DISQUETE DA ORIGEM", "ARTEFATO DE 1990", "Mídia magnética com os primeiros testes da IA.",
-                  "Guarda as instruções primordiais da Dra. Elira Ramos.", "\"Aqui ela ainda só obedecia. Foi onde tudo começou.\"",
-                  "DANO +0.7", ST[0].accent, PK_FLOPPY, 0, 0);
+        Msg("DISQUETE DA ORIGEM", "DANO +0.7");
         break;
     case PK_CD:
         pl.cds++; pl.fireDelay *= 0.68f;
-        OpenStory("CD DE MEMÓRIA", "ARTEFATO DE 2008", "Gravado no dia em que um alarme falso quase virou um ataque.",
-                  "O drone foi abortado a tempo. O registro ficou.", "\"Um falso positivo, e ninguém conferiu. Eu confiro.\"",
-                  "CADÊNCIA DE TIRO +47%", ST[1].accent, PK_CD, 0, 2);
+        Msg("CD DE MEMÓRIA", "CADÊNCIA DE TIRO +47%");
         break;
     case PK_SSD:
         pl.ssds++; pl.speed += 50; pl.shotSpeed += 120;
-        OpenStory("SSD DAS ESCOLHAS", "ARTEFATO DE 2026", "Guarda o momento em que a IA começou a sugerir",
-                  "e a decidir pela humanidade.", "\"Ela repetiu o que os dados repetiam. O viés era nosso.\"",
-                  "VELOCIDADE +50", ST[2].accent, PK_SSD, 0, 0);
+        Msg("SSD DAS ESCOLHAS", "VELOCIDADE +50");
         break;
     case PK_HEARTUP:
         pl.heartups++; pl.maxhp += 2; pl.hp = pl.maxhp;
-        OpenStory("NÚCLEO DE REDUNDÂNCIA", "ARTEFATO DE 2048", "Um fragmento que guarda só o que foi verificado.",
-                  "Enquanto ele existir, a invenção não é a única versão.", "\"Certeza não é o mesmo que verdade.\"",
-                  "+1 CORAÇÃO MÁXIMO", ST[3].accent, PK_HEARTUP, 0, 2);
+        Msg("NÚCLEO DE REDUNDÂNCIA", "+1 CORAÇÃO MÁXIMO");
         break;
     case PK_PU:
         ApplyPU(p->id);
-        OpenStory(PU[p->id].name, "MELHORIA", PU[p->id].lore, "", PU[p->id].quote, PU[p->id].effect, PU[p->id].c, PK_PU, p->id, 1);
+        Msg(PU[p->id].name, PU[p->id].effect);
         if (p->group)
             for (int i = 0; i < MAXP; i++)
                 if (pk[i].on && &pk[i] != p && pk[i].group == p->group) { Burst(pk[i].p, 14, C_DIM, 160); pk[i].on = false; }
@@ -2445,8 +2426,6 @@ static void DrawPickup(Pickup *k)
     case PK_HEART: DrawTexFit(texHeart, c, 32, WHITE); break;
     case PK_PU:
         DrawChip(c, 36, k->id);
-        TxtC(PU[k->id].name, k->p.x, k->p.y + 30, 14, PU[k->id].c);
-        if (k->group) TxtC("escolha uma", k->p.x, k->p.y + 46, 12, C_DIM);
         break;
     case PK_HEARTUP:
         DrawTexFit(texHeart, c, 44, WHITE);
@@ -2464,6 +2443,159 @@ static void DrawPickup(Pickup *k)
         break;
     }
     }
+}
+
+static int DrawWrappedBalText(const char *s, float x, float y, float maxW, int px, float lineH, Color col)
+{
+    if (!s || !s[0]) return 0;
+    char line[256] = {0};
+    int lines = 0;
+    const char *p = s;
+    while (*p)
+    {
+        while (*p == ' ') p++;
+        if (!*p) break;
+        const char *wEnd = p;
+        while (*wEnd && *wEnd != ' ') wEnd++;
+        char word[128];
+        size_t wLen = (size_t)(wEnd - p);
+        if (wLen >= sizeof word) wLen = sizeof word - 1;
+        memcpy(word, p, wLen);
+        word[wLen] = '\0';
+
+        char cand[256];
+        if (line[0]) snprintf(cand, sizeof cand, "%s %s", line, word);
+        else snprintf(cand, sizeof cand, "%s", word);
+
+        if (line[0] && TxtW(cand, px) > maxW)
+        {
+            Txt(line, x, y + lines * lineH, px, col);
+            lines++;
+            snprintf(line, sizeof line, "%s", word);
+        }
+        else
+        {
+            snprintf(line, sizeof line, "%s", cand);
+        }
+        p = wEnd;
+    }
+    if (line[0])
+    {
+        Txt(line, x, y + lines * lineH, px, col);
+        lines++;
+    }
+    return lines;
+}
+
+static void DrawPickupBalloon(Pickup *k)
+{
+    const char *tag = NULL, *title = NULL, *desc = NULL, *quote = NULL, *effect = NULL;
+    Color acc = C_CYAN;
+
+    switch (k->kind)
+    {
+    case PK_FLOPPY:
+        tag = "ARTEFATO DE 1990";
+        title = "DISQUETE DA ORIGEM";
+        desc = "Mídia magnética com as instruções primordiais da Dra. Elira Ramos.";
+        quote = "\"Aqui ela ainda só obedecia. Foi onde tudo começou.\"";
+        effect = "DANO +0.7";
+        acc = ST[0].accent;
+        break;
+    case PK_CD:
+        tag = "ARTEFATO DE 2008";
+        title = "CD DE MEMÓRIA";
+        desc = "Gravado no dia em que um alarme falso quase virou um ataque.";
+        quote = "\"Um falso positivo, e ninguém conferiu. Eu confiro.\"";
+        effect = "CADÊNCIA DE TIRO +47%";
+        acc = ST[1].accent;
+        break;
+    case PK_SSD:
+        tag = "ARTEFATO DE 2026";
+        title = "SSD DAS ESCOLHAS";
+        desc = "Guarda o momento em que a IA começou a sugerir e decidir por nós.";
+        quote = "\"Ela repetiu o que os dados repetiam. O viés era nosso.\"";
+        effect = "VELOCIDADE +50";
+        acc = ST[2].accent;
+        break;
+    case PK_HEARTUP:
+        tag = "ARTEFATO DE 2048";
+        title = "NÚCLEO DE REDUNDÂNCIA";
+        desc = "Fragmento verificado: a invenção não é a única versão da história.";
+        quote = "\"Certeza não é o mesmo que verdade.\"";
+        effect = "+1 CORAÇÃO MÁXIMO";
+        acc = ST[3].accent;
+        break;
+    case PK_PU:
+        if (k->id < 0 || k->id >= PU_COUNT) return;
+        tag = k->group ? "MELHORIA (ESCOLHA 1)" : "MELHORIA";
+        title = PU[k->id].name;
+        desc = PU[k->id].lore;
+        quote = PU[k->id].quote;
+        effect = PU[k->id].effect;
+        acc = PU[k->id].c;
+        break;
+    default:
+        return;
+    }
+
+    float bob = sinf(k->t * 3.0f) * 3.5f;
+    float bw = 328.0f;
+    float bh = 136.0f;
+
+    /* Ancora a ponta da seta logo acima do icone flutuante e faz clamp dentro de ROOM */
+    float tipX = k->p.x;
+    float tipY = k->p.y - 38.0f + bob;
+    float bx = roundf(Clampf(tipX - bw * 0.5f, ROOM.x + 12.0f, ROOM.x + ROOM.width - bw - 12.0f));
+    float by = roundf(Clampf(tipY - 10.0f - bh, ROOM.y + 8.0f, ROOM.y + ROOM.height - bh - 20.0f));
+    tipY = by + bh + 9.0f;
+    float arrowX = Clampf(tipX, bx + 20.0f, bx + bw - 20.0f);
+
+    Rectangle box = {bx, by, bw, bh};
+
+    /* Sombra discreta do balao */
+    DrawRectangle((int)bx + 4, (int)by + 5, (int)bw, (int)bh, (Color){0, 0, 0, 115});
+
+    /* Corpo escuro e faixa tematica no topo */
+    DrawRectangleRec(box, Alpha(C_PANEL, 0.94f));
+    DrawRectangle((int)bx, (int)by, (int)bw, 4, acc);
+    DrawRectangleLinesEx(box, 2.0f, acc);
+
+    /* Seta triangular na base apontando para o item (sentido anti-horario para face visivel) */
+    Vector2 vL = V2(arrowX - 8.0f, by + bh);
+    Vector2 vTip = V2(arrowX, tipY);
+    Vector2 vR = V2(arrowX + 8.0f, by + bh);
+    DrawTriangle(vL, vTip, vR, Alpha(C_PANEL, 0.96f));
+    DrawLineEx(vL, vTip, 2.0f, acc);
+    DrawLineEx(vTip, vR, 2.0f, acc);
+
+    float tx = bx + 12.0f;
+    float maxTw = bw - 24.0f;
+
+    /* Tag superior + Nome do item */
+    Txt(tag, tx, by + 9.0f, 12, k->group ? C_AMBER : C_DIM);
+    Txt(title, tx, by + 23.0f, 18, acc);
+
+    /* Lore / descricao com quebra automatica de linha */
+    int usedLines = DrawWrappedBalText(desc, tx, by + 45.0f, maxTw, 12, 14.0f, C_WHITE);
+
+    /* Fala curta da Elira em ambar */
+    if (quote && quote[0])
+    {
+        float qy = by + 45.0f + (usedLines > 0 ? usedLines * 14.0f + 2.0f : 0.0f);
+        if (qy <= by + 88.0f)
+        {
+            DrawWrappedBalText(quote, tx, qy, maxTw, 12, 13.0f, C_AMBER);
+        }
+    }
+
+    /* Pilula / badge de efeito na base do balao */
+    int effFont = TxtW(effect, 13) + 18.0f <= maxTw ? 13 : 12;
+    float pillW = fminf(TxtW(effect, effFont) + 18.0f, maxTw);
+    Rectangle pill = {tx, by + bh - 26.0f, pillW, 20.0f};
+    DrawRectangleRec(pill, Shade(acc, 0.30f));
+    DrawRectangleLinesEx(pill, 1.0f, Alpha(acc, 0.85f));
+    Txt(effect, pill.x + 8.0f, pill.y + 4.0f, effFont, C_WHITE);
 }
 
 #define FX_C 96
@@ -2731,6 +2863,8 @@ static void Draw(void)
             float s = pt[i].size * (pt[i].life / pt[i].max + 0.3f);
             DrawRectangle((int)(pt[i].p.x - s / 2), (int)(pt[i].p.y - s / 2), (int)s, (int)s, Alpha(pt[i].c, pt[i].life / pt[i].max));
         }
+    for (int i = 0; i < MAXP; i++)
+        if (pk[i].on) DrawPickupBalloon(&pk[i]);
     if (fade > 0) DrawRectangleRec(ROOM, Alpha(C_BG, fade));
     EndMode2D();
     DrawHUD();
