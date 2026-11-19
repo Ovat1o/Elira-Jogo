@@ -2044,6 +2044,39 @@ static Texture2D texEnemies, texBoss[4];
 /* altura na tela de cada linha da folha: rastreador, vazamento, pop-up, sirene, bolha, mini bolha, miragem */
 static const float ENEMY_SPRITE_H[7] = {48, 54, 52, 54, 68, 34, 56};
 
+static void LoadEnemies(const char *path)
+{
+    Image img = LoadImage(path);
+    if (!img.data) return;
+    ImageFormat(&img, PIXELFORMAT_UNCOMPRESSED_R8G8B8A8);
+    int w = img.width, h = img.height;
+    Color *px = (Color *)img.data;
+
+    /* Garante que a faixa superior y=256..290 da linha 2 (EN_POPUP) fique 100% transparente
+       (elimina qualquer gota vazada da linha 1) e aplica RGB escuro nos pixels com alpha==0
+       contra bleed trilinear entre celulas vizinhas */
+    for (int y = 0; y < h; y++)
+    {
+        bool popupTopStrip = (y >= 256 && y <= 290);
+        for (int x = 0; x < w; x++)
+        {
+            int i = y * w + x;
+            if (popupTopStrip || px[i].a == 0)
+            {
+                px[i] = (Color){11, 15, 23, 0};
+            }
+        }
+    }
+
+    texEnemies = LoadTextureFromImage(img);
+    if (texEnemies.id)
+    {
+        GenTextureMipmaps(&texEnemies);
+        SetTextureFilter(texEnemies, TEXTURE_FILTER_TRILINEAR);
+    }
+    UnloadImage(img);
+}
+
 static void RestoreSeparateBlend(void)
 {
     rlSetBlendFactorsSeparate(RL_SRC_ALPHA, RL_ONE_MINUS_SRC_ALPHA, RL_ONE, RL_ONE_MINUS_SRC_ALPHA, RL_FUNC_ADD, RL_FUNC_ADD);
@@ -2776,7 +2809,7 @@ void InvEnter(GameState *game)
         SetTextureFilter(texElira, TEXTURE_FILTER_POINT);
         LoadFaces(ASSETS "sprites/invasao/elira_rostos.png");
         texFx = LoadTexture(ASSETS "sprites/invasao/elira_fx.png");
-        texEnemies = LoadTexSmooth(ASSETS "sprites/invasao/inimigos.png");
+        LoadEnemies(ASSETS "sprites/invasao/inimigos.png");
         texBoss[0] = LoadTexSmooth(ASSETS "sprites/invasao/boss_1990.png");
         texBoss[1] = LoadTexSmooth(ASSETS "sprites/invasao/boss_2008.png");
         texBoss[2] = LoadTexSmooth(ASSETS "sprites/invasao/boss_2026.png");
