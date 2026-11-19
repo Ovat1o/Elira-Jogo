@@ -412,6 +412,9 @@ extern Texture2D g_rewardFloppyTex;
 extern Texture2D g_rewardCdTex;
 extern Texture2D g_rewardSsdTex;
 extern bool g_rewardSpritesLoaded;
+extern Texture2D g_menuCoverElira;
+extern Texture2D g_menuCoverLogo;
+extern bool g_menuCoverLoaded;
 extern Texture2D g_heartFullTex;
 extern Texture2D g_heartEmptyTex;
 extern bool g_heartTexturesLoaded;
@@ -519,6 +522,8 @@ void DrawFailure(void);
 /* Recompensas Padronizadas (1990, 2008, 2026) e Vidas (Sprite Heart) */
 void LoadRewardSprites(void);
 void UnloadRewardSprites(void);
+void LoadMenuCover(void);   /* capa do menu inicial; sem ela o menu usa o visual antigo */
+void UnloadMenuCover(void);
 void LoadHeartSprites(void);
 void UnloadHeartSprites(void);
 void DrawLivesIcons(Vector2 position, int lives, float heartSize);
