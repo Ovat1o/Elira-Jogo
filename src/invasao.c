@@ -87,6 +87,500 @@ static float TxtW(const char *s, int px) { return MeasureTextEx(F(px), s, (float
 static void TxtC(const char *s, float cx, float y, int px, Color c) { Txt(s, cx - TxtW(s, px) / 2, y, px, c); }
 
 static Texture2D texFloppy, texCd, texSsd, texHeart, texHeartEmpty, texElira, texFaces, texFx;
+
+/* ------------------------------------------------------------------ audio (SFX do tiro da Elira) */
+#define INV_SHOT_POOL 6
+static Sound sfxShot[INV_SHOT_POOL];
+static bool sfxShotLoaded = false;
+static int sfxShotIdx = 0;
+static bool invAudioMuted = false;
+
+static void LoadShotSfx(void)
+{
+    if (sfxShotLoaded || !IsAudioDeviceReady()) return;
+
+    const unsigned int sampleRate = 44100;
+    const float duration = 0.12f;
+    const unsigned int frameCount = (unsigned int)(sampleRate * duration);
+    short *pcm = (short *)malloc(frameCount * sizeof(short));
+    if (!pcm) return;
+
+    float phase = 0.0f;
+    float subPhase = 0.0f;
+    unsigned int lfsr = 0xACE1u;
+
+    for (unsigned int i = 0; i < frameCount; i++)
+    {
+        float t = (float)i / (float)sampleRate;
+        float u = (float)i / (float)frameCount;
+
+        /* Queda exponencial de frequencia estilo laser/blaster sci-fi retro (1150 Hz -> 165 Hz) */
+        float freq = 165.0f + 985.0f * expf(-u * 6.5f);
+        /* Vibrato curto de alta frequencia para textura energetica */
+        freq *= 1.0f + 0.045f * sinf(t * 280.0f);
+
+        phase += 2.0f * 3.14159265f * freq / (float)sampleRate;
+        subPhase += 2.0f * 3.14159265f * (freq * 0.5f) / (float)sampleRate;
+
+        /* Mistura de onda quadrada suavizada, dente-de-serra e sub-oitava */
+        float s = sinf(phase);
+        float sq = s >= 0.0f ? 0.65f : -0.65f;
+        float harm = 0.35f * s + 0.20f * sinf(phase * 2.0f) + 0.15f * sinf(subPhase);
+
+        /* Transiente inicial (estalo de plasma nos primeiros 12 ms) */
+        lfsr = (lfsr >> 1) ^ (-(lfsr & 1u) & 0xB400u);
+        float noise = ((float)(lfsr & 0xFFFFu) / 32768.0f - 1.0f) * expf(-u * 26.0f) * 0.32f;
+
+        /* Envelope com ataque imediato (1.5 ms) e decaimento limpo */
+        float attack = t < 0.0015f ? (t / 0.0015f) : 1.0f;
+        float decay = expf(-u * 4.2f) * (1.0f - u * 0.85f);
+        float sample = (sq * 0.45f + harm + noise) * attack * decay * 0.62f;
+
+        if (sample > 1.0f) sample = 1.0f;
+        if (sample < -1.0f) sample = -1.0f;
+        pcm[i] = (short)(sample * 32000.0f);
+    }
+
+    Wave w = {0};
+    w.frameCount = frameCount;
+    w.sampleRate = sampleRate;
+    w.sampleSize = 16;
+    w.channels = 1;
+    w.data = pcm;
+
+    /* Garante tambem o arquivo assets/som/tiro.wav se ainda nao existir */
+    if (!FileExists(ASSETS "som/tiro.wav"))
+    {
+        ExportWave(w, ASSETS "som/tiro.wav");
+    }
+
+    sfxShot[0] = LoadSoundFromWave(w);
+    free(pcm);
+
+    if (sfxShot[0].stream.buffer != NULL)
+    {
+        SetSoundVolume(sfxShot[0], 0.42f);
+        for (int i = 1; i < INV_SHOT_POOL; i++)
+        {
+            sfxShot[i] = LoadSoundAlias(sfxShot[0]);
+            SetSoundVolume(sfxShot[i], 0.42f);
+        }
+        sfxShotLoaded = true;
+        sfxShotIdx = 0;
+    }
+}
+
+static void PlayShotSfx(float pitchMult)
+{
+    if (!IsAudioDeviceReady() || invAudioMuted || g_musicVolume <= 0.001f) return;
+    if (!sfxShotLoaded) LoadShotSfx();
+    if (!sfxShotLoaded) return;
+
+    Sound s = sfxShot[sfxShotIdx];
+    sfxShotIdx = (sfxShotIdx + 1) % INV_SHOT_POOL;
+
+    float pitch = (0.94f + (float)GetRandomValue(0, 140) / 1000.0f) * pitchMult;
+    float vol = Clampf(g_musicVolume * 0.95f, 0.15f, 0.65f);
+    SetSoundVolume(s, vol);
+    SetSoundPitch(s, pitch);
+    PlaySound(s);
+}
+
+static void UnloadShotSfx(void)
+{
+    if (!sfxShotLoaded) return;
+    for (int i = 1; i < INV_SHOT_POOL; i++)
+    {
+        if (sfxShot[i].stream.buffer != NULL) UnloadSoundAlias(sfxShot[i]);
+        sfxShot[i] = (Sound){0};
+    }
+    if (sfxShot[0].stream.buffer != NULL) UnloadSound(sfxShot[0]);
+    sfxShot[0] = (Sound){0};
+    sfxShotLoaded = false;
+}
+
+/* ------------------------------------------------------------------ trilha sonora por estagio (estilo Soul Knight chiptune/synthwave) */
+#define INV_BGM_STAGES 5
+static Sound invStageBgm[INV_BGM_STAGES];
+static bool invStageBgmLoaded[INV_BGM_STAGES];
+static int invActiveBgm = -1;
+
+typedef struct
+{
+    float bpm;
+    float pulseDuty;       /* largura de pulso do lead (0.25 = 25%, 0.50 = quadrada, etc.) */
+    float sawMix;          /* mistura de dente-de-serra supersaw no lead */
+    float bassDrive;       /* saturacao do baixo */
+    int chords[4][3];      /* 4 compassos, triade MIDI para arpejo rapido */
+    int bass[4][8];        /* 8 colcheias por compasso (0 = pausa) */
+    int melody[64];        /* 64 semicolcheias (4 compassos x 16 steps; 0 = pausa) */
+    unsigned char drum[16];/* mascara por step: 1=kick, 2=snare, 4=closed hat, 8=open hat */
+} InvTrackDef;
+
+static const InvTrackDef INV_TRACKS[INV_BGM_STAGES] = {
+    /* Stage 0: 1990 - Retro Arcade Chiptune (135 BPM, D minor: Dm -> Bb -> C -> A) */
+    {
+        135.0f, 0.25f, 0.20f, 1.35f,
+        {{62, 65, 69}, {58, 62, 65}, {60, 64, 67}, {57, 61, 64}},
+        {
+            {38, 38, 50, 38, 41, 38, 45, 43},
+            {34, 34, 46, 34, 38, 34, 41, 43},
+            {36, 36, 48, 36, 40, 36, 43, 45},
+            {33, 33, 45, 33, 37, 33, 40, 43}
+        },
+        {
+            74,  0, 74, 77, 81,  0, 79, 77, 76, 74, 72, 74, 77,  0, 74,  0,
+            70,  0, 70, 74, 77,  0, 76, 74, 72, 70, 69, 70, 74,  0, 70,  0,
+            72,  0, 72, 76, 79,  0, 81, 79, 77, 76, 74, 72, 76,  0, 79,  0,
+            81, 79, 77, 76, 74, 76, 77, 79, 81,  0, 85,  0, 81, 79, 76, 73
+        },
+        {5, 4, 12, 4, 6, 4, 12, 5, 5, 4, 12, 4, 6, 5, 12, 6}
+    },
+    /* Stage 1: 2008 - Cyber-Alert Surveillance (142 BPM, E minor: Em -> C -> D -> B) */
+    {
+        142.0f, 0.35f, 0.35f, 1.50f,
+        {{64, 67, 71}, {60, 64, 67}, {62, 66, 69}, {59, 63, 66}},
+        {
+            {40, 52, 40, 52, 43, 40, 47, 45},
+            {36, 48, 36, 48, 40, 36, 43, 45},
+            {38, 50, 38, 50, 42, 38, 45, 47},
+            {35, 47, 35, 47, 39, 35, 42, 47}
+        },
+        {
+            76, 76, 79, 76, 83,  0, 81, 79, 78, 79, 81, 79, 76,  0, 71, 74,
+            72, 72, 76, 72, 79,  0, 78, 76, 74, 76, 79, 76, 74,  0, 71, 72,
+            74, 74, 78, 74, 81,  0, 79, 78, 76, 78, 81, 83, 81,  0, 78, 74,
+            71, 75, 78, 83, 82, 78, 75, 71, 75, 78, 83, 86, 83, 82, 78, 75
+        },
+        {5, 4, 9, 4, 6, 4, 12, 5, 5, 5, 12, 4, 6, 4, 13, 6}
+    },
+    /* Stage 2: 2026 - Neon Synthwave Algorithm (150 BPM, F# minor: F#m -> D -> A -> E) */
+    {
+        150.0f, 0.50f, 0.55f, 1.60f,
+        {{66, 69, 73}, {62, 66, 69}, {57, 61, 64}, {64, 68, 71}},
+        {
+            {42, 42, 54, 42, 42, 54, 45, 49},
+            {38, 38, 50, 38, 38, 50, 42, 45},
+            {33, 33, 45, 33, 33, 45, 37, 40},
+            {40, 40, 52, 40, 40, 52, 44, 47}
+        },
+        {
+            78,  0, 81, 78, 85,  0, 83, 81, 80, 81, 85, 81, 78,  0, 73, 76,
+            74,  0, 78, 74, 81,  0, 80, 78, 76, 78, 81, 78, 76,  0, 73, 74,
+            69,  0, 73, 76, 81,  0, 80, 76, 73, 76, 80, 81, 85,  0, 81, 76,
+            76, 80, 83, 88, 86, 83, 80, 76, 80, 83, 86, 88, 85, 83, 80, 76
+        },
+        {5, 4, 12, 5, 6, 4, 13, 4, 5, 4, 12, 5, 6, 5, 12, 14}
+    },
+    /* Stage 3: 2048 - Glitch Oracle Hallucination (158 BPM, G harmonic minor: Gm -> Eb -> Cm -> D) */
+    {
+        158.0f, 0.18f, 0.45f, 1.70f,
+        {{67, 70, 74}, {63, 67, 70}, {60, 63, 67}, {62, 66, 69}},
+        {
+            {43, 55, 43, 46, 50, 43, 55, 50},
+            {39, 51, 39, 43, 46, 39, 51, 46},
+            {36, 48, 36, 39, 43, 36, 48, 43},
+            {38, 50, 38, 42, 45, 50, 45, 42}
+        },
+        {
+            79, 82, 86, 79, 87, 86, 82, 79, 78, 79, 82, 86, 84, 82, 79, 74,
+            75, 79, 82, 75, 87, 86, 82, 79, 75, 79, 82, 86, 84, 82, 79, 75,
+            72, 75, 79, 84, 82, 79, 75, 72, 75, 79, 84, 87, 86, 84, 79, 75,
+            74, 78, 81, 86, 84, 81, 78, 74, 78, 81, 86, 90, 87, 86, 82, 78
+        },
+        {5, 5, 12, 4, 6, 5, 12, 6, 5, 4, 13, 5, 6, 6, 12, 14}
+    },
+    /* Stage 4: NUCLEO - A.R.1.3.L. Final Boss (168 BPM, C minor Intense: Cm -> Ab -> Fm -> G) */
+    {
+        168.0f, 0.40f, 0.65f, 1.85f,
+        {{60, 63, 67}, {56, 60, 63}, {53, 56, 60}, {55, 59, 62}},
+        {
+            {36, 48, 36, 48, 39, 48, 43, 48},
+            {32, 44, 32, 44, 36, 44, 39, 44},
+            {29, 41, 29, 41, 32, 41, 36, 41},
+            {31, 43, 31, 43, 35, 43, 38, 47}
+        },
+        {
+            72, 75, 79, 84, 83, 84, 87, 84, 79, 75, 72, 75, 79, 84, 83, 79,
+            68, 72, 75, 80, 79, 80, 84, 80, 75, 72, 68, 72, 75, 80, 79, 75,
+            65, 68, 72, 77, 75, 77, 80, 77, 72, 68, 65, 68, 72, 77, 80, 84,
+            79, 83, 86, 91, 89, 86, 83, 79, 83, 86, 91, 95, 91, 86, 83, 79
+        },
+        {5, 5, 13, 5, 6, 5, 13, 5, 5, 5, 13, 5, 6, 6, 15, 14}
+    }
+};
+
+static float InvNoteFreq(int midi)
+{
+    return 440.0f * powf(2.0f, ((float)midi - 69.0f) / 12.0f);
+}
+
+static void EnsureStageBgm(int st)
+{
+    if (st < 0 || st >= INV_BGM_STAGES) return;
+    if (invStageBgmLoaded[st] || !IsAudioDeviceReady()) return;
+
+    const InvTrackDef *tr = &INV_TRACKS[st];
+    const unsigned int sampleRate = 44100;
+    const float stepDur = (60.0f / tr->bpm) * 0.25f; /* 1 semicolcheia (1/16) */
+    const int totalSteps = 64;                       /* 4 compassos de 16 semicolcheias */
+    const unsigned int stepSamples = (unsigned int)(stepDur * (float)sampleRate + 0.5f);
+    const unsigned int frameCount = stepSamples * (unsigned int)totalSteps;
+
+    short *pcm = (short *)malloc(frameCount * 2 * sizeof(short));
+    if (!pcm) return;
+
+    float leadPhase = 0.0f, leadPhase2 = 0.0f;
+    float arpPhase = 0.0f;
+    float bassPhase = 0.0f, bassSubPhase = 0.0f;
+    float kickPhase = 0.0f;
+    unsigned int lfsr = 0xBEE5u + (unsigned int)(st * 1337);
+    const float kTwoPi = 6.28318530f;
+
+    /* Buffer circular curto de eco stereo (delay de 3 semicolcheias) */
+    const unsigned int delaySamples = stepSamples * 3;
+    float *delayL = (float *)calloc(delaySamples, sizeof(float));
+    float *delayR = (float *)calloc(delaySamples, sizeof(float));
+    unsigned int dIdx = 0;
+
+    for (unsigned int i = 0; i < frameCount; i++)
+    {
+        unsigned int step = i / stepSamples;
+        if (step >= (unsigned int)totalSteps) step = (unsigned int)(totalSteps - 1);
+        unsigned int inStep = i % stepSamples;
+        float stT = (float)inStep / (float)sampleRate;
+        float stU = (float)inStep / (float)stepSamples;
+
+        int bar = (int)(step / 16);
+        int stepInBar = (int)(step % 16);
+        unsigned char drm = tr->drum[stepInBar];
+
+        /* Ruido branco deterministico (LFSR) para caixa e chimbal */
+        lfsr = (lfsr >> 1) ^ (-(lfsr & 1u) & 0xB400u);
+        float noise = ((float)(lfsr & 0xFFFFu) / 32768.0f) - 1.0f;
+
+        /* 1. Bateria Chiptune / Arcade (Kick + Snare + Hi-Hat) */
+        float drumSig = 0.0f;
+        float sidechain = 1.0f;
+        if (drm & 1) /* Kick (bumbo punchy com pitch drop rapido) */
+        {
+            float kEnv = expf(-stT * 24.0f);
+            float kFreq = 46.0f + 135.0f * expf(-stT * 52.0f);
+            kickPhase += kTwoPi * kFreq / (float)sampleRate;
+            float click = expf(-stT * 180.0f) * noise * 0.25f;
+            drumSig += (sinf(kickPhase) * 0.95f + click) * kEnv * 0.52f;
+            sidechain = 1.0f - 0.55f * expf(-stT * 18.0f);
+        }
+        if (drm & 2) /* Snare (caixa arcade: corpo tonal + explosao de ruido) */
+        {
+            float sEnv = expf(-stT * 22.0f);
+            float sBody = sinf(kTwoPi * (185.0f - 60.0f * stU) * stT) * expf(-stT * 38.0f);
+            drumSig += (noise * 0.78f * sEnv + sBody * 0.42f) * 0.38f;
+        }
+        if (drm & 8) /* Open Hi-Hat */
+        {
+            float hEnv = expf(-stT * 16.0f);
+            float metallic = (noise - 0.5f * sinf(kTwoPi * 6200.0f * stT));
+            drumSig += metallic * hEnv * 0.14f;
+        }
+        else if (drm & 4) /* Closed Hi-Hat */
+        {
+            float hEnv = expf(-stT * 58.0f);
+            drumSig += noise * hEnv * 0.11f;
+        }
+
+        /* 2. Baixo Synthwave / Chiptune (8 colcheias por compasso) */
+        float bassSig = 0.0f;
+        int bassStep = stepInBar / 2;
+        int bassMidi = tr->bass[bar][bassStep];
+        if (bassMidi > 0)
+        {
+            unsigned int inEighth = i % (stepSamples * 2);
+            float bT = (float)inEighth / (float)sampleRate;
+            float bU = (float)inEighth / (float)(stepSamples * 2);
+            float bFreq = InvNoteFreq(bassMidi);
+            bassPhase += kTwoPi * bFreq / (float)sampleRate;
+            bassSubPhase += kTwoPi * (bFreq * 0.5f) / (float)sampleRate;
+            if (bassPhase > kTwoPi) bassPhase -= kTwoPi;
+            if (bassSubPhase > kTwoPi) bassSubPhase -= kTwoPi;
+
+            float saw = (bassPhase / 3.14159265f) - 1.0f;
+            float sq = (bassPhase < 3.14159265f) ? 1.0f : -1.0f;
+            float sub = sinf(bassSubPhase);
+            float bEnv = (bT < 0.003f ? (bT / 0.003f) : 1.0f) * expf(-bU * 2.2f);
+            float rawBass = (saw * 0.50f + sq * 0.30f + sub * 0.45f) * tr->bassDrive;
+            /* Soft clip com aproximacao racional de tanh */
+            float x2 = rawBass * rawBass;
+            float sat = rawBass * (27.0f + x2) / (27.0f + 9.0f * x2);
+            bassSig = sat * bEnv * sidechain * 0.34f;
+        }
+
+        /* 3. Arpejo Chiptune Ultra-Rapido (cicla pelas notas do acorde em 60Hz/step) */
+        int arpSub = (int)((stU * 3.0f)) % 3;
+        int chordNote = tr->chords[bar][arpSub] + ((stepInBar & 1) ? 12 : 0);
+        float arpFreq = InvNoteFreq(chordNote);
+        arpPhase += kTwoPi * arpFreq / (float)sampleRate;
+        if (arpPhase > kTwoPi) arpPhase -= kTwoPi;
+        float arpSq = (arpPhase < kTwoPi * 0.25f) ? 1.0f : -1.0f;
+        float arpEnv = expf(-stU * 1.6f) * sidechain;
+        float arpSig = arpSq * arpEnv * 0.11f;
+
+        /* 4. Melodia Principal (Lead Pulso + Supersaw com vibrato) */
+        float leadSig = 0.0f;
+        int melMidi = tr->melody[step];
+        if (melMidi > 0)
+        {
+            /* Se a proxima nota for igual, sustenta (legato); senao articula */
+            bool tiedPrev = (step > 0 && tr->melody[step - 1] == melMidi);
+            bool tiedNext = (step + 1 < (unsigned int)totalSteps && tr->melody[step + 1] == melMidi);
+            float vib = 1.0f + 0.0055f * sinf(stT * 38.0f);
+            float lFreq = InvNoteFreq(melMidi) * vib;
+
+            leadPhase += kTwoPi * lFreq / (float)sampleRate;
+            leadPhase2 += kTwoPi * (lFreq * 1.006f) / (float)sampleRate;
+            if (leadPhase > kTwoPi) leadPhase -= kTwoPi;
+            if (leadPhase2 > kTwoPi) leadPhase2 -= kTwoPi;
+
+            float pulse = (leadPhase < kTwoPi * tr->pulseDuty) ? 1.0f : -1.0f;
+            float saw2 = (leadPhase2 / 3.14159265f) - 1.0f;
+            float att = (!tiedPrev && stT < 0.003f) ? (stT / 0.003f) : 1.0f;
+            float rel = (!tiedNext && stU > 0.85f) ? ((1.0f - stU) / 0.15f) : 1.0f;
+            float dec = tiedNext ? 0.92f : expf(-stU * 1.25f);
+            leadSig = ((1.0f - tr->sawMix) * pulse + tr->sawMix * saw2) * att * dec * rel * 0.24f;
+        }
+
+        /* Mixagem Stereo com Eco Cruzado (Ping-Pong Delay) */
+        float panArp = (stepInBar & 1) ? 0.35f : -0.35f;
+        float dryL = drumSig + bassSig + leadSig * 1.05f + arpSig * (1.0f - panArp);
+        float dryR = drumSig + bassSig + leadSig * 0.95f + arpSig * (1.0f + panArp);
+
+        float echoL = delayL ? delayL[dIdx] : 0.0f;
+        float echoR = delayR ? delayR[dIdx] : 0.0f;
+        if (delayL && delayR)
+        {
+            delayL[dIdx] = leadSig * 0.36f + arpSig * 0.24f + echoR * 0.25f;
+            delayR[dIdx] = leadSig * 0.30f + arpSig * 0.30f + echoL * 0.25f;
+            dIdx = (dIdx + 1) % delaySamples;
+        }
+
+        float outL = dryL + echoL * 0.45f;
+        float outR = dryR + echoR * 0.45f;
+
+        if (outL > 0.98f) outL = 0.98f;
+        if (outL < -0.98f) outL = -0.98f;
+        if (outR > 0.98f) outR = 0.98f;
+        if (outR < -0.98f) outR = -0.98f;
+
+        pcm[i * 2] = (short)(outL * 30000.0f);
+        pcm[i * 2 + 1] = (short)(outR * 30000.0f);
+    }
+
+    if (delayL) free(delayL);
+    if (delayR) free(delayR);
+
+    /* Suaviza os primeiros e ultimos 64 frames para loop 100% livre de clique */
+    const unsigned int fadeFrames = 64;
+    for (unsigned int i = 0; i < fadeFrames && i < frameCount; i++)
+    {
+        float g = (float)i / (float)fadeFrames;
+        unsigned int tail = frameCount - 1 - i;
+        pcm[i * 2] = (short)((float)pcm[i * 2] * g + (float)pcm[tail * 2] * (1.0f - g));
+        pcm[i * 2 + 1] = (short)((float)pcm[i * 2 + 1] * g + (float)pcm[tail * 2 + 1] * (1.0f - g));
+    }
+
+    Wave w = {0};
+    w.frameCount = frameCount;
+    w.sampleRate = sampleRate;
+    w.sampleSize = 16;
+    w.channels = 2;
+    w.data = pcm;
+
+    invStageBgm[st] = LoadSoundFromWave(w);
+    free(pcm);
+
+    if (invStageBgm[st].stream.buffer != NULL)
+    {
+        invStageBgmLoaded[st] = true;
+    }
+}
+
+static void StopInvBgm(void)
+{
+    if (!IsAudioDeviceReady()) { invActiveBgm = -1; return; }
+    for (int i = 0; i < INV_BGM_STAGES; i++)
+    {
+        if (invStageBgmLoaded[i] && IsSoundPlaying(invStageBgm[i]))
+        {
+            StopSound(invStageBgm[i]);
+        }
+    }
+    invActiveBgm = -1;
+}
+
+static void PlayStageBgm(int st)
+{
+    if (!IsAudioDeviceReady()) return;
+    if (st < 0 || st >= INV_BGM_STAGES) st = 0;
+    EnsureStageBgm(st);
+    if (!invStageBgmLoaded[st]) return;
+
+    if (invActiveBgm != st)
+    {
+        for (int i = 0; i < INV_BGM_STAGES; i++)
+        {
+            if (i != st && invStageBgmLoaded[i] && IsSoundPlaying(invStageBgm[i]))
+            {
+                StopSound(invStageBgm[i]);
+            }
+        }
+        invActiveBgm = st;
+    }
+
+    float vol = invAudioMuted ? 0.0f : Clampf(g_musicVolume * 0.85f, 0.0f, 0.85f);
+    SetSoundVolume(invStageBgm[st], vol);
+    if (!IsSoundPlaying(invStageBgm[st]))
+    {
+        PlaySound(invStageBgm[st]);
+    }
+}
+
+static void UpdateInvBgm(int curStage, bool duckVolume)
+{
+    if (!IsAudioDeviceReady()) return;
+    int st = (curStage >= 0 && curStage < INV_BGM_STAGES) ? curStage : 0;
+    if (!invStageBgmLoaded[st]) EnsureStageBgm(st);
+    if (!invStageBgmLoaded[st]) return;
+
+    if (invActiveBgm != st)
+    {
+        PlayStageBgm(st);
+        return;
+    }
+
+    float vol = invAudioMuted ? 0.0f : Clampf(g_musicVolume * 0.85f, 0.0f, 0.85f);
+    if (duckVolume) vol *= 0.45f;
+    SetSoundVolume(invStageBgm[st], vol);
+
+    if (!IsSoundPlaying(invStageBgm[st]))
+    {
+        PlaySound(invStageBgm[st]);
+    }
+}
+
+static void UnloadInvBgm(void)
+{
+    StopInvBgm();
+    for (int i = 0; i < INV_BGM_STAGES; i++)
+    {
+        if (invStageBgmLoaded[i] && invStageBgm[i].stream.buffer != NULL)
+        {
+            UnloadSound(invStageBgm[i]);
+        }
+        invStageBgm[i] = (Sound){0};
+        invStageBgmLoaded[i] = false;
+    }
+    invActiveBgm = -1;
+}
 static Texture2D LoadTexSmooth(const char *path)
 {
     Texture2D t = LoadTexture(path);
@@ -653,6 +1147,7 @@ static void StartStage(int s)
     gs = GS_PLAY;
     msgT = 0;
     EnterRoom(LAYOUT[s][0].x, LAYOUT[s][0].y, -1);
+    PlayStageBgm(s);
     char t[64];
     if (s < 4) snprintf(t, sizeof t, "ESTÁGIO %d // %s", s + 1, ST[s].year);
     else snprintf(t, sizeof t, "NÚCLEO DA A.R.1.3.L.");
@@ -1253,6 +1748,7 @@ static void Update(float dt, Input in)
             }
             else
                 AddBullet(VAdd(o, VScale(side, alt ? 5.0f : -5.0f)), v, 7 + pl.dmg * 1.5f, true, BK_REAL, pl.dmg, life);
+            PlayShotSfx(pl.stolen > 0 ? 0.82f : (pl.pu[PU_OVERCLOCK] ? 1.05f : 1.0f));
             pl.cd = pl.fireDelay * (pl.stolen > 0 ? 2.0f : 1.0f);
         }
     }
@@ -1547,6 +2043,39 @@ static Texture2D texEnemies, texBoss[4];
 #define INV_BOSS_CELL 256
 /* altura na tela de cada linha da folha: rastreador, vazamento, pop-up, sirene, bolha, mini bolha, miragem */
 static const float ENEMY_SPRITE_H[7] = {48, 54, 52, 54, 68, 34, 56};
+
+static void LoadEnemies(const char *path)
+{
+    Image img = LoadImage(path);
+    if (!img.data) return;
+    ImageFormat(&img, PIXELFORMAT_UNCOMPRESSED_R8G8B8A8);
+    int w = img.width, h = img.height;
+    Color *px = (Color *)img.data;
+
+    /* Garante que a faixa superior y=256..290 da linha 2 (EN_POPUP) fique 100% transparente
+       (elimina qualquer gota vazada da linha 1) e aplica RGB escuro nos pixels com alpha==0
+       contra bleed trilinear entre celulas vizinhas */
+    for (int y = 0; y < h; y++)
+    {
+        bool popupTopStrip = (y >= 256 && y <= 290);
+        for (int x = 0; x < w; x++)
+        {
+            int i = y * w + x;
+            if (popupTopStrip || px[i].a == 0)
+            {
+                px[i] = (Color){11, 15, 23, 0};
+            }
+        }
+    }
+
+    texEnemies = LoadTextureFromImage(img);
+    if (texEnemies.id)
+    {
+        GenTextureMipmaps(&texEnemies);
+        SetTextureFilter(texEnemies, TEXTURE_FILTER_TRILINEAR);
+    }
+    UnloadImage(img);
+}
 
 static void RestoreSeparateBlend(void)
 {
@@ -2264,6 +2793,7 @@ static bool InvApplyKeys(InvKeys k)
 
 static void InvLeave(GameState *game)
 {
+    StopInvBgm();
     game->screen = SCREEN_TITLE;
 }
 
@@ -2279,20 +2809,23 @@ void InvEnter(GameState *game)
         SetTextureFilter(texElira, TEXTURE_FILTER_POINT);
         LoadFaces(ASSETS "sprites/invasao/elira_rostos.png");
         texFx = LoadTexture(ASSETS "sprites/invasao/elira_fx.png");
-        texEnemies = LoadTexSmooth(ASSETS "sprites/invasao/inimigos.png");
+        LoadEnemies(ASSETS "sprites/invasao/inimigos.png");
         texBoss[0] = LoadTexSmooth(ASSETS "sprites/invasao/boss_1990.png");
         texBoss[1] = LoadTexSmooth(ASSETS "sprites/invasao/boss_2008.png");
         texBoss[2] = LoadTexSmooth(ASSETS "sprites/invasao/boss_2026.png");
         texBoss[3] = LoadTexSmooth(ASSETS "sprites/invasao/boss_2048.png");
         SetTextureFilter(texFx, TEXTURE_FILTER_BILINEAR);
+        LoadShotSfx();
         invLoaded = true;
     }
+    invAudioMuted = game ? game->musicMuted : false;
     NewGame(0);
     game->screen = SCREEN_INVASION;
 }
 
 void InvUpdate(GameState *game, float dt)
 {
+    invAudioMuted = game ? game->musicMuted : false;
     InvKeys k = {0};
     k.esc = IsKeyPressed(KEY_ESCAPE);
     k.q = IsKeyPressed(KEY_Q);
@@ -2308,6 +2841,7 @@ void InvUpdate(GameState *game, float dt)
         InvLeave(game);
         return;
     }
+    UpdateInvBgm(stage, gs == GS_PAUSE || gs == GS_OVER || gs == GS_WIN);
     Update(fminf(dt, 1.0f / 30), gs == GS_PLAY ? ReadInput() : (Input){0});
 }
 
@@ -2322,6 +2856,8 @@ void InvDraw(void)
 
 void InvUnload(void)
 {
+    UnloadInvBgm();
+    UnloadShotSfx();
     if (!invLoaded) return;
     Texture2D *texs[] = {&texFloppy, &texCd, &texSsd, &texHeart, &texHeartEmpty, &texElira, &texFaces, &texFx,
                          &texEnemies, &texBoss[0], &texBoss[1], &texBoss[2], &texBoss[3]};
