@@ -411,12 +411,6 @@ Texture2D g_heartFullTex = {0};
 Texture2D g_heartEmptyTex = {0};
 bool g_heartTexturesLoaded = false;
 
-static inline bool IsHeartBg(Color c)
-{
-    int diff = abs((int)c.r - (int)c.g) + abs((int)c.r - (int)c.b);
-    return (c.r > 200 && c.g > 200 && c.b > 200 && diff < 30);
-}
-
 static inline bool IsHeartRed(Color c)
 {
     return (c.r > 80 && c.r > (int)((float)c.g * 1.35f) && c.r > (int)((float)c.b * 1.35f));
@@ -502,34 +496,7 @@ void LoadHeartSprites(void)
     int h = img.height;
     Color *px = (Color *)img.data;
 
-    /* 1. Flood-fill a partir das bordas para remover o fundo claro tornando-o transparente */
-    unsigned char *visited = (unsigned char *)calloc((size_t)w * (size_t)h, 1);
-    int *stack = (int *)malloc((size_t)w * (size_t)h * sizeof(int));
-    if (visited != NULL && stack != NULL)
-    {
-        int sp = 0;
-        #define HEART_PUSH(X, Y) do { int _i = (Y) * w + (X); \
-            if (!visited[_i] && IsHeartBg(px[_i])) { visited[_i] = 1; px[_i].a = 0; stack[sp++] = _i; } } while (0)
-
-        for (int x = 0; x < w; x++) { HEART_PUSH(x, 0); HEART_PUSH(x, h - 1); }
-        for (int y = 0; y < h; y++) { HEART_PUSH(0, y); HEART_PUSH(w - 1, y); }
-
-        while (sp > 0)
-        {
-            int idx = stack[--sp];
-            int x = idx % w;
-            int y = idx / w;
-            if (x > 0) HEART_PUSH(x - 1, y);
-            if (x < w - 1) HEART_PUSH(x + 1, y);
-            if (y > 0) HEART_PUSH(x, y - 1);
-            if (y < h - 1) HEART_PUSH(x, y + 1);
-        }
-        #undef HEART_PUSH
-    }
-    if (visited) free(visited);
-    if (stack) free(stack);
-
-    /* 2. Recorte justo da caixa delimitadora do coração */
+    /* 1. Recorte justo da caixa delimitadora do coração (usando canal alpha nativo do PNG) */
     int minX = w, maxX = 0, minY = h, maxY = 0;
     for (int y = 0; y < h; y++)
     {
@@ -552,14 +519,14 @@ void LoadHeartSprites(void)
     h = img.height;
     px = (Color *)img.data;
 
-    /* 3. Cria textura do coração cheio (g_heartFullTex) */
+    /* 2. Cria textura do coração cheio (g_heartFullTex) */
     g_heartFullTex = LoadTextureFromImage(img);
     if (g_heartFullTex.id != 0)
     {
         SetTextureFilter(g_heartFullTex, TEXTURE_FILTER_BILINEAR);
     }
 
-    /* 4. Cria textura do coração vazio (g_heartEmptyTex): retira o vermelho de dentro */
+    /* 3. Cria textura do coração vazio (g_heartEmptyTex): retira o vermelho de dentro */
     Image emptyImg = ImageCopy(img);
     Color *emptyPx = (Color *)emptyImg.data;
     for (int i = 0; i < w * h; i++)
@@ -576,8 +543,8 @@ void LoadHeartSprites(void)
         }
         else if (emptyPx[i].a > 0)
         {
-            /* Contorno preservado em tom ardósia visível no HUD escuro */
-            emptyPx[i] = (Color){ 85, 100, 120, 255 };
+            /* Contorno preservado em tom ardósia visível no HUD escuro mantendo alpha original */
+            emptyPx[i] = (Color){ 85, 100, 120, emptyPx[i].a };
         }
     }
 
@@ -12789,11 +12756,21 @@ void LoadEliraPortrait(void)
         for (int x = 0; x < w; x++)
         {
             Color c = px[y * w + x];
-            if (c.r < 90 && c.g < 90 && c.b < 110) { dark = true; break; }
+            if (c.a > 128 && c.r < 90 && c.g < 90 && c.b < 110) { dark = true; break; }
         }
-        if (dark) { limitH = y; break; }
+        if (dark) { limitH = y > 4 ? y - 4 : y; break; }
     }
     if (limitH < h / 2) limitH = h;
+
+    /* 1.1) Limpa linhas abaixo de limitH e poeira com alpha muito baixo */
+    for (int y = 0; y < h; y++)
+    {
+        for (int x = 0; x < w; x++)
+        {
+            int i = y * w + x;
+            if (y >= limitH || px[i].a < 45) px[i] = (Color){22, 22, 34, 0};
+        }
+    }
 
     /* 2) Flood fill do fundo branco a partir das bordas superior e laterais */
     int *stack = (int *)malloc(sizeof(int) * (size_t)w * (size_t)limitH);
@@ -12817,25 +12794,61 @@ void LoadEliraPortrait(void)
         free(stack);
     }
 
-    /* 3) Remove o halo claro que sobra ao redor do contorno */
+    /* 3) Remove em multiplos passos o halo claro/cinza que sobra ao redor do contorno */
     unsigned char *halo = (unsigned char *)calloc((size_t)w * (size_t)limitH, 1);
     if (halo != NULL)
     {
-        for (int y = 1; y < limitH - 1; y++)
+        for (int pass = 0; pass < 6; pass++)
         {
-            for (int x = 1; x < w - 1; x++)
+            int count = 0;
+            for (int i = 0; i < w * limitH; i++) halo[i] = 0;
+            for (int y = 1; y < limitH; y++)
             {
-                int i = y * w + x;
-                Color c = px[i];
-                if (c.a == 0) continue;
-                unsigned char mn = c.r < c.g ? (c.r < c.b ? c.r : c.b) : (c.g < c.b ? c.g : c.b);
-                unsigned char mx = c.r > c.g ? (c.r > c.b ? c.r : c.b) : (c.g > c.b ? c.g : c.b);
-                if (mn < 190 || (mx - mn) > 30) continue;
-                if (px[i - 1].a == 0 || px[i + 1].a == 0 || px[i - w].a == 0 || px[i + w].a == 0) halo[i] = 1;
+                for (int x = 1; x < w - 1; x++)
+                {
+                    int i = y * w + x;
+                    Color c = px[i];
+                    if (c.a == 0) continue;
+                    bool adjTrans = (px[i - 1].a == 0 || px[i + 1].a == 0 ||
+                                     px[i - w].a == 0 || (y < limitH - 1 && px[i + w].a == 0));
+                    if (!adjTrans) continue;
+                    unsigned char mn = c.r < c.g ? (c.r < c.b ? c.r : c.b) : (c.g < c.b ? c.g : c.b);
+                    unsigned char mx = c.r > c.g ? (c.r > c.b ? c.r : c.b) : (c.g > c.b ? c.g : c.b);
+                    if ((mn >= 52 && (mx - mn) <= 42) || c.a < 185)
+                    {
+                        halo[i] = 1;
+                        count++;
+                    }
+                }
+            }
+            for (int i = 0; i < w * limitH; i++) if (halo[i]) px[i] = (Color){22, 22, 34, 0};
+            if (count == 0) break;
+        }
+        free(halo);
+    }
+
+    /* 3.1) Acabamento do contorno externo: escurece pixels residuais neutros na borda imediata */
+    for (int y = 1; y < limitH; y++)
+    {
+        for (int x = 1; x < w - 1; x++)
+        {
+            int i = y * w + x;
+            if (px[i].a == 0) continue;
+            bool adjTrans = (px[i - 1].a == 0 || px[i + 1].a == 0 ||
+                             px[i - w].a == 0 || (y < limitH - 1 && px[i + w].a == 0));
+            if (adjTrans)
+            {
+                unsigned char mn = px[i].r < px[i].g ? (px[i].r < px[i].b ? px[i].r : px[i].b) : (px[i].g < px[i].b ? px[i].g : px[i].b);
+                unsigned char mx = px[i].r > px[i].g ? (px[i].r > px[i].b ? px[i].r : px[i].b) : (px[i].g > px[i].b ? px[i].g : px[i].b);
+                if (mn >= 32 && (mx - mn) <= 45)
+                {
+                    px[i].r = 16;
+                    px[i].g = 18;
+                    px[i].b = 28;
+                }
+                px[i].a = 255;
             }
         }
-        for (int i = 0; i < w * limitH; i++) if (halo[i]) px[i].a = 0;
-        free(halo);
     }
 
     /* 4) Pixels transparentes recebem cor escura para nao gerar franja branca no filtro bilinear,

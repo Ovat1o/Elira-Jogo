@@ -97,11 +97,6 @@ static Texture2D LoadTexSmooth(const char *path)
     }
     return t;
 }
-static bool HeartBg(Color c)
-{
-    int diff = abs((int)c.r - (int)c.g) + abs((int)c.r - (int)c.b);
-    return c.r > 200 && c.g > 200 && c.b > 200 && diff < 30;
-}
 static void LoadHeart(const char *path)
 {
     Image img = LoadImage(path);
@@ -109,23 +104,6 @@ static void LoadHeart(const char *path)
     ImageFormat(&img, PIXELFORMAT_UNCOMPRESSED_R8G8B8A8);
     int w = img.width, h = img.height;
     Color *px = (Color *)img.data;
-    unsigned char *vis = calloc((size_t)w * h, 1);
-    int *st = malloc((size_t)w * h * sizeof(int));
-    int sp = 0;
-#define HP(X, Y) do { int _i = (Y) * w + (X); if (!vis[_i] && HeartBg(px[_i])) { vis[_i] = 1; px[_i].a = 0; st[sp++] = _i; } } while (0)
-    for (int x = 0; x < w; x++) { HP(x, 0); HP(x, h - 1); }
-    for (int y = 0; y < h; y++) { HP(0, y); HP(w - 1, y); }
-    while (sp > 0)
-    {
-        int i = st[--sp], x = i % w, y = i / w;
-        if (x > 0) HP(x - 1, y);
-        if (x < w - 1) HP(x + 1, y);
-        if (y > 0) HP(x, y - 1);
-        if (y < h - 1) HP(x, y + 1);
-    }
-#undef HP
-    free(vis);
-    free(st);
     int x0 = w, x1 = 0, y0 = h, y1 = 0;
     for (int y = 0; y < h; y++)
         for (int x = 0; x < w; x++)
@@ -141,12 +119,136 @@ static void LoadHeart(const char *path)
         Color c = ep[i];
         bool red = c.r > 80 && c.r > c.g * 1.35f && c.r > c.b * 1.35f;
         if (red || (c.r > 240 && c.g > 240 && c.b > 240)) ep[i] = (Color){0, 0, 0, 0};
-        else if (c.a > 0) ep[i] = (Color){85, 100, 120, 255};
+        else if (c.a > 0) ep[i] = (Color){85, 100, 120, c.a};
     }
     texHeartEmpty = LoadTextureFromImage(e);
     GenTextureMipmaps(&texHeartEmpty);
     SetTextureFilter(texHeartEmpty, TEXTURE_FILTER_TRILINEAR);
     UnloadImage(e);
+    UnloadImage(img);
+}
+static void LoadFaces(const char *path)
+{
+    Image img = LoadImage(path);
+    if (!img.data) return;
+    ImageFormat(&img, PIXELFORMAT_UNCOMPRESSED_R8G8B8A8);
+    int w = img.width, h = img.height;
+    int limH = h > 235 ? 235 : h;
+    Color *px = (Color *)img.data;
+
+    /* 1. Limpa base irregular abaixo do corte do busto, poeira quase transparente
+          e bolsos de fundo branco presos entre mecha/queixo e orelha/gola */
+    for (int y = 0; y < h; y++)
+    {
+        for (int x = 0; x < w; x++)
+        {
+            int i = y * w + x;
+            Color c = px[i];
+            int cx = x % 192;
+            unsigned char mn = c.r < c.g ? (c.r < c.b ? c.r : c.b) : (c.g < c.b ? c.g : c.b);
+            unsigned char mx = c.r > c.g ? (c.r > c.b ? c.r : c.b) : (c.g > c.b ? c.g : c.b);
+            bool neutral = (mn >= 120 && (mx - mn) <= 22 && abs((int)c.r - (int)c.b) <= 14);
+            bool leftPocket = (y >= 155 && y <= 176 && cx >= 15 && cx <= 36 && neutral);
+            bool rightPocket = (y >= 134 && y <= 158 && cx >= 115 && cx <= 140 && neutral);
+            if (y >= limH || c.a < 45 || leftPocket || rightPocket)
+            {
+                px[i] = (Color){11, 15, 23, 0};
+            }
+        }
+    }
+
+    /* 2. Erosao multi-passo do halo cinza/branco externo ao contorno escuro */
+    unsigned char *rem = (unsigned char *)malloc((size_t)w * (size_t)limH);
+    if (rem)
+    {
+        for (int pass = 0; pass < 5; pass++)
+        {
+            int count = 0;
+            for (int i = 0; i < w * limH; i++) rem[i] = 0;
+            for (int y = 0; y < limH; y++)
+            {
+                for (int x = 0; x < w; x++)
+                {
+                    int i = y * w + x;
+                    Color c = px[i];
+                    if (c.a == 0) continue;
+                    int cx = x % 192;
+                    bool adjTrans = (y == 0 || cx == 0 || cx == 191);
+                    if (!adjTrans)
+                    {
+                        for (int dy = -1; dy <= 1 && !adjTrans; dy++)
+                        {
+                            int ny = y + dy;
+                            if (ny < 0 || ny >= limH) continue;
+                            for (int dx = -1; dx <= 1; dx++)
+                            {
+                                int nx = x + dx;
+                                if (nx < 0 || nx >= w || (nx / 192) != (x / 192) || px[ny * w + nx].a == 0)
+                                {
+                                    adjTrans = true;
+                                    break;
+                                }
+                            }
+                        }
+                    }
+                    if (!adjTrans) continue;
+                    unsigned char mn = c.r < c.g ? (c.r < c.b ? c.r : c.b) : (c.g < c.b ? c.g : c.b);
+                    unsigned char mx = c.r > c.g ? (c.r > c.b ? c.r : c.b) : (c.g > c.b ? c.g : c.b);
+                    if ((mn >= 52 && (mx - mn) <= 42) || c.a < 185)
+                    {
+                        rem[i] = 1;
+                        count++;
+                    }
+                }
+            }
+            for (int i = 0; i < w * limH; i++)
+            {
+                if (rem[i]) px[i] = (Color){11, 15, 23, 0};
+            }
+            if (count == 0) break;
+        }
+        free(rem);
+    }
+
+    /* 3. Acabamento da borda externa e RGB escuro nos pixels transparentes contra bleed trilinear */
+    for (int y = 0; y < limH; y++)
+    {
+        for (int x = 0; x < w; x++)
+        {
+            int i = y * w + x;
+            if (px[i].a == 0)
+            {
+                px[i] = (Color){11, 15, 23, 0};
+                continue;
+            }
+            int cx = x % 192;
+            bool adjTrans = (y == 0 || cx == 0 || cx == 191 ||
+                             (x > 0 && px[i - 1].a == 0) ||
+                             (x < w - 1 && px[i + 1].a == 0) ||
+                             (y > 0 && px[i - w].a == 0) ||
+                             (y < limH - 1 && px[i + w].a == 0));
+            if (adjTrans)
+            {
+                unsigned char mn = px[i].r < px[i].g ? (px[i].r < px[i].b ? px[i].r : px[i].b) : (px[i].g < px[i].b ? px[i].g : px[i].b);
+                unsigned char mx = px[i].r > px[i].g ? (px[i].r > px[i].b ? px[i].r : px[i].b) : (px[i].g > px[i].b ? px[i].g : px[i].b);
+                if (mn >= 32 && (mx - mn) <= 45)
+                {
+                    px[i].r = 16;
+                    px[i].g = 18;
+                    px[i].b = 28;
+                }
+                px[i].a = 255;
+            }
+        }
+    }
+
+    if (limH < h) ImageCrop(&img, (Rectangle){0, 0, (float)w, (float)limH});
+    texFaces = LoadTextureFromImage(img);
+    if (texFaces.id)
+    {
+        GenTextureMipmaps(&texFaces);
+        SetTextureFilter(texFaces, TEXTURE_FILTER_TRILINEAR);
+    }
     UnloadImage(img);
 }
 static void DrawTexFit(Texture2D t, Vector2 c, float h, Color tint)
@@ -1903,8 +2005,9 @@ static void DrawMinimap(void)
 }
 static void DrawFace(int idx, float x, float y, float h)
 {
+    float fh = texFaces.height > 0 ? (float)texFaces.height : 235.0f;
     float w = h * 192.0f / 248.0f;
-    DrawTexturePro(texFaces, (Rectangle){idx * 192.0f, 0, 192, 248}, (Rectangle){x, y, w, h}, V2(0, 0), 0, WHITE);
+    DrawTexturePro(texFaces, (Rectangle){idx * 192.0f, 0, 192, fh}, (Rectangle){x, y, w, h}, V2(0, 0), 0, WHITE);
 }
 static void DrawHUD(void)
 {
@@ -2174,7 +2277,7 @@ void InvEnter(GameState *game)
         LoadHeart(ASSETS "sprites/vidas.png");
         texElira = LoadTexture(ASSETS "sprites/invasao/elira_sheet.png");
         SetTextureFilter(texElira, TEXTURE_FILTER_POINT);
-        texFaces = LoadTexSmooth(ASSETS "sprites/invasao/elira_rostos.png");
+        LoadFaces(ASSETS "sprites/invasao/elira_rostos.png");
         texFx = LoadTexture(ASSETS "sprites/invasao/elira_fx.png");
         texEnemies = LoadTexSmooth(ASSETS "sprites/invasao/inimigos.png");
         texBoss[0] = LoadTexSmooth(ASSETS "sprites/invasao/boss_1990.png");
