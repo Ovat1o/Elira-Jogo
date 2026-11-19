@@ -2923,7 +2923,7 @@ static void Draw(void)
             DrawRectangle((int)(pt[i].p.x - s / 2), (int)(pt[i].p.y - s / 2), (int)s, (int)s, Alpha(pt[i].c, pt[i].life / pt[i].max));
         }
     for (int i = 0; i < MAXP; i++)
-        if (pk[i].on) DrawPickupBalloon(&pk[i]);
+        if (pk[i].on && !ItemLocked()) DrawPickupBalloon(&pk[i]); /* na sala protegida, o balao so aparece depois de liberar */
     if (fade > 0) DrawRectangleRec(ROOM, Alpha(C_BG, fade));
     EndMode2D();
     DrawHUD();
