@@ -1644,19 +1644,185 @@ static IafInput CpuInput(int me, float dt)
     memset(&s->once, 0, sizeof(s->once));
     return in;
 }
-static IafInput PlayerInput(void)
+/* ------------------------------------------------------------------ controles: teclado + ate 2 gamepads
+   Gamepad (Xbox ou PlayStation, pelo mapeamento padrao da raylib): analogico esquerdo ou direcional
+   movem; face esquerda (X / quadrado) = golpe fraco; face de cima (Y / triangulo) = golpe forte;
+   face direita (B / circulo) = tiro da Elira; face de baixo (A / X) = pular; ombro ou gatilho
+   direito = especial; START = pausa. O teclado continua valendo em paralelo. */
+#define IAF_PADS 2
+typedef struct { bool on; float ax, ay, rt; bool b[32]; } PadRaw;
+enum { VB_LEFT, VB_RIGHT, VB_UP, VB_DOWN, VB_LIGHT, VB_HEAVY, VB_SHOT, VB_JUMP, VB_SPECIAL, VB_START, VB_SELECT, VB_N };
+static PadRaw padNow[IAF_PADS], padPrev[IAF_PADS];
+static bool padKnown[IAF_PADS];
+static float padToastT = 0;
+static char padToast[64];
+static bool versusMode = false; /* 1 x 1: P1 = controle 1 + WASD; P2 = controle 2 + setas/teclado numerico */
+/* gancho para testar sem controle fisico (harness): se definido, substitui a leitura do hardware */
+static bool (*iafPadHook)(int pad, PadRaw *out) = NULL;
+
+static void ReadPadRaw(int i, PadRaw *r)
+{
+    memset(r, 0, sizeof *r);
+    if (iafPadHook) { r->on = iafPadHook(i, r); return; }
+    if (!IsGamepadAvailable(i)) return;
+    r->on = true;
+    r->ax = GetGamepadAxisMovement(i, GAMEPAD_AXIS_LEFT_X);
+    r->ay = GetGamepadAxisMovement(i, GAMEPAD_AXIS_LEFT_Y);
+    r->rt = GetGamepadAxisMovement(i, GAMEPAD_AXIS_RIGHT_TRIGGER);
+    for (int b = 1; b <= GAMEPAD_BUTTON_RIGHT_THUMB && b < 32; b++) r->b[b] = IsGamepadButtonDown(i, b);
+}
+/* botoes virtuais de um controle */
+static void PadVB(const PadRaw *r, bool v[VB_N])
+{
+    memset(v, 0, sizeof(bool) * VB_N);
+    if (!r->on) return;
+    v[VB_LEFT] = r->b[GAMEPAD_BUTTON_LEFT_FACE_LEFT] || r->ax < -0.45f;
+    v[VB_RIGHT] = r->b[GAMEPAD_BUTTON_LEFT_FACE_RIGHT] || r->ax > 0.45f;
+    v[VB_UP] = r->b[GAMEPAD_BUTTON_LEFT_FACE_UP] || r->ay < -0.6f;
+    v[VB_DOWN] = r->b[GAMEPAD_BUTTON_LEFT_FACE_DOWN] || r->ay > 0.55f;
+    v[VB_LIGHT] = r->b[GAMEPAD_BUTTON_RIGHT_FACE_LEFT];
+    v[VB_HEAVY] = r->b[GAMEPAD_BUTTON_RIGHT_FACE_UP];
+    v[VB_SHOT] = r->b[GAMEPAD_BUTTON_RIGHT_FACE_RIGHT];
+    v[VB_JUMP] = r->b[GAMEPAD_BUTTON_RIGHT_FACE_DOWN];
+    v[VB_SPECIAL] = r->b[GAMEPAD_BUTTON_RIGHT_TRIGGER_1] || r->b[GAMEPAD_BUTTON_RIGHT_TRIGGER_2] || r->rt > 0.5f;
+    v[VB_START] = r->b[GAMEPAD_BUTTON_MIDDLE_RIGHT];
+    v[VB_SELECT] = r->b[GAMEPAD_BUTTON_MIDDLE_LEFT];
+}
+static bool PadDown(int i, int vb)
+{
+    bool v[VB_N];
+    PadVB(&padNow[i], v);
+    return v[vb];
+}
+static bool PadPressed(int i, int vb)
+{
+    bool v[VB_N], p[VB_N];
+    PadVB(&padNow[i], v);
+    PadVB(&padPrev[i], p);
+    return v[vb] && !p[vb];
+}
+static bool AnyPadPressed(int vb)
+{
+    for (int i = 0; i < IAF_PADS; i++)
+        if (PadPressed(i, vb)) return true;
+    return false;
+}
+/* o controle i esta sendo usado por um jogador humano na luta atual? */
+static bool PadInUse(int i)
+{
+    if (versusMode) return true;
+    return !cpu[0] && (i == 0 || !padNow[0].on);
+}
+static void PollPads(float dt)
+{
+    for (int i = 0; i < IAF_PADS; i++)
+    {
+        padPrev[i] = padNow[i];
+        ReadPadRaw(i, &padNow[i]);
+        if (padNow[i].on != padKnown[i])
+        { /* conectou ou desconectou agora */
+            padKnown[i] = padNow[i].on;
+            snprintf(padToast, sizeof padToast, "CONTROLE %d %s", i + 1, padNow[i].on ? "CONECTADO" : "DESCONECTADO");
+            padToastT = 2.5f;
+            if (!padNow[i].on && iafScreen == SC_FIGHT && rstate == RS_FIGHT && PadInUse(i)) paused = true;
+        }
+    }
+    if (padToastT > 0) padToastT -= dt;
+}
+
+typedef enum { KB_ALL, KB_P1, KB_P2 } KbSet;
+/* entrada de um jogador: um conjunto de teclas + um controle (pad = -1: qualquer controle) */
+static IafInput ReadPlayer(KbSet kb, int pad)
 {
     IafInput in = {0};
-    in.left = IsKeyDown(KEY_A) || IsKeyDown(KEY_LEFT);
-    in.right = IsKeyDown(KEY_D) || IsKeyDown(KEY_RIGHT);
-    in.up = IsKeyDown(KEY_W) || IsKeyDown(KEY_UP);
-    in.upP = IsKeyPressed(KEY_W) || IsKeyPressed(KEY_UP);
-    in.down = IsKeyDown(KEY_S) || IsKeyDown(KEY_DOWN);
-    in.lightP = IsKeyPressed(KEY_J) || IsKeyPressed(KEY_Z);
-    in.heavyP = IsKeyPressed(KEY_K) || IsKeyPressed(KEY_X);
-    in.specialP = IsKeyPressed(KEY_L) || IsKeyPressed(KEY_C);
-    in.shotP = IsKeyPressed(KEY_I) || IsKeyPressed(KEY_V);
+    if (kb == KB_ALL || kb == KB_P1)
+    {
+        in.left = IsKeyDown(KEY_A);
+        in.right = IsKeyDown(KEY_D);
+        in.up = IsKeyDown(KEY_W);
+        in.upP = IsKeyPressed(KEY_W);
+        in.down = IsKeyDown(KEY_S);
+        in.lightP = IsKeyPressed(KEY_J);
+        in.heavyP = IsKeyPressed(KEY_K);
+        in.specialP = IsKeyPressed(KEY_L);
+        in.shotP = IsKeyPressed(KEY_I);
+    }
+    if (kb == KB_ALL || kb == KB_P2)
+    {
+        in.left = in.left || IsKeyDown(KEY_LEFT);
+        in.right = in.right || IsKeyDown(KEY_RIGHT);
+        in.up = in.up || IsKeyDown(KEY_UP);
+        in.upP = in.upP || IsKeyPressed(KEY_UP);
+        in.down = in.down || IsKeyDown(KEY_DOWN);
+    }
+    if (kb == KB_ALL)
+    {
+        in.lightP = in.lightP || IsKeyPressed(KEY_Z);
+        in.heavyP = in.heavyP || IsKeyPressed(KEY_X);
+        in.specialP = in.specialP || IsKeyPressed(KEY_C);
+        in.shotP = in.shotP || IsKeyPressed(KEY_V);
+    }
+    if (kb == KB_P2)
+    { /* teclado numerico: 1 fraco, 2 forte, 3 especial, 4 tiro */
+        in.lightP = IsKeyPressed(KEY_KP_1);
+        in.heavyP = IsKeyPressed(KEY_KP_2);
+        in.specialP = IsKeyPressed(KEY_KP_3);
+        in.shotP = IsKeyPressed(KEY_KP_4);
+    }
+    for (int i = 0; i < IAF_PADS; i++)
+    {
+        if ((pad >= 0 && i != pad) || !padNow[i].on) continue;
+        in.left = in.left || PadDown(i, VB_LEFT);
+        in.right = in.right || PadDown(i, VB_RIGHT);
+        in.down = in.down || PadDown(i, VB_DOWN);
+        in.up = in.up || PadDown(i, VB_UP) || PadDown(i, VB_JUMP);
+        in.upP = in.upP || PadPressed(i, VB_UP) || PadPressed(i, VB_JUMP);
+        in.lightP = in.lightP || PadPressed(i, VB_LIGHT);
+        in.heavyP = in.heavyP || PadPressed(i, VB_HEAVY);
+        in.shotP = in.shotP || PadPressed(i, VB_SHOT);
+        in.specialP = in.specialP || PadPressed(i, VB_SPECIAL);
+    }
     return in;
+}
+/* entrada do jogador humano no lado 'slot' (0 = esquerda, 1 = direita) */
+static IafInput HumanInput(int slot)
+{
+    if (!versusMode) return ReadPlayer(KB_ALL, -1);
+    return slot == 0 ? ReadPlayer(KB_P1, 0) : ReadPlayer(KB_P2, 1);
+}
+/* navegacao de menus: qualquer teclado ou controle */
+static bool AltDown(void) { return IsKeyDown(KEY_LEFT_ALT) || IsKeyDown(KEY_RIGHT_ALT); }
+static bool NavLeftP(void) { return IsKeyPressed(KEY_A) || IsKeyPressed(KEY_LEFT) || AnyPadPressed(VB_LEFT); }
+static bool NavRightP(void) { return IsKeyPressed(KEY_D) || IsKeyPressed(KEY_RIGHT) || AnyPadPressed(VB_RIGHT); }
+static bool NavOkP(void) { return (IsKeyPressed(KEY_ENTER) && !AltDown()) || IsKeyPressed(KEY_SPACE) || IsKeyPressed(KEY_J) || AnyPadPressed(VB_JUMP) || AnyPadPressed(VB_START); }
+static bool NavBackP(void) { return IsKeyPressed(KEY_ESCAPE) || AnyPadPressed(VB_SHOT) || AnyPadPressed(VB_SELECT); }
+static bool PauseP(void) { return IsKeyPressed(KEY_P) || AnyPadPressed(VB_START); }
+
+/* aviso de controle conectado/desconectado e indicador dos controles */
+static void DrawPadStatus(bool chips)
+{
+    if (chips)
+    {
+        for (int i = 0; i < IAF_PADS; i++)
+        {
+            float x = SCREEN_WIDTH - 250 + i * 120, y = 8;
+            bool on = padNow[i].on;
+            DrawRectangleRounded((Rectangle){x, y, 112, 22}, 0.4f, 6, on ? Fade(C_GREEN, 0.25f) : Fade(C_DIM, 0.12f));
+            DrawCircleV((Vector2){x + 12, y + 11}, 5, on ? C_GREEN : Fade(C_DIM, 0.6f));
+            char t[16];
+            snprintf(t, sizeof t, "CONTROLE %d", i + 1);
+            Txt(t, x + 22, y + 4, 13, on ? C_WHITE : C_DIM);
+        }
+    }
+    if (padToastT > 0)
+    {
+        float a = Clamp(padToastT / 0.4f, 0.0f, 1.0f);
+        float w = TxtW(padToast, 22) + 40;
+        Rectangle r = {SCREEN_WIDTH / 2.0f - w / 2, 100, w, 40};
+        DrawRectangleRounded(r, 0.4f, 6, Fade(C_INK, 0.85f * a));
+        DrawRectangleRoundedLinesEx(r, 0.4f, 6, 2, Fade(strstr(padToast, "DESCONECTADO") ? C_RED : C_GREEN, a));
+        TxtC(padToast, SCREEN_WIDTH / 2.0f, r.y + 9, 22, Fade(C_WHITE, a));
+    }
 }
 
 /* ------------------------------------------------------------------ fluxo */
@@ -1728,8 +1894,9 @@ static void EndRound(int winner)
 }
 static void UpdateFight(float dt)
 {
-    if (IsKeyPressed(KEY_P)) paused = !paused;
-    if (IsKeyPressed(KEY_ESCAPE)) { iafScreen = SC_SELECT; scT = 0; return; }
+    if (PauseP()) paused = !paused;
+    if (IsKeyPressed(KEY_ESCAPE) && !paused) paused = true; /* ESC pausa; na pausa, ESC ou B voltam a selecao */
+    else if (paused && (IsKeyPressed(KEY_ESCAPE) || AnyPadPressed(VB_SHOT))) { paused = false; iafScreen = SC_SELECT; scT = 0; return; }
     if (paused) return;
     if (shake > 0) shake -= dt;
     rsT += dt;
@@ -1742,8 +1909,8 @@ static void UpdateFight(float dt)
     }
     if (rstate == RS_FIGHT)
     {
-        IafInput i0 = cpu[0] ? CpuInput(0, dt) : PlayerInput();
-        IafInput i1 = cpu[1] ? CpuInput(1, dt) : PlayerInput();
+        IafInput i0 = cpu[0] ? CpuInput(0, dt) : HumanInput(0);
+        IafInput i1 = cpu[1] ? CpuInput(1, dt) : HumanInput(1);
         SimStep(dt, i0, i1);
         roundTimer -= dt;
         bool k0 = fz[0].st == ST_KO, k1 = fz[1].st == ST_KO;
@@ -1898,7 +2065,7 @@ static void DrawFightOverlay(void)
     {
         DrawRectangle(0, 0, SCREEN_WIDTH, SCREEN_HEIGHT, Fade(C_INK, 0.6f));
         TxtO("PAUSA", SCREEN_WIDTH / 2.0f, 300, 64, C_WHITE, C_INK);
-        TxtC("P: continuar   ESC: voltar à seleção", SCREEN_WIDTH / 2.0f, 380, 20, C_DIM);
+        TxtC("P / START: continuar      ESC / B: voltar à seleção", SCREEN_WIDTH / 2.0f, 380, 20, C_DIM);
     }
 }
 static void DrawFight(void)
@@ -2025,13 +2192,13 @@ static void DrawSelect(void)
         snprintf(lad, sizeof lad, "ARCADE: %s > %s > ELIRA (CHEFE FINAL)", NAME[l[0]], NAME[l[1]]);
     }
     TxtC(lad, SCREEN_WIDTH / 2.0f, 112, 16, Fade(C_WHITE, 0.8f));
-    TxtC("A/D ou SETAS: escolher    ENTER: confirmar    ESC: voltar ao menu", SCREEN_WIDTH / 2.0f, SCREEN_HEIGHT - 18, 14, C_DIM);
+    TxtC("A/D, SETAS ou CONTROLE: escolher    ENTER / A: confirmar    ESC / B: voltar ao menu", SCREEN_WIDTH / 2.0f, SCREEN_HEIGHT - 18, 14, C_DIM);
 }
 static void UpdateSelect(void)
 {
-    if (IsKeyPressed(KEY_A) || IsKeyPressed(KEY_LEFT)) sel = (sel + CH_N - 1) % CH_N;
-    if (IsKeyPressed(KEY_D) || IsKeyPressed(KEY_RIGHT)) sel = (sel + 1) % CH_N;
-    if (IsKeyPressed(KEY_ENTER) || IsKeyPressed(KEY_J))
+    if (NavLeftP()) sel = (sel + CH_N - 1) % CH_N;
+    if (NavRightP()) sel = (sel + 1) % CH_N;
+    if (NavOkP())
     {
         playerCh = sel;
         BuildLadder();
@@ -2055,7 +2222,7 @@ static void DrawVersus(void)
     if (ladderPos == 2 && b == CH_ELIRA) snprintf(d, sizeof d, "DESAFIO FINAL - A CHEFE");
     else snprintf(d, sizeof d, "DESAFIO %d DE 3", ladderPos + 1);
     TxtO(d, SCREEN_WIDTH / 2.0f, 40, 32, C_AMBER, C_INK);
-    TxtC("ENTER: lutar", SCREEN_WIDTH / 2.0f, SCREEN_HEIGHT - 30, 16, C_DIM);
+    TxtC("ENTER / A: lutar", SCREEN_WIDTH / 2.0f, SCREEN_HEIGHT - 30, 16, C_DIM);
 }
 static void IafDrawResult(bool final)
 {
@@ -2078,13 +2245,13 @@ static void IafDrawResult(bool final)
     Txt(NAME[w], q.x + 20, q.y + 14, 22, CHCOL[w]);
     Txt(WINQ[w], q.x + 20, q.y + 52, 17, C_WHITE);
     if (final) TxtC("As três rivais foram derrotadas. A arena é sua.", SCREEN_WIDTH / 2.0f, 650, 20, C_AMBER);
-    if (final) TxtC("ENTER: voltar à seleção", SCREEN_WIDTH / 2.0f, 684, 16, C_DIM);
+    if (final) TxtC("ENTER / A: voltar à seleção", SCREEN_WIDTH / 2.0f, 684, 16, C_DIM);
     else if (lastWon)
     {
-        snprintf(b, sizeof b, "ENTER: próximo desafio (%d de 3)    ESC: seleção", ladderPos + 2);
+        snprintf(b, sizeof b, "ENTER / A: próximo desafio (%d de 3)    ESC / B: seleção", ladderPos + 2);
         TxtC(b, SCREEN_WIDTH / 2.0f, 684, 16, C_DIM);
     }
-    else TxtC("ENTER: tentar de novo    ESC: seleção", SCREEN_WIDTH / 2.0f, 684, 16, C_DIM);
+    else TxtC("ENTER / A: tentar de novo    ESC / B: seleção", SCREEN_WIDTH / 2.0f, 684, 16, C_DIM);
 }
 
 /* ------------------------------------------------------------------ interface com o jogo (iafight.h) */
@@ -2101,6 +2268,12 @@ void IafEnter(GameState *game)
     cpu[0] = false;
     cpu[1] = true;
     paused = false;
+    for (int i = 0; i < IAF_PADS; i++)
+    { /* sincroniza: um botao ainda apertado no menu principal nao vale como clique aqui */
+        ReadPadRaw(i, &padNow[i]);
+        padPrev[i] = padNow[i];
+        padKnown[i] = padNow[i].on;
+    }
     iafScreen = SC_SELECT;
     scT = 0;
     game->screen = SCREEN_IAFIGHT;
@@ -2111,29 +2284,29 @@ void IafUpdate(GameState *game, float dt)
     if (dt > 1 / 30.0f) dt = 1 / 30.0f;
     gt += dt;
     scT += dt;
-    bool alt = IsKeyDown(KEY_LEFT_ALT) || IsKeyDown(KEY_RIGHT_ALT); /* Alt+Enter e tela cheia */
+    PollPads(dt);
     switch (iafScreen)
     {
     case SC_SELECT:
-        if (IsKeyPressed(KEY_ESCAPE)) { game->screen = SCREEN_TITLE; return; }
-        if (!alt) UpdateSelect();
+        if (NavBackP()) { game->screen = SCREEN_TITLE; return; }
+        UpdateSelect();
         break;
     case SC_VERSUS:
-        if ((IsKeyPressed(KEY_ENTER) && !alt) || scT > 2.6f) { StartMatch(); iafScreen = SC_FIGHT; scT = 0; }
-        if (IsKeyPressed(KEY_ESCAPE)) iafScreen = SC_SELECT;
+        if (NavOkP() || scT > 2.6f) { StartMatch(); iafScreen = SC_FIGHT; scT = 0; }
+        else if (NavBackP()) iafScreen = SC_SELECT;
         break;
     case SC_FIGHT: UpdateFight(dt); break;
     case SC_RESULT:
-        if (scT > 0.6f && IsKeyPressed(KEY_ENTER) && !alt)
+        if (scT > 0.6f && NavOkP())
         {
             if (lastWon) ladderPos++;
             iafScreen = SC_VERSUS;
             scT = 0;
         }
-        if (IsKeyPressed(KEY_ESCAPE)) { iafScreen = SC_SELECT; scT = 0; }
+        else if (NavBackP()) { iafScreen = SC_SELECT; scT = 0; }
         break;
     case SC_FINAL:
-        if (scT > 0.6f && ((IsKeyPressed(KEY_ENTER) && !alt) || IsKeyPressed(KEY_ESCAPE))) { iafScreen = SC_SELECT; scT = 0; }
+        if (scT > 0.6f && (NavOkP() || NavBackP())) { iafScreen = SC_SELECT; scT = 0; }
         break;
     }
 }
@@ -2149,6 +2322,14 @@ void IafDraw(void)
     case SC_RESULT: IafDrawResult(false); break;
     case SC_FINAL: IafDrawResult(true); break;
     }
+    DrawPadStatus(iafScreen != SC_FIGHT);
+}
+
+bool IafPadWantsEnter(void)
+{ /* START ou A em qualquer controle abre o modo a partir do menu principal */
+    for (int i = 0; i < IAF_PADS; i++)
+        if (IsGamepadAvailable(i) && (IsGamepadButtonPressed(i, GAMEPAD_BUTTON_MIDDLE_RIGHT) || IsGamepadButtonPressed(i, GAMEPAD_BUTTON_RIGHT_FACE_DOWN))) return true;
+    return false;
 }
 
 void IafUnload(void)

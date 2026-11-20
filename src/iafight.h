@@ -17,6 +17,9 @@ void IafUpdate(GameState *game, float dt);
 /* Desenha o modo no render target que o main.c ja abriu (1280x720). */
 void IafDraw(void);
 
+/* true quando START ou A foi apertado em algum controle (atalho do menu principal para o modo). */
+bool IafPadWantsEnter(void);
+
 /* Libera a textura do modo (chamar antes de CloseWindow). */
 void IafUnload(void);
 

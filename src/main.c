@@ -173,7 +173,7 @@ int main(int argc, char **argv)
                 {
                     InvEnter(&game);
                 }
-                else if (Clicked((Rectangle){86, 458, 350, 54}) || IsKeyPressed(KEY_F))
+                else if (Clicked((Rectangle){86, 458, 350, 54}) || IsKeyPressed(KEY_F) || IafPadWantsEnter())
                 {
                     IafEnter(&game);
                 }
