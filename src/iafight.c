@@ -788,6 +788,7 @@ static int EliraFrameIdx(Fighter *a, float *yoff)
 static Texture2D texClaude;
 #define CL_SCALE 2.0f
 #define CL_FRONT 190.0f /* do centro ate a frente do corpo largo: prisma, feixe e pulso de luz */
+#define CL_STRIKE_REACH 256.0f /* ponta do punho (soco forte) e do pe (chute frontal) no quadro mais esticado */
 static int CAFrame(int anim, int i)
 {
     int n = CA_COUNT[anim];
@@ -1356,6 +1357,26 @@ static void UpdateFighter(Fighter *a, Fighter *o, IafInput in, float dt)
             float win = d->st + d->ac, t0 = a->atkT - dt;
             float adv = a->atk == AT_LIGHT ? IAF_LUNGE_LIGHT : (a->atk == AT_HEAVY ? IAF_LUNGE_HEAVY : (a->atk == AT_FWDH ? IAF_LUNGE_FWDH : (a->atk == AT_UPPER ? IAF_LUNGE_LIGHT : IAF_LUNGE_LOW)));
             if (t0 < win) a->x += a->face * adv * fminf(dt, win - t0) / win;
+        }
+        if (ground && a->ch == CH_CLAUDE && (a->atk == AT_FWDH || a->atk == AT_HEAVY) && OnGround(o) && o->st != ST_KO)
+        { /* o punho/pe do sprite vai ate CL_STRIKE_REACH: colado, o Claude recua no preparo para o golpe
+             terminar dentro do corpo do oponente em vez de atravessa-lo (na parede, quem recua e o oponente) */
+            const Atk *d = &ATK[a->ch][a->atk];
+            float need = CL_STRIKE_REACH - BodyHalf(o) - 6, dist = (o->x - a->x) * a->face;
+            if (dist > 0 && dist < need && a->atkT < d->st + d->ac)
+            {
+                float left = d->st - a->atkT, gap = need - dist;
+                float mv = left > dt ? gap * dt / left : gap;
+                float back = a->x - a->face * mv;
+                if (back < IAF_WALL_L || back > IAF_WALL_R)
+                {
+                    float can = a->face > 0 ? a->x - IAF_WALL_L : IAF_WALL_R - a->x;
+                    a->x -= a->face * can;
+                    o->x += a->face * (mv - can);
+                    o->x = Clamp(o->x, IAF_WALL_L, IAF_WALL_R);
+                }
+                else a->x = back;
+            }
         }
         if (a->atk == AT_SPECIAL) UpdateSpecial(a, o, dt);
         else if (a->atk == AT_SHOT)
