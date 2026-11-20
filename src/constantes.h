@@ -131,7 +131,9 @@
 #define IAF_HP_MAX          1000.0f  /* vida de cada lutador */
 #define IAF_METER_MAX       100.0f   /* barra CARGA cheia */
 #define IAF_SPECIAL_COST    50.0f    /* CARGA gasta por especial */
-#define IAF_ROUND_TIME      99.0f    /* cronometro do round (s) */
+#define IAF_ROUND_TIME      60.0f    /* cronometro do round (s); curto para o ritmo de evento */
+#define IAF_INTRO_ROUND     0.7f     /* abertura: "ROUND n" fica ate este instante (s) */
+#define IAF_INTRO_TOTAL     1.2f     /* abertura: "LUTEM!" ate a luta comecar (s) */
 #define IAF_SHOT_STARTUP    0.20f    /* tiro de plasma da Elira: preparo (s) */
 #define IAF_SHOT_ACTIVE     0.06f    /* disparo (s) */
 #define IAF_SHOT_RECOVERY   0.28f    /* recuperacao (s) */

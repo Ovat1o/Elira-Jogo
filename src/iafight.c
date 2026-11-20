@@ -949,7 +949,7 @@ static void DrawStage(void)
 }
 
 /* ------------------------------------------------------------------ jogo: estado */
-typedef enum { SC_MODE, SC_SELECT, SC_VERSUS, SC_FIGHT, SC_RESULT, SC_FINAL } IafScreen;
+typedef enum { SC_MODE, SC_SELECT, SC_VERSUS, SC_FIGHT, SC_RESULT, SC_FINAL, SC_CONTROLS } IafScreen;
 typedef enum { RS_INTRO, RS_FIGHT, RS_KO, RS_TIMEUP } RState;
 static IafScreen iafScreen = SC_SELECT;
 static int sel = 0, playerCh = CH_ELIRA;
@@ -1813,7 +1813,7 @@ static bool AltDown(void) { return IsKeyDown(KEY_LEFT_ALT) || IsKeyDown(KEY_RIGH
 static bool NavLeftP(void) { return IsKeyPressed(KEY_A) || IsKeyPressed(KEY_LEFT) || AnyPadPressed(VB_LEFT); }
 static bool NavRightP(void) { return IsKeyPressed(KEY_D) || IsKeyPressed(KEY_RIGHT) || AnyPadPressed(VB_RIGHT); }
 static bool NavOkP(void) { return (IsKeyPressed(KEY_ENTER) && !AltDown()) || IsKeyPressed(KEY_SPACE) || IsKeyPressed(KEY_J) || AnyPadPressed(VB_JUMP) || AnyPadPressed(VB_START); }
-static bool NavBackP(void) { return IsKeyPressed(KEY_ESCAPE) || AnyPadPressed(VB_SHOT) || AnyPadPressed(VB_SELECT); }
+static bool NavBackP(void) { return IsKeyPressed(KEY_ESCAPE) || AnyPadPressed(VB_SHOT); }
 static bool PauseP(void) { return IsKeyPressed(KEY_P) || AnyPadPressed(VB_START); }
 static bool NavUpP(void) { return IsKeyPressed(KEY_W) || IsKeyPressed(KEY_UP) || AnyPadPressed(VB_UP); }
 static bool NavDownP(void) { return IsKeyPressed(KEY_S) || IsKeyPressed(KEY_DOWN) || AnyPadPressed(VB_DOWN); }
@@ -1948,7 +1948,7 @@ static void UpdateFight(float dt)
     if (rstate == RS_INTRO)
     {
         SimStep(dt, none, none);
-        if (rsT > 2.0f) { rstate = RS_FIGHT; rsT = 0; }
+        if (rsT > IAF_INTRO_TOTAL) { rstate = RS_FIGHT; rsT = 0; }
         return;
     }
     if (rstate == RS_FIGHT)
@@ -2077,16 +2077,16 @@ static void DrawFightOverlay(void)
         bool last = (wins[0] == 1 && wins[1] == 1);
         if (last) snprintf(b, sizeof b, "ROUND FINAL");
         else snprintf(b, sizeof b, "ROUND %d", roundNo);
-        if (rsT < 1.2f)
+        if (rsT < IAF_INTRO_ROUND)
         {
-            float k = EaseOut(rsT / 0.25f);
+            float k = EaseOut(rsT / 0.18f);
             DrawRectangle(0, 300, SCREEN_WIDTH, (int)(90 * k), Fade(C_INK, 0.6f));
             TxtO(b, SCREEN_WIDTH / 2.0f + (1 - k) * 300, 312, 64, C_WHITE, C_INK);
         }
         else
         {
-            float k = EaseOut((rsT - 1.2f) / 0.2f);
-            TxtO("EXECUTAR!", SCREEN_WIDTH / 2.0f, 300, (int)(60 + 20 * k), C_CYAN, C_INK);
+            float k = EaseOut((rsT - IAF_INTRO_ROUND) / 0.15f);
+            TxtO("LUTEM!", SCREEN_WIDTH / 2.0f, 296, (int)(64 + 24 * k), C_AMBER, C_INK);
         }
     }
     if (rstate == RS_KO || rstate == RS_TIMEUP)
@@ -2237,7 +2237,7 @@ static void DrawSelect(void)
         snprintf(lad, sizeof lad, "ARCADE: %s > %s > ELIRA (CHEFE FINAL)", NAME[l[0]], NAME[l[1]]);
     }
     TxtC(lad, SCREEN_WIDTH / 2.0f, 112, 16, Fade(C_WHITE, 0.8f));
-    TxtC("A/D, SETAS ou CONTROLE: escolher    ENTER / A: confirmar    ESC / B: voltar ao menu", SCREEN_WIDTH / 2.0f, SCREEN_HEIGHT - 18, 14, C_DIM);
+    TxtC("A/D, SETAS ou CONTROLE: escolher    ENTER / A: confirmar    TAB / SELECT: controles    ESC / B: voltar", SCREEN_WIDTH / 2.0f, SCREEN_HEIGHT - 18, 14, C_DIM);
 }
 static void UpdateSelect(void)
 {
@@ -2307,6 +2307,119 @@ static void IafDrawResult(bool final)
     else TxtC("ENTER / A: tentar de novo    ESC / B: seleção", SCREEN_WIDTH / 2.0f, 684, 16, C_DIM);
 }
 
+/* ------------------------------------------------------------------ tela de controles */
+static IafScreen ctrlBack = SC_SELECT; /* tela para onde a de controles volta */
+static bool ControlsKeyP(void) { return IsKeyPressed(KEY_TAB) || AnyPadPressed(VB_SELECT); }
+static void OpenControls(void) { ctrlBack = iafScreen; iafScreen = SC_CONTROLS; scT = 0; }
+/* simbolo de botao do PlayStation desenhado (a fonte do jogo nao tem esses glifos) */
+static void PsGlyph(Vector2 c, int kind, float r, Color col)
+{
+    switch (kind)
+    {
+    case 0: DrawRectangleLinesEx((Rectangle){c.x - r, c.y - r, 2 * r, 2 * r}, 2, col); break; /* quadrado */
+    case 1: /* triangulo */
+        DrawLineEx((Vector2){c.x, c.y - r}, (Vector2){c.x + r, c.y + r * 0.8f}, 2, col);
+        DrawLineEx((Vector2){c.x + r, c.y + r * 0.8f}, (Vector2){c.x - r, c.y + r * 0.8f}, 2, col);
+        DrawLineEx((Vector2){c.x - r, c.y + r * 0.8f}, (Vector2){c.x, c.y - r}, 2, col);
+        break;
+    case 2: DrawRing(c, r - 2, r, 0, 360, 24, col); break; /* circulo */
+    default: /* xis */
+        DrawLineEx((Vector2){c.x - r, c.y - r}, (Vector2){c.x + r, c.y + r}, 2, col);
+        DrawLineEx((Vector2){c.x - r, c.y + r}, (Vector2){c.x + r, c.y - r}, 2, col);
+        break;
+    }
+}
+static void DrawControls(void)
+{
+    DrawBackdrop(C_GREEN);
+    TxtO("CONTROLES", SCREEN_WIDTH / 2.0f, 18, 56, C_WHITE, C_INK);
+    /* ---- controle */
+    Rectangle pane = {40, 92, 720, 470};
+    DrawRectangleRounded(pane, 0.06f, 6, (Color){12, 14, 30, 235});
+    DrawRectangleRoundedLinesEx(pane, 0.06f, 6, 2, Fade(C_GREEN, 0.6f));
+    Txt("CONTROLE  (Xbox ou PlayStation)", pane.x + 20, pane.y + 14, 22, C_GREEN);
+    Vector2 o = {pane.x + 190, pane.y + 220};
+    Color body = (Color){46, 52, 72, 255}, edge = (Color){90, 100, 130, 255}, dark = (Color){24, 28, 40, 255};
+    DrawCircleV((Vector2){o.x - 92, o.y + 40}, 56, body); /* pegadores */
+    DrawCircleV((Vector2){o.x + 92, o.y + 40}, 56, body);
+    DrawRectangleRounded((Rectangle){o.x - 150, o.y - 56, 300, 112}, 0.6f, 12, body);
+    DrawRectangleRoundedLinesEx((Rectangle){o.x - 150, o.y - 56, 300, 112}, 0.6f, 12, 2, edge);
+    DrawRectangleRounded((Rectangle){o.x + 64, o.y - 76, 76, 22}, 0.6f, 6, C_AMBER); /* ombro direito: especial */
+    DrawRectangleRounded((Rectangle){o.x - 140, o.y - 76, 76, 22}, 0.6f, 6, Fade(edge, 0.5f));
+    TxtC("RB / R1", o.x + 102, o.y - 72, 13, C_INK);
+    Vector2 st = {o.x - 92, o.y - 14}, dp = {o.x - 44, o.y + 34};
+    DrawCircleV(st, 22, dark);
+    DrawCircleV(st, 14, C_CYAN);
+    DrawRectangle((int)dp.x - 7, (int)dp.y - 20, 14, 40, C_CYAN);
+    DrawRectangle((int)dp.x - 20, (int)dp.y - 7, 40, 14, C_CYAN);
+    DrawRectangleRounded((Rectangle){o.x + 10, o.y - 30, 24, 11}, 0.6f, 4, C_WHITE); /* start */
+    DrawRectangleRounded((Rectangle){o.x - 34, o.y - 30, 24, 11}, 0.6f, 4, edge);    /* select */
+    Vector2 fc = {o.x + 92, o.y - 4};
+    static const char *XB[4] = {"Y", "X", "B", "A"};
+    static const Color FC[4] = {{250, 210, 80, 255}, {80, 150, 255, 255}, {240, 90, 90, 255}, {110, 220, 120, 255}};
+    static const int PS[4] = {1, 0, 2, 3};
+    static const char *ACTS[4] = {"CHUTE  (golpe forte)", "SOCO  (golpe fraco)", "TIRO  (só a Elira)", "PULAR  /  confirmar"};
+    Vector2 fp[4] = {{fc.x, fc.y - 26}, {fc.x - 26, fc.y}, {fc.x + 26, fc.y}, {fc.x, fc.y + 26}};
+    for (int i = 0; i < 4; i++) DrawCircleV(fp[i], 13, FC[i]);
+    /* legenda */
+    float lx = pane.x + 400, ly = pane.y + 76;
+    for (int i = 0; i < 4; i++)
+    {
+        float y = ly + i * 46;
+        DrawCircleV((Vector2){lx + 14, y + 10}, 14, FC[i]);
+        TxtC(XB[i], lx + 14, y + 1, 16, C_INK);
+        DrawCircleV((Vector2){lx + 46, y + 10}, 14, (Color){30, 34, 52, 255});
+        PsGlyph((Vector2){lx + 46, y + 10}, PS[i], 6, C_WHITE);
+        Txt(ACTS[i], lx + 72, y + 1, 18, C_WHITE);
+    }
+    float y4 = ly + 4 * 46;
+    DrawRectangleRounded((Rectangle){lx, y4, 60, 22}, 0.6f, 6, C_AMBER);
+    TxtC("RB/RT", lx + 30, y4 + 4, 13, C_INK);
+    Txt("ESPECIAL  (R1 / R2)", lx + 72, y4 + 1, 18, C_WHITE);
+    DrawRectangleRounded((Rectangle){lx, y4 + 46, 60, 22}, 0.6f, 6, C_WHITE);
+    TxtC("START", lx + 30, y4 + 50, 13, C_INK);
+    Txt("PAUSA", lx + 72, y4 + 47, 18, C_WHITE);
+    DrawCircleV((Vector2){lx + 14, y4 + 104}, 12, C_CYAN);
+    Txt("MOVER  (analógico ou direcional)", lx + 34, y4 + 94, 18, C_WHITE);
+    Txt("SELECT: esta tela", lx + 34, y4 + 124, 15, C_DIM);
+    Txt("Para trás: DEFENDE (escudo)    Para baixo: AGACHA    Agachado + golpe: RASTEIRA", pane.x + 20, pane.y + pane.height - 64, 15, C_DIM);
+    Txt("No ar + golpe: CHUTE AÉREO    Especial gasta metade da barra CARGA    B: voltar nos menus", pane.x + 20, pane.y + pane.height - 38, 15, C_DIM);
+    /* ---- teclado */
+    Rectangle kp = {780, 92, 460, 470};
+    DrawRectangleRounded(kp, 0.06f, 6, (Color){12, 14, 30, 235});
+    DrawRectangleRoundedLinesEx(kp, 0.06f, 6, 2, Fade(C_CYAN, 0.6f));
+    Txt("TECLADO", kp.x + 20, kp.y + 14, 22, C_CYAN);
+    static const char *ACT[8] = {"Mover", "Pular", "Agachar", "Soco (fraco)", "Chute (forte)", "Especial", "Tiro (Elira)", "Pausa"};
+    static const char *K1[8] = {"A / D  ou  SETAS", "W  ou  SETA CIMA", "S  ou  SETA BAIXO", "J  ou  Z", "K  ou  X", "L  ou  C", "I  ou  V", "P  ou  ESC"};
+    static const char *KP1[8] = {"A / D", "W", "S", "J", "K", "L", "I", "P"};
+    static const char *KP2[8] = {"SETAS", "SETA CIMA", "SETA BAIXO", "1 (num.)", "2 (num.)", "3 (num.)", "4 (num.)", "P"};
+    Txt("1 JOGADOR x CPU", kp.x + 20, kp.y + 54, 16, C_AMBER);
+    for (int i = 0; i < 8; i++)
+    {
+        float y = kp.y + 80 + i * 22;
+        Txt(ACT[i], kp.x + 20, y, 15, C_DIM);
+        Txt(K1[i], kp.x + 170, y, 15, C_WHITE);
+    }
+    float y0 = kp.y + 270;
+    Txt("1 x 1", kp.x + 20, y0, 16, C_AMBER);
+    Txt("P1", kp.x + 170, y0, 16, C_CYAN);
+    Txt("P2", kp.x + 300, y0, 16, C_RED);
+    for (int i = 0; i < 7; i++)
+    {
+        float y = y0 + 24 + i * 22;
+        Txt(ACT[i], kp.x + 20, y, 15, C_DIM);
+        Txt(KP1[i], kp.x + 170, y, 15, C_WHITE);
+        Txt(KP2[i], kp.x + 300, y, 15, C_WHITE);
+    }
+    (void)KP2[7];
+    TxtC("No 1 x 1: P1 usa o controle 1 e P2 o controle 2; sem o 2º controle, o P2 joga no teclado.", SCREEN_WIDTH / 2.0f, 586, 16, C_DIM);
+    TxtC("TAB / SELECT, ESC / B ou ENTER / A: voltar", SCREEN_WIDTH / 2.0f, SCREEN_HEIGHT - 34, 16, C_DIM);
+}
+static void UpdateControls(void)
+{
+    if (scT > 0.15f && (ControlsKeyP() || NavBackP() || NavOkP())) { iafScreen = ctrlBack; scT = 0; }
+}
+
 /* ------------------------------------------------------------------ tela de modo */
 static const char *MODE_TXT[2] = {"1 JOGADOR x CPU", "1 x 1  (VERSUS)"};
 static const char *MODE_SUB[2] = {"Arcade: enfrente as outras três inteligências, melhor de 3 rounds.",
@@ -2327,7 +2440,7 @@ static void DrawMode(void)
         TxtC(MODE_TXT[i], r.x + r.width / 2, r.y + 18, 40, on ? C_WHITE : C_DIM);
         TxtC(MODE_SUB[i], r.x + r.width / 2, r.y + 70, 16, on ? Fade(c, 0.95f) : Fade(C_DIM, 0.7f));
     }
-    TxtC("W/S, SETAS ou CONTROLE: escolher    ENTER / A: confirmar    ESC / B: voltar ao menu", SCREEN_WIDTH / 2.0f, SCREEN_HEIGHT - 30, 16, C_DIM);
+    TxtC("W/S, SETAS ou CONTROLE: escolher    ENTER / A: confirmar    TAB / SELECT: controles    ESC / B: voltar ao menu", SCREEN_WIDTH / 2.0f, SCREEN_HEIGHT - 30, 16, C_DIM);
 }
 static void UpdateMode(void)
 {
@@ -2404,11 +2517,11 @@ static void DrawSelectVs(void)
         }
     }
     if (readyP[0] && readyP[1]) TxtO("LUTEM!", SCREEN_WIDTH / 2.0f, 300, 72, C_AMBER, C_INK);
-    TxtC("ESC: voltar ao modo", SCREEN_WIDTH / 2.0f, SCREEN_HEIGHT - 26, 14, C_DIM);
+    TxtC("TAB / SELECT: ver controles      ESC: voltar ao modo", SCREEN_WIDTH / 2.0f, SCREEN_HEIGHT - 26, 14, C_DIM);
 }
 static void UpdateSelectVs(float dt)
 {
-    if (IsKeyPressed(KEY_ESCAPE) || ((!readyP[0] && PadPressed(0, VB_SHOT)) || (!readyP[1] && PadPressed(1, VB_SHOT))) || AnyPadPressed(VB_SELECT))
+    if (IsKeyPressed(KEY_ESCAPE) || (!readyP[0] && PadPressed(0, VB_SHOT)) || (!readyP[1] && PadPressed(1, VB_SHOT)))
     {
         iafScreen = SC_MODE;
         scT = 0;
@@ -2515,10 +2628,13 @@ void IafUpdate(GameState *game, float dt)
     switch (iafScreen)
     {
     case SC_MODE:
+        if (ControlsKeyP()) { OpenControls(); break; }
         if (NavBackP()) { game->screen = SCREEN_TITLE; return; }
         UpdateMode();
         break;
+    case SC_CONTROLS: UpdateControls(); break;
     case SC_SELECT:
+        if (ControlsKeyP()) { OpenControls(); break; }
         if (versusMode) { UpdateSelectVs(dt); break; }
         if (NavBackP()) { iafScreen = SC_MODE; scT = 0; break; }
         UpdateSelect();
@@ -2550,6 +2666,7 @@ void IafDraw(void)
     switch (iafScreen)
     {
     case SC_MODE: DrawMode(); break;
+    case SC_CONTROLS: DrawControls(); break;
     case SC_SELECT: if (versusMode) DrawSelectVs(); else DrawSelect(); break;
     case SC_VERSUS: DrawVersus(); break;
     case SC_FIGHT: DrawFight(); break;
