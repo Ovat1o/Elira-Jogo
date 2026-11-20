@@ -137,12 +137,12 @@ static const Atk ATK[CH_N][AT_SPECIAL] = {
                   {0.06f, 0.15f, 0.10f, 60, 96, 150, 90, 0.34f, 170, 2},
                   {0.22f, 0.10f, 0.32f, 105, 150, 170, 50, 0.48f, 330, 0},
                   {0.09f, 0.13f, 0.34f, 80, 120, 300, 270, 0.50f, 120, 0}},
-    [CH_ANTI] = {{0}, {0.07f, 0.08f, 0.14f, 44, 158, 175, 80, 0.28f, 160, 0}, /* alcances na ponta do golpe do sprite (2,5x) */
-                 {0.16f, 0.10f, 0.28f, 100, 160, 200, 110, 0.44f, 300, 0},  /* chute */
+    [CH_ANTI] = {{0}, {0.07f, 0.08f, 0.14f, 48, 158, 175, 80, 0.28f, 160, 0}, /* alcances na ponta do golpe do sprite (2,5x) */
+                 {0.16f, 0.10f, 0.28f, 92, 160, 200, 110, 0.44f, 300, 0},  /* chute */
                  {0.09f, 0.09f, 0.20f, 45, 152, 60, 56, 0.30f, 150, 1},     /* low kick */
-                 {0.05f, 0.18f, 0.10f, 55, 140, 110, 140, 0.32f, 160, 2},   /* ground slam: de cima para baixo */
-                 {0.20f, 0.10f, 0.30f, 92, 160, 190, 90, 0.44f, 320, 0},    /* heavy punch */
-                 {0.08f, 0.14f, 0.32f, 78, 150, 320, 300, 0.50f, 120, 0}},  /* uppercut (heavy punch subindo) */
+                 {0.05f, 0.18f, 0.10f, 26, 140, 110, 140, 0.32f, 160, 2},   /* ground slam: de cima para baixo */
+                 {0.20f, 0.10f, 0.30f, 65, 160, 190, 90, 0.44f, 320, 0},    /* heavy punch */
+                 {0.08f, 0.14f, 0.32f, 32, 150, 320, 300, 0.50f, 120, 0}},  /* uppercut (heavy punch subindo) */
 };
 /* especiais: preparo / janela ativa / recuperacao */
 static const float SP_ST[CH_N] = {0.42f, 0.08f, 0.14f, 0.22f};
@@ -960,6 +960,8 @@ static int ClaudeFrameIdx(Fighter *a)
 #include "iafight_antigravity.h"
 static Texture2D texAnti;
 #define AG_SCALE 2.5f
+/* equilibrio do Antigravity (simulacao CPU x CPU contra Elira e Claude) */
+#define AG_WELL_SLAM_DMG 110.0f /* queda no fim do poco gravitacional */
 static int AGFrame(int anim, int i)
 {
     int n = AA_COUNT[anim];
@@ -1468,7 +1470,7 @@ static void UpdateWell(float dt)
         {
             HitSparks((Vector2){well.x, well.y}, C_VIOLET, 30, 500);
             AddText((Vector2){well.x, well.y - 120}, "QUEDA LIVRE!", C_VIOLET, 24);
-            ApplyHit(a, o, 130, 0.7f, 120, 0, (Vector2){o->x, o->y - 100}, true, true);
+            ApplyHit(a, o, AG_WELL_SLAM_DMG, 0.7f, 120, 0, (Vector2){o->x, o->y - 100}, true, true);
             o->vy = 900; /* derrubada para baixo */
         }
         well.on = false;
