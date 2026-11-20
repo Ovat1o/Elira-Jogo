@@ -151,5 +151,8 @@
 #define IAF_ACTIVE_VISUAL   0.10f    /* o quadro de impacto fica pelo menos isto na tela (s) */
 #define IAF_SHOT_RECOIL     3.0f     /* recuo da Elira ao disparar o tiro de plasma (px) */
 #define IAF_MUZZLE_Y        84.0f    /* altura da boca do canhao da Elira acima dos pes (px) */
+#define IAF_LUNGE_FWDH      34.0f    /* avanco do corpo no soco longo (frente + forte) (px) */
+#define IAF_UPPER_CANCEL    0.08f    /* cima e forte com ate este intervalo: o pulo vira uppercut (s) */
+#define IAF_UPPER_LAUNCH    820.0f   /* velocidade para cima de quem leva o uppercut (px/s) */
 
 #endif /* CONSTANTES_H */

@@ -113,25 +113,36 @@ static const Color CHCOL[CH_N] = {{96, 214, 240, 255}, {222, 116, 76, 255}, {70,
 static const int STAT[CH_N][4] = {{3, 4, 2, 5}, {3, 3, 5, 3}, {5, 4, 2, 2}, {2, 5, 3, 4}};
 
 typedef enum { ST_IDLE, ST_WALK, ST_JUMP, ST_CROUCH, ST_BLOCK, ST_ATK, ST_HIT, ST_KO, ST_WIN, ST_LOSE } FState;
-typedef enum { AT_NONE, AT_LIGHT, AT_HEAVY, AT_LOW, AT_AIR, AT_SPECIAL, AT_SHOT } AtkKind;
+/* AT_FWDH = frente + forte (soco longo, mais lento); AT_UPPER = cima + forte (uppercut anti-aereo) */
+typedef enum { AT_NONE, AT_LIGHT, AT_HEAVY, AT_LOW, AT_AIR, AT_FWDH, AT_UPPER, AT_SPECIAL, AT_SHOT } AtkKind;
 typedef struct { float st, ac, rc, dmg, rx, top, h, stun, push; int type; } Atk; /* type: 0 meio, 1 baixo, 2 alto */
-static const Atk ATK[CH_N][5] = {
+/* por lutador: -, fraco, forte, rasteira, aereo, soco longo (frente + forte), uppercut (cima + forte).
+   O uppercut tem caixa alta (top grande): pega quem esta pulando por cima. */
+static const Atk ATK[CH_N][AT_SPECIAL] = {
     [CH_ELIRA] = {{0}, {0.06f, 0.08f, 0.15f, 45, 112, 168, 46, 0.30f, 170, 0},
                   {0.14f, 0.12f, 0.26f, 95, 138, 200, 95, 0.45f, 300, 0}, /* chute alto (forte) */
                   {0.08f, 0.09f, 0.20f, 42, 128, 46, 44, 0.30f, 150, 1},
-                  {0.05f, 0.16f, 0.10f, 55, 96, 150, 90, 0.32f, 160, 2}},
+                  {0.05f, 0.16f, 0.10f, 55, 96, 150, 90, 0.32f, 160, 2},
+                  {0.20f, 0.10f, 0.30f, 90, 150, 168, 50, 0.45f, 330, 0},  /* soco longo */
+                  {0.08f, 0.14f, 0.32f, 80, 124, 300, 270, 0.50f, 120, 0}}, /* uppercut (chute alto) */
     [CH_CLAUDE] = {{0}, {0.07f, 0.08f, 0.15f, 48, 240, 162, 66, 0.30f, 170, 0}, /* alcances no punho/pe do sprite (2x) */
-                   {0.17f, 0.10f, 0.30f, 105, 250, 170, 72, 0.45f, 380, 0},
+                   {0.17f, 0.10f, 0.30f, 105, 250, 150, 72, 0.45f, 380, 0},  /* chute frontal */
                    {0.10f, 0.08f, 0.22f, 50, 228, 44, 44, 0.32f, 160, 1},
-                   {0.05f, 0.15f, 0.10f, 55, 248, 80, 54, 0.32f, 160, 2}},
+                   {0.05f, 0.15f, 0.10f, 55, 248, 80, 54, 0.32f, 160, 2},
+                   {0.24f, 0.10f, 0.34f, 115, 262, 170, 72, 0.50f, 420, 0},  /* soco forte de alcance longo */
+                   {0.09f, 0.14f, 0.34f, 85, 210, 320, 290, 0.50f, 120, 0}}, /* uppercut */
     [CH_CODEX] = {{0}, {0.06f, 0.07f, 0.14f, 52, 100, 168, 50, 0.30f, 180, 0},
                   {0.20f, 0.10f, 0.32f, 120, 118, 200, 120, 0.48f, 330, 0},
                   {0.09f, 0.08f, 0.22f, 55, 116, 46, 46, 0.32f, 170, 1},
-                  {0.06f, 0.15f, 0.10f, 60, 96, 150, 90, 0.34f, 170, 2}},
+                  {0.06f, 0.15f, 0.10f, 60, 96, 150, 90, 0.34f, 170, 2},
+                  {0.22f, 0.10f, 0.32f, 105, 150, 170, 50, 0.48f, 330, 0},
+                  {0.09f, 0.13f, 0.34f, 80, 120, 300, 270, 0.50f, 120, 0}},
     [CH_ANTI] = {{0}, {0.07f, 0.08f, 0.14f, 44, 116, 176, 46, 0.28f, 160, 0},
                  {0.16f, 0.10f, 0.28f, 100, 140, 210, 80, 0.44f, 300, 0},
                  {0.09f, 0.09f, 0.20f, 45, 134, 46, 46, 0.30f, 150, 1},
-                 {0.05f, 0.18f, 0.10f, 55, 104, 150, 90, 0.32f, 160, 2}},
+                 {0.05f, 0.18f, 0.10f, 55, 104, 150, 90, 0.32f, 160, 2},
+                 {0.20f, 0.10f, 0.30f, 92, 160, 176, 50, 0.44f, 320, 0},
+                 {0.08f, 0.14f, 0.32f, 78, 126, 300, 270, 0.50f, 120, 0}},
 };
 /* especiais: preparo / janela ativa / recuperacao */
 static const float SP_ST[CH_N] = {0.42f, 0.08f, 0.14f, 0.22f};
@@ -659,6 +670,14 @@ static Pose PoseFor(Fighter *a)
             p = PCrouch();
             p.lF = Lerp(78, 88, e); p.kF = Lerp(122, 0, e); p.lean = 16 + 10 * e; p.aB = 120; p.eB = 30;
             break;
+        case AT_FWDH: /* soco longo: o corpo inteiro vai junto */
+            if (wind > 0) { p.aF = Lerp(55, 30, wind); p.eF = Lerp(75, 120, wind); p.lean -= 6 * wind; }
+            else { p.aF = Lerp(60, 90, e); p.eF = Lerp(60, 0, e); p.aB = 30; p.eB = 90; p.lean = 6 + 20 * e; p.lF = 22 + 22 * e; p.lB = -18 - 14 * e; }
+            break;
+        case AT_UPPER: /* uppercut: abaixa e sobe com o braco para o alto */
+            if (wind > 0) { p = PCrouch(); p.aF = 20; p.eF = 110; p.lean = 18; }
+            else { p.aF = Lerp(60, 168, e); p.eF = Lerp(90, 8, e); p.aB = 40; p.eB = 80; p.lean = -10 * e; p.rootY = 6 - 18 * e; p.lF = 30; p.kF = 10; }
+            break;
         case AT_AIR:
             p = PJump();
             p.lF = Lerp(70, 50, e); p.kF = Lerp(100, 0, e); p.aF = 120; p.lean = 10;
@@ -728,6 +747,8 @@ static int EliraFrameIdx(Fighter *a, float *yoff)
         {
         case AT_LIGHT: return AtkFrame(a, EA_PUNCH, 1, 1, d->st, d->ac, d->rc);
         case AT_HEAVY: return AtkFrame(a, EA_KICK, 2, 3, d->st, d->ac, d->rc);
+        case AT_FWDH: return AtkFrame(a, EA_PUNCH, 1, 1, d->st, d->ac, d->rc);  /* soco com avanco longo */
+        case AT_UPPER: return AtkFrame(a, EA_KICK, 2, 3, d->st, d->ac, d->rc);  /* sem uppercut na arte: chute alto */
         case AT_LOW: return AtkFrame(a, EA_SWEEP, 2, 2, d->st, d->ac, d->rc);
         case AT_AIR: return AtkFrame(a, EA_AIRKICK, 1, 1, d->st, d->ac, d->rc);
         case AT_SHOT: return AtkFrame(a, EA_SHOT, 3, 3, IAF_SHOT_STARTUP, IAF_SHOT_ACTIVE, IAF_SHOT_RECOVERY);
@@ -812,7 +833,9 @@ static int ClaudeFrameIdx(Fighter *a)
         switch (a->atk)
         {
         case AT_LIGHT: return ClaudeAtkFrame(a, CA_JAB, 2, 4, d->st, d->ac, d->rc);
-        case AT_HEAVY: return ClaudeAtkFrame(a, CA_HEAVY, 4, 6, d->st, d->ac, d->rc);
+        case AT_HEAVY: return ClaudeAtkFrame(a, CA_FKICK, 3, 6, d->st, d->ac, d->rc);
+        case AT_FWDH: return ClaudeAtkFrame(a, CA_HEAVY, 4, 6, d->st, d->ac, d->rc);
+        case AT_UPPER: return ClaudeAtkFrame(a, CA_UPPER, 4, 7, d->st, d->ac, d->rc);
         case AT_LOW: return ClaudeAtkFrame(a, CA_SWEEP, 4, 6, d->st, d->ac, d->rc);
         case AT_AIR: return ClaudeAtkFrame(a, CA_AIRKICK, 4, 6, d->st, d->ac, d->rc);
         case AT_SPECIAL:
@@ -840,7 +863,7 @@ static int ClaudeFrameIdx(Fighter *a)
    (angulos em graus a partir da frente; positivo = para baixo) */
 static void DrawAttackTrail(Fighter *a, float jx)
 {
-    if (a->st != ST_ATK || a->atk < AT_LIGHT || a->atk > AT_AIR) return;
+    if (a->st != ST_ATK || a->atk < AT_LIGHT || a->atk > AT_UPPER) return;
     const Atk *d = &ATK[a->ch][a->atk];
     float act = fmaxf(d->ac, IAF_ACTIVE_VISUAL), t = a->atkT - d->st, lead = 0.04f, life = act + 0.10f;
     if (t < -lead || t > life) return;
@@ -856,6 +879,8 @@ static void DrawAttackTrail(Fighter *a, float jx)
         else { cy = a->y - 105; r = d->rx * 0.72f; a0 = 70; a1 = -55; }                          /* chute subindo */
         break;
     case AT_LOW: cy = a->y - 70; r = d->rx * 0.68f; a0 = 20; a1 = 62; break;
+    case AT_FWDH: cy = a->y - d->top + d->h * 0.5f; r = d->rx * 0.66f; a0 = -10; a1 = 10; break; /* reto e longo */
+    case AT_UPPER: cy = a->y - 90; r = 110 + d->rx * 0.2f; a0 = 50; a1 = -85; break;              /* sobe em arco */
     default: cy = a->y - d->top + 20; r = d->rx * 0.7f; a0 = -25; a1 = 60; break; /* chute aereo, para baixo */
     }
     Color c = FCol(a);
@@ -1030,7 +1055,7 @@ static float HitstopFor(Fighter *att)
 {
     if (g_projHit) return g_projHit == 2 ? IAF_HITSTOP_SPECIAL : IAF_HITSTOP_LIGHT;
     if (att->st != ST_ATK) return IAF_HITSTOP_LIGHT;
-    if (att->atk == AT_HEAVY) return IAF_HITSTOP_HEAVY;
+    if (att->atk == AT_HEAVY || att->atk == AT_FWDH || att->atk == AT_UPPER) return IAF_HITSTOP_HEAVY;
     if (att->atk == AT_SPECIAL) return IAF_HITSTOP_SPECIAL;
     return IAF_HITSTOP_LIGHT;
 }
@@ -1288,11 +1313,11 @@ static void UpdateFighter(Fighter *a, Fighter *o, IafInput in, float dt)
     case ST_ATK:
     {
         a->atkT += dt;
-        if (ground && (a->atk == AT_LIGHT || a->atk == AT_HEAVY || a->atk == AT_LOW))
+        if (ground && (a->atk == AT_LIGHT || a->atk == AT_HEAVY || a->atk == AT_LOW || a->atk == AT_FWDH || a->atk == AT_UPPER))
         { /* avanco do corpo durante o preparo e o ativo do golpe */
             const Atk *d = &ATK[a->ch][a->atk];
             float win = d->st + d->ac, t0 = a->atkT - dt;
-            float adv = a->atk == AT_LIGHT ? IAF_LUNGE_LIGHT : (a->atk == AT_HEAVY ? IAF_LUNGE_HEAVY : IAF_LUNGE_LOW);
+            float adv = a->atk == AT_LIGHT ? IAF_LUNGE_LIGHT : (a->atk == AT_HEAVY ? IAF_LUNGE_HEAVY : (a->atk == AT_FWDH ? IAF_LUNGE_FWDH : (a->atk == AT_UPPER ? IAF_LUNGE_LIGHT : IAF_LUNGE_LOW)));
             if (t0 < win) a->x += a->face * adv * fminf(dt, win - t0) / win;
         }
         if (a->atk == AT_SPECIAL) UpdateSpecial(a, o, dt);
@@ -1319,7 +1344,9 @@ static void UpdateFighter(Fighter *a, Fighter *o, IafInput in, float dt)
                 {
                     a->hitDone = true;
                     Vector2 at = (Vector2){o->x - a->face * (Hurt(o).width * 0.5f - 7), top + d->h * 0.5f}; /* na borda de quem apanha */
-                    ApplyHit(a, o, d->dmg, d->stun, d->push, d->type, at, false, a->atk == AT_HEAVY && a->ch == CH_CLAUDE && !OnGround(o));
+                    bool up = a->atk == AT_UPPER;
+                    ApplyHit(a, o, d->dmg, d->stun, d->push, d->type, at, false, up || (a->atk == AT_HEAVY && a->ch == CH_CLAUDE && !OnGround(o)));
+                    if (up && o->st == ST_HIT) o->vy = -IAF_UPPER_LAUNCH; /* acertou (nao defendeu): sobe mais */
                 }
             }
         }
@@ -1336,6 +1363,12 @@ static void UpdateFighter(Fighter *a, Fighter *o, IafInput in, float dt)
     }
     break;
     case ST_JUMP:
+        if (in.heavyP && a->stT < IAF_UPPER_CANCEL && !a->airAtkUsed)
+        { /* cima + forte quase juntos: o pulo que acabou de sair vira uppercut */
+            a->y = IAF_GROUND_Y; a->vy = 0;
+            StartAtk(a, AT_UPPER);
+            break;
+        }
         if ((in.lightP || in.heavyP) && !a->airAtkUsed) { a->airAtkUsed = true; a->atk = AT_AIR; a->atkT = 0; a->hitDone = false; a->st = ST_ATK; a->stT = 0; }
         break;
     default: /* parado / andando / agachado */
@@ -1343,7 +1376,11 @@ static void UpdateFighter(Fighter *a, Fighter *o, IafInput in, float dt)
         if (in.specialP && a->meter >= IAF_SPECIAL_COST && !(a->ch == CH_ANTI && well.on)) { a->meter -= IAF_SPECIAL_COST; a->crouch = false; StartAtk(a, AT_SPECIAL); break; }
         if (in.shotP && a->ch == CH_ELIRA && a->shotCd <= 0 && !EliraShotOnScreen(a)) { a->crouch = false; StartAtk(a, AT_SHOT); break; }
         if (in.lightP) { StartAtk(a, a->crouch ? AT_LOW : AT_LIGHT); break; }
-        if (in.heavyP) { StartAtk(a, a->crouch ? AT_LOW : AT_HEAVY); break; }
+        if (in.heavyP)
+        { /* agachado: rasteira; cima: uppercut; frente: soco longo; parado: forte */
+            StartAtk(a, a->crouch ? AT_LOW : (in.up ? AT_UPPER : (holdFwd ? AT_FWDH : AT_HEAVY)));
+            break;
+        }
         if (in.upP && ground)
         {
             a->crouch = false;
@@ -1603,6 +1640,14 @@ static IafInput CpuInput(int me, float dt)
     s->t -= dt;
     if (s->shotCd > 0) s->shotCd -= dt;
     bool threat = o->st == ST_ATK && dist < 240 && o->atkT < AtkTotal(o) * 0.6f;
+    /* anti-aereo: oponente caindo por cima e perto -> uppercut (uma tentativa por pulo) */
+    static bool aaTried[2];
+    if (OnGround(o)) aaTried[me] = false;
+    else if (!aaTried[me] && OnGround(a) && o->vy > -150 && dist < BodyHalf(a) + 150 && (a->st == ST_IDLE || a->st == ST_WALK))
+    {
+        aaTried[me] = true;
+        if (Rand01() < s->skill * 0.6f) { s->once.heavyP = true; s->once.up = true; s->t = 0.3f; }
+    }
     bool pthreat = ProjThreat(me);
     if (well.on && well.owner != me && !well.caught) threat = true;
     if ((threat || pthreat) && !s->reacted)
@@ -1631,7 +1676,8 @@ static IafInput CpuInput(int me, float dt)
         }
         else if (dist > fmaxf(165, BodyHalf(a) + BodyHalf(o) + 22)) /* com corpos largos, ainda ha distancia para atacar */
         {
-            if (r < 0.45f) { s->mode = AI_FWD; s->t = 0.2f + Rand01() * 0.3f; }
+            if (r < 0.12f && dist < ATK[a->ch][AT_FWDH].rx + BodyHalf(o) + 30) { s->mode = AI_FWD; s->t = 0.12f; s->once.heavyP = true; } /* soco longo */
+            else if (r < 0.45f) { s->mode = AI_FWD; s->t = 0.2f + Rand01() * 0.3f; }
             else if (r < 0.6f) { s->mode = AI_JUMPIN; s->once.upP = true; s->t = 0.7f; }
             else if (a->ch == CH_ELIRA && s->shotCd <= 0 && r < 0.8f) { s->once.shotP = true; s->shotCd = 1.3f; }
             else if (sp && a->ch == CH_ANTI && r < 0.85f) s->once.specialP = true;
@@ -1662,6 +1708,7 @@ static IafInput CpuInput(int me, float dt)
     }
     if (s->once.lightP) { in.lightP = true; }
     if (s->once.heavyP) in.heavyP = true;
+    if (s->once.up) in.up = true; /* cima segurado sem pular (uppercut) */
     if (s->once.shotP) in.shotP = true;
     if (s->once.specialP) in.specialP = true;
     if (s->once.upP) { in.upP = true; in.up = true; }
