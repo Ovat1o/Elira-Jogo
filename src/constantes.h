@@ -119,4 +119,24 @@
 #define ENDING_NAME_PADRAO "Final Padrão"
 #define ENDING_NAME_OTIMO  "Rota Dourada"
 
+/* ========================================================================= */
+/* MODO IA FIGHT (src/iafight.c) - LUTA 1x1 EM VISAO LATERAL                 */
+/* ========================================================================= */
+#define IAF_ELIRA_ATLAS     "assets/sprites/iafight/elira_luta.png" /* atlas de luta da Elira */
+#define IAF_GROUND_Y        622.0f   /* linha do chao da arena (pes dos lutadores) */
+#define IAF_WALL_L          70.0f    /* limite esquerdo da arena */
+#define IAF_WALL_R          1210.0f  /* limite direito da arena */
+#define IAF_GRAVITY         2700.0f  /* gravidade (px/s^2) */
+#define IAF_JUMP_SPEED      1080.0f  /* velocidade inicial do pulo (px/s) */
+#define IAF_HP_MAX          1000.0f  /* vida de cada lutador */
+#define IAF_METER_MAX       100.0f   /* barra CARGA cheia */
+#define IAF_SPECIAL_COST    50.0f    /* CARGA gasta por especial */
+#define IAF_ROUND_TIME      99.0f    /* cronometro do round (s) */
+#define IAF_SHOT_STARTUP    0.20f    /* tiro de plasma da Elira: preparo (s) */
+#define IAF_SHOT_ACTIVE     0.06f    /* disparo (s) */
+#define IAF_SHOT_RECOVERY   0.28f    /* recuperacao (s) */
+#define IAF_SHOT_COOLDOWN   0.45f    /* recarga entre tiros (s); so 1 tiro dela na tela */
+#define IAF_MAX_PROJ        12       /* projeteis simultaneos */
+#define IAF_MAX_PARTS       700      /* particulas/textos de efeito simultaneos */
+
 #endif /* CONSTANTES_H */
