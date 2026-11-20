@@ -327,41 +327,100 @@ static void Bar(float x, float y, float w, float h, float fill, float trail, Col
         DrawLineEx((Vector2){X + off, y}, (Vector2){X, y + h}, 2, (Color){4, 6, 14, 160});
     }
 }
+
+/* texto alinhado ao lado do jogador: P1 a partir de x, P2 terminando em SCREEN_WIDTH - x */
+static void TxtSide(const char *s, float x, float y, int px, Color c, bool right)
+{
+    if (right) TxtR(s, SCREEN_WIDTH - x, y, px, c);
+    else Txt(s, x, y, px, c);
+}
+
+/* contador de golpes ao lado da barra de quem ataca (nao sobre os corpos) */
+static void DrawComboTag(Fighter *a, bool right)
+{
+    if (a->combo < 2 || a->comboT <= 0) return;
+    float k = Clamp(a->comboT / 0.9f, 0.0f, 1.0f);
+    float pop = 1 + 0.25f * Clamp((a->comboT - 0.75f) / 0.15f, 0.0f, 1.0f); /* cresce no golpe novo */
+    char n[8], b[16];
+    snprintf(n, sizeof n, "%d", a->combo);
+    snprintf(b, sizeof b, "ACERTOS");
+    int big = (int)(40 * pop);
+    float y = 104;
+    float nw = TxtW(n, big), bw = TxtW(b, 20);
+    float x = right ? SCREEN_WIDTH - 72 - nw - 10 - bw : 72;
+    Color c = Fade(ColorLerp(CHCOL[a->ch], WHITE, 0.2f), fminf(1, k * 2));
+    Color o = Fade(C_INK, fminf(1, k * 2));
+    TxtO(n, x + nw / 2, y - (big - 40) / 2.0f, big, c, o);
+    TxtO(b, x + nw + 10 + bw / 2, y + 14, 20, c, o);
+}
+
+/* selo pulsante de especial pronto, em cima da barra de carga */
+static void DrawSpecialReady(Fighter *a, bool right)
+{
+    const char *s = "ESPECIAL PRONTO";
+    int px = 20;
+    float tw = TxtW(s, px), w = tw + 44, h = 32;
+    float x = right ? SCREEN_WIDTH - 70 - w : 70, y = SCREEN_HEIGHT - 102;
+    float pulse = 0.5f + 0.5f * sinf(gt * 7);
+    Color c = CHCOL[a->ch];
+    Rectangle r = {x, y, w, h};
+    DrawRectangleRounded(r, 0.4f, 6, Fade(C_INK, 0.85f));
+    DrawRectangleRounded(r, 0.4f, 6, Fade(c, 0.12f + 0.18f * pulse));
+    DrawRectangleRoundedLinesEx(r, 0.4f, 6, 2, Fade(ColorLerp(c, WHITE, 0.3f * pulse), 0.95f));
+    /* losango indicador */
+    Vector2 d = {x + 18, y + h / 2};
+    float q = 6 + 2 * pulse;
+    Quad((Vector2){d.x, d.y - q}, (Vector2){d.x + q, d.y}, (Vector2){d.x, d.y + q}, (Vector2){d.x - q, d.y}, ColorLerp(c, WHITE, 0.4f));
+    Txt(s, x + 32, y + (h - px) / 2 - 1, px, ColorLerp(c, WHITE, 0.35f + 0.3f * pulse));
+}
+
 static void DrawHUD(void)
 {
+    /* placa escura atras do placar (so atras do HUD, nao e filtro de tela) */
+    DrawRectangleGradientV(0, 0, SCREEN_WIDTH, 120, Fade(C_INK, 0.75f), Fade(C_INK, 0.0f));
+    DrawRectangleGradientV(0, SCREEN_HEIGHT - 100, SCREEN_WIDTH, 100, Fade(C_INK, 0.0f), Fade(C_INK, 0.7f));
     for (int i = 0; i < 2; i++)
     {
         Fighter *a = &fz[i];
         bool m = i == 1;
         float fill = a->hp / IAF_HP_MAX, trail = a->hpShown / IAF_HP_MAX;
         Color col = fill < 0.25f ? ColorLerp(C_RED, WHITE, 0.15f * (0.5f + 0.5f * sinf(gt * 10))) : ColorLerp(CHCOL[a->ch], WHITE, 0.15f);
-        Bar(70, 30, 470, 26, fill, trail, col, m);
-        /* nome e "chip" de cor */
+        Bar(70, 26, 470, 28, fill, trail, col, m);
+        /* nome grande com chip de cor e quem controla */
         float nx = m ? SCREEN_WIDTH - 70 : 70;
-        DrawRectangle((int)(m ? nx - 14 : nx), 64, 14, 14, CHCOL[a->ch]);
-        DrawRectangleLines((int)(m ? nx - 14 : nx), 64, 14, 14, C_INK);
+        Rectangle chip = {m ? nx - 20 : nx, 66, 20, 20};
+        DrawRectangleRec(chip, CHCOL[a->ch]);
+        DrawRectangleLinesEx(chip, 2, C_INK);
         const char *nm = NAME[a->ch];
-        if (m) TxtR(nm, nx - 22, 61, 22, C_WHITE); else Txt(nm, nx + 22, 61, 22, C_WHITE);
+        float nw = TxtW(nm, 30);
+        TxtSide(nm, 70 + 30, 60, 30, C_WHITE, m);
         const char *tag = cpu[i] ? "CPU" : "JOGADOR";
-        float tw = TxtW(nm, 22) + 32;
-        if (m) TxtR(tag, nx - tw, 66, 14, C_DIM); else Txt(tag, nx + tw, 66, 14, C_DIM);
-        /* rounds vencidos: chips de memoria */
+        TxtSide(tag, 70 + 30 + nw + 12, 70, 16, C_DIM, m);
+        /* rounds vencidos: dois chips grandes perto do cronometro */
         for (int r = 0; r < 2; r++)
         {
-            float cx = m ? SCREEN_WIDTH / 2.0f + 76 + r * 26 : SCREEN_WIDTH / 2.0f - 76 - r * 26;
-            Rectangle rc = {cx - 9, 66, 18, 12};
-            DrawRectangleRec(rc, wins[i] > r ? CHCOL[a->ch] : (Color){30, 34, 56, 255});
-            DrawRectangleLinesEx(rc, 1.5f, C_INK);
-            for (int p = 0; p < 3; p++) { DrawRectangle((int)rc.x + 2 + p * 6, 78, 2, 4, C_DIM); DrawRectangle((int)rc.x + 2 + p * 6, 62, 2, 4, C_DIM); }
+            float cx = m ? SCREEN_WIDTH / 2.0f + 78 + r * 40 : SCREEN_WIDTH / 2.0f - 78 - r * 40;
+            Rectangle rc = {cx - 15, 64, 30, 20};
+            bool won = wins[i] > r;
+            if (won) DrawRectangleRec((Rectangle){rc.x - 3, rc.y - 3, rc.width + 6, rc.height + 6}, Fade(CHCOL[a->ch], 0.25f + 0.15f * sinf(gt * 4)));
+            DrawRectangleRec(rc, won ? CHCOL[a->ch] : (Color){30, 34, 56, 255});
+            DrawRectangleLinesEx(rc, 2, C_INK);
+            for (int p = 0; p < 4; p++)
+            {
+                DrawRectangle((int)rc.x + 3 + p * 7, (int)rc.y - 5, 3, 5, C_DIM);
+                DrawRectangle((int)rc.x + 3 + p * 7, (int)(rc.y + rc.height), 3, 5, C_DIM);
+            }
+            if (won) DrawRectangle((int)rc.x + 8, (int)rc.y + 6, 14, 8, Fade(WHITE, 0.55f));
         }
+        DrawComboTag(a, m);
         /* carga do especial */
         float mx = m ? SCREEN_WIDTH - 70 - 300 : 70, my = SCREEN_HEIGHT - 40;
-        Txt("CARGA", m ? mx + 300 - TxtW("CARGA", 14) : mx, my - 20, 14, C_DIM);
+        TxtSide("CARGA", 70, my - 22, 16, C_DIM, m);
         for (int sgm = 0; sgm < 2; sgm++)
         {
             float seg = Clamp((a->meter - sgm * 50) / 50, 0.0f, 1.0f);
             int si = m ? 1 - sgm : sgm;
-            Rectangle r = {mx + si * 152, my, 148, 14};
+            Rectangle r = {mx + si * 152, my, 148, 16};
             DrawRectangleRec(r, (Color){20, 24, 44, 255});
             Rectangle f = r;
             f.width *= seg;
@@ -369,19 +428,16 @@ static void DrawHUD(void)
             DrawRectangleRec(f, seg >= 1 ? ColorLerp(CHCOL[a->ch], WHITE, 0.3f + 0.3f * sinf(gt * 8)) : Fade(CHCOL[a->ch], 0.7f));
             DrawRectangleLinesEx(r, 2, C_INK);
         }
-        if (a->meter >= IAF_SPECIAL_COST)
-        {
-            const char *s = "ESPECIAL PRONTO";
-            if (m) TxtR(s, SCREEN_WIDTH - 70 - 60, my - 20, 14, CHCOL[a->ch]); else Txt(s, 70 + 60, my - 20, 14, CHCOL[a->ch]);
-        }
+        if (a->meter >= IAF_SPECIAL_COST) DrawSpecialReady(a, m);
     }
     /* cronometro em hexagono */
-    Vector2 c = (Vector2){SCREEN_WIDTH / 2.0f, 50};
-    DrawPoly(c, 6, 44, 0, (Color){4, 6, 14, 255});
-    DrawPoly(c, 6, 40, 0, (Color){18, 22, 42, 255});
-    DrawPolyLinesEx(c, 6, 40, 0, 2, Fade(C_CYAN, 0.7f));
+    Vector2 c = (Vector2){SCREEN_WIDTH / 2.0f, 52};
+    DrawPoly(c, 6, 46, 0, (Color){4, 6, 14, 255});
+    DrawPoly(c, 6, 42, 0, (Color){18, 22, 42, 255});
+    DrawPolyLinesEx(c, 6, 42, 0, 2, Fade(C_CYAN, 0.7f));
     char b[8];
     snprintf(b, sizeof b, "%02d", (int)ceilf(roundTimer));
-    TxtC(b, c.x, c.y - 17, 34, roundTimer < 10 ? C_RED : C_WHITE);
+    TxtC(b, c.x, c.y - 19, 38, roundTimer < 10 ? C_RED : C_WHITE);
 }
+
 #endif /* IAFIGHT_ARENA_H */

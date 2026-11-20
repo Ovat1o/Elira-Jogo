@@ -970,12 +970,7 @@ static void ApplyHit(Fighter *att, Fighter *def, float dmg, float stun, float pu
     att->meter = fminf(IAF_METER_MAX, att->meter + dmg * 0.09f);
     att->combo = (att->comboT > 0) ? att->combo + 1 : 1;
     att->comboT = 0.9f;
-    if (att->combo >= 2)
-    {
-        char b[32];
-        snprintf(b, sizeof b, "%d ACERTOS", att->combo);
-        AddText((Vector2){att->x, att->y - 240}, b, CHCOL[att->ch], 22);
-    }
+    /* o contador de acertos aparece no HUD, ao lado da barra de quem ataca (DrawComboTag) */
     if (def->ch != CH_ELIRA)
     { /* sem efeito por cima dos quadros de reacao da Elira */
         if (att->ch == CH_ELIRA) AddImpact(at, 1.6f + dmg / 120.0f, dir);
