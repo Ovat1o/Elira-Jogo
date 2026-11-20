@@ -48,6 +48,8 @@ static bool ValidateRequiredAssets(void)
         "assets/sprites/cd.png",
         "assets/sprites/ssd.png",
         "assets/sprites/elira_portrait.png",
+        "assets/sprites/menu/capa_elira.png",
+        "assets/sprites/menu/capa_logo.png",
         "assets/som/ambient.wav",
         "assets/sprites/invasao/elira_sheet.png",
         "assets/sprites/invasao/elira_fx.png",
@@ -95,6 +97,7 @@ int main(int argc, char **argv)
 
     LoadEliraPortrait();
     LoadRewardSprites();
+    LoadMenuCover();
 
     EnsureAmbientMusicFile();
 
@@ -449,6 +452,7 @@ int main(int argc, char **argv)
         UnloadTexture(g_eliraPortrait);
     }
     UnloadRewardSprites();
+    UnloadMenuCover();
     InvUnload();
     if (bgmLoaded)
     {

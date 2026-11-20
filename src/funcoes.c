@@ -481,6 +481,44 @@ void UnloadRewardSprites(void)
     UnloadHeartSprites();
 }
 
+/* ========================================================================= */
+/* CAPA DO MENU INICIAL (Elira recortada + logo da capa)                     */
+/* ========================================================================= */
+Texture2D g_menuCoverElira = {0};
+Texture2D g_menuCoverLogo = {0};
+bool g_menuCoverLoaded = false;
+
+void LoadMenuCover(void)
+{
+    if (g_menuCoverLoaded) return;
+
+    const char *eliraPath = FindRewardSpritePath("menu/capa_elira.png");
+    if (FileExists(eliraPath)) g_menuCoverElira = LoadTexture(eliraPath);
+    const char *logoPath = FindRewardSpritePath("menu/capa_logo.png");
+    if (FileExists(logoPath)) g_menuCoverLogo = LoadTexture(logoPath);
+
+    if (g_menuCoverElira.id == 0 || g_menuCoverLogo.id == 0)
+    {
+        /* Sem as duas imagens o menu continua com o visual antigo */
+        UnloadMenuCover();
+        return;
+    }
+
+    /* Elira em pixel art: escala nao inteira com POINT fica mais nitida que BILINEAR */
+    SetTextureFilter(g_menuCoverElira, TEXTURE_FILTER_POINT);
+    SetTextureFilter(g_menuCoverLogo, TEXTURE_FILTER_BILINEAR);
+    g_menuCoverLoaded = true;
+}
+
+void UnloadMenuCover(void)
+{
+    if (g_menuCoverElira.id != 0) UnloadTexture(g_menuCoverElira);
+    if (g_menuCoverLogo.id != 0)  UnloadTexture(g_menuCoverLogo);
+    g_menuCoverElira = (Texture2D){0};
+    g_menuCoverLogo = (Texture2D){0};
+    g_menuCoverLoaded = false;
+}
+
 void LoadHeartSprites(void)
 {
     if (g_heartTexturesLoaded) return;
@@ -997,7 +1035,9 @@ void DrawBackground(void)
     }
 }
 
-void DrawTitleSpaceBackground(void)
+/* coverActive: com a capa no menu, o planeta antigo nao e desenhado e o painel
+   escuro da esquerda esmaece em cima e embaixo (sem borda reta). */
+static void DrawTitleSpaceBackgroundEx(bool coverActive)
 {
     float time = (float)GetTime();
     Vector2 mouse = GetVirtualMouse();
@@ -1064,58 +1104,76 @@ void DrawTitleSpaceBackground(void)
         DrawCircle((int)curX, (int)curY, 2.2f, Fade(RAYWHITE, 1.0f - t));
     }
 
-    /* Planeta e aneis com flutuacao orbital e paralaxe do mouse */
-    float planetX = 1030.0f + cosf(time * 0.5f) * 4.0f + mx * 10.0f;
-    float planetY = 370.0f + sinf(time * 0.7f) * 5.0f + my * 8.0f;
-
-    /* Brilho atmosferico sutil */
-    float atmoGlow = 0.08f + 0.04f * sinf(time * 1.6f);
-    DrawCircle((int)planetX, (int)planetY, 166, Fade(CYAN_COLOR, atmoGlow));
-    DrawCircle((int)planetX, (int)planetY, 158, Fade((Color){50, 130, 200, 255}, atmoGlow * 1.4f));
-
-    /* Aneis externos */
-    DrawEllipseLines((int)planetX, (int)planetY, 246, 85, Fade(RAYWHITE, 0.09f));
-    DrawEllipseLines((int)planetX, (int)planetY, 222, 73, Fade(CYAN_COLOR, 0.24f + 0.08f * sinf(time * 2.0f)));
-
-    /* Esfera do planeta */
-    DrawCircleGradientCompat((int)planetX, (int)planetY, 154,
-                       (Color){80, 147, 181, 255},
-                       (Color){17, 35, 64, 255});
-
-    /* Sombra do planeta */
-    DrawCircle((int)(planetX + 57), (int)(planetY - 20), 132, Fade((Color){2, 7, 19, 255}, 0.74f));
-
-    /* Ponto de luz especular pulsante */
-    DrawCircleGradientCompat((int)(planetX - 50.0f), (int)(planetY - 52.0f), 36,
-                       Fade(RAYWHITE, 0.20f + 0.06f * sinf(time * 1.8f)), BLANK);
-
-    /* Aneis internos */
-    DrawEllipseLines((int)planetX, (int)planetY, 172, 35, Fade(CYAN_COLOR, 0.16f));
-    DrawEllipseLines((int)planetX, (int)(planetY + 24), 144, 23, Fade(GOLD_COLOR, 0.14f));
-
-    /* Particulas orbitando pelos aneis */
-    for (int p = 0; p < 7; p++)
+    if (!coverActive)
     {
-        float pAngle = time * 0.45f + (float)p * (2.0f * PI / 7.0f);
-        float rx = 222.0f;
-        float ry = 73.0f;
-        float orbX = planetX + cosf(pAngle) * rx;
-        float orbY = planetY + sinf(pAngle) * ry;
+        /* Planeta e aneis com flutuacao orbital e paralaxe do mouse */
+        float planetX = 1030.0f + cosf(time * 0.5f) * 4.0f + mx * 10.0f;
+        float planetY = 370.0f + sinf(time * 0.7f) * 5.0f + my * 8.0f;
 
-        bool isBehind = (sinf(pAngle) < -0.15f) && (fabsf(cosf(pAngle) * rx) < 145.0f);
-        if (!isBehind)
+        /* Brilho atmosferico sutil */
+        float atmoGlow = 0.08f + 0.04f * sinf(time * 1.6f);
+        DrawCircle((int)planetX, (int)planetY, 166, Fade(CYAN_COLOR, atmoGlow));
+        DrawCircle((int)planetX, (int)planetY, 158, Fade((Color){50, 130, 200, 255}, atmoGlow * 1.4f));
+
+        /* Aneis externos */
+        DrawEllipseLines((int)planetX, (int)planetY, 246, 85, Fade(RAYWHITE, 0.09f));
+        DrawEllipseLines((int)planetX, (int)planetY, 222, 73, Fade(CYAN_COLOR, 0.24f + 0.08f * sinf(time * 2.0f)));
+
+        /* Esfera do planeta */
+        DrawCircleGradientCompat((int)planetX, (int)planetY, 154,
+                           (Color){80, 147, 181, 255},
+                           (Color){17, 35, 64, 255});
+
+        /* Sombra do planeta */
+        DrawCircle((int)(planetX + 57), (int)(planetY - 20), 132, Fade((Color){2, 7, 19, 255}, 0.74f));
+
+        /* Ponto de luz especular pulsante */
+        DrawCircleGradientCompat((int)(planetX - 50.0f), (int)(planetY - 52.0f), 36,
+                           Fade(RAYWHITE, 0.20f + 0.06f * sinf(time * 1.8f)), BLANK);
+
+        /* Aneis internos */
+        DrawEllipseLines((int)planetX, (int)planetY, 172, 35, Fade(CYAN_COLOR, 0.16f));
+        DrawEllipseLines((int)planetX, (int)(planetY + 24), 144, 23, Fade(GOLD_COLOR, 0.14f));
+
+        /* Particulas orbitando pelos aneis */
+        for (int p = 0; p < 7; p++)
         {
-            float pPulse = 0.45f + 0.45f * sinf(time * 3.0f + (float)p);
-            DrawCircle((int)orbX, (int)orbY, 1.8f, Fade(CYAN_COLOR, pPulse));
+            float pAngle = time * 0.45f + (float)p * (2.0f * PI / 7.0f);
+            float rx = 222.0f;
+            float ry = 73.0f;
+            float orbX = planetX + cosf(pAngle) * rx;
+            float orbY = planetY + sinf(pAngle) * ry;
+
+            bool isBehind = (sinf(pAngle) < -0.15f) && (fabsf(cosf(pAngle) * rx) < 145.0f);
+            if (!isBehind)
+            {
+                float pPulse = 0.45f + 0.45f * sinf(time * 3.0f + (float)p);
+                DrawCircle((int)orbX, (int)orbY, 1.8f, Fade(CYAN_COLOR, pPulse));
+            }
         }
-    }
+
+    } /* fim do planeta */
 
     /* Degradê lateral para proteger a leitura dos textos */
-    DrawRectangleGradientH(0, 90, 750, 430,
-                           Fade((Color){3, 7, 18, 255}, 0.96f),
-                           Fade((Color){3, 7, 18, 255}, 0.0f));
+    Color panelL = Fade((Color){3, 7, 18, 255}, 0.96f);
+    Color panelR = Fade((Color){3, 7, 18, 255}, 0.0f);
+    if (!coverActive)
+    {
+        DrawRectangleGradientH(0, 90, 750, 430, panelL, panelR);
+    }
+    else
+    {
+        DrawRectangleGradientH(0, 150, 750, 310, panelL, panelR);
+        DrawRectangleGradientEx((Rectangle){0, 40, 750, 110}, BLANK, panelL, panelR, BLANK);
+        DrawRectangleGradientEx((Rectangle){0, 460, 750, 140}, panelL, BLANK, BLANK, panelR);
+    }
     DrawRectangleGradientV(0, 600, SCREEN_WIDTH, 120,
                            BLANK, Fade(BLACK, 0.62f));
+}
+
+void DrawTitleSpaceBackground(void)
+{
+    DrawTitleSpaceBackgroundEx(false);
 }
 
 void SetMessage(GameState *game, const char *message)
@@ -1677,6 +1735,39 @@ void DrawTitle(void)
     Rectangle invasionButton = {86, 392, 350, 54};
     Rectangle settingsButton = {86, 458, 350, 50};
     float time = (float)GetTime();
+
+    if (g_menuCoverLoaded)
+    {
+        /* Capa: fundo sem planeta, Elira recortada a 2.5x encostada a direita e
+           apoiada no rodape, logo da capa no lugar do titulo. Botoes iguais. */
+        DrawTitleSpaceBackgroundEx(true);
+
+        const float eliraScale = 2.5f;
+        Rectangle eliraSrc = {0, 0, (float)g_menuCoverElira.width, (float)g_menuCoverElira.height};
+        float eliraW = eliraSrc.width * eliraScale;
+        float eliraH = eliraSrc.height * eliraScale;
+        /* ~70 px da arte original (so a ponta do ombro) ficam fora da tela */
+        float eliraX = roundf(SCREEN_WIDTH - (eliraSrc.width - 70.0f) * eliraScale);
+        float eliraY = roundf(SCREEN_HEIGHT - eliraH);
+        DrawTexturePro(g_menuCoverElira, eliraSrc, (Rectangle){eliraX, eliraY, eliraW, eliraH},
+                       (Vector2){0, 0}, 0.0f, WHITE);
+
+        Rectangle logoSrc = {0, 0, (float)g_menuCoverLogo.width, (float)g_menuCoverLogo.height};
+        DrawTexturePro(g_menuCoverLogo, logoSrc,
+                       (Rectangle){50, 70, logoSrc.width * 1.5f, logoSrc.height * 1.5f},
+                       (Vector2){0, 0}, 0.0f, WHITE);
+
+        DrawRectangle(88, 284, 554, 3, CYAN_COLOR);
+        DrawRectangle(88, 291, 218, 2, GOLD_COLOR);
+
+        DrawTitleStartButton(startButton, "INICIAR MISSAO", CYAN_COLOR);
+        DrawTitleStartButton(invasionButton, "MODO INVASAO [I]", (Color){230, 90, 200, 255});
+        DrawTitleStartButton(settingsButton, "CONFIGURACOES [C]", GOLD_COLOR);
+
+        float coverPromptAlpha = 0.40f + 0.55f * (0.5f + 0.5f * sinf(time * 3.4f));
+        DrawGameText("> ENTER: Iniciar  |  I: Invasao  |  C: Opcoes <", 93, 524, 15, Fade(GOLD_COLOR, coverPromptAlpha));
+        return; /* sem linhas CRT com a capa (sem filtro de tela) */
+    }
 
     DrawTitleSpaceBackground();
 
