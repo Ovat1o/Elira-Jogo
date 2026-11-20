@@ -733,6 +733,89 @@ static int EliraFrameIdx(Fighter *a, float *yoff)
     return EAFrame(EA_IDLE, 0);
 }
 
+/* ------------------------------------------------------------------ Claude: atlas de luta
+   Gerado fora do repositorio a partir do pacote de sprites (quadros 256x161, pixel art de 2 px).
+   Ampliado com filtro POINT: 2x = 4 px de tela por pixel da arte, ~204 px de altura (como a Elira). */
+#include "iafight_claude.h"
+static Texture2D texClaude;
+#define CL_SCALE 2.0f
+#define CL_FRONT 190.0f /* do centro ate a frente do corpo largo: prisma, feixe e pulso de luz */
+static int CAFrame(int anim, int i)
+{
+    int n = CA_COUNT[anim];
+    if (i < 0) i = 0;
+    if (i >= n) i = n - 1;
+    return CA_FIRST[anim] + i;
+}
+static int CALoop(int anim, float t) { return CA_FIRST[anim] + ((int)(t / CA_DUR[anim]) % CA_COUNT[anim]); }
+/* desenha o quadro f com os pes em (x, yFeet); espelha quando face < 0 */
+static void DrawCF(int f, float x, float yFeet, int face, float sc, Color tint, float flash)
+{
+    const CFrame *e = &CF[f];
+    Rectangle src = {e->x, e->y, e->w, e->h};
+    float left = face > 0 ? x - e->ax * sc : x - (e->w - e->ax) * sc;
+    if (face < 0) src.width = -src.width;
+    Rectangle dst = {roundf(left), roundf(yFeet - e->ay * sc), e->w * sc, e->h * sc};
+    DrawTexturePro(texClaude, src, dst, (Vector2){0, 0}, 0, tint);
+    if (flash > 0)
+    {
+        BeginBlendMode(BLEND_ADDITIVE);
+        DrawTexturePro(texClaude, src, dst, (Vector2){0, 0}, 0, Fade(WHITE, flash));
+        EndBlendMode();
+    }
+}
+/* golpe: preparo usa os quadros [0, a0), ativo [a0, a1] (punho/pe esticado), recuperacao o resto */
+static int ClaudeAtkFrame(Fighter *a, int anim, int a0, int a1, float st, float ac, float rc)
+{
+    int n = CA_COUNT[anim], i;
+    float t = a->atkT;
+    if (ac < IAF_ACTIVE_VISUAL) { rc = fmaxf(rc - (IAF_ACTIVE_VISUAL - ac), 0.02f); ac = IAF_ACTIVE_VISUAL; }
+    if (t < st) i = (int)(t / st * a0);
+    else if (t < st + ac) i = a0 + (int)((t - st) / ac * (a1 - a0 + 1));
+    else i = a1 + 1 + (int)((t - st - ac) / rc * (n - 1 - a1));
+    return CAFrame(anim, i);
+}
+static int ClaudeFrameIdx(Fighter *a)
+{
+    int nk = CA_COUNT[CA_KNOCKDOWN];
+    if (a->st == ST_KO) return CAFrame(CA_KNOCKDOWN, (int)(a->stT / 0.06f));
+    if (a->down)
+    { /* caido; ao levantar, a queda tocada ao contrario */
+        if (a->downT > 0.36f) return CAFrame(CA_KNOCKDOWN, nk - 1);
+        return CAFrame(CA_KNOCKDOWN, (int)(a->downT / 0.36f * (nk - 1)));
+    }
+    if (a->st == ST_LOSE) return CAFrame(CA_KNOCKDOWN, nk - 1);
+    if (a->st == ST_WIN) return CALoop(CA_VICTORY, a->stT);
+    if (a->st == ST_HIT) return CAFrame(CA_HURT, (int)(a->stT / 0.4f * CA_COUNT[CA_HURT]));
+    if (a->st == ST_ATK)
+    {
+        const Atk *d = &ATK[CH_CLAUDE][a->atk < AT_SPECIAL ? a->atk : 0];
+        switch (a->atk)
+        {
+        case AT_LIGHT: return ClaudeAtkFrame(a, CA_JAB, 2, 4, d->st, d->ac, d->rc);
+        case AT_HEAVY: return ClaudeAtkFrame(a, CA_HEAVY, 4, 6, d->st, d->ac, d->rc);
+        case AT_LOW: return ClaudeAtkFrame(a, CA_SWEEP, 4, 6, d->st, d->ac, d->rc);
+        case AT_AIR: return ClaudeAtkFrame(a, CA_AIRKICK, 4, 6, d->st, d->ac, d->rc);
+        case AT_SPECIAL:
+        { /* prisma: carga em loop enquanto o escudo esta de pe; depois (ou ao refletir) o disparo */
+            float st = SP_ST[CH_CLAUDE], ac = SP_AC[CH_CLAUDE], rc = SP_RC[CH_CLAUDE];
+            if (a->atkT < st + ac) return CALoop(CA_CHARGE, a->atkT);
+            return CAFrame(CA_BLAST, (int)((a->atkT - st - ac) / rc * CA_COUNT[CA_BLAST]));
+        }
+        default: break;
+        }
+    }
+    if (a->shieldOn || a->st == ST_BLOCK)
+    {
+        if (a->crouch) return CAFrame(CA_CROUCH, CA_COUNT[CA_CROUCH] - 1);
+        return CALoop(CA_BLOCK, a->stT);
+    }
+    if (a->st == ST_JUMP) return CAFrame(CA_JUMP, 1 + (int)((a->vy + IAF_JUMP_SPEED) / (2 * IAF_JUMP_SPEED) * 9));
+    if (a->crouch) return CAFrame(CA_CROUCH, (int)(a->stT / 0.035f));
+    if (a->st == ST_WALK) return CALoop((a->vx * a->face) < 0 ? CA_WALK_B : CA_WALK_F, a->anim);
+    return CALoop(CA_IDLE, gt);
+}
+
 /* ------------------------------------------------------------------ desenho de um lutador */
 /* rastro do golpe: arco translucido na cor do lutador, varrendo o caminho do membro que golpeia
    (angulos em graus a partir da frente; positivo = para baixo) */
@@ -784,7 +867,7 @@ static void DrawFighter(Fighter *a)
     float flash = a->flash > 0 ? Clamp(a->flash / 0.12f, 0.0f, 1.0f) * 0.8f : 0;
     float alt = IAF_GROUND_Y - a->y;
     float jx = a->hitShake > 0 ? (Rand01() - 0.5f) * 2 * IAF_HIT_SHAKE_PX : 0; /* tremor no impacto */
-    DrawShadow(a->x, 52 - fminf(alt, 200) * 0.12f);
+    DrawShadow(a->x, (a->ch == CH_CLAUDE && texClaude.id ? 118 : 52) - fminf(alt, 200) * 0.12f);
     if (a->inv > 0 && fmodf(a->inv, 0.1f) < 0.05f && a->st != ST_KO) return;
     if (a->ch == CH_ELIRA)
     {
@@ -799,6 +882,7 @@ static void DrawFighter(Fighter *a)
         }
         DrawEF(f, x, a->y + yoff, a->face, 1.0f, WHITE, fl);
     }
+    else if (a->ch == CH_CLAUDE && texClaude.id) DrawCF(ClaudeFrameIdx(a), a->x + jx, a->y, a->face, CL_SCALE, WHITE, flash);
     else
     {
         Pose p = PoseFor(a);
@@ -810,6 +894,7 @@ static void DrawFighter(Fighter *a)
     {
         Color c = CHCOL[a->ch];
         float cy = a->crouch ? a->y - 60 : a->y - 120, cx = a->x + a->face * 52;
+        if (a->ch == CH_CLAUDE && texClaude.id) { cy = a->crouch ? a->y - 90 : a->y - 140; cx = a->x + a->face * 172; } /* na frente do braco erguido */
         DrawPoly((Vector2){cx, cy}, 6, 40, 0, Fade(c, 0.18f));
         DrawPolyLinesEx((Vector2){cx, cy}, 6, 40, 0, 3, Fade(c, 0.85f));
         DrawPolyLinesEx((Vector2){cx, cy}, 6, 28, 0, 1.5f, Fade(c, 0.5f));
@@ -819,7 +904,7 @@ static void DrawFighter(Fighter *a)
     {
         float t = a->atkT, st = SP_ST[CH_CLAUDE], ac = SP_AC[CH_CLAUDE];
         float vis = t < st ? t / st : (t < st + ac ? 1 : 1 - (t - st - ac) / SP_RC[CH_CLAUDE]);
-        float cx = a->x + a->face * 74, cy = a->y - 120;
+        float cx = a->x + a->face * CL_FRONT, cy = a->y - 120;
         Color amb = C_AMBER;
         Vector2 pts[6];
         for (int i = 0; i < 6; i++)
@@ -840,7 +925,7 @@ static void DrawFighter(Fighter *a)
     }
     if (a->beamT > 0)
     { /* feixe de resposta do prisma */
-        Vector2 o = (Vector2){a->x + a->face * 74, a->y - 120};
+        Vector2 o = (Vector2){a->x + a->face * CL_FRONT, a->y - 120};
         Color bands[3] = {{255, 140, 100, 255}, {255, 220, 130, 255}, {255, 255, 255, 255}};
         for (int i = 0; i < 3; i++)
             DrawLineEx(Vector2Add(o, (Vector2){0, (i - 1) * 6}), Vector2Add(a->beamTo, (Vector2){0, (i - 1) * 10}), (10 - i * 3) * (a->beamT / 0.35f) + 1, Fade(bands[i], a->beamT / 0.35f));
@@ -1934,6 +2019,12 @@ static void DrawCharacterBig(CharId ch, float x, float yFeet, int face, float sc
         DrawEF(f, x, yFeet + yo, face, sc, WHITE, 0);
         return;
     }
+    if (ch == CH_CLAUDE && texClaude.id)
+    { /* escala em passos de 0,5 para o pixel da arte continuar inteiro (cartao 1,5x, VS 2,5x) */
+        int f = st == ST_WIN ? CALoop(CA_VICTORY, gt) : (st == ST_KO ? CAFrame(CA_KNOCKDOWN, CA_COUNT[CA_KNOCKDOWN] - 1) : CALoop(CA_IDLE, gt));
+        DrawCF(f, x, yFeet, face, fmaxf(1.0f, roundf(CL_SCALE * sc * 0.75f * 2) / 2), WHITE, 0);
+        return;
+    }
     Fighter tmp;
     memset(&tmp, 0, sizeof tmp);
     tmp.ch = ch; tmp.st = st; tmp.face = face; tmp.x = x;
@@ -2096,6 +2187,8 @@ void IafEnter(GameState *game)
     {
         texElira = LoadTexture(IAF_ELIRA_ATLAS);
         SetTextureFilter(texElira, TEXTURE_FILTER_BILINEAR);
+        texClaude = LoadTexture(IAF_CLAUDE_ATLAS);
+        SetTextureFilter(texClaude, TEXTURE_FILTER_POINT); /* pixel art: sem suavizar */
         iafLoaded = true;
     }
     cpu[0] = false;
@@ -2153,6 +2246,6 @@ void IafDraw(void)
 
 void IafUnload(void)
 {
-    if (iafLoaded) UnloadTexture(texElira);
+    if (iafLoaded) { UnloadTexture(texElira); if (texClaude.id) UnloadTexture(texClaude); texClaude = (Texture2D){0}; }
     iafLoaded = false;
 }
