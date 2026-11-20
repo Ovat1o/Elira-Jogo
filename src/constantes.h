@@ -124,6 +124,7 @@
 /* ========================================================================= */
 #define IAF_ELIRA_ATLAS     "assets/sprites/iafight/elira_luta.png" /* atlas de luta da Elira */
 #define IAF_CLAUDE_ATLAS    "assets/sprites/iafight/claude_luta.png" /* atlas de luta do Claude */
+#define IAF_CODEX_ATLAS     "assets/sprites/iafight/codex_luta.png"  /* atlas de luta do Codex */
 #define IAF_GROUND_Y        622.0f   /* linha do chao da arena (pes dos lutadores) */
 #define IAF_WALL_L          70.0f    /* limite esquerdo da arena */
 #define IAF_WALL_R          1210.0f  /* limite direito da arena */
