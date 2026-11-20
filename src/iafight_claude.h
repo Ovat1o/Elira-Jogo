@@ -10,7 +10,7 @@
 #define IAFIGHT_CLAUDE_H
 
 typedef struct { float x, y, w, h, ax, ay; } CFrame;
-static const CFrame CF[147] = {
+static const CFrame CF[175] = {
     {2, 2, 160, 102, 80.0f, 102.0f}, /* IDLE */
     {164, 2, 160, 102, 80.0f, 102.0f}, /* IDLE */
     {326, 2, 160, 102, 80.0f, 102.0f}, /* IDLE */
@@ -158,11 +158,39 @@ static const CFrame CF[147] = {
     {2, 1610, 166, 132, 82.0f, 138.0f}, /* VICTORY */
     {170, 1610, 166, 138, 82.0f, 144.0f}, /* VICTORY */
     {338, 1610, 166, 138, 82.0f, 144.0f}, /* VICTORY */
+    {506, 1610, 158, 102, 80.0f, 102.0f}, /* UPPER */
+    {666, 1610, 158, 102, 80.0f, 102.0f}, /* UPPER */
+    {826, 1610, 190, 106, 80.0f, 108.0f}, /* UPPER */
+    {1018, 1610, 188, 126, 76.0f, 134.0f}, /* UPPER */
+    {1208, 1610, 188, 140, 74.0f, 156.0f}, /* UPPER */
+    {1398, 1610, 186, 138, 72.0f, 156.0f}, /* UPPER */
+    {1586, 1610, 186, 138, 72.0f, 156.0f}, /* UPPER */
+    {1774, 1610, 186, 142, 74.0f, 156.0f}, /* UPPER */
+    {2, 1754, 186, 118, 78.0f, 124.0f}, /* UPPER */
+    {190, 1754, 186, 106, 80.0f, 106.0f}, /* UPPER */
+    {378, 1754, 160, 102, 80.0f, 102.0f}, /* FKICK */
+    {540, 1754, 160, 102, 80.0f, 102.0f}, /* FKICK */
+    {702, 1754, 174, 102, 82.0f, 102.0f}, /* FKICK */
+    {878, 1754, 214, 104, 86.0f, 104.0f}, /* FKICK */
+    {1094, 1754, 204, 104, 88.0f, 104.0f}, /* FKICK */
+    {1300, 1754, 204, 104, 88.0f, 104.0f}, /* FKICK */
+    {1506, 1754, 202, 104, 88.0f, 104.0f}, /* FKICK */
+    {1710, 1754, 204, 104, 84.0f, 104.0f}, /* FKICK */
+    {2, 1874, 166, 102, 80.0f, 102.0f}, /* FKICK */
+    {170, 1874, 160, 102, 80.0f, 102.0f}, /* FKICK */
+    {332, 1874, 202, 106, 122.0f, 106.0f}, /* DASH */
+    {536, 1874, 204, 106, 124.0f, 106.0f}, /* DASH */
+    {742, 1874, 208, 106, 128.0f, 106.0f}, /* DASH */
+    {952, 1874, 210, 106, 130.0f, 106.0f}, /* DASH */
+    {1164, 1874, 210, 106, 130.0f, 106.0f}, /* DASH */
+    {1376, 1874, 210, 106, 130.0f, 106.0f}, /* DASH */
+    {1588, 1874, 210, 106, 130.0f, 106.0f}, /* DASH */
+    {1800, 1874, 210, 106, 130.0f, 106.0f}, /* DASH */
 };
-enum { CA_IDLE, CA_WALK_F, CA_WALK_B, CA_CROUCH, CA_BLOCK, CA_JAB, CA_HEAVY, CA_SWEEP, CA_JUMP, CA_AIRKICK, CA_HURT, CA_KNOCKDOWN, CA_CHARGE, CA_BLAST, CA_VICTORY, CA_N };
-static const int CA_FIRST[CA_N] = {0, 10, 20, 30, 36, 42, 50, 60, 70, 82, 92, 99, 110, 122, 135};
-static const int CA_COUNT[CA_N] = {10, 10, 10, 6, 6, 8, 10, 10, 12, 10, 7, 11, 12, 13, 12};
+enum { CA_IDLE, CA_WALK_F, CA_WALK_B, CA_CROUCH, CA_BLOCK, CA_JAB, CA_HEAVY, CA_SWEEP, CA_JUMP, CA_AIRKICK, CA_HURT, CA_KNOCKDOWN, CA_CHARGE, CA_BLAST, CA_VICTORY, CA_UPPER, CA_FKICK, CA_DASH, CA_N };
+static const int CA_FIRST[CA_N] = {0, 10, 20, 30, 36, 42, 50, 60, 70, 82, 92, 99, 110, 122, 135, 147, 157, 167};
+static const int CA_COUNT[CA_N] = {10, 10, 10, 6, 6, 8, 10, 10, 12, 10, 7, 11, 12, 13, 12, 10, 10, 8};
 /* duracao de cada quadro do atlas (s): a do pacote x 2, porque so 1 a cada 2 quadros entrou */
-static const float CA_DUR[CA_N] = {0.160f, 0.120f, 0.120f, 0.130f, 0.130f, 0.096f, 0.100f, 0.110f, 0.104f, 0.104f, 0.112f, 0.124f, 0.124f, 0.094f, 0.134f};
+static const float CA_DUR[CA_N] = {0.160f, 0.120f, 0.120f, 0.130f, 0.130f, 0.096f, 0.100f, 0.110f, 0.104f, 0.104f, 0.112f, 0.124f, 0.124f, 0.094f, 0.134f, 0.110f, 0.104f, 0.100f};
 
 #endif /* IAFIGHT_CLAUDE_H */
