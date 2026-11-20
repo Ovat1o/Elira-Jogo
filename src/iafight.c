@@ -188,6 +188,8 @@ static Impact impacts[16];
 
 static Fighter fz[2];
 static float hitstop = 0, shake = 0;
+/* botoes apertados durante a pausa de impacto: guardados e aplicados no primeiro quadro depois dela */
+static IafInput bufP[2];
 
 static void AddPart(Vector2 p, Vector2 v, float life, float size, Color c, int kind)
 {
@@ -1083,6 +1085,7 @@ static void ClearFx(void)
     memset(parts, 0, sizeof(parts));
     memset(impacts, 0, sizeof(impacts));
     memset(&well, 0, sizeof(well));
+    memset(bufP, 0, sizeof(bufP));
     hitstop = 0; shake = 0;
 }
 
@@ -2008,10 +2011,27 @@ static void PushApart(void)
         if (b->x > IAF_WALL_R) { a->x -= b->x - IAF_WALL_R; b->x = IAF_WALL_R; }
     }
 }
+static void MergePressed(IafInput *dst, IafInput src)
+{
+    dst->upP = dst->upP || src.upP;
+    dst->lightP = dst->lightP || src.lightP;
+    dst->heavyP = dst->heavyP || src.heavyP;
+    dst->specialP = dst->specialP || src.specialP;
+    dst->shotP = dst->shotP || src.shotP;
+}
 static void SimStep(float dt, IafInput i0, IafInput i1)
 {
     UpdateParts(dt);
-    if (hitstop > 0) { hitstop -= dt; return; }
+    if (hitstop > 0)
+    {
+        hitstop -= dt;
+        MergePressed(&bufP[0], i0);
+        MergePressed(&bufP[1], i1);
+        return;
+    }
+    MergePressed(&i0, bufP[0]);
+    MergePressed(&i1, bufP[1]);
+    memset(bufP, 0, sizeof bufP);
     UpdateFighter(&fz[0], &fz[1], i0, dt);
     UpdateFighter(&fz[1], &fz[0], i1, dt);
     UpdateProjectiles(dt);
