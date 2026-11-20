@@ -59,7 +59,8 @@ PROJECT_HEADERS := $(SRC_DIR)/constantes.h \
                    $(SRC_DIR)/funcoes.h \
                    $(SRC_DIR)/invasao.h \
                    $(SRC_DIR)/iafight.h \
-                   $(SRC_DIR)/iafight_elira.h
+                   $(SRC_DIR)/iafight_elira.h \
+                   $(SRC_DIR)/iafight_claude.h
 
 # Arquivos de cabecalho da biblioteca Raylib presentes na pasta src/raylib/
 RAYLIB_HEADERS  := $(SRC_RAYLIB_DIR)/raylib.h \
