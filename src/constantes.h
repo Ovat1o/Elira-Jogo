@@ -146,5 +146,7 @@
 #define IAF_HITSTOP_SPECIAL 0.14f    /* pausa de impacto: especial (s) */
 #define IAF_HIT_SHAKE_PX    3.0f     /* tremor de quem apanha durante a pausa (px) */
 #define IAF_ACTIVE_VISUAL   0.10f    /* o quadro de impacto fica pelo menos isto na tela (s) */
+#define IAF_SHOT_RECOIL     3.0f     /* recuo da Elira ao disparar o tiro de plasma (px) */
+#define IAF_MUZZLE_Y        84.0f    /* altura da boca do canhao da Elira acima dos pes (px) */
 
 #endif /* CONSTANTES_H */

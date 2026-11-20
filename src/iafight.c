@@ -221,6 +221,11 @@ static void HitSparks(Vector2 p, Color c, int n, float spd)
     }
     AddPart(p, (Vector2){0, 0}, 0.25f, 40, c, 3);
 }
+/* clarao na boca do canhao (kind 7): nucleo branco, raios curtos e anel */
+static void MuzzleFlash(Vector2 p, float size)
+{
+    AddPart(p, (Vector2){0, 0}, 0.10f, size, C_CYAN, 7);
+}
 /* acerto: estrela de pontas no ponto de contato (kind 4; v.x guarda o giro) */
 static void ImpactSpark(Vector2 p, Color c, float size)
 {
@@ -1070,7 +1075,7 @@ static void SpawnProj(Fighter *a, bool big)
     for (int i = 0; i < IAF_MAX_PROJ; i++)
         if (!proj[i].on)
         {
-            proj[i] = (Proj){true, a->x + a->face * (big ? 140 : 96), a->y - 108, a->face * (big ? 560.0f : 720.0f), Idx(a), big, false, big ? 55.0f : 70.0f, 0, 0, big ? 3 : 1};
+            proj[i] = (Proj){true, a->x + a->face * (big ? 140 : 96), a->y - IAF_MUZZLE_Y, a->face * (big ? 560.0f : 720.0f), Idx(a), big, false, big ? 55.0f : 70.0f, 0, 0, big ? 3 : 1};
             return;
         }
 }
@@ -1086,7 +1091,7 @@ static void UpdateSpecial(Fighter *a, Fighter *o, float dt)
     switch (a->ch)
     {
     case CH_ELIRA:
-        if (t >= st && !a->spawned) { a->spawned = true; SpawnProj(a, true); a->vx = -a->face * 120; AddText((Vector2){a->x, a->y - 240}, "RAJADA TEMPORAL!", C_CYAN, 22); }
+        if (t >= st && !a->spawned) { a->spawned = true; SpawnProj(a, true); MuzzleFlash((Vector2){a->x + a->face * 120, a->y - IAF_MUZZLE_Y}, 44); a->vx = -a->face * 120; AddText((Vector2){a->x, a->y - 240}, "RAJADA TEMPORAL!", C_CYAN, 22); }
         break;
     case CH_CLAUDE:
         if (t >= st + ac && !a->spawned && !a->countered)
@@ -1269,7 +1274,14 @@ static void UpdateFighter(Fighter *a, Fighter *o, IafInput in, float dt)
         if (a->atk == AT_SPECIAL) UpdateSpecial(a, o, dt);
         else if (a->atk == AT_SHOT)
         {
-            if (a->atkT >= IAF_SHOT_STARTUP && !a->spawned) { a->spawned = true; SpawnProj(a, false); a->shotCd = IAF_SHOT_COOLDOWN; }
+            if (a->atkT >= IAF_SHOT_STARTUP && !a->spawned)
+            {
+                a->spawned = true;
+                SpawnProj(a, false);
+                a->shotCd = IAF_SHOT_COOLDOWN;
+                MuzzleFlash((Vector2){a->x + a->face * 96, a->y - IAF_MUZZLE_Y}, 26);
+                a->x -= a->face * IAF_SHOT_RECOIL; /* recuo do disparo */
+            }
         }
         else
         {
@@ -1476,6 +1488,20 @@ static void DrawParts(void)
                 Tri(Vector2Add(p->p, Vector2Scale(n, w * 0.5f)), Vector2Subtract(p->p, Vector2Scale(n, w * 0.5f)), Vector2Add(p->p, Vector2Scale(d, len * 0.6f)), Fade(WHITE, k));
             }
             DrawCircleV(p->p, p->size * 0.22f * k + 2, Fade(WHITE, k));
+        }
+        else if (p->kind == 7)
+        { /* clarao do canhao */
+            float q = 1 - k;
+            DrawCircleV(p->p, p->size * (0.55f + 0.3f * q), Fade(p->c, 0.45f * k));
+            for (int s = 0; s < 4; s++)
+            {
+                float an = s * 1.5708f + 0.785f;
+                Vector2 d = {cosf(an), sinf(an)};
+                DrawLineEx(Vector2Add(p->p, Vector2Scale(d, p->size * 0.3f)), Vector2Add(p->p, Vector2Scale(d, p->size * (0.8f + 0.5f * q))), 3 * k + 1, Fade(WHITE, k));
+            }
+            DrawLineEx(Vector2Add(p->p, (Vector2){-p->size * 1.1f, 0}), Vector2Add(p->p, (Vector2){p->size * 1.1f, 0}), 4 * k + 1, Fade(WHITE, k));
+            DrawCircleV(p->p, p->size * 0.32f * k + 2, Fade(WHITE, k));
+            DrawRing(p->p, p->size * (0.6f + q), p->size * (0.6f + q) + 2, 0, 360, 28, Fade(p->c, k));
         }
         else if (p->kind == 5) DrawPoly(p->p, 6, p->size, p->life * 900, Fade(ColorLerp(p->c, WHITE, 0.4f), k));
         else if (p->kind == 6)
