@@ -120,10 +120,10 @@ static const Atk ATK[CH_N][5] = {
                   {0.14f, 0.12f, 0.26f, 95, 138, 200, 95, 0.45f, 300, 0}, /* chute alto (forte) */
                   {0.08f, 0.09f, 0.20f, 42, 128, 46, 44, 0.30f, 150, 1},
                   {0.05f, 0.16f, 0.10f, 55, 96, 150, 90, 0.32f, 160, 2}},
-    [CH_CLAUDE] = {{0}, {0.07f, 0.08f, 0.15f, 48, 108, 172, 48, 0.30f, 170, 0},
-                   {0.17f, 0.10f, 0.30f, 105, 128, 180, 90, 0.45f, 380, 0},
-                   {0.10f, 0.08f, 0.22f, 50, 128, 44, 44, 0.32f, 160, 1},
-                   {0.05f, 0.15f, 0.10f, 55, 98, 150, 90, 0.32f, 160, 2}},
+    [CH_CLAUDE] = {{0}, {0.07f, 0.08f, 0.15f, 48, 240, 162, 66, 0.30f, 170, 0}, /* alcances no punho/pe do sprite (2x) */
+                   {0.17f, 0.10f, 0.30f, 105, 250, 170, 72, 0.45f, 380, 0},
+                   {0.10f, 0.08f, 0.22f, 50, 228, 44, 44, 0.32f, 160, 1},
+                   {0.05f, 0.15f, 0.10f, 55, 248, 80, 54, 0.32f, 160, 2}},
     [CH_CODEX] = {{0}, {0.06f, 0.07f, 0.14f, 52, 100, 168, 50, 0.30f, 180, 0},
                   {0.20f, 0.10f, 0.32f, 120, 118, 200, 120, 0.48f, 330, 0},
                   {0.09f, 0.08f, 0.22f, 55, 116, 46, 46, 0.32f, 170, 1},
@@ -1043,9 +1043,11 @@ static float AtkTotal(Fighter *a)
 static Rectangle Hurt(Fighter *a)
 {
     float w = a->ch == CH_CODEX ? 84 : 70, h = a->crouch ? 128 : (a->ch == CH_ELIRA ? 196 : 200);
+    if (a->ch == CH_CLAUDE) { w = 232; h = a->crouch ? 160 : 204; } /* sprite largo e baixo (corpo 240x204 na tela) */
     if (a->down || a->st == ST_KO) h = 40;
     return (Rectangle){a->x - w / 2, a->y - h, w, h};
 }
+static float BodyHalf(Fighter *a) { return a->ch == CH_CLAUDE ? 112.0f : 31.0f; } /* meia largura do corpo para nao se sobreporem */
 static bool Overlap(Rectangle a, Rectangle b) { return a.x < b.x + b.width && b.x < a.x + a.width && a.y < b.y + b.height && b.y < a.y + a.height; }
 static bool OnGround(Fighter *a) { return a->y >= IAF_GROUND_Y - 0.5f; }
 static void SetState(Fighter *a, FState s) { a->st = s; a->stT = 0; }
@@ -1182,8 +1184,8 @@ static void UpdateSpecial(Fighter *a, Fighter *o, float dt)
         if (t >= st + ac && !a->spawned && !a->countered)
         { /* sem ataque para refletir: pulso curto de luz */
             a->spawned = true;
-            HitSparks((Vector2){a->x + a->face * 80, a->y - 120}, C_AMBER, 14, 300);
-            if (fabsf(o->x - a->x) < 170 && fabsf(o->y - a->y) < 140) ApplyHit(a, o, 60, 0.35f, 260, 0, (Vector2){o->x, o->y - 120}, false, false);
+            HitSparks((Vector2){a->x + a->face * CL_FRONT, a->y - 120}, C_AMBER, 14, 300);
+            if (fabsf(o->x - a->x) < CL_FRONT + 96 && fabsf(o->y - a->y) < 140) ApplyHit(a, o, 60, 0.35f, 260, 0, (Vector2){o->x, o->y - 120}, false, false);
         }
         break;
     case CH_CODEX:
@@ -1379,7 +1381,7 @@ static void UpdateFighter(Fighter *a, Fighter *o, IafInput in, float dt)
                 if (Overlap(hb, Hurt(o)))
                 {
                     a->hitDone = true;
-                    Vector2 at = (Vector2){o->x - a->face * 28, top + d->h * 0.5f};
+                    Vector2 at = (Vector2){o->x - a->face * (Hurt(o).width * 0.5f - 7), top + d->h * 0.5f}; /* na borda de quem apanha */
                     ApplyHit(a, o, d->dmg, d->stun, d->push, d->type, at, false, a->atk == AT_HEAVY && a->ch == CH_CLAUDE && !OnGround(o));
                 }
             }
@@ -1690,7 +1692,7 @@ static IafInput CpuInput(int me, float dt)
             else if (sp && a->ch == CH_CODEX && r < 0.3f && dist < 560) s->once.specialP = true;
             else { s->mode = AI_FWD; s->t = 0.3f + Rand01() * 0.4f; }
         }
-        else if (dist > 165)
+        else if (dist > fmaxf(165, BodyHalf(a) + BodyHalf(o) + 22)) /* com corpos largos, ainda ha distancia para atacar */
         {
             if (r < 0.45f) { s->mode = AI_FWD; s->t = 0.2f + Rand01() * 0.3f; }
             else if (r < 0.6f) { s->mode = AI_JUMPIN; s->once.upP = true; s->t = 0.7f; }
@@ -1782,7 +1784,7 @@ static void PushApart(void)
     Fighter *a = &fz[0], *b = &fz[1];
     if (a->st == ST_KO || b->st == ST_KO || a->down || b->down) return;
     if (well.on && well.caught) return;
-    float minD = 62;
+    float minD = BodyHalf(a) + BodyHalf(b);
     if (fabsf(a->y - b->y) < 150 && fabsf(a->x - b->x) < minD)
     {
         float push = (minD - fabsf(a->x - b->x)) / 2;
