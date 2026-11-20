@@ -126,10 +126,10 @@ static const Atk ATK[CH_N][AT_SPECIAL] = {
                   {0.20f, 0.10f, 0.30f, 90, 150, 168, 50, 0.45f, 330, 0},  /* soco longo */
                   {0.08f, 0.14f, 0.32f, 80, 124, 300, 270, 0.50f, 120, 0}}, /* uppercut (chute alto) */
     [CH_CLAUDE] = {{0}, {0.07f, 0.08f, 0.15f, 48, 240, 162, 66, 0.30f, 170, 0}, /* alcances no punho/pe do sprite (2x) */
-                   {0.17f, 0.10f, 0.30f, 105, 250, 150, 72, 0.45f, 380, 0},  /* chute frontal */
+                   {0.17f, 0.10f, 0.30f, 98, 250, 150, 72, 0.45f, 380, 0},   /* chute frontal */
                    {0.10f, 0.08f, 0.22f, 50, 228, 44, 44, 0.32f, 160, 1},
                    {0.05f, 0.15f, 0.10f, 55, 248, 80, 54, 0.32f, 160, 2},
-                   {0.24f, 0.10f, 0.34f, 115, 262, 170, 72, 0.50f, 420, 0},  /* soco forte de alcance longo */
+                   {0.24f, 0.10f, 0.34f, 108, 262, 170, 72, 0.50f, 420, 0},  /* soco forte de alcance longo */
                    {0.09f, 0.14f, 0.34f, 85, 210, 320, 290, 0.50f, 120, 0}}, /* uppercut */
     [CH_CODEX] = {{0}, {0.06f, 0.07f, 0.14f, 52, 100, 168, 50, 0.30f, 180, 0},
                   {0.20f, 0.10f, 0.32f, 120, 118, 200, 120, 0.48f, 330, 0},
@@ -146,8 +146,8 @@ static const Atk ATK[CH_N][AT_SPECIAL] = {
 };
 /* especiais: preparo / janela ativa / recuperacao */
 static const float SP_ST[CH_N] = {0.42f, 0.08f, 0.14f, 0.22f};
-static const float SP_AC[CH_N] = {0.05f, 0.85f, 0.40f, 0.05f};
-static const float SP_RC[CH_N] = {0.40f, 0.25f, 0.34f, 0.45f};
+static const float SP_AC[CH_N] = {0.05f, 0.40f, 0.40f, 0.05f};
+static const float SP_RC[CH_N] = {0.40f, 0.50f, 0.34f, 0.45f};
 
 typedef struct
 {
@@ -789,6 +789,9 @@ static Texture2D texClaude;
 #define CL_SCALE 2.0f
 #define CL_FRONT 190.0f /* do centro ate a frente do corpo largo: prisma, feixe e pulso de luz */
 #define CL_STRIKE_REACH 256.0f /* ponta do punho (soco forte) e do pe (chute frontal) no quadro mais esticado */
+/* equilibrio do prisma (o especial do Claude causava ~6x o dano do especial dos outros) */
+#define CL_PRISM_COUNTER_DMG 60.0f /* feixe de resposta quando o prisma apara um golpe */
+#define CL_REFLECT_MULT 0.7f       /* dano do projetil refletido em relacao ao original */
 static int CAFrame(int anim, int i)
 {
     int n = CA_COUNT[anim];
@@ -1092,7 +1095,7 @@ static void PrismCounter(Fighter *cl, Fighter *att)
     cl->beamTo = (Vector2){att->x, att->y - 110};
     cl->atkT = SP_ST[CH_CLAUDE] + SP_AC[CH_CLAUDE]; /* vai para a recuperacao */
     AddText((Vector2){cl->x, cl->y - 250}, "REFLEXÃO!", C_AMBER, 26);
-    ApplyHit(cl, att, 130, 0.6f, 420, 0, (Vector2){att->x, att->y - 110}, true, true);
+    ApplyHit(cl, att, CL_PRISM_COUNTER_DMG, 0.6f, 420, 0, (Vector2){att->x, att->y - 110}, true, true);
 }
 static void ApplyHit(Fighter *att, Fighter *def, float dmg, float stun, float push, int type, Vector2 at, bool unblockable, bool launch)
 {
@@ -1550,7 +1553,7 @@ static void UpdateProjectiles(float dt)
             { /* reflete */
                 p->owner = 1 - p->owner;
                 p->vx = -p->vx * 1.2f;
-                p->dmg *= 1.5f;
+                p->dmg *= CL_REFLECT_MULT;
                 p->reflected = true;
                 p->hitCd = 0.1f;
                 HitSparks((Vector2){p->x, p->y}, C_AMBER, 14, 300);
