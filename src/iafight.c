@@ -207,9 +207,10 @@ static float hitstop = 0, shake = 0;
    Volume segue o do jogo: no padrao (g_musicVolume = 0,45) a musica fica em IAF_MUSIC_VOLUME e os
    efeitos em IAF_SFX_VOLUME; o mudo do jogo (tecla M) silencia tudo. Sem dispositivo de audio ou sem
    os arquivos, o modo continua funcionando em silencio. */
-enum { SFX_LIGHT, SFX_HEAVY, SFX_BLOCK, SFX_SHOT, SFX_SP_CHARGE, SFX_SP_FIRE, SFX_KO, SFX_FALL, SFX_MOVE, SFX_OK, VOX_ROUND, VOX_LUTEM, VOX_WIN, SFX_N };
+enum { SFX_LIGHT, SFX_HEAVY, SFX_BLOCK, SFX_SHOT, SFX_SP_CHARGE, SFX_SP_FIRE, SFX_KO, SFX_FALL, SFX_MOVE, SFX_OK, SFX_DASH, VOX_ROUND, VOX_LUTEM, VOX_WIN, SFX_N };
 static const char *SFX_FILE[SFX_N] = {"golpe_fraco.wav", "golpe_forte.wav", "defesa.wav", "tiro.wav", "especial_carga.wav",
                                       "especial_disparo.wav", "impacto_ko.wav", "queda.wav", "menu_mover.wav", "menu_confirmar.wav",
+                                      "menu_mover.wav" /* dash: o bip do menu bem mais grave vira um whoosh */,
                                       "voz_round.wav", "voz_lutem.wav", "voz_vitoria.wav"};
 #define IAF_SFX_VOICES 3 /* copias de cada efeito para sobrepor golpes seguidos */
 static Sound sfx[SFX_N][IAF_SFX_VOICES];
@@ -248,7 +249,8 @@ static void PlaySfx(int id)
     float vol = fminf(1.0f, IAF_SFX_VOLUME * AudioMaster());
     if (vol <= 0.001f) return;
     SetSoundVolume(*s, vol);
-    SetSoundPitch(*s, id >= VOX_ROUND || id == SFX_MOVE || id == SFX_OK ? 1.0f : 0.95f + Rand01() * 0.1f); /* golpes variam um pouco */
+    if (id == SFX_DASH) SetSoundPitch(*s, 0.55f + Rand01() * 0.06f);
+    else SetSoundPitch(*s, id >= VOX_ROUND || id == SFX_MOVE || id == SFX_OK ? 1.0f : 0.95f + Rand01() * 0.1f); /* golpes variam um pouco */
     PlaySound(*s);
 }
 /* toca a trilha pedida (0 selecao, 1 luta, -1 silencio) e mantem o stream andando */
@@ -1533,6 +1535,7 @@ static void UpdateFighter(Fighter *a, Fighter *o, IafInput in, float dt)
             a->dashT = 0;
             a->vx = a->face * IAF_DASH_DIST / IAF_DASH_TIME;
             SetState(a, ST_DASH);
+            PlaySfx(SFX_DASH);
             break;
         }
         if (in.upP && ground)
