@@ -188,6 +188,8 @@ static Impact impacts[16];
 
 static Fighter fz[2];
 static float hitstop = 0, shake = 0;
+/* botoes apertados durante a pausa de impacto: guardados e aplicados no primeiro quadro depois dela */
+static IafInput bufP[2];
 
 static void AddPart(Vector2 p, Vector2 v, float life, float size, Color c, int kind)
 {
@@ -951,88 +953,8 @@ static void DrawFighter(Fighter *a)
     }
 }
 
-/* ------------------------------------------------------------------ cenario: arena do nucleo */
-static unsigned Hash(unsigned x) { x ^= x >> 16; x *= 0x7feb352d; x ^= x >> 15; x *= 0x846ca68b; x ^= x >> 16; return x; }
-static void DrawRack(float x, float y, float w, float h, float depth, int seed)
-{
-    Color body = ColorLerp((Color){20, 24, 40, 255}, (Color){34, 40, 62, 255}, depth);
-    Color edge = ColorLerp((Color){30, 36, 58, 255}, (Color){58, 68, 100, 255}, depth);
-    DrawRectangle((int)x, (int)y, (int)w, (int)h, body);
-    DrawRectangle((int)x, (int)y, (int)w, 4, edge);
-    DrawRectangle((int)x, (int)y, 3, (int)h, edge);
-    DrawRectangle((int)(x + w - 3), (int)y, 3, (int)h, ColorLerp(body, BLACK, 0.4f));
-    int slots = (int)(h / 22);
-    for (int j = 0; j < slots; j++)
-    {
-        float sy = y + 10 + j * 22;
-        DrawRectangle((int)x + 8, (int)sy, (int)w - 16, 16, ColorLerp(body, BLACK, 0.35f));
-        DrawRectangle((int)x + 8, (int)sy, (int)w - 16, 2, Fade(edge, 0.7f));
-        for (int l = 0; l < 3; l++)
-        {
-            unsigned hsh = Hash((unsigned)(seed * 977 + j * 31 + l * 7 + (int)(gt * (1.5f + l))));
-            Color lc = (hsh % 5 == 0) ? (Color){255, 170, 80, 255} : ((hsh % 3 == 0) ? C_GREEN : C_CYAN);
-            float on = (hsh % 4) ? 1 : 0.2f;
-            DrawRectangle((int)(x + w - 30 + l * 7), (int)sy + 6, 4, 4, Fade(lc, (0.35f + 0.65f * depth) * on));
-        }
-    }
-}
-static void DrawStage(void)
-{
-    DrawRectangleGradientV(0, 0, SCREEN_WIDTH, (int)IAF_GROUND_Y, (Color){6, 8, 20, 255}, (Color){20, 24, 48, 255});
-    /* teto com dutos */
-    DrawRectangle(0, 0, SCREEN_WIDTH, 46, (Color){12, 14, 28, 255});
-    for (int i = 0; i < 8; i++) DrawRectangle(i * 170 + 20, 46, 120, 8, (Color){24, 28, 50, 255});
-    /* fileira de tras */
-    for (int i = 0; i < 16; i++) DrawRack(i * 84 - 20, 200, 70, 300, 0.1f, i + 40);
-    /* telao central */
-    Rectangle scr = {390, 96, 500, 170};
-    DrawRectangleRounded((Rectangle){scr.x - 10, scr.y - 10, scr.width + 20, scr.height + 20}, 0.08f, 6, (Color){16, 18, 34, 255});
-    DrawRectangleRounded(scr, 0.06f, 6, (Color){8, 22, 36, 255});
-    DrawRectangleRoundedLinesEx(scr, 0.06f, 6, 2, Fade(C_CYAN, 0.5f));
-    TxtC("RINHA DE INTELIGÊNCIAS", scr.x + scr.width / 2, scr.y + 22, 28, Fade(C_CYAN, 0.9f));
-    Vector2 prev = {0};
-    for (int i = 0; i <= 60; i++)
-    {
-        float xx = scr.x + 30 + i * (scr.width - 60) / 60.0f;
-        float yy = scr.y + 110 + sinf(i * 0.5f + gt * 3) * 14 * sinf(i * 0.13f + gt) + sinf(i * 1.7f - gt * 5) * 5;
-        if (i) DrawLineEx(prev, (Vector2){xx, yy}, 2, Fade(C_TEAL, 0.8f));
-        prev = (Vector2){xx, yy};
-    }
-    TxtC("ARENA DO NÚCLEO  //  TRANSMISSÃO AO VIVO", scr.x + scr.width / 2, scr.y + 60, 14, Fade(C_DIM, 0.9f));
-    /* cabos pendurados */
-    for (int i = 0; i < 6; i++)
-    {
-        float x0 = 60 + i * 230, x1 = x0 + 140;
-        DrawLineBezier((Vector2){x0, 50}, (Vector2){x1, 54}, 4, (Color){10, 12, 22, 255});
-        DrawLineBezier((Vector2){x0 + 10, 50}, (Vector2){x1 - 30, 50}, 2, (Color){30, 40, 70, 255});
-    }
-    /* fileira da frente (laterais) */
-    for (int i = 0; i < 3; i++) DrawRack(i * 104 - 30, 250, 96, 380, 0.75f, i);
-    for (int i = 0; i < 3; i++) DrawRack(SCREEN_WIDTH - 70 - i * 104, 250, 96, 380, 0.75f, i + 10);
-    /* piso em perspectiva */
-    DrawRectangleGradientV(0, (int)IAF_GROUND_Y - 30, SCREEN_WIDTH, SCREEN_HEIGHT - (int)IAF_GROUND_Y + 30, (Color){22, 26, 48, 255}, (Color){8, 10, 20, 255});
-    Vector2 vp = (Vector2){SCREEN_WIDTH / 2.0f, 360};
-    for (int i = -12; i <= 12; i++)
-    {
-        float xb = SCREEN_WIDTH / 2.0f + i * 130;
-        Vector2 a = (Vector2){Lerp(vp.x, xb, (IAF_GROUND_Y - 30 - vp.y) / (SCREEN_HEIGHT - vp.y)), IAF_GROUND_Y - 30};
-        DrawLineEx(a, (Vector2){xb, SCREEN_HEIGHT}, 1.5f, Fade(C_CYAN, 0.12f));
-    }
-    for (int j = 0; j < 7; j++)
-    {
-        float yy = IAF_GROUND_Y - 30 + powf(j / 6.0f, 1.8f) * (SCREEN_HEIGHT - IAF_GROUND_Y + 30);
-        DrawLineEx((Vector2){0, yy}, (Vector2){SCREEN_WIDTH, yy}, 1, Fade(C_CYAN, 0.10f + j * 0.015f));
-    }
-    /* borda da arena */
-    DrawRectangle(0, (int)IAF_GROUND_Y + 10, SCREEN_WIDTH, 3, Fade(C_CYAN, 0.55f));
-    DrawRectangle(0, (int)IAF_GROUND_Y + 13, SCREEN_WIDTH, 6, Fade(C_CYAN, 0.12f));
-    for (int i = 0; i < 20; i++)
-    {
-        float xx = 40 + i * 64;
-        float on = 0.4f + 0.6f * (0.5f + 0.5f * sinf(gt * 2 + i * 0.7f));
-        DrawRectangle((int)xx, (int)IAF_GROUND_Y + 9, 20, 5, Fade(C_CYAN, on));
-    }
-}
+/* ------------------------------------------------------------------ cenario: arena do nucleo
+   (desenho da arena e do HUD em iafight_arena.h, incluido mais abaixo, depois do estado da luta) */
 
 /* ------------------------------------------------------------------ jogo: estado */
 typedef enum { SC_MODE, SC_SELECT, SC_VERSUS, SC_FIGHT, SC_RESULT, SC_FINAL, SC_CONTROLS } IafScreen;
@@ -1083,6 +1005,7 @@ static void ClearFx(void)
     memset(parts, 0, sizeof(parts));
     memset(impacts, 0, sizeof(impacts));
     memset(&well, 0, sizeof(well));
+    memset(bufP, 0, sizeof(bufP));
     hitstop = 0; shake = 0;
 }
 
@@ -1156,12 +1079,7 @@ static void ApplyHit(Fighter *att, Fighter *def, float dmg, float stun, float pu
     att->meter = fminf(IAF_METER_MAX, att->meter + dmg * 0.09f);
     att->combo = (att->comboT > 0) ? att->combo + 1 : 1;
     att->comboT = 0.9f;
-    if (att->combo >= 2)
-    {
-        char b[32];
-        snprintf(b, sizeof b, "%d ACERTOS", att->combo);
-        AddText((Vector2){att->x, att->y - 240}, b, FCol(att), 22);
-    }
+    /* o contador de acertos aparece no HUD, ao lado da barra de quem ataca (DrawComboTag) */
     if (def->ch != CH_ELIRA)
     { /* sem efeito por cima dos quadros de reacao da Elira */
         if (att->ch == CH_ELIRA) AddImpact(at, 1.6f + dmg / 120.0f, dir);
@@ -1983,11 +1901,13 @@ static int selP[2] = {0, 1};   /* 1 x 1: personagem de cada jogador */
 static bool readyP[2];         /* 1 x 1: jogador ja confirmou */
 static float readyT = 0;       /* atraso depois que os dois confirmam */
 static int modeSel = 0, resSel = 0;
+static void ArenaSortear(void); /* sorteia o cenario (iafight_arena.h) */
 static void StartMatch(void)
 {
     wins[0] = wins[1] = 0;
     resSel = 0;
     roundNo = 1;
+    ArenaSortear(); /* cenario da luta (iafight_arena.h) */
     StartRound();
 }
 static void PushApart(void)
@@ -2008,10 +1928,27 @@ static void PushApart(void)
         if (b->x > IAF_WALL_R) { a->x -= b->x - IAF_WALL_R; b->x = IAF_WALL_R; }
     }
 }
+static void MergePressed(IafInput *dst, IafInput src)
+{
+    dst->upP = dst->upP || src.upP;
+    dst->lightP = dst->lightP || src.lightP;
+    dst->heavyP = dst->heavyP || src.heavyP;
+    dst->specialP = dst->specialP || src.specialP;
+    dst->shotP = dst->shotP || src.shotP;
+}
 static void SimStep(float dt, IafInput i0, IafInput i1)
 {
     UpdateParts(dt);
-    if (hitstop > 0) { hitstop -= dt; return; }
+    if (hitstop > 0)
+    {
+        hitstop -= dt;
+        MergePressed(&bufP[0], i0);
+        MergePressed(&bufP[1], i1);
+        return;
+    }
+    MergePressed(&i0, bufP[0]);
+    MergePressed(&i1, bufP[1]);
+    memset(bufP, 0, sizeof bufP);
     UpdateFighter(&fz[0], &fz[1], i0, dt);
     UpdateFighter(&fz[1], &fz[0], i1, dt);
     UpdateProjectiles(dt);
@@ -2078,85 +2015,9 @@ static void UpdateFight(float dt)
     }
 }
 
-/* ------------------------------------------------------------------ HUD */
-static void PG(float x0, float x1, float y, float h, float sl, bool mirror, Color col)
-{
-    if (!mirror) Quad((Vector2){x0 + sl, y}, (Vector2){x1 + sl, y}, (Vector2){x1, y + h}, (Vector2){x0, y + h}, col);
-    else Quad((Vector2){SCREEN_WIDTH - (x0 + sl), y}, (Vector2){SCREEN_WIDTH - (x1 + sl), y}, (Vector2){SCREEN_WIDTH - x1, y + h}, (Vector2){SCREEN_WIDTH - x0, y + h}, col);
-}
-static void Bar(float x, float y, float w, float h, float fill, float trail, Color col, bool mirror)
-{
-    float sl = 16;
-    PG(x - 4, x + w + 4, y - 3, h + 6, sl, mirror, (Color){4, 6, 14, 255});
-    PG(x, x + w, y, h, sl, mirror, (Color){24, 28, 48, 255});
-    PG(x + w * (1 - trail), x + w, y, h, sl, mirror, (Color){255, 240, 220, 200});
-    PG(x + w * (1 - fill), x + w, y, h, sl, mirror, col);
-    PG(x + w * (1 - fill), x + w, y + 2, h * 0.35f, sl * 0.4f, mirror, Fade(WHITE, 0.28f));
-    for (int i = 1; i < 10; i++)
-    {
-        float xx = x + w * i / 10.0f;
-        float X = mirror ? SCREEN_WIDTH - xx : xx;
-        float off = mirror ? -sl : sl;
-        DrawLineEx((Vector2){X + off, y}, (Vector2){X, y + h}, 2, (Color){4, 6, 14, 160});
-    }
-}
-static void DrawHUD(void)
-{
-    for (int i = 0; i < 2; i++)
-    {
-        Fighter *a = &fz[i];
-        bool m = i == 1;
-        float fill = a->hp / IAF_HP_MAX, trail = a->hpShown / IAF_HP_MAX;
-        Color col = fill < 0.25f ? ColorLerp(C_RED, WHITE, 0.15f * (0.5f + 0.5f * sinf(gt * 10))) : ColorLerp(FCol(a), WHITE, 0.15f);
-        Bar(70, 30, 470, 26, fill, trail, col, m);
-        /* nome e "chip" de cor */
-        float nx = m ? SCREEN_WIDTH - 70 : 70;
-        DrawRectangle((int)(m ? nx - 14 : nx), 64, 14, 14, FCol(a));
-        DrawRectangleLines((int)(m ? nx - 14 : nx), 64, 14, 14, C_INK);
-        const char *nm = NAME[a->ch];
-        if (m) TxtR(nm, nx - 22, 61, 22, C_WHITE); else Txt(nm, nx + 22, 61, 22, C_WHITE);
-        const char *tag = cpu[i] ? "CPU" : (versusMode ? (i == 0 ? "P1" : "P2") : "JOGADOR");
-        float tw = TxtW(nm, 22) + 32;
-        if (m) TxtR(tag, nx - tw, 66, 14, C_DIM); else Txt(tag, nx + tw, 66, 14, C_DIM);
-        /* rounds vencidos: chips de memoria */
-        for (int r = 0; r < 2; r++)
-        {
-            float cx = m ? SCREEN_WIDTH / 2.0f + 76 + r * 26 : SCREEN_WIDTH / 2.0f - 76 - r * 26;
-            Rectangle rc = {cx - 9, 66, 18, 12};
-            DrawRectangleRec(rc, wins[i] > r ? FCol(a) : (Color){30, 34, 56, 255});
-            DrawRectangleLinesEx(rc, 1.5f, C_INK);
-            for (int p = 0; p < 3; p++) { DrawRectangle((int)rc.x + 2 + p * 6, 78, 2, 4, C_DIM); DrawRectangle((int)rc.x + 2 + p * 6, 62, 2, 4, C_DIM); }
-        }
-        /* carga do especial */
-        float mx = m ? SCREEN_WIDTH - 70 - 300 : 70, my = SCREEN_HEIGHT - 40;
-        Txt("CARGA", m ? mx + 300 - TxtW("CARGA", 14) : mx, my - 20, 14, C_DIM);
-        for (int sgm = 0; sgm < 2; sgm++)
-        {
-            float seg = Clamp((a->meter - sgm * 50) / 50, 0.0f, 1.0f);
-            int si = m ? 1 - sgm : sgm;
-            Rectangle r = {mx + si * 152, my, 148, 14};
-            DrawRectangleRec(r, (Color){20, 24, 44, 255});
-            Rectangle f = r;
-            f.width *= seg;
-            if (m) f.x = r.x + r.width - f.width;
-            DrawRectangleRec(f, seg >= 1 ? ColorLerp(FCol(a), WHITE, 0.3f + 0.3f * sinf(gt * 8)) : Fade(FCol(a), 0.7f));
-            DrawRectangleLinesEx(r, 2, C_INK);
-        }
-        if (a->meter >= IAF_SPECIAL_COST)
-        {
-            const char *s = "ESPECIAL PRONTO";
-            if (m) TxtR(s, SCREEN_WIDTH - 70 - 60, my - 20, 14, FCol(a)); else Txt(s, 70 + 60, my - 20, 14, FCol(a));
-        }
-    }
-    /* cronometro em hexagono */
-    Vector2 c = (Vector2){SCREEN_WIDTH / 2.0f, 50};
-    DrawPoly(c, 6, 44, 0, (Color){4, 6, 14, 255});
-    DrawPoly(c, 6, 40, 0, (Color){18, 22, 42, 255});
-    DrawPolyLinesEx(c, 6, 40, 0, 2, Fade(C_CYAN, 0.7f));
-    char b[8];
-    snprintf(b, sizeof b, "%02d", (int)ceilf(roundTimer));
-    TxtC(b, c.x, c.y - 17, 34, roundTimer < 10 ? C_RED : C_WHITE);
-}
+/* ------------------------------------------------------------------ arena e HUD da luta */
+#include "iafight_arena.h"
+
 static void DrawFightOverlay(void)
 {
     if (rstate == RS_INTRO)
@@ -2208,6 +2069,7 @@ static void DrawFight(void)
     if (shake > 0) cam.offset = (Vector2){(Rand01() - 0.5f) * shake * 24, (Rand01() - 0.5f) * shake * 24};
     BeginMode2D(cam);
     DrawStage();
+    DrawStageFloor();
     DrawWell();
     /* quem ataca fica na frente */
     int first = (fz[0].st == ST_ATK && fz[1].st != ST_ATK) ? 1 : 0;
