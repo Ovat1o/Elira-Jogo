@@ -2404,8 +2404,9 @@ static void DrawControls(void)
     DrawRectangleRounded((Rectangle){o.x - 150, o.y - 56, 300, 112}, 0.6f, 12, body);
     DrawRectangleRoundedLinesEx((Rectangle){o.x - 150, o.y - 56, 300, 112}, 0.6f, 12, 2, edge);
     DrawRectangleRounded((Rectangle){o.x + 64, o.y - 76, 76, 22}, 0.6f, 6, C_AMBER); /* ombro direito: especial */
-    DrawRectangleRounded((Rectangle){o.x - 140, o.y - 76, 76, 22}, 0.6f, 6, Fade(edge, 0.5f));
+    DrawRectangleRounded((Rectangle){o.x - 140, o.y - 76, 76, 22}, 0.6f, 6, C_CYAN); /* ombro esquerdo: dash */
     TxtC("RB / R1", o.x + 102, o.y - 72, 13, C_INK);
+    TxtC("LB / L1", o.x - 102, o.y - 72, 13, C_INK);
     Vector2 st = {o.x - 92, o.y - 14}, dp = {o.x - 44, o.y + 34};
     DrawCircleV(st, 22, dark);
     DrawCircleV(st, 14, C_CYAN);
@@ -2424,53 +2425,59 @@ static void DrawControls(void)
     float lx = pane.x + 400, ly = pane.y + 76;
     for (int i = 0; i < 4; i++)
     {
-        float y = ly + i * 46;
+        float y = ly + i * 42;
         DrawCircleV((Vector2){lx + 14, y + 10}, 14, FC[i]);
         TxtC(XB[i], lx + 14, y + 1, 16, C_INK);
         DrawCircleV((Vector2){lx + 46, y + 10}, 14, (Color){30, 34, 52, 255});
         PsGlyph((Vector2){lx + 46, y + 10}, PS[i], 6, C_WHITE);
         Txt(ACTS[i], lx + 72, y + 1, 18, C_WHITE);
     }
-    float y4 = ly + 4 * 46;
+    float y4 = ly + 4 * 42;
     DrawRectangleRounded((Rectangle){lx, y4, 60, 22}, 0.6f, 6, C_AMBER);
     TxtC("RB/RT", lx + 30, y4 + 4, 13, C_INK);
     Txt("ESPECIAL  (R1 / R2)", lx + 72, y4 + 1, 18, C_WHITE);
-    DrawRectangleRounded((Rectangle){lx, y4 + 46, 60, 22}, 0.6f, 6, C_WHITE);
-    TxtC("START", lx + 30, y4 + 50, 13, C_INK);
-    Txt("PAUSA", lx + 72, y4 + 47, 18, C_WHITE);
-    DrawCircleV((Vector2){lx + 14, y4 + 104}, 12, C_CYAN);
-    Txt("MOVER  (analógico ou direcional)", lx + 34, y4 + 94, 18, C_WHITE);
-    Txt("SELECT: esta tela", lx + 34, y4 + 124, 15, C_DIM);
-    Txt("Para trás: DEFENDE (escudo)    Para baixo: AGACHA    Agachado + golpe: RASTEIRA", pane.x + 20, pane.y + pane.height - 64, 15, C_DIM);
-    Txt("No ar + golpe: CHUTE AÉREO    Especial gasta metade da barra CARGA    B: voltar nos menus", pane.x + 20, pane.y + pane.height - 38, 15, C_DIM);
+    DrawRectangleRounded((Rectangle){lx, y4 + 40, 60, 22}, 0.6f, 6, C_CYAN);
+    TxtC("LB / L1", lx + 30, y4 + 44, 13, C_INK);
+    Txt("DASH  (investida)", lx + 72, y4 + 41, 18, C_WHITE);
+    DrawRectangleRounded((Rectangle){lx, y4 + 80, 60, 22}, 0.6f, 6, C_WHITE);
+    TxtC("START", lx + 30, y4 + 84, 13, C_INK);
+    Txt("PAUSA", lx + 72, y4 + 81, 18, C_WHITE);
+    DrawCircleV((Vector2){lx + 14, y4 + 130}, 12, C_CYAN);
+    Txt("MOVER  (analógico ou direcional)", lx + 34, y4 + 120, 18, C_WHITE);
+    /* combinacoes (valem para os 4 lutadores) */
+    float cy = pane.y + pane.height - 78;
+    Txt("Forte: CHUTE    Frente + forte: SOCO LONGO    Cima + forte: UPPERCUT", pane.x + 20, cy, 15, C_AMBER);
+    Txt("Frente 2x ou LB/L1: DASH    Agachado + golpe: RASTEIRA    No ar + golpe: CHUTE AÉREO", pane.x + 20, cy + 22, 15, C_DIM);
+    Txt("Para trás: DEFENDE (escudo)    Especial gasta metade da CARGA    B: voltar nos menus", pane.x + 20, cy + 44, 15, C_DIM);
     /* ---- teclado */
     Rectangle kp = {780, 92, 460, 470};
     DrawRectangleRounded(kp, 0.06f, 6, (Color){12, 14, 30, 235});
     DrawRectangleRoundedLinesEx(kp, 0.06f, 6, 2, Fade(C_CYAN, 0.6f));
     Txt("TECLADO", kp.x + 20, kp.y + 14, 22, C_CYAN);
-    static const char *ACT[8] = {"Mover", "Pular", "Agachar", "Soco (fraco)", "Chute (forte)", "Especial", "Tiro (Elira)", "Pausa"};
-    static const char *K1[8] = {"A / D  ou  SETAS", "W  ou  SETA CIMA", "S  ou  SETA BAIXO", "J  ou  Z", "K  ou  X", "L  ou  C", "I  ou  V", "P  ou  ESC"};
-    static const char *KP1[8] = {"A / D", "W", "S", "J", "K", "L", "I", "P"};
-    static const char *KP2[8] = {"SETAS", "SETA CIMA", "SETA BAIXO", "1 (num.)", "2 (num.)", "3 (num.)", "4 (num.)", "P"};
+    static const char *ACT[9] = {"Mover", "Pular", "Agachar", "Soco (fraco)", "Chute (forte)", "Dash", "Especial", "Tiro (Elira)", "Pausa"};
+    static const char *K1[9] = {"A / D  ou  SETAS", "W  ou  SETA CIMA", "S  ou  SETA BAIXO", "J  ou  Z", "K  ou  X", "2x para frente (D D)", "L  ou  C", "I  ou  V", "P  ou  ESC"};
+    static const char *KP1[9] = {"A / D", "W", "S", "J", "K", "D D", "L", "I", "P"};
+    static const char *KP2[9] = {"SETAS", "SETA CIMA", "SETA BAIXO", "1 (num.)", "2 (num.)", "SETA 2x", "3 (num.)", "4 (num.)", "P"};
     Txt("1 JOGADOR x CPU", kp.x + 20, kp.y + 54, 16, C_AMBER);
-    for (int i = 0; i < 8; i++)
+    for (int i = 0; i < 9; i++)
     {
-        float y = kp.y + 80 + i * 22;
-        Txt(ACT[i], kp.x + 20, y, 15, C_DIM);
+        float y = kp.y + 80 + i * 20;
+        Txt(ACT[i], kp.x + 20, y, 15, ACT[i][0] == 'D' ? C_CYAN : C_DIM);
         Txt(K1[i], kp.x + 170, y, 15, C_WHITE);
     }
-    float y0 = kp.y + 270;
+    float y0 = kp.y + 266;
     Txt("1 x 1", kp.x + 20, y0, 16, C_AMBER);
     Txt("P1", kp.x + 170, y0, 16, C_CYAN);
     Txt("P2", kp.x + 300, y0, 16, C_RED);
-    for (int i = 0; i < 7; i++)
+    for (int i = 0; i < 8; i++)
     {
-        float y = y0 + 24 + i * 22;
-        Txt(ACT[i], kp.x + 20, y, 15, C_DIM);
+        float y = y0 + 22 + i * 19;
+        Txt(ACT[i], kp.x + 20, y, 15, ACT[i][0] == 'D' ? C_CYAN : C_DIM);
         Txt(KP1[i], kp.x + 170, y, 15, C_WHITE);
         Txt(KP2[i], kp.x + 300, y, 15, C_WHITE);
     }
-    (void)KP2[7];
+    (void)KP2[8];
+    Txt("Frente + chute: SOCO LONGO    Cima + chute: UPPERCUT", kp.x + 20, kp.y + kp.height - 26, 14, C_AMBER);
     TxtC("No 1 x 1: P1 usa o controle 1 e P2 o controle 2; sem o 2º controle, o P2 joga no teclado.", SCREEN_WIDTH / 2.0f, 586, 16, C_DIM);
     TxtC("TAB / SELECT, ESC / B ou ENTER / A: voltar", SCREEN_WIDTH / 2.0f, SCREEN_HEIGHT - 34, 16, C_DIM);
 }
