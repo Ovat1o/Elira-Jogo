@@ -16,7 +16,7 @@
 #define VH 720
 #ifndef ASSETS
 #define ASSETS "assets/" /* o main.c ja poe o diretorio de trabalho na raiz do jogo */
-#define INV_DEBUG_SKIP 0 /* 1 = teclas 1-5 pulam de estagio (so para testes; deixar 0 nas entregas) */
+#define INV_DEBUG_SKIP 1 /* 1 = teclas 1-5 pulam de estagio (so para testes; deixar 0 nas entregas) */
 #endif
 
 /* ------------------------------------------------------------------ util */
