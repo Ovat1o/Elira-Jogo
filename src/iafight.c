@@ -221,6 +221,21 @@ static void HitSparks(Vector2 p, Color c, int n, float spd)
     }
     AddPart(p, (Vector2){0, 0}, 0.25f, 40, c, 3);
 }
+/* acerto: estrela de pontas no ponto de contato (kind 4; v.x guarda o giro) */
+static void ImpactSpark(Vector2 p, Color c, float size)
+{
+    AddPart(p, (Vector2){Rand01() * 0.8f, 0}, 0.16f, size, c, 4);
+}
+/* defesa: clarao vertical na frente do defensor (kind 6) e lascas hexagonais que caem (kind 5) */
+static void BlockSpark(Vector2 p, Color c, int dir)
+{
+    AddPart(p, (Vector2){0, 0}, 0.14f, 34, c, 6);
+    for (int i = 0; i < 7; i++)
+    {
+        float a = (-70 + Rand01() * 110) * DEG2RAD, s = 180 + Rand01() * 220;
+        AddPart(p, (Vector2){-dir * cosf(a) * s, sinf(a) * s}, 0.30f + Rand01() * 0.15f, 3 + Rand01() * 3, c, 5);
+    }
+}
 
 /* ------------------------------------------------------------------ esqueleto das IAs (primitivas) */
 typedef struct { float rootY, lean, head, aF, eF, aB, eB, lF, kF, lB, kB; } Pose;
@@ -1010,7 +1025,7 @@ static void ApplyHit(Fighter *att, Fighter *def, float dmg, float stun, float pu
         def->vx = dir * push * 0.8f;
         def->meter = fminf(IAF_METER_MAX, def->meter + 4);
         def->shieldHit = 0.15f;
-        if (def->ch != CH_ELIRA) HitSparks(at, CHCOL[def->ch], 6, 260); /* a faisca da Elira ja vem no quadro */
+        if (def->ch != CH_ELIRA) BlockSpark(at, CHCOL[def->ch], dir); /* a faisca do escudo da Elira ja vem no quadro */
         hitstop = fmaxf(hitstop, HitstopFor(att) * 0.7f);
         def->hitShake = hitstop;
         if (def->hp <= 0) KO(def, dir);
@@ -1041,6 +1056,8 @@ static void ApplyHit(Fighter *att, Fighter *def, float dmg, float stun, float pu
         if (att->ch == CH_ELIRA) AddImpact(at, 1.6f + dmg / 120.0f, dir);
         HitSparks(at, att->ch == CH_ELIRA ? C_CYAN : CHCOL[att->ch], 10 + (int)(dmg / 10), 420);
     }
+    /* estrela de impacto no ponto do acerto (menor sobre a Elira, cujos quadros de dano ja tem efeito) */
+    ImpactSpark(at, att->ch == CH_ELIRA ? C_CYAN : CHCOL[att->ch], (28 + dmg * 0.22f) * (def->ch == CH_ELIRA ? 0.6f : 1.0f));
     hitstop = fmaxf(hitstop, HitstopFor(att));
     def->hitShake = hitstop;
     shake = fmaxf(shake, dmg / 600.0f);
@@ -1425,6 +1442,7 @@ static void UpdateParts(float dt)
         p->life -= dt;
         p->p = Vector2Add(p->p, Vector2Scale(p->v, dt));
         if (p->kind == 0) p->v = Vector2Scale(p->v, 1 - 4 * dt);
+        if (p->kind == 5) p->v.y += 900 * dt; /* lascas caem */
     }
     for (int i = 0; i < 16; i++)
         if (impacts[i].on) { impacts[i].t += dt; if (impacts[i].t > 0.32f) impacts[i].on = false; }
@@ -1444,6 +1462,28 @@ static void DrawParts(void)
         else if (p->kind == 1) DrawCircleV(p->p, p->size, Fade(p->c, k));
         else if (p->kind == 2) TxtO(p->txt, p->p.x, p->p.y, (int)p->size, Fade(p->c, fminf(1, k * 2)), Fade(C_INK, fminf(1, k * 2)));
         else if (p->kind == 3) { float r = p->size * (1.4f - k); DrawRing(p->p, r - 3, r, 0, 360, 32, Fade(p->c, k * 0.8f)); }
+        else if (p->kind == 4)
+        { /* estrela de impacto: 8 pontas que crescem e afinam */
+            float q = 1 - k, rot = p->v.x;
+            for (int s = 0; s < 8; s++)
+            {
+                float an = rot + s * 0.785f, len = p->size * ((s % 2 ? 0.55f : 1.0f) * (0.6f + 0.6f * q)), w = (s % 2 ? 3.0f : 5.0f) * k + 1;
+                Vector2 d = {cosf(an), sinf(an)}, n = {-d.y, d.x};
+                Vector2 tip = Vector2Add(p->p, Vector2Scale(d, len));
+                Vector2 b0 = Vector2Add(Vector2Add(p->p, Vector2Scale(d, p->size * 0.12f)), Vector2Scale(n, w));
+                Vector2 b1 = Vector2Subtract(Vector2Add(p->p, Vector2Scale(d, p->size * 0.12f)), Vector2Scale(n, w));
+                Tri(b0, b1, tip, Fade(p->c, k));
+                Tri(Vector2Add(p->p, Vector2Scale(n, w * 0.5f)), Vector2Subtract(p->p, Vector2Scale(n, w * 0.5f)), Vector2Add(p->p, Vector2Scale(d, len * 0.6f)), Fade(WHITE, k));
+            }
+            DrawCircleV(p->p, p->size * 0.22f * k + 2, Fade(WHITE, k));
+        }
+        else if (p->kind == 5) DrawPoly(p->p, 6, p->size, p->life * 900, Fade(ColorLerp(p->c, WHITE, 0.4f), k));
+        else if (p->kind == 6)
+        { /* clarao vertical do bloqueio */
+            float h = p->size * (1.2f + (1 - k) * 0.8f);
+            DrawRectangleRec((Rectangle){p->p.x - 5 * k - 1, p->p.y - h, 10 * k + 2, h * 2}, Fade(p->c, 0.5f * k));
+            DrawRectangleRec((Rectangle){p->p.x - 1.5f, p->p.y - h * 0.8f, 3, h * 1.6f}, Fade(WHITE, k));
+        }
     }
     for (int i = 0; i < 16; i++)
         if (impacts[i].on)
