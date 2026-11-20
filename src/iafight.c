@@ -952,6 +952,99 @@ static int ClaudeFrameIdx(Fighter *a)
     return CALoop(CA_IDLE, gt);
 }
 
+/* ------------------------------------------------------------------ Codex: atlas de luta
+   Gerado fora do repositorio a partir do pacote Codex Fighter V2 (grade nativa 128x128).
+   O atlas guarda 1 pixel da arte por pixel; 2x na tela = ~198 px de altura (Elira ~218, Claude ~204). */
+#include "iafight_codex.h"
+static Texture2D texCodex;
+#define XC_SCALE 2.0f
+#define XC_FRONT 76.0f /* do centro ate a frente da nuvem: placa de defesa e agarrao do especial */
+#define IAF_CODEX_ALT_TINT ((Color){150, 255, 185, 255}) /* sprite do Codex no espelho: luvas e rosto verdes */
+static int XAFrame(int anim, int i)
+{
+    int n = XA_COUNT[anim];
+    if (i < 0) i = 0;
+    if (i >= n) i = n - 1;
+    return XA_FIRST[anim] + i;
+}
+static int XALoop(int anim, float t) { return XA_FIRST[anim] + ((int)(t / XA_DUR[anim]) % XA_COUNT[anim]); }
+static void DrawXF(int f, float x, float yFeet, int face, float sc, Color tint, float flash)
+{
+    const XFrame *e = &XF[f];
+    Rectangle src = {e->x, e->y, e->w, e->h};
+    float left = face > 0 ? x - e->ax * sc : x - (e->w - e->ax) * sc;
+    if (face < 0) src.width = -src.width;
+    Rectangle dst = {roundf(left), roundf(yFeet - e->ay * sc), e->w * sc, e->h * sc};
+    DrawTexturePro(texCodex, src, dst, (Vector2){0, 0}, 0, tint);
+    if (flash > 0)
+    {
+        BeginBlendMode(BLEND_ADDITIVE);
+        DrawTexturePro(texCodex, src, dst, (Vector2){0, 0}, 0, Fade(WHITE, flash));
+        EndBlendMode();
+    }
+}
+/* golpe: preparo usa os quadros [0, a0), ativo [a0, a1] (punho/pe esticado), recuperacao o resto */
+static int CodexAtkFrame(Fighter *a, int anim, int a0, int a1, float st, float ac, float rc)
+{
+    int n = XA_COUNT[anim], i;
+    float t = a->atkT;
+    if (ac < IAF_ACTIVE_VISUAL) { rc = fmaxf(rc - (IAF_ACTIVE_VISUAL - ac), 0.02f); ac = IAF_ACTIVE_VISUAL; }
+    if (t < st) i = (int)(t / st * a0);
+    else if (t < st + ac) i = a0 + (int)((t - st) / ac * (a1 - a0 + 1));
+    else i = a1 + 1 + (int)((t - st - ac) / rc * (n - 1 - a1));
+    return XAFrame(anim, i);
+}
+static int CodexFrameIdx(Fighter *a)
+{
+    int nk = XA_COUNT[XA_KO];
+    if (a->st == ST_KO) return XAFrame(XA_KO, (int)(a->stT / 0.06f));
+    if (a->down)
+    { /* caido; ao levantar, a queda tocada ao contrario */
+        if (a->downT > 0.36f) return XAFrame(XA_KO, nk - 1);
+        return XAFrame(XA_KO, (int)(a->downT / 0.36f * (nk - 1)));
+    }
+    if (a->st == ST_LOSE) return XAFrame(XA_KO, nk - 1);
+    if (a->st == ST_WIN) return XALoop(XA_VICTORY, a->stT);
+    if (a->st == ST_HIT) return XAFrame(XA_HIT, (int)(a->stT / 0.4f * XA_COUNT[XA_HIT]));
+    if (a->st == ST_ATK)
+    {
+        const Atk *d = &ATK[CH_CODEX][a->atk < AT_SPECIAL ? a->atk : 0];
+        switch (a->atk)
+        {
+        case AT_LIGHT: return CodexAtkFrame(a, XA_LIGHT, 6, 11, d->st, d->ac, d->rc);
+        case AT_HEAVY: return CodexAtkFrame(a, XA_KICK, 9, 17, d->st, d->ac, d->rc);
+        case AT_FWDH: return CodexAtkFrame(a, XA_LONG, 11, 16, d->st, d->ac, d->rc);
+        case AT_UPPER: return CodexAtkFrame(a, XA_UPPER, 7, 12, d->st, d->ac, d->rc);
+        case AT_LOW: return CodexAtkFrame(a, XA_LOWKICK, 7, 13, d->st, d->ac, d->rc);
+        case AT_AIR: return CodexAtkFrame(a, XA_KICK, 9, 17, d->st, d->ac, d->rc); /* sem aereo no pacote: chute alto */
+        case AT_SPECIAL:
+        { /* deploy forcado: carga no preparo, investida com o punho, socos da sequencia e o disparo final */
+            float st = SP_ST[CH_CODEX], ac = SP_AC[CH_CODEX], rc = SP_RC[CH_CODEX];
+            if (a->atkT < st) return XALoop(XA_CHARGE, a->atkT);
+            if (a->caught)
+            {
+                if (a->spHits < 4) return XAFrame(XA_SPECIAL, 11 + (int)(fmodf(a->spT, 0.09f) / 0.09f * 6));
+                return XAFrame(XA_SPECIAL, 17 + (int)((a->spT - 0.36f) / 0.14f * 7));
+            }
+            if (a->atkT < st + ac) return XAFrame(XA_SPECIAL, 8 + (int)((a->atkT - st) / ac * 9));
+            return XAFrame(XA_SPECIAL, 21 + (int)((a->atkT - st - ac) / rc * 7));
+        }
+        default: break;
+        }
+    }
+    if (a->shieldOn || a->st == ST_BLOCK)
+    {
+        if (a->crouch) return XAFrame(XA_CROUCH, XA_COUNT[XA_CROUCH] - 1);
+        float t = a->stT / XA_DUR[XA_GUARD];
+        return t < 3 ? XAFrame(XA_GUARD, (int)t) : XA_FIRST[XA_GUARD] + 3 + ((int)t - 3) % 10; /* entra e segura a guarda */
+    }
+    if (a->st == ST_DASH) return XAFrame(XA_DASH, (int)(a->dashT / IAF_DASH_TIME * XA_COUNT[XA_DASH]));
+    if (a->st == ST_JUMP) return XAFrame(XA_JUMP, 1 + (int)((a->vy + IAF_JUMP_SPEED) / (2 * IAF_JUMP_SPEED) * 9));
+    if (a->crouch) return XAFrame(XA_CROUCH, (int)(a->stT / 0.035f));
+    if (a->st == ST_WALK) return XALoop((a->vx * a->face) < 0 ? XA_WALK_B : XA_WALK_F, a->anim);
+    return XALoop(XA_IDLE, gt);
+}
+
 /* ------------------------------------------------------------------ desenho de um lutador */
 /* rastro do golpe: arco translucido na cor do lutador, varrendo o caminho do membro que golpeia
    (angulos em graus a partir da frente; positivo = para baixo) */
@@ -968,7 +1061,8 @@ static void DrawAttackTrail(Fighter *a, float jx)
     {
     case AT_LIGHT: cy = a->y - d->top + d->h * 0.5f; r = d->rx * 0.62f; a0 = -16; a1 = 16; break;
     case AT_HEAVY:
-        if (a->ch == CH_CODEX) { cy = a->y - 120; r = d->rx * 0.8f; a0 = -80; a1 = 35; }       /* martelada descendo */
+        if (a->ch == CH_CODEX && texCodex.id) { cy = a->y - 95; r = d->rx * 0.7f; a0 = 30; a1 = -6; } /* chute alto do sprite */
+        else if (a->ch == CH_CODEX) { cy = a->y - 120; r = d->rx * 0.8f; a0 = -80; a1 = 35; }  /* martelada descendo */
         else if (a->ch == CH_CLAUDE) { cy = a->y - 130; r = d->rx * 0.62f; a0 = -14; a1 = 14; } /* empurrao reto */
         else { cy = a->y - 105; r = d->rx * 0.72f; a0 = 70; a1 = -55; }                          /* chute subindo */
         break;
@@ -1005,7 +1099,7 @@ static void DrawFighter(Fighter *a)
     float flash = a->flash > 0 ? Clamp(a->flash / 0.12f, 0.0f, 1.0f) * 0.8f : 0;
     float alt = IAF_GROUND_Y - a->y;
     float jx = a->hitShake > 0 ? (Rand01() - 0.5f) * 2 * IAF_HIT_SHAKE_PX : 0; /* tremor no impacto */
-    DrawShadow(a->x, (a->ch == CH_CLAUDE && texClaude.id ? 118 : 52) - fminf(alt, 200) * 0.12f);
+    DrawShadow(a->x, (a->ch == CH_CLAUDE && texClaude.id ? 118 : (a->ch == CH_CODEX && texCodex.id ? 84 : 52)) - fminf(alt, 200) * 0.12f);
     if (a->inv > 0 && fmodf(a->inv, 0.1f) < 0.05f && a->st != ST_KO) return;
     if (a->st == ST_DASH)
     { /* rastro: copias apagadas para tras (sprites) e linhas de velocidade (todos) */
@@ -1015,6 +1109,7 @@ static void DrawFighter(Fighter *a)
             float gx = a->x - a->face * k * 34, al = 0.32f / k;
             if (a->ch == CH_ELIRA) { float yo; DrawEF(EliraFrameIdx(a, &yo), gx, a->y, a->face, 1.0f, Fade(c, al), 0); }
             else if (a->ch == CH_CLAUDE && texClaude.id) DrawCF(ClaudeFrameIdx(a), gx, a->y, a->face, CL_SCALE, Fade(c, al), 0);
+            else if (a->ch == CH_CODEX && texCodex.id) DrawXF(CodexFrameIdx(a), gx, a->y, a->face, XC_SCALE, Fade(c, al), 0);
         }
         for (int l = 0; l < 6; l++)
         {
@@ -1037,6 +1132,7 @@ static void DrawFighter(Fighter *a)
         DrawEF(f, x, a->y + yoff, a->face, 1.0f, a->alt ? IAF_ELIRA_ALT_TINT : WHITE, fl);
     }
     else if (a->ch == CH_CLAUDE && texClaude.id) DrawCF(ClaudeFrameIdx(a), a->x + jx, a->y, a->face, CL_SCALE, a->alt ? IAF_CLAUDE_ALT_TINT : WHITE, flash);
+    else if (a->ch == CH_CODEX && texCodex.id) DrawXF(CodexFrameIdx(a), a->x + jx, a->y, a->face, XC_SCALE, a->alt ? IAF_CODEX_ALT_TINT : WHITE, flash);
     else
     {
         Pose p = PoseFor(a);
@@ -1051,6 +1147,7 @@ static void DrawFighter(Fighter *a)
         Color c = FCol(a);
         float cy = a->crouch ? a->y - 60 : a->y - 120, cx = a->x + a->face * 52;
         if (a->ch == CH_CLAUDE && texClaude.id) { cy = a->crouch ? a->y - 90 : a->y - 140; cx = a->x + a->face * 172; } /* na frente do braco erguido */
+        if (a->ch == CH_CODEX && texCodex.id) { cy = a->crouch ? a->y - 80 : a->y - 112; cx = a->x + a->face * (XC_FRONT + 22); } /* na frente das luvas */
         DrawPoly((Vector2){cx, cy}, 6, 40, 0, Fade(c, 0.18f));
         DrawPolyLinesEx((Vector2){cx, cy}, 6, 40, 0, 3, Fade(c, 0.85f));
         DrawPolyLinesEx((Vector2){cx, cy}, 6, 28, 0, 1.5f, Fade(c, 0.5f));
@@ -2323,6 +2420,12 @@ static void DrawCharacterBig(CharId ch, float x, float yFeet, int face, float sc
         DrawCF(f, x, yFeet, face, fmaxf(1.0f, roundf(CL_SCALE * sc * 0.75f * 2) / 2), g_altPal ? IAF_CLAUDE_ALT_TINT : WHITE, 0);
         return;
     }
+    if (ch == CH_CODEX && texCodex.id)
+    { /* mesma regra do Claude: escala em passos de 0,5 do pixel da arte */
+        int f = st == ST_WIN ? XALoop(XA_VICTORY, gt) : (st == ST_KO ? XAFrame(XA_KO, XA_COUNT[XA_KO] - 1) : XALoop(XA_IDLE, gt));
+        DrawXF(f, x, yFeet, face, fmaxf(1.0f, roundf(XC_SCALE * sc * 0.75f * 2) / 2), g_altPal ? IAF_CODEX_ALT_TINT : WHITE, 0);
+        return;
+    }
     Fighter tmp;
     memset(&tmp, 0, sizeof tmp);
     tmp.ch = ch; tmp.st = st; tmp.face = face; tmp.x = x;
@@ -2789,6 +2892,8 @@ void IafEnter(GameState *game)
         SetTextureFilter(texElira, TEXTURE_FILTER_BILINEAR);
         texClaude = LoadTexture(IAF_CLAUDE_ATLAS);
         SetTextureFilter(texClaude, TEXTURE_FILTER_POINT); /* pixel art: sem suavizar */
+        texCodex = LoadTexture(IAF_CODEX_ATLAS);
+        SetTextureFilter(texCodex, TEXTURE_FILTER_POINT);
         LoadIafAudio();
         iafLoaded = true;
     }
@@ -2880,6 +2985,6 @@ bool IafPadWantsEnter(void)
 
 void IafUnload(void)
 {
-    if (iafLoaded) { UnloadTexture(texElira); if (texClaude.id) UnloadTexture(texClaude); texClaude = (Texture2D){0}; UnloadIafAudio(); }
+    if (iafLoaded) { UnloadTexture(texElira); if (texClaude.id) UnloadTexture(texClaude); texClaude = (Texture2D){0}; if (texCodex.id) UnloadTexture(texCodex); texCodex = (Texture2D){0};UnloadIafAudio(); }
     iafLoaded = false;
 }
