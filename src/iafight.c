@@ -714,6 +714,47 @@ static int EliraFrameIdx(Fighter *a, float *yoff)
 }
 
 /* ------------------------------------------------------------------ desenho de um lutador */
+/* rastro do golpe: arco translucido na cor do lutador, varrendo o caminho do membro que golpeia
+   (angulos em graus a partir da frente; positivo = para baixo) */
+static void DrawAttackTrail(Fighter *a, float jx)
+{
+    if (a->st != ST_ATK || a->atk < AT_LIGHT || a->atk > AT_AIR) return;
+    const Atk *d = &ATK[a->ch][a->atk];
+    float act = fmaxf(d->ac, IAF_ACTIVE_VISUAL), t = a->atkT - d->st, lead = 0.04f, life = act + 0.10f;
+    if (t < -lead || t > life) return;
+    float k = t < 0 ? (t + lead) / lead : 1 - Clamp((t - act) / (life - act), 0.0f, 1.0f); /* entra rapido, some no fim */
+    float prog = Clamp((t + lead) / (act + lead), 0.0f, 1.0f);
+    float cy, r, a0, a1;
+    switch (a->atk)
+    {
+    case AT_LIGHT: cy = a->y - d->top + d->h * 0.5f; r = d->rx * 0.62f; a0 = -16; a1 = 16; break;
+    case AT_HEAVY:
+        if (a->ch == CH_CODEX) { cy = a->y - 120; r = d->rx * 0.8f; a0 = -80; a1 = 35; }       /* martelada descendo */
+        else if (a->ch == CH_CLAUDE) { cy = a->y - 130; r = d->rx * 0.62f; a0 = -14; a1 = 14; } /* empurrao reto */
+        else { cy = a->y - 105; r = d->rx * 0.72f; a0 = 70; a1 = -55; }                          /* chute subindo */
+        break;
+    case AT_LOW: cy = a->y - 70; r = d->rx * 0.68f; a0 = 20; a1 = 62; break;
+    default: cy = a->y - d->top + 20; r = d->rx * 0.7f; a0 = -25; a1 = 60; break; /* chute aereo, para baixo */
+    }
+    Color c = CHCOL[a->ch];
+    Vector2 o = {a->x + jx + a->face * 8, cy}, prev = {0}, tip = {0};
+    float cur = Lerp(a0, a1, prog);
+    const int N = 16;
+    for (int i = 0; i <= N; i++)
+    {
+        float u = i / (float)N, an = Lerp(a0, cur, u) * DEG2RAD;
+        Vector2 p = {o.x + a->face * cosf(an) * r, o.y + sinf(an) * r};
+        if (i > 0)
+        {
+            DrawLineEx(prev, p, 4 + 12 * u, Fade(c, k * 0.6f * (0.25f + 0.75f * u)));
+            DrawLineEx(prev, p, 1.5f + 3 * u, Fade(WHITE, k * 0.45f * u));
+        }
+        prev = p;
+        tip = p;
+    }
+    DrawCircleV(tip, 4 + 3 * k, Fade(WHITE, k * 0.5f));
+}
+
 static void DrawShadow(float x, float w)
 {
     DrawEllipse((int)x, (int)IAF_GROUND_Y + 2, (int)w, 9, Fade(BLACK, 0.45f));
@@ -743,6 +784,7 @@ static void DrawFighter(Fighter *a)
         Pose p = PoseFor(a);
         DrawPuppet(a->ch, a->x + jx, a->y, a->face, 1.0f, p, flash, a->vx);
     }
+    DrawAttackTrail(a, jx);
     /* defesa das IAs: placa hexagonal na frente (a Elira tem quadros proprios) */
     if (a->st == ST_BLOCK && a->ch != CH_ELIRA)
     {
