@@ -1767,10 +1767,12 @@ static void StartRound(void)
     roundWinner = -1;
     fz[0].perfect = fz[1].perfect = 1;
 }
+static void ArenaSortear(void); /* sorteia o cenario (iafight_arena.h) */
 static void StartMatch(void)
 {
     wins[0] = wins[1] = 0;
     roundNo = 1;
+    ArenaSortear(); /* cenario da luta (iafight_arena.h) */
     StartRound();
 }
 static void PushApart(void)

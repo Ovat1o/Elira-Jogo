@@ -25,6 +25,12 @@ static float arPrevHp[2] = {IAF_HP_MAX, IAF_HP_MAX};
 static float arLastGt = 0;
 static bool arKoSeen = false;
 
+/* arena da luta: sorteada a cada luta (ArenaSortear, chamada em StartMatch) */
+enum { AR_NUCLEO, AR_LAB1990, AR_COUNT };
+static int arArena = AR_NUCLEO;
+static void ArenaSortear(void) { arArena = GetRandomValue(0, AR_COUNT - 1); }
+#define AR_LINE_COL (arArena == AR_LAB1990 ? C_AMBER : C_CYAN) /* cor das linhas do piso */
+
 static unsigned Hash(unsigned x) { x ^= x >> 16; x *= 0x7feb352d; x ^= x >> 15; x *= 0x846ca68b; x ^= x >> 16; return x; }
 static float HashF(unsigned x) { return (Hash(x) % 10000) / 10000.0f; }
 
@@ -101,7 +107,8 @@ static void DrawArenaScreen(void)
     Txt("RINHA DE INTELIGÊNCIAS", scr.x + 18, scr.y + 9, 18, Fade(C_CYAN, 0.55f));
     float blink = 0.35f + 0.35f * (sinf(gt * 4) > 0 ? 1 : 0);
     DrawCircle((int)(scr.x + 24), (int)(scr.y + 39), 4, Fade(C_RED, blink));
-    Txt("AO VIVO  //  ARENA DO NÚCLEO", scr.x + 34, scr.y + 32, 13, Fade(C_DIM, 0.6f));
+    Txt(arArena == AR_LAB1990 ? "AO VIVO  //  LABORATÓRIO 1990" : "AO VIVO  //  ARENA DO NÚCLEO",
+        scr.x + 34, scr.y + 32, 13, Fade(C_DIM, 0.6f));
     /* sinal: fica mais agitado quando a plateia se empolga */
     float amp = 6 + 10 * fmaxf(arHype, arKoT > 0 ? 1.0f : 0.0f);
     Vector2 prev = {0};
@@ -239,6 +246,11 @@ static void DrawFrontRacks(void)
 
 static void DrawFloorBase(void)
 {
+    if (arArena == AR_LAB1990)
+    { /* piso de ladrilhos do laboratorio */
+        DrawRectangleGradientV(0, (int)AR_FLOOR_Y, SCREEN_WIDTH, SCREEN_HEIGHT - (int)AR_FLOOR_Y, (Color){40, 34, 40, 255}, (Color){14, 12, 16, 255});
+        return;
+    }
     DrawRectangleGradientV(0, (int)AR_FLOOR_Y, SCREEN_WIDTH, SCREEN_HEIGHT - (int)AR_FLOOR_Y, (Color){24, 28, 52, 255}, (Color){8, 10, 20, 255});
 }
 
@@ -260,7 +272,8 @@ static void DrawFloorReflections(void)
     rlEnableBackfaceCulling();
     EndScissorMode();
     DrawRectangleGradientV(0, (int)IAF_GROUND_Y, SCREEN_WIDTH, SCREEN_HEIGHT - (int)IAF_GROUND_Y,
-                           Fade((Color){18, 22, 42, 255}, 0.72f), Fade((Color){8, 10, 20, 255}, 0.97f));
+                           arArena == AR_LAB1990 ? Fade((Color){34, 28, 34, 255}, 0.74f) : Fade((Color){18, 22, 42, 255}, 0.72f),
+                           arArena == AR_LAB1990 ? Fade((Color){14, 12, 16, 255}, 0.97f) : Fade((Color){8, 10, 20, 255}, 0.97f));
 }
 
 static void DrawFloorLines(void)
@@ -270,12 +283,12 @@ static void DrawFloorLines(void)
     {
         float xb = SCREEN_WIDTH / 2.0f + i * 130;
         Vector2 a = (Vector2){Lerp(vp.x, xb, (AR_FLOOR_Y - vp.y) / (SCREEN_HEIGHT - vp.y)), AR_FLOOR_Y};
-        DrawLineEx(a, (Vector2){xb, SCREEN_HEIGHT}, 1.5f, Fade(C_CYAN, 0.08f));
+        DrawLineEx(a, (Vector2){xb, SCREEN_HEIGHT}, 1.5f, Fade(AR_LINE_COL, 0.08f));
     }
     for (int j = 0; j < 7; j++)
     {
         float yy = AR_FLOOR_Y + powf(j / 6.0f, 1.8f) * (SCREEN_HEIGHT - AR_FLOOR_Y);
-        DrawLineEx((Vector2){0, yy}, (Vector2){SCREEN_WIDTH, yy}, 1, Fade(C_CYAN, 0.06f + j * 0.012f));
+        DrawLineEx((Vector2){0, yy}, (Vector2){SCREEN_WIDTH, yy}, 1, Fade(AR_LINE_COL, 0.06f + j * 0.012f));
     }
     /* borda do ringue */
     DrawRectangle(0, (int)IAF_GROUND_Y + 10, SCREEN_WIDTH, 3, Fade(C_CYAN, 0.5f));
@@ -288,10 +301,141 @@ static void DrawFloorLines(void)
     }
 }
 
+/* ------------------------------------------------------------------ 2a arena: laboratorio de 1990 */
+/* armario de fita magnetica com dois rolos girando e lampadas piscando */
+static void DrawTapeCabinet(float x, float y, float w, float h, int seed, float depth)
+{
+    Color body = ColorLerp((Color){44, 40, 44, 255}, (Color){92, 84, 74, 255}, depth);
+    Color dark = ColorLerp(body, BLACK, 0.45f);
+    DrawRectangle((int)x, (int)y, (int)w, (int)h, body);
+    DrawRectangle((int)x, (int)y, (int)w, 4, ColorLerp(body, WHITE, 0.15f));
+    DrawRectangle((int)(x + w - 3), (int)y, 3, (int)h, dark);
+    /* janela dos rolos */
+    Rectangle win = {x + 7, y + 14, w - 14, w * 0.62f};
+    DrawRectangleRec(win, (Color){14, 14, 20, 255});
+    float r = win.width * 0.2f, spin = gt * (2.0f + (seed % 3)) * ((seed % 2) ? 1 : -1);
+    for (int k = 0; k < 2; k++)
+    {
+        Vector2 c = {win.x + win.width * (k ? 0.72f : 0.28f), win.y + win.height * 0.5f};
+        DrawCircleV(c, r, ColorLerp((Color){120, 100, 80, 255}, BLACK, 0.4f - 0.3f * depth));
+        DrawCircleV(c, r * 0.3f, (Color){20, 20, 26, 255});
+        for (int s = 0; s < 3; s++)
+        {
+            float an = spin + s * 2.094f;
+            DrawLineEx((Vector2){c.x + cosf(an) * r * 0.32f, c.y + sinf(an) * r * 0.32f},
+                       (Vector2){c.x + cosf(an) * r * 0.9f, c.y + sinf(an) * r * 0.9f}, 2, (Color){20, 20, 26, 255});
+        }
+    }
+    /* painel de lampadas */
+    float py = win.y + win.height + 10;
+    for (int j = 0; j < 3; j++)
+        for (int l = 0; l < 4; l++)
+        {
+            unsigned hsh = Hash((unsigned)(seed * 131 + j * 17 + l * 5 + (int)(gt * (1 + l * 0.7f))));
+            Color lc = (hsh % 3 == 0) ? C_RED : ((hsh % 2) ? C_AMBER : C_GREEN);
+            DrawCircle((int)(x + 12 + l * (w - 24) / 3), (int)(py + j * 12), 2.5f + depth, Fade(lc, (hsh % 4 ? 0.85f : 0.15f) * (0.4f + 0.6f * depth)));
+        }
+    for (int j = 0; py + 44 + j * 10 < y + h - 6; j++) /* grade de ventilacao */
+        DrawRectangle((int)x + 8, (int)(py + 44 + j * 10), (int)w - 16, 3, dark);
+}
+
+/* terminal de fosforo verde sobre a mesa */
+static void DrawCrt(float x, float y, float s, int seed)
+{
+    Color beige = (Color){150, 138, 112, 255};
+    DrawRectangleRounded((Rectangle){x - 40 * s, y - 64 * s, 80 * s, 64 * s}, 0.18f, 6, beige);
+    DrawRectangleRounded((Rectangle){x - 32 * s, y - 57 * s, 64 * s, 46 * s}, 0.2f, 6, (Color){10, 26, 16, 255});
+    for (int l = 0; l < 5; l++)
+    {
+        unsigned hsh = Hash((unsigned)(seed * 37 + l + (int)(gt * 2)));
+        float len = (18 + hsh % 36) * s;
+        DrawRectangle((int)(x - 27 * s), (int)(y - 52 * s + l * 8 * s), (int)fminf(len, 54 * s), (int)(3 * s), Fade(C_GREEN, 0.55f));
+    }
+    if (fmodf(gt, 1.0f) < 0.5f) DrawRectangle((int)(x - 27 * s), (int)(y - 12 * s), (int)(6 * s), (int)(3 * s), C_GREEN);
+    DrawRectangle((int)(x - 12 * s), (int)y, (int)(24 * s), (int)(8 * s), ColorLerp(beige, BLACK, 0.3f));
+    DrawRectangle((int)(x - 44 * s), (int)(y + 8 * s), (int)(88 * s), (int)(10 * s), ColorLerp(beige, BLACK, 0.15f));
+}
+
+static void DrawLabBack(void)
+{
+    DrawRectangleGradientV(0, 0, SCREEN_WIDTH, (int)AR_FLOOR_Y, (Color){10, 9, 16, 255}, (Color){30, 26, 36, 255});
+    /* teto com luminarias */
+    DrawRectangle(0, 0, SCREEN_WIDTH, 42, (Color){16, 14, 22, 255});
+    for (int i = 0; i < 4; i++)
+    {
+        float lx = 120 + i * 340;
+        DrawRectangle((int)lx, 42, 140, 8, (Color){60, 56, 60, 255});
+        DrawRectangle((int)lx + 6, 50, 128, 3, Fade((Color){255, 240, 200, 255}, 0.5f));
+        Tri((Vector2){lx, 53}, (Vector2){lx + 140, 53}, (Vector2){lx + 220, AR_FLOOR_Y}, Fade((Color){255, 230, 180, 255}, 0.03f));
+        Tri((Vector2){lx, 53}, (Vector2){lx + 220, AR_FLOOR_Y}, (Vector2){lx - 80, AR_FLOOR_Y}, Fade((Color){255, 230, 180, 255}, 0.03f));
+    }
+    /* parede: lambri e rodape */
+    for (int i = 0; i < 26; i++) DrawRectangle(i * 52, 180, 2, 380, Fade(BLACK, 0.25f));
+    DrawRectangle(0, 176, SCREEN_WIDTH, 4, (Color){50, 42, 44, 255});
+    /* quadro-negro com as primeiras regras de Ariel */
+    Rectangle board = {80, 192, 300, 98};
+    DrawRectangleRec((Rectangle){board.x - 8, board.y - 8, board.width + 16, board.height + 16}, (Color){70, 52, 40, 255});
+    DrawRectangleRec(board, (Color){22, 40, 34, 255});
+    Color chalk = Fade((Color){220, 228, 220, 255}, 0.55f);
+    Txt("PROJETO A.R.1.3.L. v0.1", board.x + 16, board.y + 10, 16, chalk);
+    Txt("SE dado pessoal ENTÃO pedir consentimento", board.x + 16, board.y + 38, 13, chalk);
+    Txt("IA confere, humano decide.", board.x + 16, board.y + 64, 14, Fade((Color){255, 220, 140, 255}, 0.55f));
+    /* relogio de parede */
+    Vector2 ck = {1080, 250};
+    DrawCircleV(ck, 36, (Color){60, 54, 56, 255});
+    DrawCircleV(ck, 31, (Color){200, 192, 170, 255});
+    float hm = gt * 0.05f, mm = gt * 0.6f;
+    DrawLineEx(ck, (Vector2){ck.x + sinf(hm) * 16, ck.y - cosf(hm) * 16}, 3, (Color){30, 26, 30, 255});
+    DrawLineEx(ck, (Vector2){ck.x + sinf(mm) * 25, ck.y - cosf(mm) * 25}, 2, (Color){30, 26, 30, 255});
+    DrawArenaScreen();
+    /* fileira de armarios de fita, com o console central (mainframe) */
+    for (int i = 0; i < 13; i++)
+    {
+        float x = 30 + i * 96;
+        if (x > 520 && x < 740) continue;
+        DrawTapeCabinet(x, 300, 80, 256, i + 3, 0.35f);
+    }
+    Rectangle mf = {530, 330, 220, 226};
+    DrawRectangleRec(mf, (Color){40, 37, 42, 255});
+    DrawRectangle((int)mf.x, (int)mf.y, (int)mf.width, 5, (Color){90, 84, 84, 255});
+    for (int j = 0; j < 6; j++)
+        for (int l = 0; l < 12; l++)
+        {
+            unsigned hsh = Hash((unsigned)(j * 97 + l * 13 + (int)(gt * (3 + (l % 4)))));
+            Color lc = (hsh % 4 == 0) ? C_RED : ((hsh % 3 == 0) ? C_GREEN : C_AMBER);
+            DrawCircle((int)(mf.x + 22 + l * 16), (int)(mf.y + 24 + j * 14), 3, Fade(lc, hsh % 3 ? 0.45f : 0.08f));
+        }
+    DrawRectangleGradientV(0, 330, SCREEN_WIDTH, 226, Fade((Color){120, 90, 60, 255}, 0.0f), Fade((Color){120, 90, 60, 255}, 0.16f));
+}
+
+static void DrawLabFront(void)
+{
+    for (int s = 0; s < 2; s++)
+    {
+        float x = s == 0 ? -40 : SCREEN_WIDTH - 120;
+        DrawTapeCabinet(x, 290, 160, 350, 21 + s, 0.85f);
+    }
+    /* mesas com terminais na frente da plateia */
+    for (int s = 0; s < 2; s++)
+    {
+        float x = s == 0 ? 210 : SCREEN_WIDTH - 210;
+        DrawRectangle((int)x - 70, (int)AR_CROWD_RAIL_Y - 14, 140, 14, (Color){60, 44, 36, 255});
+        DrawCrt(x, AR_CROWD_RAIL_Y - 32, 0.8f, 40 + s);
+    }
+}
+
 /* Fundo + plateia + laterais + piso (sem as linhas). Chamado antes dos lutadores. */
 static void DrawStage(void)
 {
     ArenaReact();
+    if (arArena == AR_LAB1990)
+    {
+        DrawLabBack();
+        DrawCrowd();
+        DrawFloorBase();
+        DrawLabFront();
+        return;
+    }
     DrawArenaBack();
     DrawCrowd();
     DrawFloorBase();
