@@ -202,35 +202,22 @@ typedef struct GameState
     int activeDocument2008;            /* -1 = nenhum, 0..3 = registros, 4 = pai, 5 = memorando */
     int terminal2008ActiveTab;         /* 0 = Ordem/Evidencias, 1 = Configuracao Local */
 
-    /* --- SALA 2026: LABORATORIO DE SINTESE (VIES ALGORITMICO) --- */
-    int modal2026;                     /* Room2026Modal: painel aberto na sala */
-    bool manual2026Read;               /* Etapa 1: manual tecnico consultado */
-    bool sample2026Analyzed[R2026_MATERIAL_COUNT]; /* Amostras varridas no analisador */
-    int sample2026Viewing;             /* Amostra exibida no analisador (-1 = nenhuma) */
-    float sample2026ScanTimer;         /* Animacao da varredura espectral */
-    bool contest2026Picking;           /* Terminal: escolhendo o material do laudo */
-    bool laudo2026Done;                /* Etapa 1: laudo correto (Neodimio) registrado */
-    bool decisionLog2026Read;          /* Gaveta 1: log de decisoes consultado */
-    bool dataset2026Seen;              /* Etapa 2: dados de treinamento auditados */
-    bool board2026Read;                /* Quadro de avisos (memorando + Anexo B) lido */
-    char padlock2026Input[R2026_CODE_LEN + 1]; /* Digitos do cadeado do painel */
-    int padlock2026Length;
-    int padlock2026Attempts;           /* Tentativas erradas no cadeado */
-    bool weights2026Unlocked;          /* Cadeado do painel de pesos aberto */
-    int weights2026Draft[R2026_CRITERIA_COUNT];   /* Pesos em edicao no painel (%) */
-    int weights2026Applied[R2026_CRITERIA_COUNT]; /* Pesos ativos no algoritmo de Ariel (%) */
-    bool weights2026Calibrated;        /* Etapa 3: norma aplicada, Ariel recomenda Neodimio */
-    bool autoExec2026Active;           /* Ariel ameaca executar a recomendacao sozinha */
-    float autoExec2026Timer;           /* Contagem local ate a execucao automatica */
-    int feedback2026Tone;              /* 0 = aviso, 1 = erro, 2 = sucesso */
-    bool feedback2026Fatal;            /* Vidas esgotadas: o modal leva a SCREEN_FAILURE */
+    /* --- SALA 2026: REDACAO DIGITAL (CURADORIA CRITICA / VIES DE ENGAJAMENTO) --- */
+    int modal2026;                      /* Room2026Modal: painel aberto na sala */
+    bool sources2026Read;               /* Mural FONTES REAIS consultado */
+    bool guide2026Read;                 /* Cracha GUIA DO EDITOR consultado */
+    int post2026Choice[R2026_POST_COUNT]; /* -1 = pendente, 0 = bloquear, 1 = aprovar */
+    bool post2026Wrong[R2026_POST_COUNT]; /* Marcacao de erro apos tentativa incorreta */
+    bool feed2026Cleared;               /* Curadoria das 4 manchetes concluida (SSD livre) */
+    int feedback2026Tone;               /* 0 = aviso, 1 = erro, 2 = sucesso */
+    bool feedback2026Fatal;             /* Vidas esgotadas: o modal leva a SCREEN_FAILURE */
     char feedback2026Title[64];
     char feedback2026Lines[4][160];
-    bool room2026Processing;           /* Camara sintetizando a liga do SSD */
-    float room2026ProcessTimer;        /* Temporizador da barra de progresso */
-    bool room2026Completed;            /* SSD obtido */
-    bool room2026FirstTrySuccess;      /* Bonus: sala concluida sem nenhum erro */
-    int room2026MistakesCount;         /* Erros cometidos (laudo errado, sintese falha) */
+    bool room2026Processing;            /* Extracao do SSD 2026 em andamento */
+    float room2026ProcessTimer;         /* Temporizador da barra de extracao */
+    bool room2026Completed;             /* SSD 2026 obtido */
+    bool room2026FirstTrySuccess;       /* Bonus: sala concluida sem nenhum erro */
+    int room2026MistakesCount;          /* Erros cometidos na curadoria */
 
     /* --- SALA 2048: TERMINAL DE RECUPERACAO DA A.R.1.3.L --- */
     int term2046State;                 /* Term2046State */
@@ -303,36 +290,16 @@ typedef struct CrawlEntry
     int type; /* 0: Titulo ELIRA, 1: Corpo, 2: Destaque/Citacao, 3: Ano 1990, 4: Espaco vazio */
 } CrawlEntry;
 
-/* Sala 2026: paineis/modais do laboratorio (apenas um aberto por vez) */
+/* Sala 2026: paineis/modais da Redacao Digital (apenas um aberto por vez) */
 typedef enum Room2026Modal
 {
     R2026_MODAL_NONE = 0,
-    R2026_MODAL_MANUAL,      /* manual tecnico: 4 requisitos da liga */
-    R2026_MODAL_SAMPLE,      /* analisador espectral de uma amostra */
-    R2026_MODAL_TERMINAL,    /* terminal de Ariel: ranking, laudo/contestacao */
-    R2026_MODAL_ARCHIVE,     /* arquivo: log de decisoes + dados de treinamento */
-    R2026_MODAL_BOARD,       /* quadro de avisos: memorando + Anexo B */
-    R2026_MODAL_PADLOCK,     /* cadeado do painel de pesos */
-    R2026_MODAL_WEIGHTS,     /* painel de pesos do algoritmo */
-    R2026_MODAL_REACTOR,     /* escolha da amostra para a camara */
-    R2026_MODAL_FEEDBACK,    /* resultado de uma acao (acerto/erro) */
-    R2026_MODAL_PROCESSING   /* sintese final em andamento */
+    R2026_MODAL_SOURCES,     /* mural FONTES REAIS: 3 registros oficiais verificados */
+    R2026_MODAL_GUIDE,       /* cracha GUIA DO EDITOR: 3 regras de checagem contra IA */
+    R2026_MODAL_FEED,        /* monitor A.R.1.3.L. FEED: curadoria das 4 manchetes */
+    R2026_MODAL_FEEDBACK,    /* resultado de uma acao (erro educativo ou sucesso) */
+    R2026_MODAL_EXTRACTING   /* extracao rapida do SSD 2026 */
 } Room2026Modal;
-
-typedef struct Material2026Def
-{
-    const char *name;           /* "Ferro", "Cobalto", "Neodímio", "Níquel" */
-    const char *upper;          /* nome em maiusculas (UTF-8) */
-    const char *symbol;         /* "Fe", "Co", "Nd", "Ni" */
-    const char *state;          /* estado fisico */
-    const char *origin;         /* origem mineral */
-    const char *magnetism;      /* propriedade magnetica */
-    bool rareEarth;             /* apenas o Neodimio */
-    int trainingRecords;        /* registros nos dados de treinamento de Ariel */
-    const char *verdict;        /* comparacao com os 4 requisitos do manual */
-    int criteria[R2026_CRITERIA_COUNT]; /* notas 0-100 por criterio do algoritmo */
-    Color accent;
-} Material2026Def;
 
 typedef enum FinalStage
 {
@@ -555,7 +522,7 @@ void UpdatePuzzle2008(GameState *game);
 void DrawResult2008(const GameState *game);
 void UpdateResult2008(GameState *game);
 
-/* Fase 3 (Ano 2026) - Laboratorio de Sintese: Vies Algoritmico (SSD) */
+/* Fase 3 (Ano 2026) - Redacao Digital: Curadoria Critica e Vies Algoritmico (SSD) */
 void DrawHudRoom2026(const GameState *game);
 void DrawRoom2026(const GameState *game);
 void UpdateRoom2026(GameState *game);
