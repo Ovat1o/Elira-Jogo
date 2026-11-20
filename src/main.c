@@ -131,7 +131,7 @@ int main(int argc, char **argv)
 
         if (bgmLoaded)
         {
-            SetMusicVolume(ambientBgm, (game.musicMuted || game.screen == SCREEN_INVASION) ? 0.0f : g_musicVolume);
+            SetMusicVolume(ambientBgm, (game.musicMuted || game.screen == SCREEN_INVASION || game.screen == SCREEN_IAFIGHT) ? 0.0f : g_musicVolume);
             UpdateMusicStream(ambientBgm);
         }
 
@@ -154,7 +154,7 @@ int main(int argc, char **argv)
             game.musicMuted = !game.musicMuted;
             if (bgmLoaded)
             {
-                SetMusicVolume(ambientBgm, (game.musicMuted || game.screen == SCREEN_INVASION) ? 0.0f : g_musicVolume);
+                SetMusicVolume(ambientBgm, (game.musicMuted || game.screen == SCREEN_INVASION || game.screen == SCREEN_IAFIGHT) ? 0.0f : g_musicVolume);
             }
             SetMessage(&game, game.musicMuted ? "Musica ambiente desativada [Mudo]."
                                               : "Musica ambiente ativada.");

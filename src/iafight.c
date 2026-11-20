@@ -188,6 +188,85 @@ static Impact impacts[16];
 
 static Fighter fz[2];
 static float hitstop = 0, shake = 0;
+
+/* ------------------------------------------------------------------ som (assets/som/iafight)
+   Volume segue o do jogo: no padrao (g_musicVolume = 0,45) a musica fica em IAF_MUSIC_VOLUME e os
+   efeitos em IAF_SFX_VOLUME; o mudo do jogo (tecla M) silencia tudo. Sem dispositivo de audio ou sem
+   os arquivos, o modo continua funcionando em silencio. */
+enum { SFX_LIGHT, SFX_HEAVY, SFX_BLOCK, SFX_SHOT, SFX_SP_CHARGE, SFX_SP_FIRE, SFX_KO, SFX_FALL, SFX_MOVE, SFX_OK, VOX_ROUND, VOX_LUTEM, VOX_WIN, SFX_N };
+static const char *SFX_FILE[SFX_N] = {"golpe_fraco.wav", "golpe_forte.wav", "defesa.wav", "tiro.wav", "especial_carga.wav",
+                                      "especial_disparo.wav", "impacto_ko.wav", "queda.wav", "menu_mover.wav", "menu_confirmar.wav",
+                                      "voz_round.wav", "voz_lutem.wav", "voz_vitoria.wav"};
+#define IAF_SFX_VOICES 3 /* copias de cada efeito para sobrepor golpes seguidos */
+static Sound sfx[SFX_N][IAF_SFX_VOICES];
+static int sfxNext[SFX_N];
+static int iafSfxPlays[SFX_N]; /* quantas vezes cada efeito foi pedido (usado pelos testes) */
+static Music musSel, musFight;
+static bool musLoaded = false, iafMuted = false;
+static int musCur = -1; /* -1 nenhuma, 0 selecao, 1 luta */
+static float AudioMaster(void) { return iafMuted ? 0.0f : Clamp(g_musicVolume / 0.45f, 0.0f, 2.5f); }
+static void LoadIafAudio(void)
+{
+    if (!IsAudioDeviceReady()) return;
+    char path[256];
+    for (int i = 0; i < SFX_N; i++)
+    {
+        snprintf(path, sizeof path, "%s%s", IAF_AUDIO_DIR, SFX_FILE[i]);
+        if (!FileExists(path)) continue;
+        sfx[i][0] = LoadSound(path);
+        if (sfx[i][0].frameCount == 0) continue;
+        for (int v = 1; v < IAF_SFX_VOICES; v++) sfx[i][v] = LoadSoundAlias(sfx[i][0]);
+    }
+    if (FileExists(IAF_AUDIO_DIR "musica_selecao.ogg") && FileExists(IAF_AUDIO_DIR "musica_luta.ogg"))
+    {
+        musSel = LoadMusicStream(IAF_AUDIO_DIR "musica_selecao.ogg");
+        musFight = LoadMusicStream(IAF_AUDIO_DIR "musica_luta.ogg");
+        musSel.looping = musFight.looping = true;
+        musLoaded = musSel.stream.buffer != NULL && musFight.stream.buffer != NULL;
+    }
+}
+static void PlaySfx(int id)
+{
+    iafSfxPlays[id]++;
+    Sound *s = &sfx[id][sfxNext[id]];
+    sfxNext[id] = (sfxNext[id] + 1) % IAF_SFX_VOICES;
+    if (!IsAudioDeviceReady() || s->frameCount == 0) return;
+    float vol = fminf(1.0f, IAF_SFX_VOLUME * AudioMaster());
+    if (vol <= 0.001f) return;
+    SetSoundVolume(*s, vol);
+    SetSoundPitch(*s, id >= VOX_ROUND || id == SFX_MOVE || id == SFX_OK ? 1.0f : 0.95f + Rand01() * 0.1f); /* golpes variam um pouco */
+    PlaySound(*s);
+}
+/* toca a trilha pedida (0 selecao, 1 luta, -1 silencio) e mantem o stream andando */
+static void UpdateIafMusic(int want)
+{
+    if (!musLoaded) return;
+    if (want != musCur)
+    {
+        if (musCur == 0) StopMusicStream(musSel);
+        if (musCur == 1) StopMusicStream(musFight);
+        musCur = want;
+        if (want == 0) PlayMusicStream(musSel);
+        if (want == 1) PlayMusicStream(musFight);
+    }
+    Music *m = musCur == 0 ? &musSel : (musCur == 1 ? &musFight : NULL);
+    if (!m) return;
+    SetMusicVolume(*m, fminf(1.0f, IAF_MUSIC_VOLUME * AudioMaster()));
+    UpdateMusicStream(*m);
+}
+static void UnloadIafAudio(void)
+{
+    for (int i = 0; i < SFX_N; i++)
+    {
+        if (sfx[i][0].frameCount == 0) continue;
+        for (int v = 1; v < IAF_SFX_VOICES; v++) UnloadSoundAlias(sfx[i][v]);
+        UnloadSound(sfx[i][0]);
+    }
+    memset(sfx, 0, sizeof sfx);
+    if (musLoaded) { UnloadMusicStream(musSel); UnloadMusicStream(musFight); }
+    musLoaded = false;
+    musCur = -1;
+}
 /* botoes apertados durante a pausa de impacto: guardados e aplicados no primeiro quadro depois dela */
 static IafInput bufP[2];
 
@@ -1017,6 +1096,7 @@ static void KO(Fighter *d, int dir)
     SetState(d, ST_KO);
     d->vx = dir * 380; d->vy = -520; d->crouch = false; d->guard = false;
     hitstop = 0.18f; shake = 0.4f;
+    PlaySfx(SFX_KO);
 }
 static bool PrismActive(Fighter *d)
 {
@@ -1040,6 +1120,7 @@ static void PrismCounter(Fighter *cl, Fighter *att)
     cl->beamT = 0.35f;
     cl->beamTo = (Vector2){att->x, att->y - 110};
     cl->atkT = SP_ST[CH_CLAUDE] + SP_AC[CH_CLAUDE]; /* vai para a recuperacao */
+    PlaySfx(SFX_SP_FIRE);
     AddText((Vector2){cl->x, cl->y - 250}, "REFLEXÃO!", C_AMBER, 26);
     ApplyHit(cl, att, 130, 0.6f, 420, 0, (Vector2){att->x, att->y - 110}, true, true);
 }
@@ -1053,6 +1134,7 @@ static void ApplyHit(Fighter *att, Fighter *def, float dmg, float stun, float pu
     int dir = att->x < def->x ? 1 : -1;
     if (blocked)
     {
+        PlaySfx(SFX_BLOCK);
         def->hp -= dmg * 0.12f;
         SetState(def, ST_BLOCK);
         def->stun = stun * 0.65f;
@@ -1088,6 +1170,7 @@ static void ApplyHit(Fighter *att, Fighter *def, float dmg, float stun, float pu
     /* estrela de impacto no ponto do acerto (menor sobre a Elira, cujos quadros de dano ja tem efeito) */
     ImpactSpark(at, att->ch == CH_ELIRA ? C_CYAN : FCol(att), (28 + dmg * 0.22f) * (def->ch == CH_ELIRA ? 0.6f : 1.0f));
     hitstop = fmaxf(hitstop, HitstopFor(att));
+    PlaySfx(HitstopFor(att) >= IAF_HITSTOP_HEAVY ? SFX_HEAVY : SFX_LIGHT);
     def->hitShake = hitstop;
     shake = fmaxf(shake, dmg / 600.0f);
     if (def->hp <= 0) KO(def, dir);
@@ -1115,13 +1198,14 @@ static void UpdateSpecial(Fighter *a, Fighter *o, float dt)
     switch (a->ch)
     {
     case CH_ELIRA:
-        if (t >= st && !a->spawned) { a->spawned = true; SpawnProj(a, true); MuzzleFlash((Vector2){a->x + a->face * 120, a->y - IAF_MUZZLE_Y}, 44); a->vx = -a->face * 120; AddText((Vector2){a->x, a->y - 240}, "RAJADA TEMPORAL!", C_CYAN, 22); }
+        if (t >= st && !a->spawned) { a->spawned = true; SpawnProj(a, true); PlaySfx(SFX_SP_FIRE); MuzzleFlash((Vector2){a->x + a->face * 120, a->y - IAF_MUZZLE_Y}, 44); a->vx = -a->face * 120; AddText((Vector2){a->x, a->y - 240}, "RAJADA TEMPORAL!", C_CYAN, 22); }
         break;
     case CH_CLAUDE:
         if (t >= st + ac && !a->spawned && !a->countered)
         { /* sem ataque para refletir: pulso curto de luz */
             a->spawned = true;
             HitSparks((Vector2){a->x + a->face * CL_FRONT, a->y - 120}, C_AMBER, 14, 300);
+            PlaySfx(SFX_SP_FIRE);
             if (fabsf(o->x - a->x) < CL_FRONT + 96 && fabsf(o->y - a->y) < 140) ApplyHit(a, o, 60, 0.35f, 260, 0, (Vector2){o->x, o->y - 120}, false, false);
         }
         break;
@@ -1150,7 +1234,7 @@ static void UpdateSpecial(Fighter *a, Fighter *o, float dt)
                     ApplyHit(a, o, 30, 0.3f, 300, 0, (Vector2){o->x - a->face * 20, o->y - 120}, false, false);
                     a->atkT = st + ac; /* parou no bloqueio */
                 }
-                else { a->caught = true; a->spHits = 0; a->spT = 0; }
+                else { a->caught = true; a->spHits = 0; a->spT = 0; PlaySfx(SFX_SP_FIRE); }
             }
         }
         if (a->caught)
@@ -1186,6 +1270,7 @@ static void UpdateSpecial(Fighter *a, Fighter *o, float dt)
             if (wx < IAF_WALL_L + 40) wx = IAF_WALL_L + 40;
             if (wx > IAF_WALL_R - 40) wx = IAF_WALL_R - 40;
             well = (Well){true, wx, IAF_GROUND_Y - 170, 0, 1.25f, Idx(a), false, false};
+            PlaySfx(SFX_SP_FIRE);
             /* aberto com o oponente caido/atordoado: o poco nao prende (evita emendar queda -> poco -> queda) */
             if (o->down || o->st == ST_HIT || o->st == ST_KO) well.resisted = true;
             AddText((Vector2){a->x, a->y - 250}, "POÇO GRAVITACIONAL!", C_VIOLET, 22);
@@ -1302,6 +1387,7 @@ static void UpdateFighter(Fighter *a, Fighter *o, IafInput in, float dt)
             {
                 a->spawned = true;
                 SpawnProj(a, false);
+                PlaySfx(SFX_SHOT);
                 a->shotCd = IAF_SHOT_COOLDOWN;
                 MuzzleFlash((Vector2){a->x + a->face * 96, a->y - IAF_MUZZLE_Y}, 26);
                 a->x -= a->face * IAF_SHOT_RECOIL; /* recuo do disparo */
@@ -1340,7 +1426,7 @@ static void UpdateFighter(Fighter *a, Fighter *o, IafInput in, float dt)
         break;
     default: /* parado / andando / agachado */
         a->crouch = ground && in.down;
-        if (in.specialP && a->meter >= IAF_SPECIAL_COST && !(a->ch == CH_ANTI && well.on)) { a->meter -= IAF_SPECIAL_COST; a->crouch = false; StartAtk(a, AT_SPECIAL); break; }
+        if (in.specialP && a->meter >= IAF_SPECIAL_COST && !(a->ch == CH_ANTI && well.on)) { a->meter -= IAF_SPECIAL_COST; a->crouch = false; StartAtk(a, AT_SPECIAL); PlaySfx(SFX_SP_CHARGE); break; }
         if (in.shotP && a->ch == CH_ELIRA && a->shotCd <= 0 && !EliraShotOnScreen(a)) { a->crouch = false; StartAtk(a, AT_SHOT); break; }
         if (in.lightP) { StartAtk(a, a->crouch ? AT_LOW : AT_LIGHT); break; }
         if (in.heavyP) { StartAtk(a, a->crouch ? AT_LOW : AT_HEAVY); break; }
@@ -1397,7 +1483,7 @@ static void UpdateFighter(Fighter *a, Fighter *o, IafInput in, float dt)
             bool wasAir = a->vy > 300;
             a->y = IAF_GROUND_Y;
             if (a->st == ST_KO) { a->vy = 0; a->vx *= 0.5f; }
-            else if (a->st == ST_HIT && wasAir && a->stT > 0.05f) { a->down = true; a->downT = 0.75f; a->vy = 0; shake = fmaxf(shake, 0.15f); HitSparks((Vector2){a->x, IAF_GROUND_Y}, C_DIM, 8, 200); }
+            else if (a->st == ST_HIT && wasAir && a->stT > 0.05f) { a->down = true; PlaySfx(SFX_FALL); a->downT = 0.75f; a->vy = 0; shake = fmaxf(shake, 0.15f); HitSparks((Vector2){a->x, IAF_GROUND_Y}, C_DIM, 8, 200); }
             else a->vy = 0;
             if (a->st == ST_JUMP) { SetState(a, ST_IDLE); a->vx = 0; }
         }
@@ -1882,11 +1968,13 @@ static void BuildLadder(void)
     }
     ladderPos = 0;
 }
+static bool voxRoundDone = false, voxLutemDone = false; /* vozes da abertura ja tocaram neste round */
 static void StartRound(void)
 {
     ResetFighter(&fz[0], (CharId)playerCh, 420, 1);
     ResetFighter(&fz[1], (CharId)ladder[ladderPos], 860, -1);
     fz[1].alt = versusMode && fz[0].ch == fz[1].ch;
+    voxRoundDone = voxLutemDone = false;
     fz[0].meter = fz[1].meter = 0;
     ClearFx();
     memset(ai, 0, sizeof(ai));
@@ -1973,6 +2061,8 @@ static void UpdateFight(float dt)
     if (rstate == RS_INTRO)
     {
         SimStep(dt, none, none);
+        if (!voxRoundDone) { voxRoundDone = true; PlaySfx(VOX_ROUND); }
+        if (rsT >= IAF_INTRO_ROUND && !voxLutemDone) { voxLutemDone = true; PlaySfx(VOX_LUTEM); }
         if (rsT > IAF_INTRO_TOTAL) { rstate = RS_FIGHT; rsT = 0; }
         return;
     }
@@ -2008,6 +2098,7 @@ static void UpdateFight(float dt)
         if (wins[0] >= 2 || wins[1] >= 2)
         {
             lastWon = wins[0] >= 2;
+            if (versusMode || lastWon) PlaySfx(VOX_WIN);
             iafScreen = (lastWon && ladderPos == 2) ? SC_FINAL : SC_RESULT;
             scT = 0;
         }
@@ -2561,6 +2652,7 @@ void IafEnter(GameState *game)
         SetTextureFilter(texElira, TEXTURE_FILTER_BILINEAR);
         texClaude = LoadTexture(IAF_CLAUDE_ATLAS);
         SetTextureFilter(texClaude, TEXTURE_FILTER_POINT); /* pixel art: sem suavizar */
+        LoadIafAudio();
         iafLoaded = true;
     }
     cpu[0] = false;
@@ -2583,11 +2675,16 @@ void IafUpdate(GameState *game, float dt)
     gt += dt;
     scT += dt;
     PollPads(dt);
+    iafMuted = game->musicMuted;
+    /* estado antes da atualizacao: mudou cursor = som de mover; mudou de tela/confirmou = som de confirmar */
+    IafScreen pScr = iafScreen;
+    int pSel = sel, pMode = modeSel, pS0 = selP[0], pS1 = selP[1], pRes = resSel;
+    bool pR0 = readyP[0], pR1 = readyP[1];
     switch (iafScreen)
     {
     case SC_MODE:
         if (ControlsKeyP()) { OpenControls(); break; }
-        if (NavBackP()) { game->screen = SCREEN_TITLE; return; }
+        if (NavBackP()) { UpdateIafMusic(-1); game->screen = SCREEN_TITLE; return; }
         UpdateMode();
         break;
     case SC_CONTROLS: UpdateControls(); break;
@@ -2616,6 +2713,9 @@ void IafUpdate(GameState *game, float dt)
         if (scT > 0.6f && (NavOkP() || NavBackP())) { iafScreen = SC_SELECT; scT = 0; }
         break;
     }
+    if (sel != pSel || modeSel != pMode || selP[0] != pS0 || selP[1] != pS1 || resSel != pRes) PlaySfx(SFX_MOVE);
+    if ((iafScreen != pScr && pScr != SC_FIGHT && iafScreen != SC_FIGHT) || (readyP[0] && !pR0) || (readyP[1] && !pR1)) PlaySfx(SFX_OK);
+    UpdateIafMusic(iafScreen == SC_FIGHT ? 1 : 0);
 }
 
 void IafDraw(void)
@@ -2643,6 +2743,6 @@ bool IafPadWantsEnter(void)
 
 void IafUnload(void)
 {
-    if (iafLoaded) { UnloadTexture(texElira); if (texClaude.id) UnloadTexture(texClaude); texClaude = (Texture2D){0}; }
+    if (iafLoaded) { UnloadTexture(texElira); if (texClaude.id) UnloadTexture(texClaude); texClaude = (Texture2D){0}; UnloadIafAudio(); }
     iafLoaded = false;
 }
