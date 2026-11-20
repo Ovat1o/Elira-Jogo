@@ -166,6 +166,7 @@ typedef struct
     float shieldT;    /* tempo desde que abriu a defesa */
     float shieldHit;  /* > 0: acabou de bloquear (quadro 3 + tremor) */
     float shotCd;     /* recarga do tiro de plasma */
+    float hitShake;   /* > 0: tremendo por ter levado/defendido um golpe */
     int juggle;       /* golpes levados no ar nesta queda (limite evita malabarismo infinito) */
 } Fighter;
 
@@ -545,6 +546,7 @@ static float AtkExt(Fighter *a, float *windOut)
     if (a->atk == AT_SPECIAL) { st = SP_ST[a->ch]; ac = SP_AC[a->ch]; rc = SP_RC[a->ch]; }
     else if (a->atk == AT_SHOT) { st = IAF_SHOT_STARTUP; ac = IAF_SHOT_ACTIVE; rc = IAF_SHOT_RECOVERY; }
     else { const Atk *d = &ATK[a->ch][a->atk]; st = d->st; ac = d->ac; rc = d->rc; }
+    if (ac < IAF_ACTIVE_VISUAL) { rc = fmaxf(rc - (IAF_ACTIVE_VISUAL - ac), 0.02f); ac = IAF_ACTIVE_VISUAL; } /* segura o impacto */
     float t = a->atkT;
     if (windOut) *windOut = t < st ? t / st : 0;
     if (t < st) return EaseOut(t / st) * 0.35f;
@@ -654,6 +656,7 @@ static int AtkFrame(Fighter *a, int anim, int a0, int a1, float st, float ac, fl
 {
     int n = EA_COUNT[anim], i;
     float t = a->atkT;
+    if (ac < IAF_ACTIVE_VISUAL) { rc = fmaxf(rc - (IAF_ACTIVE_VISUAL - ac), 0.02f); ac = IAF_ACTIVE_VISUAL; } /* segura o impacto */
     if (t < st) i = a0 > 0 ? (int)(t / st * a0) : 0;
     else if (t < st + ac) i = a0 + (a1 > a0 ? (int)((t - st) / ac * (a1 - a0 + 1)) : 0);
     else
@@ -719,13 +722,14 @@ static void DrawFighter(Fighter *a)
 {
     float flash = a->flash > 0 ? Clamp(a->flash / 0.12f, 0.0f, 1.0f) * 0.8f : 0;
     float alt = IAF_GROUND_Y - a->y;
+    float jx = a->hitShake > 0 ? (Rand01() - 0.5f) * 2 * IAF_HIT_SHAKE_PX : 0; /* tremor no impacto */
     DrawShadow(a->x, 52 - fminf(alt, 200) * 0.12f);
     if (a->inv > 0 && fmodf(a->inv, 0.1f) < 0.05f && a->st != ST_KO) return;
     if (a->ch == CH_ELIRA)
     {
         float yoff;
         int f = EliraFrameIdx(a, &yoff);
-        float x = a->x, fl = flash;
+        float x = a->x + jx, fl = flash;
         if ((a->shieldOn || a->st == ST_BLOCK) && a->shieldHit > 0)
         { /* bloqueio: tremor e flash branco por cima do 3o quadro */
             float k = Clamp(a->shieldHit / 0.15f, 0.0f, 1.0f);
@@ -737,7 +741,7 @@ static void DrawFighter(Fighter *a)
     else
     {
         Pose p = PoseFor(a);
-        DrawPuppet(a->ch, a->x, a->y, a->face, 1.0f, p, flash, a->vx);
+        DrawPuppet(a->ch, a->x + jx, a->y, a->face, 1.0f, p, flash, a->vx);
     }
     /* defesa das IAs: placa hexagonal na frente (a Elira tem quadros proprios) */
     if (a->st == ST_BLOCK && a->ch != CH_ELIRA)
@@ -929,6 +933,16 @@ static bool PrismActive(Fighter *d)
     return d->atkT >= SP_ST[CH_CLAUDE] * 0.5f && d->atkT < SP_ST[CH_CLAUDE] + SP_AC[CH_CLAUDE];
 }
 static void ApplyHit(Fighter *att, Fighter *def, float dmg, float stun, float push, int type, Vector2 at, bool unblockable, bool launch);
+static int g_projHit = 0; /* 1 = acerto de tiro, 2 = acerto do nucleo da rajada (durante ApplyHit) */
+/* pausa de impacto (congela os dois lutadores) conforme o tipo de golpe */
+static float HitstopFor(Fighter *att)
+{
+    if (g_projHit) return g_projHit == 2 ? IAF_HITSTOP_SPECIAL : IAF_HITSTOP_LIGHT;
+    if (att->st != ST_ATK) return IAF_HITSTOP_LIGHT;
+    if (att->atk == AT_HEAVY) return IAF_HITSTOP_HEAVY;
+    if (att->atk == AT_SPECIAL) return IAF_HITSTOP_SPECIAL;
+    return IAF_HITSTOP_LIGHT;
+}
 static void PrismCounter(Fighter *cl, Fighter *att)
 {
     cl->countered = true;
@@ -955,7 +969,8 @@ static void ApplyHit(Fighter *att, Fighter *def, float dmg, float stun, float pu
         def->meter = fminf(IAF_METER_MAX, def->meter + 4);
         def->shieldHit = 0.15f;
         if (def->ch != CH_ELIRA) HitSparks(at, CHCOL[def->ch], 6, 260); /* a faisca da Elira ja vem no quadro */
-        hitstop = 0.04f;
+        hitstop = fmaxf(hitstop, HitstopFor(att) * 0.7f);
+        def->hitShake = hitstop;
         if (def->hp <= 0) KO(def, dir);
         return;
     }
@@ -984,7 +999,8 @@ static void ApplyHit(Fighter *att, Fighter *def, float dmg, float stun, float pu
         if (att->ch == CH_ELIRA) AddImpact(at, 1.6f + dmg / 120.0f, dir);
         HitSparks(at, att->ch == CH_ELIRA ? C_CYAN : CHCOL[att->ch], 10 + (int)(dmg / 10), 420);
     }
-    hitstop = 0.05f + dmg / 2400.0f;
+    hitstop = fmaxf(hitstop, HitstopFor(att));
+    def->hitShake = hitstop;
     shake = fmaxf(shake, dmg / 600.0f);
     if (def->hp <= 0) KO(def, dir);
 }
@@ -1346,7 +1362,9 @@ static void UpdateProjectiles(float dt)
                 continue;
             }
             Fighter *a = &fz[p->owner];
+            g_projHit = p->big ? 2 : 1;
             ApplyHit(a, o, p->dmg, p->big ? 0.35f : 0.4f, p->big ? 120 : 220, 0, (Vector2){p->x, p->y}, false, false);
+            g_projHit = 0;
             p->hits--;
             p->hitCd = 0.16f;
             if (p->hits <= 0) { p->on = false; AddImpact((Vector2){p->x, p->y}, p->big ? 3.4f : 2.0f, p->vx > 0 ? 1 : -1); }
@@ -1356,6 +1374,8 @@ static void UpdateProjectiles(float dt)
 
 static void UpdateParts(float dt)
 {
+    for (int k = 0; k < 2; k++)
+        if (fz[k].hitShake > 0) fz[k].hitShake -= dt; /* corre mesmo durante a pausa de impacto */
     for (int i = 0; i < IAF_MAX_PARTS; i++)
     {
         Part *p = &parts[i];

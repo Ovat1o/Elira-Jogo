@@ -141,5 +141,10 @@
 #define IAF_LUNGE_LIGHT     10.0f    /* avanco do corpo no golpe fraco (px) */
 #define IAF_LUNGE_HEAVY     18.0f    /* avanco do corpo no golpe forte (px) */
 #define IAF_LUNGE_LOW       14.0f    /* avanco do corpo na rasteira (px) */
+#define IAF_HITSTOP_LIGHT   0.05f    /* pausa de impacto: golpe fraco, baixo, aereo e tiro (s) */
+#define IAF_HITSTOP_HEAVY   0.09f    /* pausa de impacto: golpe forte (s) */
+#define IAF_HITSTOP_SPECIAL 0.14f    /* pausa de impacto: especial (s) */
+#define IAF_HIT_SHAKE_PX    3.0f     /* tremor de quem apanha durante a pausa (px) */
+#define IAF_ACTIVE_VISUAL   0.10f    /* o quadro de impacto fica pelo menos isto na tela (s) */
 
 #endif /* CONSTANTES_H */
