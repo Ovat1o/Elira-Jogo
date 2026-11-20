@@ -173,7 +173,11 @@ int main(int argc, char **argv)
                 {
                     InvEnter(&game);
                 }
-                else if (Clicked((Rectangle){86, 458, 350, 50}) || IsKeyPressed(KEY_C))
+                else if (Clicked((Rectangle){86, 458, 350, 54}) || IsKeyPressed(KEY_F))
+                {
+                    IafEnter(&game);
+                }
+                else if (Clicked((Rectangle){86, 524, 350, 50}) || IsKeyPressed(KEY_C))
                 {
                     game.screen = SCREEN_SETTINGS;
                 }

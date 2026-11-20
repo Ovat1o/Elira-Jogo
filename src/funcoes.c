@@ -1675,7 +1675,8 @@ void DrawTitle(void)
 {
     Rectangle startButton = {86, 326, 350, 54};
     Rectangle invasionButton = {86, 392, 350, 54};
-    Rectangle settingsButton = {86, 458, 350, 50};
+    Rectangle iaFightButton = {86, 458, 350, 54};
+    Rectangle settingsButton = {86, 524, 350, 50};
     float time = (float)GetTime();
 
     DrawTitleSpaceBackground();
@@ -1714,11 +1715,12 @@ void DrawTitle(void)
     /* 5. Botoes interativos */
     DrawTitleStartButton(startButton, "INICIAR MISSAO", CYAN_COLOR);
     DrawTitleStartButton(invasionButton, "MODO INVASAO [I]", (Color){230, 90, 200, 255});
+    DrawTitleStartButton(iaFightButton, "IA FIGHT [F]", (Color){120, 230, 150, 255});
     DrawTitleStartButton(settingsButton, "CONFIGURACOES [C]", GOLD_COLOR);
 
     /* 6. Indicador de atalhos pulsante */
     float promptAlpha = 0.40f + 0.55f * (0.5f + 0.5f * sinf(time * 3.4f));
-    DrawGameText("> ENTER: Iniciar  |  I: Invasao  |  C: Opcoes <", 93, 524, 15, Fade(GOLD_COLOR, promptAlpha));
+    DrawGameText("> ENTER: Iniciar  |  I: Invasao  |  F: IA Fight  |  C: Opcoes <", 93, 590, 15, Fade(GOLD_COLOR, promptAlpha));
 
     /* 8. Linhas CRT retro */
     for (int y = 0; y < SCREEN_HEIGHT; y += 4)
