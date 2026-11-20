@@ -138,5 +138,8 @@
 #define IAF_SHOT_COOLDOWN   0.45f    /* recarga entre tiros (s); so 1 tiro dela na tela */
 #define IAF_MAX_PROJ        12       /* projeteis simultaneos */
 #define IAF_MAX_PARTS       700      /* particulas/textos de efeito simultaneos */
+#define IAF_LUNGE_LIGHT     10.0f    /* avanco do corpo no golpe fraco (px) */
+#define IAF_LUNGE_HEAVY     18.0f    /* avanco do corpo no golpe forte (px) */
+#define IAF_LUNGE_LOW       14.0f    /* avanco do corpo na rasteira (px) */
 
 #endif /* CONSTANTES_H */

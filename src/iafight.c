@@ -1184,6 +1184,13 @@ static void UpdateFighter(Fighter *a, Fighter *o, IafInput in, float dt)
     case ST_ATK:
     {
         a->atkT += dt;
+        if (ground && (a->atk == AT_LIGHT || a->atk == AT_HEAVY || a->atk == AT_LOW))
+        { /* avanco do corpo durante o preparo e o ativo do golpe */
+            const Atk *d = &ATK[a->ch][a->atk];
+            float win = d->st + d->ac, t0 = a->atkT - dt;
+            float adv = a->atk == AT_LIGHT ? IAF_LUNGE_LIGHT : (a->atk == AT_HEAVY ? IAF_LUNGE_HEAVY : IAF_LUNGE_LOW);
+            if (t0 < win) a->x += a->face * adv * fminf(dt, win - t0) / win;
+        }
         if (a->atk == AT_SPECIAL) UpdateSpecial(a, o, dt);
         else if (a->atk == AT_SHOT)
         {
