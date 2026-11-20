@@ -167,6 +167,7 @@ typedef struct
     float shieldHit;  /* > 0: acabou de bloquear (quadro 3 + tremor) */
     float shotCd;     /* recarga do tiro de plasma */
     float hitShake;   /* > 0: tremendo por ter levado/defendido um golpe */
+    bool alt;         /* cor alternativa (1 x 1 com o mesmo lutador dos dois lados) */
     int juggle;       /* golpes levados no ar nesta queda (limite evita malabarismo infinito) */
 } Fighter;
 
@@ -241,6 +242,18 @@ static void BlockSpark(Vector2 p, Color c, int dir)
         AddPart(p, (Vector2){-dir * cosf(a) * s, sinf(a) * s}, 0.30f + Rand01() * 0.15f, 3 + Rand01() * 3, c, 5);
     }
 }
+
+/* ------------------------------------------------------------------ cor alternativa (1 x 1 com o mesmo lutador) */
+static bool g_altPal = false; /* ligado enquanto desenha o lutador da direita num espelho */
+#define IAF_ELIRA_ALT_TINT ((Color){255, 178, 140, 255})
+static Color AltCol(Color c)
+{ /* gira o matiz e mantem brilho/saturacao */
+    Vector3 h = ColorToHSV(c);
+    Color o = ColorFromHSV(fmodf(h.x + 150.0f, 360.0f), h.y, h.z);
+    o.a = c.a;
+    return o;
+}
+static Color FCol(const Fighter *a) { return a->alt ? AltCol(CHCOL[a->ch]) : CHCOL[a->ch]; }
 
 /* ------------------------------------------------------------------ esqueleto das IAs (primitivas) */
 typedef struct { float rootY, lean, head, aF, eF, aB, eB, lF, kF, lB, kB; } Pose;
@@ -355,6 +368,7 @@ static void DrawClaude(Skel *k, Pose p, float t, float flash, float vx)
     Color coat = {196, 98, 62, 255}, coatHi = {240, 150, 106, 255}, coatDk = {112, 48, 28, 255}, coatSh = {150, 70, 42, 255};
     Color pant = {84, 70, 82, 255}, pantHi = {140, 120, 134, 255}, ink = {26, 16, 16, 255};
     Color cream = {242, 230, 210, 255}, creamHi = {255, 250, 240, 255}, gold = {255, 196, 110, 255};
+    if (g_altPal) { coat = AltCol(coat); coatHi = AltCol(coatHi); coatDk = AltCol(coatDk); coatSh = AltCol(coatSh); gold = AltCol(gold); }
     if (flash > 0) { coat = ColorLerp(coat, WHITE, flash); cream = ColorLerp(cream, WHITE, flash); pant = ColorLerp(pant, WHITE, flash); }
     /* constelacao atras da cabeca */
     Vector2 hc = k->head;
@@ -441,6 +455,7 @@ static void DrawCodex(Skel *k, Pose p, float t, float flash, float vx)
     Color hood = {46, 50, 60, 255}, hoodHi = {84, 92, 108, 255}, hoodSh = {32, 34, 42, 255}, ink = {10, 12, 14, 255};
     Color pant = {30, 32, 40, 255}, pantHi = {64, 68, 80, 255}, neon = C_GREEN;
     Color boot = {24, 26, 30, 255}, bootHi = {80, 84, 96, 255};
+    if (g_altPal) { neon = AltCol(neon); hood = (Color){58, 44, 62, 255}; hoodHi = (Color){104, 84, 112, 255}; hoodSh = (Color){40, 30, 44, 255}; }
     if (flash > 0) { hood = ColorLerp(hood, WHITE, flash); pant = ColorLerp(pant, WHITE, flash); }
     float glow = 0.5f + 0.5f * sinf(t * 6);
     /* cabo de dados nas costas */
@@ -506,6 +521,7 @@ static void DrawAnti(Skel *k, Pose p, float t, float flash, float vx)
     float s = k->s;
     Color suit = {226, 230, 242, 255}, suitHi = {255, 255, 255, 255}, suitSh = {160, 168, 200, 255}, ink = {24, 20, 48, 255};
     Color vio = {128, 96, 255, 255}, teal = C_TEAL;
+    if (g_altPal) { vio = AltCol(vio); teal = AltCol(teal); suitSh = (Color){200, 176, 160, 255}; }
     if (flash > 0) { suit = ColorLerp(suit, (Color){255, 200, 200, 255}, flash); }
     Vector2 core = Vector2Lerp(k->hip, k->neck, 0.55f);
     /* cachecol flutuando para cima */
@@ -756,7 +772,7 @@ static void DrawAttackTrail(Fighter *a, float jx)
     case AT_LOW: cy = a->y - 70; r = d->rx * 0.68f; a0 = 20; a1 = 62; break;
     default: cy = a->y - d->top + 20; r = d->rx * 0.7f; a0 = -25; a1 = 60; break; /* chute aereo, para baixo */
     }
-    Color c = CHCOL[a->ch];
+    Color c = FCol(a);
     Vector2 o = {a->x + jx + a->face * 8, cy}, prev = {0}, tip = {0};
     float cur = Lerp(a0, a1, prog);
     const int N = 16;
@@ -797,18 +813,20 @@ static void DrawFighter(Fighter *a)
             x += (Rand01() - 0.5f) * 8 * k;
             fl = fmaxf(fl, 0.3f * k);
         }
-        DrawEF(f, x, a->y + yoff, a->face, 1.0f, WHITE, fl);
+        DrawEF(f, x, a->y + yoff, a->face, 1.0f, a->alt ? IAF_ELIRA_ALT_TINT : WHITE, fl);
     }
     else
     {
         Pose p = PoseFor(a);
+        g_altPal = a->alt;
         DrawPuppet(a->ch, a->x + jx, a->y, a->face, 1.0f, p, flash, a->vx);
+        g_altPal = false;
     }
     DrawAttackTrail(a, jx);
     /* defesa das IAs: placa hexagonal na frente (a Elira tem quadros proprios) */
     if (a->st == ST_BLOCK && a->ch != CH_ELIRA)
     {
-        Color c = CHCOL[a->ch];
+        Color c = FCol(a);
         float cy = a->crouch ? a->y - 60 : a->y - 120, cx = a->x + a->face * 52;
         DrawPoly((Vector2){cx, cy}, 6, 40, 0, Fade(c, 0.18f));
         DrawPolyLinesEx((Vector2){cx, cy}, 6, 40, 0, 3, Fade(c, 0.85f));
@@ -931,7 +949,7 @@ static void DrawStage(void)
 }
 
 /* ------------------------------------------------------------------ jogo: estado */
-typedef enum { SC_SELECT, SC_VERSUS, SC_FIGHT, SC_RESULT, SC_FINAL } IafScreen;
+typedef enum { SC_MODE, SC_SELECT, SC_VERSUS, SC_FIGHT, SC_RESULT, SC_FINAL } IafScreen;
 typedef enum { RS_INTRO, RS_FIGHT, RS_KO, RS_TIMEUP } RState;
 static IafScreen iafScreen = SC_SELECT;
 static int sel = 0, playerCh = CH_ELIRA;
@@ -1030,7 +1048,7 @@ static void ApplyHit(Fighter *att, Fighter *def, float dmg, float stun, float pu
         def->vx = dir * push * 0.8f;
         def->meter = fminf(IAF_METER_MAX, def->meter + 4);
         def->shieldHit = 0.15f;
-        if (def->ch != CH_ELIRA) BlockSpark(at, CHCOL[def->ch], dir); /* a faisca do escudo da Elira ja vem no quadro */
+        if (def->ch != CH_ELIRA) BlockSpark(at, FCol(def), dir); /* a faisca do escudo da Elira ja vem no quadro */
         hitstop = fmaxf(hitstop, HitstopFor(att) * 0.7f);
         def->hitShake = hitstop;
         if (def->hp <= 0) KO(def, dir);
@@ -1054,15 +1072,15 @@ static void ApplyHit(Fighter *att, Fighter *def, float dmg, float stun, float pu
     {
         char b[32];
         snprintf(b, sizeof b, "%d ACERTOS", att->combo);
-        AddText((Vector2){att->x, att->y - 240}, b, CHCOL[att->ch], 22);
+        AddText((Vector2){att->x, att->y - 240}, b, FCol(att), 22);
     }
     if (def->ch != CH_ELIRA)
     { /* sem efeito por cima dos quadros de reacao da Elira */
         if (att->ch == CH_ELIRA) AddImpact(at, 1.6f + dmg / 120.0f, dir);
-        HitSparks(at, att->ch == CH_ELIRA ? C_CYAN : CHCOL[att->ch], 10 + (int)(dmg / 10), 420);
+        HitSparks(at, att->ch == CH_ELIRA ? C_CYAN : FCol(att), 10 + (int)(dmg / 10), 420);
     }
     /* estrela de impacto no ponto do acerto (menor sobre a Elira, cujos quadros de dano ja tem efeito) */
-    ImpactSpark(at, att->ch == CH_ELIRA ? C_CYAN : CHCOL[att->ch], (28 + dmg * 0.22f) * (def->ch == CH_ELIRA ? 0.6f : 1.0f));
+    ImpactSpark(at, att->ch == CH_ELIRA ? C_CYAN : FCol(att), (28 + dmg * 0.22f) * (def->ch == CH_ELIRA ? 0.6f : 1.0f));
     hitstop = fmaxf(hitstop, HitstopFor(att));
     def->hitShake = hitstop;
     shake = fmaxf(shake, dmg / 600.0f);
@@ -1797,6 +1815,26 @@ static bool NavRightP(void) { return IsKeyPressed(KEY_D) || IsKeyPressed(KEY_RIG
 static bool NavOkP(void) { return (IsKeyPressed(KEY_ENTER) && !AltDown()) || IsKeyPressed(KEY_SPACE) || IsKeyPressed(KEY_J) || AnyPadPressed(VB_JUMP) || AnyPadPressed(VB_START); }
 static bool NavBackP(void) { return IsKeyPressed(KEY_ESCAPE) || AnyPadPressed(VB_SHOT) || AnyPadPressed(VB_SELECT); }
 static bool PauseP(void) { return IsKeyPressed(KEY_P) || AnyPadPressed(VB_START); }
+static bool NavUpP(void) { return IsKeyPressed(KEY_W) || IsKeyPressed(KEY_UP) || AnyPadPressed(VB_UP); }
+static bool NavDownP(void) { return IsKeyPressed(KEY_S) || IsKeyPressed(KEY_DOWN) || AnyPadPressed(VB_DOWN); }
+/* navegacao de UM jogador no 1 x 1: P1 = A/D + J (K desfaz) + controle 1; P2 = setas + 1/ENTER do
+   teclado numerico (2 desfaz) + controle 2 */
+enum { PN_LEFT, PN_RIGHT, PN_OK, PN_UNDO };
+static bool PlayerNavP(int p, int what)
+{
+    static const int KL[2] = {KEY_A, KEY_LEFT}, KR[2] = {KEY_D, KEY_RIGHT};
+    switch (what)
+    {
+    case PN_LEFT: return IsKeyPressed(KL[p]) || PadPressed(p, VB_LEFT);
+    case PN_RIGHT: return IsKeyPressed(KR[p]) || PadPressed(p, VB_RIGHT);
+    case PN_OK:
+        if (p == 0) return IsKeyPressed(KEY_J) || IsKeyPressed(KEY_SPACE) || PadPressed(0, VB_JUMP) || PadPressed(0, VB_START);
+        return IsKeyPressed(KEY_KP_1) || IsKeyPressed(KEY_KP_ENTER) || IsKeyPressed(KEY_ENTER) || PadPressed(1, VB_JUMP) || PadPressed(1, VB_START);
+    default:
+        if (p == 0) return IsKeyPressed(KEY_K) || PadPressed(0, VB_SHOT);
+        return IsKeyPressed(KEY_KP_2) || PadPressed(1, VB_SHOT);
+    }
+}
 
 /* aviso de controle conectado/desconectado e indicador dos controles */
 static void DrawPadStatus(bool chips)
@@ -1842,6 +1880,7 @@ static void StartRound(void)
 {
     ResetFighter(&fz[0], (CharId)playerCh, 420, 1);
     ResetFighter(&fz[1], (CharId)ladder[ladderPos], 860, -1);
+    fz[1].alt = versusMode && fz[0].ch == fz[1].ch;
     fz[0].meter = fz[1].meter = 0;
     ClearFx();
     memset(ai, 0, sizeof(ai));
@@ -1852,9 +1891,14 @@ static void StartRound(void)
     roundWinner = -1;
     fz[0].perfect = fz[1].perfect = 1;
 }
+static int selP[2] = {0, 1};   /* 1 x 1: personagem de cada jogador */
+static bool readyP[2];         /* 1 x 1: jogador ja confirmou */
+static float readyT = 0;       /* atraso depois que os dois confirmam */
+static int modeSel = 0, resSel = 0;
 static void StartMatch(void)
 {
     wins[0] = wins[1] = 0;
+    resSel = 0;
     roundNo = 1;
     StartRound();
 }
@@ -1896,7 +1940,7 @@ static void UpdateFight(float dt)
 {
     if (PauseP()) paused = !paused;
     if (IsKeyPressed(KEY_ESCAPE) && !paused) paused = true; /* ESC pausa; na pausa, ESC ou B voltam a selecao */
-    else if (paused && (IsKeyPressed(KEY_ESCAPE) || AnyPadPressed(VB_SHOT))) { paused = false; iafScreen = SC_SELECT; scT = 0; return; }
+    else if (paused && (IsKeyPressed(KEY_ESCAPE) || AnyPadPressed(VB_SHOT))) { paused = false; readyP[0] = readyP[1] = false; iafScreen = SC_SELECT; scT = 0; return; }
     if (paused) return;
     if (shake > 0) shake -= dt;
     rsT += dt;
@@ -1975,15 +2019,15 @@ static void DrawHUD(void)
         Fighter *a = &fz[i];
         bool m = i == 1;
         float fill = a->hp / IAF_HP_MAX, trail = a->hpShown / IAF_HP_MAX;
-        Color col = fill < 0.25f ? ColorLerp(C_RED, WHITE, 0.15f * (0.5f + 0.5f * sinf(gt * 10))) : ColorLerp(CHCOL[a->ch], WHITE, 0.15f);
+        Color col = fill < 0.25f ? ColorLerp(C_RED, WHITE, 0.15f * (0.5f + 0.5f * sinf(gt * 10))) : ColorLerp(FCol(a), WHITE, 0.15f);
         Bar(70, 30, 470, 26, fill, trail, col, m);
         /* nome e "chip" de cor */
         float nx = m ? SCREEN_WIDTH - 70 : 70;
-        DrawRectangle((int)(m ? nx - 14 : nx), 64, 14, 14, CHCOL[a->ch]);
+        DrawRectangle((int)(m ? nx - 14 : nx), 64, 14, 14, FCol(a));
         DrawRectangleLines((int)(m ? nx - 14 : nx), 64, 14, 14, C_INK);
         const char *nm = NAME[a->ch];
         if (m) TxtR(nm, nx - 22, 61, 22, C_WHITE); else Txt(nm, nx + 22, 61, 22, C_WHITE);
-        const char *tag = cpu[i] ? "CPU" : "JOGADOR";
+        const char *tag = cpu[i] ? "CPU" : (versusMode ? (i == 0 ? "P1" : "P2") : "JOGADOR");
         float tw = TxtW(nm, 22) + 32;
         if (m) TxtR(tag, nx - tw, 66, 14, C_DIM); else Txt(tag, nx + tw, 66, 14, C_DIM);
         /* rounds vencidos: chips de memoria */
@@ -1991,7 +2035,7 @@ static void DrawHUD(void)
         {
             float cx = m ? SCREEN_WIDTH / 2.0f + 76 + r * 26 : SCREEN_WIDTH / 2.0f - 76 - r * 26;
             Rectangle rc = {cx - 9, 66, 18, 12};
-            DrawRectangleRec(rc, wins[i] > r ? CHCOL[a->ch] : (Color){30, 34, 56, 255});
+            DrawRectangleRec(rc, wins[i] > r ? FCol(a) : (Color){30, 34, 56, 255});
             DrawRectangleLinesEx(rc, 1.5f, C_INK);
             for (int p = 0; p < 3; p++) { DrawRectangle((int)rc.x + 2 + p * 6, 78, 2, 4, C_DIM); DrawRectangle((int)rc.x + 2 + p * 6, 62, 2, 4, C_DIM); }
         }
@@ -2007,13 +2051,13 @@ static void DrawHUD(void)
             Rectangle f = r;
             f.width *= seg;
             if (m) f.x = r.x + r.width - f.width;
-            DrawRectangleRec(f, seg >= 1 ? ColorLerp(CHCOL[a->ch], WHITE, 0.3f + 0.3f * sinf(gt * 8)) : Fade(CHCOL[a->ch], 0.7f));
+            DrawRectangleRec(f, seg >= 1 ? ColorLerp(FCol(a), WHITE, 0.3f + 0.3f * sinf(gt * 8)) : Fade(FCol(a), 0.7f));
             DrawRectangleLinesEx(r, 2, C_INK);
         }
         if (a->meter >= IAF_SPECIAL_COST)
         {
             const char *s = "ESPECIAL PRONTO";
-            if (m) TxtR(s, SCREEN_WIDTH - 70 - 60, my - 20, 14, CHCOL[a->ch]); else Txt(s, 70 + 60, my - 20, 14, CHCOL[a->ch]);
+            if (m) TxtR(s, SCREEN_WIDTH - 70 - 60, my - 20, 14, FCol(a)); else Txt(s, 70 + 60, my - 20, 14, FCol(a));
         }
     }
     /* cronometro em hexagono */
@@ -2055,7 +2099,8 @@ static void DrawFightOverlay(void)
             else
             {
                 char b[64];
-                snprintf(b, sizeof b, "%s VENCE O ROUND", NAME[fz[roundWinner].ch]);
+                if (versusMode) snprintf(b, sizeof b, "P%d - %s VENCE O ROUND", roundWinner + 1, NAME[fz[roundWinner].ch]);
+                else snprintf(b, sizeof b, "%s VENCE O ROUND", NAME[fz[roundWinner].ch]);
                 TxtO(b, SCREEN_WIDTH / 2.0f, 300, 48, CHCOL[fz[roundWinner].ch], C_INK);
                 if (fz[roundWinner].hp >= IAF_HP_MAX - 0.5f) TxtO("SEM UM ARRANHÃO!", SCREEN_WIDTH / 2.0f, 360, 28, C_AMBER, C_INK);
             }
@@ -2098,7 +2143,7 @@ static void DrawCharacterBig(CharId ch, float x, float yFeet, int face, float sc
         float yo = roundf((sinf(gt * 2.4f) - 1) * 1.0f) * sc;
         if (st == ST_WIN) { f = EAFrame(EA_WIN, 2 + ((int)(gt * 2.5f) % 2)); yo = 0; }
         if (st == ST_KO) { f = EAFrame(EA_DEFEAT, 1); yo = 0; }
-        DrawEF(f, x, yFeet + yo, face, sc, WHITE, 0);
+        DrawEF(f, x, yFeet + yo, face, sc, g_altPal ? IAF_ELIRA_ALT_TINT : WHITE, 0);
         return;
     }
     Fighter tmp;
@@ -2214,13 +2259,21 @@ static void DrawVersus(void)
     Tri((Vector2){SCREEN_WIDTH / 2.0f + 20, 0}, (Vector2){SCREEN_WIDTH / 2.0f + 60, SCREEN_HEIGHT}, (Vector2){SCREEN_WIDTH / 2.0f - 20, SCREEN_HEIGHT}, (Color){6, 8, 16, 255});
     float k = EaseOut(scT / 0.4f);
     DrawCharacterBig(a, 300 - (1 - k) * 300, 560, 1, 1.6f, ST_IDLE);
+    g_altPal = versusMode && a == b;
     DrawCharacterBig(b, SCREEN_WIDTH - 300 + (1 - k) * 300, 560, -1, 1.6f, ST_IDLE);
+    g_altPal = false;
     TxtO(NAME[a], 300, 590, 44, CHCOL[a], C_INK);
     TxtO(NAME[b], SCREEN_WIDTH - 300, 590, 44, CHCOL[b], C_INK);
     TxtO("VS", SCREEN_WIDTH / 2.0f, 300, 96, C_WHITE, C_INK);
     char d[48];
-    if (ladderPos == 2 && b == CH_ELIRA) snprintf(d, sizeof d, "DESAFIO FINAL - A CHEFE");
+    if (versusMode) snprintf(d, sizeof d, "1 x 1  -  MELHOR DE 3");
+    else if (ladderPos == 2 && b == CH_ELIRA) snprintf(d, sizeof d, "DESAFIO FINAL - A CHEFE");
     else snprintf(d, sizeof d, "DESAFIO %d DE 3", ladderPos + 1);
+    if (versusMode)
+    {
+        TxtO("P1", 300, 640, 30, C_CYAN, C_INK);
+        TxtO("P2", SCREEN_WIDTH - 300, 640, 30, C_RED, C_INK);
+    }
     TxtO(d, SCREEN_WIDTH / 2.0f, 40, 32, C_AMBER, C_INK);
     TxtC("ENTER / A: lutar", SCREEN_WIDTH / 2.0f, SCREEN_HEIGHT - 30, 16, C_DIM);
 }
@@ -2254,6 +2307,180 @@ static void IafDrawResult(bool final)
     else TxtC("ENTER / A: tentar de novo    ESC / B: seleção", SCREEN_WIDTH / 2.0f, 684, 16, C_DIM);
 }
 
+/* ------------------------------------------------------------------ tela de modo */
+static const char *MODE_TXT[2] = {"1 JOGADOR x CPU", "1 x 1  (VERSUS)"};
+static const char *MODE_SUB[2] = {"Arcade: enfrente as outras três inteligências, melhor de 3 rounds.",
+                                  "Dois jogadores na mesma tela: controle ou teclado. Melhor de 3."};
+static void DrawMode(void)
+{
+    DrawBackdrop(modeSel ? C_RED : C_CYAN);
+    TxtO("IA FIGHT", SCREEN_WIDTH / 2.0f, 70, 96, C_WHITE, C_INK);
+    TxtC("RINHA DE INTELIGÊNCIAS", SCREEN_WIDTH / 2.0f, 176, 24, C_CYAN);
+    for (int i = 0; i < 2; i++)
+    {
+        Rectangle r = {SCREEN_WIDTH / 2.0f - 300, 260.0f + i * 130, 600, 104};
+        bool on = i == modeSel;
+        Color c = i ? C_RED : C_CYAN;
+        if (on) DrawRectangleRounded((Rectangle){r.x - 8, r.y - 8, r.width + 16, r.height + 16}, 0.2f, 8, Fade(c, 0.22f + 0.1f * sinf(gt * 5)));
+        DrawRectangleRounded(r, 0.18f, 8, (Color){14, 18, 36, 255});
+        DrawRectangleRoundedLinesEx(r, 0.18f, 8, on ? 3 : 1.5f, on ? c : Fade(c, 0.4f));
+        TxtC(MODE_TXT[i], r.x + r.width / 2, r.y + 18, 40, on ? C_WHITE : C_DIM);
+        TxtC(MODE_SUB[i], r.x + r.width / 2, r.y + 70, 16, on ? Fade(c, 0.95f) : Fade(C_DIM, 0.7f));
+    }
+    TxtC("W/S, SETAS ou CONTROLE: escolher    ENTER / A: confirmar    ESC / B: voltar ao menu", SCREEN_WIDTH / 2.0f, SCREEN_HEIGHT - 30, 16, C_DIM);
+}
+static void UpdateMode(void)
+{
+    if (NavUpP() || NavDownP() || NavLeftP() || NavRightP()) modeSel = 1 - modeSel;
+    if (scT > 0.15f && NavOkP())
+    {
+        versusMode = modeSel == 1;
+        if (versusMode)
+        {
+            cpu[0] = cpu[1] = false;
+            readyP[0] = readyP[1] = false;
+            readyT = 0;
+            selP[0] = 0; selP[1] = 1;
+        }
+        else { cpu[0] = false; cpu[1] = true; }
+        iafScreen = SC_SELECT;
+        scT = 0;
+    }
+}
+
+/* ------------------------------------------------------------------ 1 x 1: selecao simultanea */
+static void DrawSelectVs(void)
+{
+    DrawBackdrop(C_DIM);
+    TxtO("1 x 1", SCREEN_WIDTH / 2.0f, 22, 64, C_WHITE, C_INK);
+    TxtC("CADA JOGADOR ESCOLHE O SEU LUTADOR", SCREEN_WIDTH / 2.0f, 92, 20, C_CYAN);
+    static const Color PC[2] = {{96, 214, 240, 255}, {230, 80, 84, 255}};
+    for (int i = 0; i < CH_N; i++)
+    {
+        Rectangle r = {80 + i * 290.0f, 140, 260, 340};
+        bool on0 = selP[0] == i, on1 = selP[1] == i;
+        Color c = CHCOL[i];
+        DrawRectangleRounded(r, 0.05f, 6, (Color){14, 18, 36, 255});
+        DrawRectangleGradientV((int)r.x + 4, (int)(r.y + r.height * 0.45f), (int)r.width - 8, (int)(r.height * 0.55f) - 4, Fade(c, 0), Fade(c, (on0 || on1) ? 0.28f : 0.1f));
+        DrawRectangleRoundedLinesEx(r, 0.05f, 6, 1.5f, Fade(c, 0.45f));
+        for (int p = 0; p < 2; p++)
+            if (selP[p] == i)
+            { /* moldura do cursor de cada jogador (P2 por fora quando os dois estao no mesmo card) */
+                float g = (p == 1 && on0) ? 9 : 3;
+                Rectangle rr = {r.x - g, r.y - g, r.width + 2 * g, r.height + 2 * g};
+                DrawRectangleRoundedLinesEx(rr, 0.05f, 6, readyP[p] ? 5 : 3, Fade(PC[p], readyP[p] ? 1.0f : 0.6f + 0.4f * sinf(gt * 6)));
+            }
+        float fy = r.y + r.height - 70;
+        DrawEllipse((int)(r.x + r.width / 2), (int)fy + 2, (int)(r.width * 0.32f), 10, Fade(BLACK, 0.5f));
+        g_altPal = false;
+        DrawCharacterBig((CharId)i, r.x + r.width / 2, fy, 1, i == CH_ELIRA ? 1.05f : 0.95f, ST_IDLE);
+        TxtC(NAME[i], r.x + r.width / 2, r.y + r.height - 52, 26, (on0 || on1) ? C_WHITE : C_DIM);
+        if (on0) { DrawRectangleRounded((Rectangle){r.x + 10, r.y + 10, 48, 26}, 0.3f, 4, PC[0]); TxtC("P1", r.x + 34, r.y + 14, 18, C_INK); }
+        if (on1) { DrawRectangleRounded((Rectangle){r.x + r.width - 58, r.y + 10, 48, 26}, 0.3f, 4, PC[1]); TxtC("P2", r.x + r.width - 34, r.y + 14, 18, C_INK); }
+    }
+    for (int p = 0; p < 2; p++)
+    { /* painel de cada jogador */
+        Rectangle ip = {80 + p * 600.0f, 500, 520, 170};
+        int ch = selP[p];
+        Color c = PC[p];
+        DrawRectangleRounded(ip, 0.1f, 6, (Color){12, 14, 30, 255});
+        DrawRectangleRoundedLinesEx(ip, 0.1f, 6, 2, Fade(c, 0.8f));
+        g_altPal = p == 1 && selP[0] == selP[1];
+        Color cc = g_altPal ? AltCol(CHCOL[ch]) : CHCOL[ch];
+        DrawCharacterBig((CharId)ch, ip.x + 70, ip.y + 150, 1, 0.55f, ST_IDLE);
+        g_altPal = false;
+        char t[48];
+        snprintf(t, sizeof t, "P%d  %s", p + 1, NAME[ch]);
+        Txt(t, ip.x + 140, ip.y + 14, 26, cc);
+        if (p == 1 && selP[0] == selP[1]) Txt("cor alternativa", ip.x + 140, ip.y + 44, 14, C_DIM);
+        Txt("ESPECIAL:", ip.x + 140, ip.y + 66, 15, C_WHITE);
+        Txt(SPNAME[ch], ip.x + 232, ip.y + 66, 15, cc);
+        Txt(readyP[p] ? "PRONTO!" : (p == 0 ? "A/D ou controle 1  -  J ou A confirma" : "SETAS ou controle 2  -  1 ou A confirma"), ip.x + 140, ip.y + 100, readyP[p] ? 26 : 14, readyP[p] ? c : C_DIM);
+        if (readyP[p]) Txt(p == 0 ? "K ou B: desfazer" : "2 ou B: desfazer", ip.x + 140, ip.y + 134, 14, C_DIM);
+        else
+        {
+            bool padOn = padNow[p].on;
+            Txt(padOn ? "controle conectado" : "sem controle: use o teclado", ip.x + 140, ip.y + 134, 14, padOn ? C_GREEN : C_DIM);
+        }
+    }
+    if (readyP[0] && readyP[1]) TxtO("LUTEM!", SCREEN_WIDTH / 2.0f, 300, 72, C_AMBER, C_INK);
+    TxtC("ESC: voltar ao modo", SCREEN_WIDTH / 2.0f, SCREEN_HEIGHT - 26, 14, C_DIM);
+}
+static void UpdateSelectVs(float dt)
+{
+    if (IsKeyPressed(KEY_ESCAPE) || ((!readyP[0] && PadPressed(0, VB_SHOT)) || (!readyP[1] && PadPressed(1, VB_SHOT))) || AnyPadPressed(VB_SELECT))
+    {
+        iafScreen = SC_MODE;
+        scT = 0;
+        return;
+    }
+    for (int p = 0; p < 2; p++)
+    {
+        if (!readyP[p])
+        {
+            if (PlayerNavP(p, PN_LEFT)) selP[p] = (selP[p] + CH_N - 1) % CH_N;
+            if (PlayerNavP(p, PN_RIGHT)) selP[p] = (selP[p] + 1) % CH_N;
+            if (scT > 0.15f && PlayerNavP(p, PN_OK)) readyP[p] = true;
+        }
+        else if (PlayerNavP(p, PN_UNDO)) readyP[p] = false;
+    }
+    if (readyP[0] && readyP[1])
+    {
+        readyT += dt;
+        if (readyT > 0.7f)
+        {
+            playerCh = selP[0];
+            ladderPos = 0;
+            ladder[0] = selP[1];
+            iafScreen = SC_VERSUS;
+            scT = 0;
+            readyT = 0;
+        }
+    }
+    else readyT = 0;
+}
+
+/* ------------------------------------------------------------------ 1 x 1: vencedor */
+static const char *RES_OPT[3] = {"REVANCHE", "TROCAR LUTADORES", "MENU"};
+static void DrawResultVs(void)
+{
+    int w = wins[0] >= 2 ? 0 : 1;
+    Fighter *fw = &fz[w];
+    Color c = FCol(fw);
+    DrawBackdrop(c);
+    DrawEllipse(SCREEN_WIDTH / 2 - 220, 590, 170, 26, Fade(c, 0.25f));
+    DrawEllipseLines(SCREEN_WIDTH / 2 - 220, 590, 175, 28, c);
+    g_altPal = fw->alt;
+    DrawCharacterBig(fw->ch, SCREEN_WIDTH / 2.0f - 220, 590, 1, 1.5f, ST_WIN);
+    g_altPal = false;
+    char b[64];
+    snprintf(b, sizeof b, "P%d VENCE!", w + 1);
+    TxtO(b, SCREEN_WIDTH / 2.0f, 40, 88, w == 0 ? C_CYAN : C_RED, C_INK);
+    snprintf(b, sizeof b, "%s  (%d x %d)", NAME[fw->ch], wins[w], wins[1 - w]);
+    TxtC(b, SCREEN_WIDTH / 2.0f, 140, 26, C_WHITE);
+    Txt(WINQ[fw->ch], SCREEN_WIDTH / 2.0f - 20, 214, 17, C_DIM);
+    for (int i = 0; i < 3; i++)
+    {
+        Rectangle r = {SCREEN_WIDTH / 2.0f + 40, 290.0f + i * 92, 420, 72};
+        bool on = i == resSel;
+        if (on) DrawRectangleRounded((Rectangle){r.x - 6, r.y - 6, r.width + 12, r.height + 12}, 0.25f, 8, Fade(c, 0.25f + 0.1f * sinf(gt * 5)));
+        DrawRectangleRounded(r, 0.22f, 8, (Color){14, 18, 36, 255});
+        DrawRectangleRoundedLinesEx(r, 0.22f, 8, on ? 3 : 1.5f, on ? c : Fade(c, 0.4f));
+        TxtC(RES_OPT[i], r.x + r.width / 2, r.y + 20, 32, on ? C_WHITE : C_DIM);
+    }
+    TxtC("W/S, SETAS ou CONTROLE: escolher    ENTER / A: confirmar", SCREEN_WIDTH / 2.0f, SCREEN_HEIGHT - 30, 16, C_DIM);
+}
+static void UpdateResultVs(void)
+{
+    if (NavUpP()) resSel = (resSel + 2) % 3;
+    if (NavDownP()) resSel = (resSel + 1) % 3;
+    if (scT < 0.8f || !NavOkP()) return;
+    if (resSel == 0) { iafScreen = SC_VERSUS; }                                                    /* revanche: mesmos lutadores */
+    else if (resSel == 1) { readyP[0] = readyP[1] = false; readyT = 0; iafScreen = SC_SELECT; } /* trocar lutadores */
+    else { iafScreen = SC_MODE; }
+    scT = 0;
+}
+
 /* ------------------------------------------------------------------ interface com o jogo (iafight.h) */
 static bool iafLoaded = false;
 
@@ -2274,7 +2501,7 @@ void IafEnter(GameState *game)
         padPrev[i] = padNow[i];
         padKnown[i] = padNow[i].on;
     }
-    iafScreen = SC_SELECT;
+    iafScreen = SC_MODE;
     scT = 0;
     game->screen = SCREEN_IAFIGHT;
 }
@@ -2287,8 +2514,13 @@ void IafUpdate(GameState *game, float dt)
     PollPads(dt);
     switch (iafScreen)
     {
-    case SC_SELECT:
+    case SC_MODE:
         if (NavBackP()) { game->screen = SCREEN_TITLE; return; }
+        UpdateMode();
+        break;
+    case SC_SELECT:
+        if (versusMode) { UpdateSelectVs(dt); break; }
+        if (NavBackP()) { iafScreen = SC_MODE; scT = 0; break; }
         UpdateSelect();
         break;
     case SC_VERSUS:
@@ -2297,6 +2529,7 @@ void IafUpdate(GameState *game, float dt)
         break;
     case SC_FIGHT: UpdateFight(dt); break;
     case SC_RESULT:
+        if (versusMode) { UpdateResultVs(); break; }
         if (scT > 0.6f && NavOkP())
         {
             if (lastWon) ladderPos++;
@@ -2316,10 +2549,11 @@ void IafDraw(void)
     ClearBackground(C_BG);
     switch (iafScreen)
     {
-    case SC_SELECT: DrawSelect(); break;
+    case SC_MODE: DrawMode(); break;
+    case SC_SELECT: if (versusMode) DrawSelectVs(); else DrawSelect(); break;
     case SC_VERSUS: DrawVersus(); break;
     case SC_FIGHT: DrawFight(); break;
-    case SC_RESULT: IafDrawResult(false); break;
+    case SC_RESULT: if (versusMode) DrawResultVs(); else IafDrawResult(false); break;
     case SC_FINAL: IafDrawResult(true); break;
     }
     DrawPadStatus(iafScreen != SC_FIGHT);
