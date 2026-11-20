@@ -3,6 +3,7 @@
 #include <string.h>
 #include "funcoes.h"
 #include "invasao.h"
+#include "iafight.h"
 
 static bool TryUseAssetBase(const char *baseDirectory)
 {
@@ -56,7 +57,8 @@ static bool ValidateRequiredAssets(void)
         "assets/sprites/invasao/boss_1990.png",
         "assets/sprites/invasao/boss_2008.png",
         "assets/sprites/invasao/boss_2026.png",
-        "assets/sprites/invasao/boss_2048.png"
+        "assets/sprites/invasao/boss_2048.png",
+        IAF_ELIRA_ATLAS
     };
     bool valid = true;
 
@@ -322,6 +324,9 @@ int main(int argc, char **argv)
             case SCREEN_INVASION:
                 InvUpdate(&game, delta);
                 break;
+            case SCREEN_IAFIGHT:
+                IafUpdate(&game, delta);
+                break;
             case SCREEN_FINAL_DIALOGUE:
                 UpdateFinalDialogue(&game);
                 break;
@@ -411,6 +416,9 @@ int main(int argc, char **argv)
             case SCREEN_INVASION:
                 InvDraw();
                 break;
+            case SCREEN_IAFIGHT:
+                IafDraw();
+                break;
             case SCREEN_FINAL_DIALOGUE:
                 DrawFinalDialogue(&game);
                 break;
@@ -450,6 +458,7 @@ int main(int argc, char **argv)
     }
     UnloadRewardSprites();
     InvUnload();
+    IafUnload();
     if (bgmLoaded)
     {
         UnloadMusicStream(ambientBgm);

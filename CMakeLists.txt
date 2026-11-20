@@ -39,12 +39,14 @@ if(APPLE)
         src/main.c
         src/funcoes.c
         src/invasao.c
+        src/iafight.c
     )
 else()
     add_executable(ELIRA
         src/main.c
         src/funcoes.c
         src/invasao.c
+        src/iafight.c
     )
 endif()
 
