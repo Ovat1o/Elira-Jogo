@@ -124,6 +124,7 @@
 /* ========================================================================= */
 #define IAF_ELIRA_ATLAS     "assets/sprites/iafight/elira_luta.png" /* atlas de luta da Elira */
 #define IAF_CLAUDE_ATLAS    "assets/sprites/iafight/claude_luta.png" /* atlas de luta do Claude */
+#define IAF_ANTI_ATLAS      "assets/sprites/iafight/antigravity_luta.png" /* atlas de luta do Antigravity */
 #define IAF_GROUND_Y        622.0f   /* linha do chao da arena (pes dos lutadores) */
 #define IAF_WALL_L          70.0f    /* limite esquerdo da arena */
 #define IAF_WALL_R          1210.0f  /* limite direito da arena */
@@ -160,5 +161,6 @@
 #define IAF_DASH_TAP        0.25f    /* janela do toque duplo para frente que faz o dash (s) */
 #define IAF_DASH_TIME       0.20f    /* duracao do dash (s) */
 #define IAF_DASH_DIST       180.0f   /* distancia da investida do dash (px) */
+#define IAF_ANTI_SLAM_VY    650.0f   /* ground slam do Antigravity: velocidade minima de mergulho (px/s) */
 
 #endif /* CONSTANTES_H */

@@ -137,12 +137,12 @@ static const Atk ATK[CH_N][AT_SPECIAL] = {
                   {0.06f, 0.15f, 0.10f, 60, 96, 150, 90, 0.34f, 170, 2},
                   {0.22f, 0.10f, 0.32f, 105, 150, 170, 50, 0.48f, 330, 0},
                   {0.09f, 0.13f, 0.34f, 80, 120, 300, 270, 0.50f, 120, 0}},
-    [CH_ANTI] = {{0}, {0.07f, 0.08f, 0.14f, 44, 116, 176, 46, 0.28f, 160, 0},
-                 {0.16f, 0.10f, 0.28f, 100, 140, 210, 80, 0.44f, 300, 0},
-                 {0.09f, 0.09f, 0.20f, 45, 134, 46, 46, 0.30f, 150, 1},
-                 {0.05f, 0.18f, 0.10f, 55, 104, 150, 90, 0.32f, 160, 2},
-                 {0.20f, 0.10f, 0.30f, 92, 160, 176, 50, 0.44f, 320, 0},
-                 {0.08f, 0.14f, 0.32f, 78, 126, 300, 270, 0.50f, 120, 0}},
+    [CH_ANTI] = {{0}, {0.07f, 0.08f, 0.14f, 48, 158, 175, 80, 0.28f, 160, 0}, /* alcances na ponta do golpe do sprite (2,5x) */
+                 {0.16f, 0.10f, 0.28f, 92, 160, 200, 110, 0.44f, 300, 0},  /* chute */
+                 {0.09f, 0.09f, 0.20f, 45, 152, 60, 56, 0.30f, 150, 1},     /* low kick */
+                 {0.05f, 0.18f, 0.10f, 26, 140, 110, 140, 0.32f, 160, 2},   /* ground slam: de cima para baixo */
+                 {0.20f, 0.10f, 0.30f, 65, 160, 190, 90, 0.44f, 320, 0},    /* heavy punch */
+                 {0.08f, 0.14f, 0.32f, 32, 150, 320, 300, 0.50f, 120, 0}},  /* uppercut (heavy punch subindo) */
 };
 /* especiais: preparo / janela ativa / recuperacao */
 static const float SP_ST[CH_N] = {0.42f, 0.08f, 0.14f, 0.22f};
@@ -344,6 +344,7 @@ static void BlockSpark(Vector2 p, Color c, int dir)
 static bool g_altPal = false; /* ligado enquanto desenha o lutador da direita num espelho */
 #define IAF_ELIRA_ALT_TINT ((Color){255, 178, 140, 255})
 #define IAF_CLAUDE_ALT_TINT ((Color){150, 196, 255, 255}) /* sprite do Claude no espelho: tom frio */
+#define IAF_ANTI_ALT_TINT ((Color){120, 110, 255, 255})   /* sprite do Antigravity no espelho: arco-iris puxado para o violeta */
 static Color AltCol(Color c)
 { /* gira o matiz e mantem brilho/saturacao */
     Vector3 h = ColorToHSV(c);
@@ -952,6 +953,100 @@ static int ClaudeFrameIdx(Fighter *a)
     return CALoop(CA_IDLE, gt);
 }
 
+/* ------------------------------------------------------------------ Antigravity: atlas de luta
+   Gerado fora do repositorio a partir do pacote de sprites (384x354 = grade nativa 128x118 em 3x).
+   O atlas guarda a grade nativa; o jogo amplia 2,5x com filtro POINT (~192 px de altura parada,
+   entre o Claude e a Elira). A flutuacao do desenho antigo continua (AntiHover). */
+#include "iafight_antigravity.h"
+static Texture2D texAnti;
+#define AG_SCALE 2.5f
+/* equilibrio do Antigravity (simulacao CPU x CPU contra Elira e Claude) */
+#define AG_WELL_SLAM_DMG 110.0f /* queda no fim do poco gravitacional */
+static int AGFrame(int anim, int i)
+{
+    int n = AA_COUNT[anim];
+    if (i < 0) i = 0;
+    if (i >= n) i = n - 1;
+    return AA_FIRST[anim] + i;
+}
+static int AGLoop(int anim, float t) { return AA_FIRST[anim] + ((int)(t / AA_DUR[anim]) % AA_COUNT[anim]); }
+static void DrawAF(int f, float x, float yFeet, int face, float sc, Color tint, float flash)
+{
+    const AFrame *e = &AF[f];
+    Rectangle src = {e->x, e->y, e->w, e->h};
+    float left = face > 0 ? x - e->ax * sc : x - (e->w - e->ax) * sc;
+    if (face < 0) src.width = -src.width;
+    Rectangle dst = {roundf(left), roundf(yFeet - e->ay * sc), e->w * sc, e->h * sc};
+    DrawTexturePro(texAnti, src, dst, (Vector2){0, 0}, 0, tint);
+    if (flash > 0)
+    {
+        BeginBlendMode(BLEND_ADDITIVE);
+        DrawTexturePro(texAnti, src, dst, (Vector2){0, 0}, 0, Fade(WHITE, flash));
+        EndBlendMode();
+    }
+}
+/* flutuacao: o "A" fica um pouco acima do chao, subindo e descendo (menos caido) */
+static float AntiHover(Fighter *a)
+{
+    if (a->st == ST_KO || a->down || a->st == ST_LOSE) return 0;
+    return 16 + 5 * sinf(gt * 2.4f);
+}
+/* golpe: preparo usa [f0, a0), ativo [a0, a1], recuperacao (a1, f1] */
+static int AntiAtkFrame(Fighter *a, int anim, int f0, int a0, int a1, int f1, float st, float ac, float rc)
+{
+    float t = a->atkT;
+    int i;
+    if (ac < IAF_ACTIVE_VISUAL) { rc = fmaxf(rc - (IAF_ACTIVE_VISUAL - ac), 0.02f); ac = IAF_ACTIVE_VISUAL; }
+    if (t < st) i = f0 + (int)(t / st * (a0 - f0));
+    else if (t < st + ac) i = a0 + (int)((t - st) / ac * (a1 - a0 + 1));
+    else i = a1 + 1 + (int)((t - st - ac) / rc * (f1 - a1));
+    if (i > f1) i = f1;
+    return AGFrame(anim, i);
+}
+static int AntiFrameIdx(Fighter *a)
+{
+    int nk = AA_COUNT[AA_KO];
+    if (a->st == ST_KO) return AGFrame(AA_KO, (int)(a->stT / AA_DUR[AA_KO]));
+    if (a->down)
+    { /* caida; ao levantar, o nocaute tocado ao contrario */
+        if (a->downT > 0.36f) return AGFrame(AA_KO, nk - 1);
+        return AGFrame(AA_KO, 7 + (int)(a->downT / 0.36f * (nk - 8)));
+    }
+    if (a->st == ST_LOSE) return AGFrame(AA_KO, nk - 1);
+    if (a->st == ST_WIN) return AGLoop(AA_VICTORY, a->stT);
+    if (a->st == ST_HIT) return AGFrame(AA_HIT, (int)(a->stT / 0.4f * AA_COUNT[AA_HIT]));
+    if (a->st == ST_ATK)
+    {
+        const Atk *d = &ATK[CH_ANTI][a->atk < AT_SPECIAL ? a->atk : 0];
+        switch (a->atk)
+        {
+        case AT_LIGHT: return AntiAtkFrame(a, AA_JAB, 0, 6, 10, 17, d->st, d->ac, d->rc);
+        case AT_HEAVY: return AntiAtkFrame(a, AA_KICK, 0, 8, 11, 21, d->st, d->ac, d->rc);
+        case AT_FWDH: return AntiAtkFrame(a, AA_HEAVY, 0, 9, 14, 21, d->st, d->ac, d->rc);
+        case AT_UPPER: return AntiAtkFrame(a, AA_HEAVY, 4, 12, 14, 21, d->st, d->ac, d->rc); /* sem uppercut no pacote: o soco que mais sobe */
+        case AT_LOW: return AntiAtkFrame(a, AA_LOWKICK, 0, 9, 12, 19, d->st, d->ac, d->rc);
+        case AT_AIR: return AntiAtkFrame(a, AA_SLAM, 10, 14, 17, 24, d->st, d->ac, d->rc); /* pula a subida: so a queda */
+        case AT_SPECIAL:
+        {
+            float tot = SP_ST[CH_ANTI] + SP_AC[CH_ANTI] + SP_RC[CH_ANTI];
+            return AGFrame(AA_SPECIAL, (int)(a->atkT / tot * AA_COUNT[AA_SPECIAL]));
+        }
+        default: break;
+        }
+    }
+    if (a->shieldOn || a->st == ST_BLOCK)
+    { /* escudo: entra (0-2) e fica nos quadros com o escudo erguido */
+        if (a->crouch) return AGFrame(AA_CROUCH, 4);
+        if (a->shieldT < 0.1f && a->st != ST_BLOCK) return AGFrame(AA_BLOCK, (int)(a->shieldT / 0.05f));
+        return AGFrame(AA_BLOCK, 2 + ((int)(a->stT / AA_DUR[AA_BLOCK]) % 13));
+    }
+    if (a->st == ST_DASH) return AGFrame(AA_DASH, (int)(a->dashT / IAF_DASH_TIME * AA_COUNT[AA_DASH]));
+    if (a->st == ST_JUMP) return AGFrame(AA_JUMP, 3 + (int)((a->vy + IAF_JUMP_SPEED) / (2 * IAF_JUMP_SPEED) * 17));
+    if (a->crouch) return AGFrame(AA_CROUCH, (int)(a->stT / AA_DUR[AA_CROUCH]) < 4 ? (int)(a->stT / AA_DUR[AA_CROUCH]) : 4);
+    if (a->st == ST_WALK) return AGLoop((a->vx * a->face) < 0 ? AA_WALK_B : AA_WALK_F, a->anim);
+    return AGLoop(AA_IDLE, gt);
+}
+
 /* ------------------------------------------------------------------ desenho de um lutador */
 /* rastro do golpe: arco translucido na cor do lutador, varrendo o caminho do membro que golpeia
    (angulos em graus a partir da frente; positivo = para baixo) */
@@ -1005,7 +1100,7 @@ static void DrawFighter(Fighter *a)
     float flash = a->flash > 0 ? Clamp(a->flash / 0.12f, 0.0f, 1.0f) * 0.8f : 0;
     float alt = IAF_GROUND_Y - a->y;
     float jx = a->hitShake > 0 ? (Rand01() - 0.5f) * 2 * IAF_HIT_SHAKE_PX : 0; /* tremor no impacto */
-    DrawShadow(a->x, (a->ch == CH_CLAUDE && texClaude.id ? 118 : 52) - fminf(alt, 200) * 0.12f);
+    DrawShadow(a->x, (a->ch == CH_CLAUDE && texClaude.id ? 118 : (a->ch == CH_ANTI && texAnti.id ? 104 : 52)) - fminf(alt, 200) * 0.12f);
     if (a->inv > 0 && fmodf(a->inv, 0.1f) < 0.05f && a->st != ST_KO) return;
     if (a->st == ST_DASH)
     { /* rastro: copias apagadas para tras (sprites) e linhas de velocidade (todos) */
@@ -1015,6 +1110,7 @@ static void DrawFighter(Fighter *a)
             float gx = a->x - a->face * k * 34, al = 0.32f / k;
             if (a->ch == CH_ELIRA) { float yo; DrawEF(EliraFrameIdx(a, &yo), gx, a->y, a->face, 1.0f, Fade(c, al), 0); }
             else if (a->ch == CH_CLAUDE && texClaude.id) DrawCF(ClaudeFrameIdx(a), gx, a->y, a->face, CL_SCALE, Fade(c, al), 0);
+            else if (a->ch == CH_ANTI && texAnti.id) DrawAF(AntiFrameIdx(a), gx, a->y - AntiHover(a), a->face, AG_SCALE, Fade(c, al), 0);
         }
         for (int l = 0; l < 6; l++)
         {
@@ -1037,6 +1133,7 @@ static void DrawFighter(Fighter *a)
         DrawEF(f, x, a->y + yoff, a->face, 1.0f, a->alt ? IAF_ELIRA_ALT_TINT : WHITE, fl);
     }
     else if (a->ch == CH_CLAUDE && texClaude.id) DrawCF(ClaudeFrameIdx(a), a->x + jx, a->y, a->face, CL_SCALE, a->alt ? IAF_CLAUDE_ALT_TINT : WHITE, flash);
+    else if (a->ch == CH_ANTI && texAnti.id) DrawAF(AntiFrameIdx(a), a->x + jx, a->y - AntiHover(a), a->face, AG_SCALE, a->alt ? IAF_ANTI_ALT_TINT : WHITE, flash);
     else
     {
         Pose p = PoseFor(a);
@@ -1044,9 +1141,9 @@ static void DrawFighter(Fighter *a)
         DrawPuppet(a->ch, a->x + jx, a->y, a->face, 1.0f, p, flash, a->vx);
         g_altPal = false;
     }
-    DrawAttackTrail(a, jx);
-    /* defesa das IAs: placa hexagonal na frente (a Elira tem quadros proprios) */
-    if (a->st == ST_BLOCK && a->ch != CH_ELIRA)
+    if (!(a->ch == CH_ANTI && texAnti.id)) DrawAttackTrail(a, jx); /* os golpes do Antigravity ja trazem o rastro no desenho */
+    /* defesa das IAs: placa hexagonal na frente (a Elira e o Antigravity tem quadros proprios) */
+    if (a->st == ST_BLOCK && a->ch != CH_ELIRA && !(a->ch == CH_ANTI && texAnti.id))
     {
         Color c = FCol(a);
         float cy = a->crouch ? a->y - 60 : a->y - 120, cx = a->x + a->face * 52;
@@ -1120,10 +1217,11 @@ static Rectangle Hurt(Fighter *a)
 {
     float w = a->ch == CH_CODEX ? 84 : 70, h = a->crouch ? 128 : (a->ch == CH_ELIRA ? 196 : 200);
     if (a->ch == CH_CLAUDE) { w = 232; h = a->crouch ? 160 : 204; } /* sprite largo e baixo (corpo 240x204 na tela) */
+    if (a->ch == CH_ANTI) { w = 200; h = a->crouch ? 155 : 205; }   /* "A" de 225x192 na tela, flutuando ~16 px */
     if (a->down || a->st == ST_KO) h = 40;
     return (Rectangle){a->x - w / 2, a->y - h, w, h};
 }
-static float BodyHalf(Fighter *a) { return a->ch == CH_CLAUDE ? 112.0f : 31.0f; } /* meia largura do corpo para nao se sobreporem */
+static float BodyHalf(Fighter *a) { return a->ch == CH_CLAUDE ? 112.0f : (a->ch == CH_ANTI ? 100.0f : 31.0f); } /* meia largura do corpo para nao se sobreporem */
 static bool Overlap(Rectangle a, Rectangle b) { return a.x < b.x + b.width && b.x < a.x + a.width && a.y < b.y + b.height && b.y < a.y + a.height; }
 static bool OnGround(Fighter *a) { return a->y >= IAF_GROUND_Y - 0.5f; }
 static void SetState(Fighter *a, FState s) { a->st = s; a->stT = 0; }
@@ -1372,7 +1470,7 @@ static void UpdateWell(float dt)
         {
             HitSparks((Vector2){well.x, well.y}, C_VIOLET, 30, 500);
             AddText((Vector2){well.x, well.y - 120}, "QUEDA LIVRE!", C_VIOLET, 24);
-            ApplyHit(a, o, 130, 0.7f, 120, 0, (Vector2){o->x, o->y - 100}, true, true);
+            ApplyHit(a, o, AG_WELL_SLAM_DMG, 0.7f, 120, 0, (Vector2){o->x, o->y - 100}, true, true);
             o->vy = 900; /* derrubada para baixo */
         }
         well.on = false;
@@ -1518,7 +1616,11 @@ static void UpdateFighter(Fighter *a, Fighter *o, IafInput in, float dt)
             StartAtk(a, AT_UPPER);
             break;
         }
-        if ((in.lightP || in.heavyP) && !a->airAtkUsed) { a->airAtkUsed = true; a->atk = AT_AIR; a->atkT = 0; a->hitDone = false; a->st = ST_ATK; a->stT = 0; }
+        if ((in.lightP || in.heavyP) && !a->airAtkUsed)
+        {
+            a->airAtkUsed = true; a->atk = AT_AIR; a->atkT = 0; a->hitDone = false; a->st = ST_ATK; a->stT = 0;
+            if (a->ch == CH_ANTI) a->vy = fmaxf(a->vy, IAF_ANTI_SLAM_VY); /* ground slam: mergulha com a gravidade */
+        }
         break;
     default: /* parado / andando / agachado */
         a->crouch = ground && in.down;
@@ -1580,9 +1682,9 @@ static void UpdateFighter(Fighter *a, Fighter *o, IafInput in, float dt)
     if (!held)
     {
         float g = IAF_GRAVITY;
-        if (a->ch == CH_ANTI && !ground && in.up && a->vy > 0 && a->hoverT < 0.9f) { g = IAF_GRAVITY * 0.12f; a->hoverT += dt; } /* plana */
+        if (a->ch == CH_ANTI && a->st == ST_JUMP && !ground && in.up && a->vy > 0 && a->hoverT < 0.9f) { g = IAF_GRAVITY * 0.12f; a->hoverT += dt; } /* plana */
         if (!ground || a->vy < 0) a->vy += g * dt;
-        if (a->ch == CH_ANTI && !ground && in.up && a->vy > 120 && a->hoverT < 0.9f) a->vy = 120;
+        if (a->ch == CH_ANTI && a->st == ST_JUMP && !ground && in.up && a->vy > 120 && a->hoverT < 0.9f) a->vy = 120;
         a->x += a->vx * dt;
         a->y += a->vy * dt;
         if (a->y >= IAF_GROUND_Y)
@@ -2323,6 +2425,14 @@ static void DrawCharacterBig(CharId ch, float x, float yFeet, int face, float sc
         DrawCF(f, x, yFeet, face, fmaxf(1.0f, roundf(CL_SCALE * sc * 0.75f * 2) / 2), g_altPal ? IAF_CLAUDE_ALT_TINT : WHITE, 0);
         return;
     }
+    if (ch == CH_ANTI && texAnti.id)
+    { /* mesma regra: escala em passos de 0,5 */
+        int f = st == ST_WIN ? AGLoop(AA_VICTORY, gt) : (st == ST_KO ? AGFrame(AA_KO, AA_COUNT[AA_KO] - 1) : AGLoop(AA_IDLE, gt));
+        float s2 = fmaxf(1.0f, roundf(AG_SCALE * sc * 0.75f * 2) / 2);
+        float hov = st == ST_KO ? 0 : (16 + 5 * sinf(gt * 2.4f)) * s2 / AG_SCALE;
+        DrawAF(f, x, yFeet - hov, face, s2, g_altPal ? IAF_ANTI_ALT_TINT : WHITE, 0);
+        return;
+    }
     Fighter tmp;
     memset(&tmp, 0, sizeof tmp);
     tmp.ch = ch; tmp.st = st; tmp.face = face; tmp.x = x;
@@ -2789,6 +2899,8 @@ void IafEnter(GameState *game)
         SetTextureFilter(texElira, TEXTURE_FILTER_BILINEAR);
         texClaude = LoadTexture(IAF_CLAUDE_ATLAS);
         SetTextureFilter(texClaude, TEXTURE_FILTER_POINT); /* pixel art: sem suavizar */
+        texAnti = LoadTexture(IAF_ANTI_ATLAS); /* sem o arquivo, id = 0 e volta o desenho antigo */
+        SetTextureFilter(texAnti, TEXTURE_FILTER_POINT);
         LoadIafAudio();
         iafLoaded = true;
     }
@@ -2880,6 +2992,6 @@ bool IafPadWantsEnter(void)
 
 void IafUnload(void)
 {
-    if (iafLoaded) { UnloadTexture(texElira); if (texClaude.id) UnloadTexture(texClaude); texClaude = (Texture2D){0}; UnloadIafAudio(); }
+    if (iafLoaded) { UnloadTexture(texElira); if (texClaude.id) UnloadTexture(texClaude); texClaude = (Texture2D){0}; if (texAnti.id) UnloadTexture(texAnti); texAnti = (Texture2D){0}; UnloadIafAudio(); }
     iafLoaded = false;
 }
