@@ -161,5 +161,6 @@
 #define IAF_DASH_TAP        0.25f    /* janela do toque duplo para frente que faz o dash (s) */
 #define IAF_DASH_TIME       0.20f    /* duracao do dash (s) */
 #define IAF_DASH_DIST       180.0f   /* distancia da investida do dash (px) */
+#define IAF_ANTI_SLAM_VY    650.0f   /* ground slam do Antigravity: velocidade minima de mergulho (px/s) */
 
 #endif /* CONSTANTES_H */

@@ -137,12 +137,12 @@ static const Atk ATK[CH_N][AT_SPECIAL] = {
                   {0.06f, 0.15f, 0.10f, 60, 96, 150, 90, 0.34f, 170, 2},
                   {0.22f, 0.10f, 0.32f, 105, 150, 170, 50, 0.48f, 330, 0},
                   {0.09f, 0.13f, 0.34f, 80, 120, 300, 270, 0.50f, 120, 0}},
-    [CH_ANTI] = {{0}, {0.07f, 0.08f, 0.14f, 44, 116, 176, 46, 0.28f, 160, 0},
-                 {0.16f, 0.10f, 0.28f, 100, 140, 210, 80, 0.44f, 300, 0},
-                 {0.09f, 0.09f, 0.20f, 45, 134, 46, 46, 0.30f, 150, 1},
-                 {0.05f, 0.18f, 0.10f, 55, 104, 150, 90, 0.32f, 160, 2},
-                 {0.20f, 0.10f, 0.30f, 92, 160, 176, 50, 0.44f, 320, 0},
-                 {0.08f, 0.14f, 0.32f, 78, 126, 300, 270, 0.50f, 120, 0}},
+    [CH_ANTI] = {{0}, {0.07f, 0.08f, 0.14f, 44, 158, 175, 80, 0.28f, 160, 0}, /* alcances na ponta do golpe do sprite (2,5x) */
+                 {0.16f, 0.10f, 0.28f, 100, 160, 200, 110, 0.44f, 300, 0},  /* chute */
+                 {0.09f, 0.09f, 0.20f, 45, 152, 60, 56, 0.30f, 150, 1},     /* low kick */
+                 {0.05f, 0.18f, 0.10f, 55, 140, 110, 140, 0.32f, 160, 2},   /* ground slam: de cima para baixo */
+                 {0.20f, 0.10f, 0.30f, 92, 160, 190, 90, 0.44f, 320, 0},    /* heavy punch */
+                 {0.08f, 0.14f, 0.32f, 78, 150, 320, 300, 0.50f, 120, 0}},  /* uppercut (heavy punch subindo) */
 };
 /* especiais: preparo / janela ativa / recuperacao */
 static const float SP_ST[CH_N] = {0.42f, 0.08f, 0.14f, 0.22f};
@@ -1215,10 +1215,11 @@ static Rectangle Hurt(Fighter *a)
 {
     float w = a->ch == CH_CODEX ? 84 : 70, h = a->crouch ? 128 : (a->ch == CH_ELIRA ? 196 : 200);
     if (a->ch == CH_CLAUDE) { w = 232; h = a->crouch ? 160 : 204; } /* sprite largo e baixo (corpo 240x204 na tela) */
+    if (a->ch == CH_ANTI) { w = 200; h = a->crouch ? 155 : 205; }   /* "A" de 225x192 na tela, flutuando ~16 px */
     if (a->down || a->st == ST_KO) h = 40;
     return (Rectangle){a->x - w / 2, a->y - h, w, h};
 }
-static float BodyHalf(Fighter *a) { return a->ch == CH_CLAUDE ? 112.0f : 31.0f; } /* meia largura do corpo para nao se sobreporem */
+static float BodyHalf(Fighter *a) { return a->ch == CH_CLAUDE ? 112.0f : (a->ch == CH_ANTI ? 100.0f : 31.0f); } /* meia largura do corpo para nao se sobreporem */
 static bool Overlap(Rectangle a, Rectangle b) { return a.x < b.x + b.width && b.x < a.x + a.width && a.y < b.y + b.height && b.y < a.y + a.height; }
 static bool OnGround(Fighter *a) { return a->y >= IAF_GROUND_Y - 0.5f; }
 static void SetState(Fighter *a, FState s) { a->st = s; a->stT = 0; }
@@ -1613,7 +1614,11 @@ static void UpdateFighter(Fighter *a, Fighter *o, IafInput in, float dt)
             StartAtk(a, AT_UPPER);
             break;
         }
-        if ((in.lightP || in.heavyP) && !a->airAtkUsed) { a->airAtkUsed = true; a->atk = AT_AIR; a->atkT = 0; a->hitDone = false; a->st = ST_ATK; a->stT = 0; }
+        if ((in.lightP || in.heavyP) && !a->airAtkUsed)
+        {
+            a->airAtkUsed = true; a->atk = AT_AIR; a->atkT = 0; a->hitDone = false; a->st = ST_ATK; a->stT = 0;
+            if (a->ch == CH_ANTI) a->vy = fmaxf(a->vy, IAF_ANTI_SLAM_VY); /* ground slam: mergulha com a gravidade */
+        }
         break;
     default: /* parado / andando / agachado */
         a->crouch = ground && in.down;
@@ -1675,9 +1680,9 @@ static void UpdateFighter(Fighter *a, Fighter *o, IafInput in, float dt)
     if (!held)
     {
         float g = IAF_GRAVITY;
-        if (a->ch == CH_ANTI && !ground && in.up && a->vy > 0 && a->hoverT < 0.9f) { g = IAF_GRAVITY * 0.12f; a->hoverT += dt; } /* plana */
+        if (a->ch == CH_ANTI && a->st == ST_JUMP && !ground && in.up && a->vy > 0 && a->hoverT < 0.9f) { g = IAF_GRAVITY * 0.12f; a->hoverT += dt; } /* plana */
         if (!ground || a->vy < 0) a->vy += g * dt;
-        if (a->ch == CH_ANTI && !ground && in.up && a->vy > 120 && a->hoverT < 0.9f) a->vy = 120;
+        if (a->ch == CH_ANTI && a->st == ST_JUMP && !ground && in.up && a->vy > 120 && a->hoverT < 0.9f) a->vy = 120;
         a->x += a->vx * dt;
         a->y += a->vy * dt;
         if (a->y >= IAF_GROUND_Y)
