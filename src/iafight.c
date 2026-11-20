@@ -112,7 +112,7 @@ static const Color CHCOL[CH_N] = {{96, 214, 240, 255}, {222, 116, 76, 255}, {70,
 /* atributos (0..5) para a ficha da selecao: forca, velocidade, defesa, alcance */
 static const int STAT[CH_N][4] = {{3, 4, 2, 5}, {3, 3, 5, 3}, {5, 4, 2, 2}, {2, 5, 3, 4}};
 
-typedef enum { ST_IDLE, ST_WALK, ST_JUMP, ST_CROUCH, ST_BLOCK, ST_ATK, ST_HIT, ST_KO, ST_WIN, ST_LOSE } FState;
+typedef enum { ST_IDLE, ST_WALK, ST_JUMP, ST_CROUCH, ST_BLOCK, ST_ATK, ST_HIT, ST_KO, ST_WIN, ST_LOSE, ST_DASH } FState;
 /* AT_FWDH = frente + forte (soco longo, mais lento); AT_UPPER = cima + forte (uppercut anti-aereo) */
 typedef enum { AT_NONE, AT_LIGHT, AT_HEAVY, AT_LOW, AT_AIR, AT_FWDH, AT_UPPER, AT_SPECIAL, AT_SHOT } AtkKind;
 typedef struct { float st, ac, rc, dmg, rx, top, h, stun, push; int type; } Atk; /* type: 0 meio, 1 baixo, 2 alto */
@@ -180,9 +180,12 @@ typedef struct
     float hitShake;   /* > 0: tremendo por ter levado/defendido um golpe */
     bool alt;         /* cor alternativa (1 x 1 com o mesmo lutador dos dois lados) */
     int juggle;       /* golpes levados no ar nesta queda (limite evita malabarismo infinito) */
+    float tapT;       /* > 0: tocou para frente ha pouco (o 2o toque dentro da janela faz o dash) */
+    float dashT;      /* tempo desde o inicio do dash */
 } Fighter;
 
-typedef struct { bool left, right, up, down, upP, lightP, heavyP, specialP, shotP; } IafInput;
+/* leftP/rightP: tocou na direcao agora (toque duplo = dash); dashP: botao de dash (LB / L1) */
+typedef struct { bool left, right, up, down, upP, lightP, heavyP, specialP, shotP, leftP, rightP, dashP; } IafInput;
 
 /* projeteis */
 typedef struct { bool on; float x, y, vx; int owner; bool big, reflected; float dmg, t, hitCd; int hits; } Proj;
@@ -615,6 +618,10 @@ static Pose PoseFor(Fighter *a)
         p.rootY = 6 + 3 * fabsf(cosf(ph));
     }
     if (a->crouch) p = PCrouch();
+    if (a->st == ST_DASH)
+    { /* investida: corpo inclinado, passada aberta, bracos para tras */
+        p.lean += 20; p.lF = 44; p.kF = 26; p.lB = -40; p.kB = 22; p.aF = 20; p.eF = 70; p.aB = -20; p.eB = 40; p.rootY = 10;
+    }
     if (a->st == ST_JUMP || (a->st == ST_ATK && a->atk == AT_AIR)) p = PJump();
     if (a->st == ST_BLOCK || (a->guard && a->st != ST_ATK && a->st != ST_HIT))
     {
@@ -762,6 +769,7 @@ static int EliraFrameIdx(Fighter *a, float *yoff)
         if (a->shieldHit > 0) return EAFrame(anim, 2);
         return EAFrame(anim, a->shieldT < 0.08f ? 0 : 1);
     }
+    if (a->st == ST_DASH) return EAFrame(EA_WALK_F, 2);
     if (a->st == ST_JUMP) return EAFrame(EA_JUMP, a->vy < -250 ? 0 : (a->vy < 250 ? 1 : 2));
     if (a->crouch) return EAFrame(EA_CROUCH, a->stT < 0.07f ? 0 : 1);
     if (a->st == ST_WALK)
@@ -852,6 +860,7 @@ static int ClaudeFrameIdx(Fighter *a)
         if (a->crouch) return CAFrame(CA_CROUCH, CA_COUNT[CA_CROUCH] - 1);
         return CALoop(CA_BLOCK, a->stT);
     }
+    if (a->st == ST_DASH) return CAFrame(CA_DASH, (int)(a->dashT / IAF_DASH_TIME * CA_COUNT[CA_DASH]));
     if (a->st == ST_JUMP) return CAFrame(CA_JUMP, 1 + (int)((a->vy + IAF_JUMP_SPEED) / (2 * IAF_JUMP_SPEED) * 9));
     if (a->crouch) return CAFrame(CA_CROUCH, (int)(a->stT / 0.035f));
     if (a->st == ST_WALK) return CALoop((a->vx * a->face) < 0 ? CA_WALK_B : CA_WALK_F, a->anim);
@@ -913,6 +922,22 @@ static void DrawFighter(Fighter *a)
     float jx = a->hitShake > 0 ? (Rand01() - 0.5f) * 2 * IAF_HIT_SHAKE_PX : 0; /* tremor no impacto */
     DrawShadow(a->x, (a->ch == CH_CLAUDE && texClaude.id ? 118 : 52) - fminf(alt, 200) * 0.12f);
     if (a->inv > 0 && fmodf(a->inv, 0.1f) < 0.05f && a->st != ST_KO) return;
+    if (a->st == ST_DASH)
+    { /* rastro: copias apagadas para tras (sprites) e linhas de velocidade (todos) */
+        Color c = FCol(a);
+        for (int k = 3; k >= 1; k--)
+        {
+            float gx = a->x - a->face * k * 34, al = 0.32f / k;
+            if (a->ch == CH_ELIRA) { float yo; DrawEF(EliraFrameIdx(a, &yo), gx, a->y, a->face, 1.0f, Fade(c, al), 0); }
+            else if (a->ch == CH_CLAUDE && texClaude.id) DrawCF(ClaudeFrameIdx(a), gx, a->y, a->face, CL_SCALE, Fade(c, al), 0);
+        }
+        for (int l = 0; l < 6; l++)
+        {
+            float ly = a->y - 30 - l * 30, len = 60 + 40 * ((l * 37) % 5) / 4.0f;
+            float x0 = a->x - a->face * 40;
+            DrawLineEx((Vector2){x0, ly}, (Vector2){x0 - a->face * len, ly}, 3, Fade(c, 0.45f));
+        }
+    }
     if (a->ch == CH_ELIRA)
     {
         float yoff;
@@ -1286,6 +1311,13 @@ static void UpdateFighter(Fighter *a, Fighter *o, IafInput in, float dt)
     if (ground && (canAct || a->st == ST_JUMP)) a->face = toward;
     bool holdBack = (a->face > 0 && in.left) || (a->face < 0 && in.right);
     bool holdFwd = (a->face > 0 && in.right) || (a->face < 0 && in.left);
+    /* dash: dois toques para frente dentro da janela, ou o botao de dash */
+    bool fwdP = (a->face > 0 && in.rightP) || (a->face < 0 && in.leftP);
+    bool backP = (a->face > 0 && in.leftP) || (a->face < 0 && in.rightP);
+    bool dashReq = in.dashP;
+    if (fwdP) { if (a->tapT > 0) dashReq = true; a->tapT = dashReq ? 0 : IAF_DASH_TAP; }
+    else if (backP) a->tapT = 0;
+    else if (a->tapT > 0) a->tapT -= dt;
 
     switch (a->st)
     {
@@ -1309,6 +1341,11 @@ static void UpdateFighter(Fighter *a, Fighter *o, IafInput in, float dt)
         a->stun -= dt;
         a->vx *= 1 - 9 * dt;
         if (a->stun <= 0) { SetState(a, ST_IDLE); }
+        break;
+    case ST_DASH: /* investida para frente, sem atacar */
+        a->dashT += dt;
+        a->vx = a->face * IAF_DASH_DIST / IAF_DASH_TIME;
+        if (a->dashT >= IAF_DASH_TIME) { a->vx = 0; SetState(a, ST_IDLE); }
         break;
     case ST_ATK:
     {
@@ -1379,6 +1416,13 @@ static void UpdateFighter(Fighter *a, Fighter *o, IafInput in, float dt)
         if (in.heavyP)
         { /* agachado: rasteira; cima: uppercut; frente: soco longo; parado: forte */
             StartAtk(a, a->crouch ? AT_LOW : (in.up ? AT_UPPER : (holdFwd ? AT_FWDH : AT_HEAVY)));
+            break;
+        }
+        if (dashReq && ground && !a->crouch)
+        {
+            a->dashT = 0;
+            a->vx = a->face * IAF_DASH_DIST / IAF_DASH_TIME;
+            SetState(a, ST_DASH);
             break;
         }
         if (in.upP && ground)
@@ -1672,7 +1716,7 @@ static IafInput CpuInput(int me, float dt)
             else if (sp && a->ch == CH_ELIRA && r < 0.7f) s->once.specialP = true;
             else if (sp && a->ch == CH_ANTI && r < 0.35f && dist < 560) s->once.specialP = true;
             else if (sp && a->ch == CH_CODEX && r < 0.3f && dist < 560) s->once.specialP = true;
-            else { s->mode = AI_FWD; s->t = 0.3f + Rand01() * 0.4f; }
+            else { s->mode = AI_FWD; s->t = 0.3f + Rand01() * 0.4f; if (Rand01() < 0.3f) s->once.dashP = true; }
         }
         else if (dist > fmaxf(165, BodyHalf(a) + BodyHalf(o) + 22)) /* com corpos largos, ainda ha distancia para atacar */
         {
@@ -1709,6 +1753,7 @@ static IafInput CpuInput(int me, float dt)
     if (s->once.lightP) { in.lightP = true; }
     if (s->once.heavyP) in.heavyP = true;
     if (s->once.up) in.up = true; /* cima segurado sem pular (uppercut) */
+    if (s->once.dashP) in.dashP = true;
     if (s->once.shotP) in.shotP = true;
     if (s->once.specialP) in.specialP = true;
     if (s->once.upP) { in.upP = true; in.up = true; }
@@ -1722,7 +1767,7 @@ static IafInput CpuInput(int me, float dt)
    direito = especial; START = pausa. O teclado continua valendo em paralelo. */
 #define IAF_PADS 2
 typedef struct { bool on; float ax, ay, rt; bool b[32]; } PadRaw;
-enum { VB_LEFT, VB_RIGHT, VB_UP, VB_DOWN, VB_LIGHT, VB_HEAVY, VB_SHOT, VB_JUMP, VB_SPECIAL, VB_START, VB_SELECT, VB_N };
+enum { VB_LEFT, VB_RIGHT, VB_UP, VB_DOWN, VB_LIGHT, VB_HEAVY, VB_SHOT, VB_JUMP, VB_SPECIAL, VB_START, VB_SELECT, VB_DASH, VB_N };
 static PadRaw padNow[IAF_PADS], padPrev[IAF_PADS];
 static bool padKnown[IAF_PADS];
 static float padToastT = 0;
@@ -1758,6 +1803,7 @@ static void PadVB(const PadRaw *r, bool v[VB_N])
     v[VB_SPECIAL] = r->b[GAMEPAD_BUTTON_RIGHT_TRIGGER_1] || r->b[GAMEPAD_BUTTON_RIGHT_TRIGGER_2] || r->rt > 0.5f;
     v[VB_START] = r->b[GAMEPAD_BUTTON_MIDDLE_RIGHT];
     v[VB_SELECT] = r->b[GAMEPAD_BUTTON_MIDDLE_LEFT];
+    v[VB_DASH] = r->b[GAMEPAD_BUTTON_LEFT_TRIGGER_1]; /* ombro esquerdo: LB / L1 */
 }
 static bool PadDown(int i, int vb)
 {
@@ -1817,6 +1863,8 @@ static IafInput ReadPlayer(KbSet kb, int pad)
         in.heavyP = IsKeyPressed(KEY_K);
         in.specialP = IsKeyPressed(KEY_L);
         in.shotP = IsKeyPressed(KEY_I);
+        in.leftP = IsKeyPressed(KEY_A);
+        in.rightP = IsKeyPressed(KEY_D);
     }
     if (kb == KB_ALL || kb == KB_P2)
     {
@@ -1825,6 +1873,8 @@ static IafInput ReadPlayer(KbSet kb, int pad)
         in.up = in.up || IsKeyDown(KEY_UP);
         in.upP = in.upP || IsKeyPressed(KEY_UP);
         in.down = in.down || IsKeyDown(KEY_DOWN);
+        in.leftP = in.leftP || IsKeyPressed(KEY_LEFT);
+        in.rightP = in.rightP || IsKeyPressed(KEY_RIGHT);
     }
     if (kb == KB_ALL)
     {
@@ -1852,6 +1902,9 @@ static IafInput ReadPlayer(KbSet kb, int pad)
         in.heavyP = in.heavyP || PadPressed(i, VB_HEAVY);
         in.shotP = in.shotP || PadPressed(i, VB_SHOT);
         in.specialP = in.specialP || PadPressed(i, VB_SPECIAL);
+        in.leftP = in.leftP || PadPressed(i, VB_LEFT);
+        in.rightP = in.rightP || PadPressed(i, VB_RIGHT);
+        in.dashP = in.dashP || PadPressed(i, VB_DASH);
     }
     return in;
 }
@@ -1982,6 +2035,9 @@ static void MergePressed(IafInput *dst, IafInput src)
     dst->heavyP = dst->heavyP || src.heavyP;
     dst->specialP = dst->specialP || src.specialP;
     dst->shotP = dst->shotP || src.shotP;
+    dst->leftP = dst->leftP || src.leftP;
+    dst->rightP = dst->rightP || src.rightP;
+    dst->dashP = dst->dashP || src.dashP;
 }
 static void SimStep(float dt, IafInput i0, IafInput i1)
 {

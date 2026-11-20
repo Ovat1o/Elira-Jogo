@@ -154,5 +154,8 @@
 #define IAF_LUNGE_FWDH      34.0f    /* avanco do corpo no soco longo (frente + forte) (px) */
 #define IAF_UPPER_CANCEL    0.08f    /* cima e forte com ate este intervalo: o pulo vira uppercut (s) */
 #define IAF_UPPER_LAUNCH    820.0f   /* velocidade para cima de quem leva o uppercut (px/s) */
+#define IAF_DASH_TAP        0.25f    /* janela do toque duplo para frente que faz o dash (s) */
+#define IAF_DASH_TIME       0.20f    /* duracao do dash (s) */
+#define IAF_DASH_DIST       180.0f   /* distancia da investida do dash (px) */
 
 #endif /* CONSTANTES_H */
