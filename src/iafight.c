@@ -2974,6 +2974,20 @@ static void DrawSelectScreen(bool vs)
     if (vs) DrawSelPanel(1, cur[1], "2P", PCOL[1], mirror, readyP[1]);
     else if (tr) DrawSelPanel(1, cur[1], "BONECO", C_GREEN, false, false);
     else DrawSelPanel(1, cur[1], "CPU", C_AMBER, false, false);
+
+    /* seletor de arena (entre subtitulo e grade central) */
+    {
+        Rectangle arBox = {SCREEN_WIDTH / 2.0f - 180.0f, 104.0f, 360.0f, 34.0f};
+        Vector2 vm = GetVirtualMouse();
+        bool hover = CheckCollisionPointRec(vm, arBox);
+        Color arCol = arSelected < 0 ? C_CYAN : C_AMBER;
+        DrawRectangleRounded(arBox, 0.30f, 6, (Color){14, 18, 36, 240});
+        DrawRectangleRoundedLinesEx(arBox, 0.30f, 6, hover ? 2.5f : 1.5f, Fade(arCol, hover ? 0.95f : 0.70f));
+        char arTxt[96];
+        snprintf(arTxt, sizeof arTxt, "[Q] <  ARENA: %s  > [E]", ArenaName(arSelected));
+        TxtC(arTxt, SCREEN_WIDTH / 2.0f, arBox.y + 9.0f, 15, arSelected < 0 ? C_WHITE : C_AMBER);
+    }
+
     /* grade central */
     TxtC("LUTADORES", SCREEN_WIDTH / 2.0f, 150, 16, C_DIM);
     for (int i = 0; i < CH_N; i++)
@@ -3039,9 +3053,35 @@ static void DrawSelectScreen(bool vs)
     }
     TxtC("TAB / SELECT: ver controles      ESC: voltar ao modo", SCREEN_WIDTH / 2.0f, SCREEN_HEIGHT - 26, 14, C_DIM);
 }
+static void CycleArena(int dir)
+{
+    int total = AR_COUNT + 1; /* -1 (ALEATORIA) ate AR_COUNT - 1 */
+    int idx = (arSelected + 1 + dir + total) % total;
+    arSelected = idx - 1;
+    PlaySfx(SFX_MOVE);
+}
+static void UpdateArenaPickerInput(void)
+{
+    bool prevKey = IsKeyPressed(KEY_Q) ||
+                   (padNow[0].on && padNow[0].b[GAMEPAD_BUTTON_LEFT_TRIGGER_1] && !padPrev[0].b[GAMEPAD_BUTTON_LEFT_TRIGGER_1]);
+    bool nextKey = IsKeyPressed(KEY_E) ||
+                   (padNow[0].on && padNow[0].b[GAMEPAD_BUTTON_RIGHT_TRIGGER_1] && !padPrev[0].b[GAMEPAD_BUTTON_RIGHT_TRIGGER_1]);
+    if (prevKey) { CycleArena(-1); return; }
+    if (nextKey) { CycleArena(1); return; }
+    if (IsMouseButtonPressed(MOUSE_LEFT_BUTTON))
+    {
+        Rectangle arBox = {SCREEN_WIDTH / 2.0f - 180.0f, 104.0f, 360.0f, 34.0f};
+        Vector2 vm = GetVirtualMouse();
+        if (CheckCollisionPointRec(vm, arBox))
+        {
+            CycleArena(vm.x < arBox.x + 80.0f ? -1 : 1);
+        }
+    }
+}
 static void DrawSelect(void) { DrawSelectScreen(false); }
 static void UpdateSelect(void)
 {
+    UpdateArenaPickerInput();
     if (NavLeftP()) sel = (sel + CH_N - 1) % CH_N;
     if (NavRightP()) sel = (sel + 1) % CH_N;
     if (NavUpP() || NavDownP()) sel ^= 2; /* grade 2 x 2: troca de linha */
@@ -3302,6 +3342,7 @@ static void UpdateSelectVs(float dt)
         scT = 0;
         return;
     }
+    UpdateArenaPickerInput();
     for (int p = 0; p < 2; p++)
     {
         if (!readyP[p])
@@ -3385,6 +3426,7 @@ void IafEnter(GameState *game)
         SetTextureFilter(texAnti, TEXTURE_FILTER_POINT);
         texCodex = LoadTexture(IAF_CODEX_ATLAS);
         SetTextureFilter(texCodex, TEXTURE_FILTER_POINT);
+        ArenaLoadAssets();
         LoadIafAudio();
         iafLoaded = true;
     }
@@ -3481,6 +3523,6 @@ bool IafPadWantsEnter(void)
 
 void IafUnload(void)
 {
-    if (iafLoaded) { UnloadTexture(texElira); if (texClaude.id) UnloadTexture(texClaude); texClaude = (Texture2D){0}; if (texAnti.id) UnloadTexture(texAnti); texAnti = (Texture2D){0}; if (texCodex.id) UnloadTexture(texCodex); texCodex = (Texture2D){0};UnloadIafAudio(); }
+    if (iafLoaded) { UnloadTexture(texElira); if (texClaude.id) UnloadTexture(texClaude); texClaude = (Texture2D){0}; if (texAnti.id) UnloadTexture(texAnti); texAnti = (Texture2D){0}; if (texCodex.id) UnloadTexture(texCodex); texCodex = (Texture2D){0}; ArenaUnloadAssets(); UnloadIafAudio(); }
     iafLoaded = false;
 }
