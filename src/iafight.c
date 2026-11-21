@@ -2073,10 +2073,11 @@ static IafInput CpuInput(int me, float dt)
         s->mode = AI_IDLE;
         s->t = 0.15f + Rand01() * 0.25f;
         bool sp = a->meter >= IAF_SPECIAL_COST;
+        bool prism = a->ch == CH_ELIRA && o->ch == CH_CLAUDE && o->meter >= IAF_SPECIAL_COST; /* tiro e rajada voltariam refletidos */
         if (dist > 420)
         {
-            if (a->ch == CH_ELIRA && s->shotCd <= 0 && r < 0.5f) { s->once.shotP = true; s->shotCd = 1.3f; }
-            else if (sp && a->ch == CH_ELIRA && r < 0.7f) s->once.specialP = true;
+            if (a->ch == CH_ELIRA && !prism && s->shotCd <= 0 && r < 0.5f) { s->once.shotP = true; s->shotCd = 1.3f; }
+            else if (sp && a->ch == CH_ELIRA && !prism && r < 0.7f) s->once.specialP = true;
             else if (sp && a->ch == CH_ANTI && r < 0.35f && dist < 560) s->once.specialP = true;
             else if (sp && a->ch == CH_CODEX && r < 0.3f && dist < 560) s->once.specialP = true;
             else { s->mode = AI_FWD; s->t = 0.3f + Rand01() * 0.4f; if (Rand01() < 0.3f) s->once.dashP = true; }
@@ -2086,7 +2087,7 @@ static IafInput CpuInput(int me, float dt)
             if (r < 0.12f && dist < ATK[a->ch][AT_FWDH].rx + BodyHalf(o) + 30) { s->mode = AI_FWD; s->t = 0.12f; s->once.heavyP = true; } /* soco longo */
             else if (r < 0.45f) { s->mode = AI_FWD; s->t = 0.2f + Rand01() * 0.3f; }
             else if (r < 0.6f) { s->mode = AI_JUMPIN; s->once.upP = true; s->t = 0.7f; }
-            else if (a->ch == CH_ELIRA && s->shotCd <= 0 && r < 0.8f) { s->once.shotP = true; s->shotCd = 1.3f; }
+            else if (a->ch == CH_ELIRA && !prism && s->shotCd <= 0 && r < 0.8f) { s->once.shotP = true; s->shotCd = 1.3f; }
             else if (sp && a->ch == CH_ANTI && r < 0.85f) s->once.specialP = true;
             else if (sp && a->ch == CH_CODEX && r < 0.85f) s->once.specialP = true;
             else if (r < 0.9f) { s->mode = AI_BACK; s->t = 0.25f; }
@@ -2098,7 +2099,7 @@ static IafInput CpuInput(int me, float dt)
             else if (r < 0.64f) { s->mode = AI_IDLE; s->low = true; s->once.lightP = true; }
             else if (r < 0.78f) { s->mode = AI_BLOCK; s->t = 0.4f; }
             else if (r < 0.88f) { s->mode = AI_BACK; s->t = 0.3f; }
-            else if (sp && a->ch != CH_ANTI) s->once.specialP = true;
+            else if (sp && a->ch != CH_ANTI && !prism) s->once.specialP = true;
         }
     }
     switch (s->mode)
@@ -2121,6 +2122,11 @@ static IafInput CpuInput(int me, float dt)
     if (s->once.specialP) in.specialP = true;
     if (s->once.upP) { in.upP = true; in.up = true; }
     memset(&s->once, 0, sizeof(s->once));
+    if (a->ch == CH_ELIRA && o->ch == CH_CLAUDE && o->st == ST_ATK && o->atk == AT_SPECIAL)
+    { /* prisma de pe: golpe ou tiro so voltam como feixe/reflexo; ela espera defendendo */
+        in.lightP = in.heavyP = in.shotP = in.specialP = in.upP = in.dashP = false;
+        in.left = o->x > a->x; in.right = !in.left; in.up = false;
+    }
     return in;
 }
 /* ------------------------------------------------------------------ controles: teclado + ate 2 gamepads
