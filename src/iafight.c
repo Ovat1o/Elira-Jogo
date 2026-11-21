@@ -806,7 +806,7 @@ static int AtkFrame(Fighter *a, int anim, int a0, int a1, float st, float ac, fl
 {
     int n = EA_COUNT[anim], i;
     float t = a->atkT;
-    if (ac < IAF_ACTIVE_VISUAL) { rc = fmaxf(rc - (IAF_ACTIVE_VISUAL - ac), 0.02f); ac = IAF_ACTIVE_VISUAL; } /* segura o impacto */
+    if (ac < IAF_ELIRA_ACTIVE_VISUAL) { rc = fmaxf(rc - (IAF_ELIRA_ACTIVE_VISUAL - ac), 0.02f); ac = IAF_ELIRA_ACTIVE_VISUAL; } /* segura o impacto */
     if (t < st) i = a0 > 0 ? (int)(t / st * a0) : 0;
     else if (t < st + ac) i = a0 + (a1 > a0 ? (int)((t - st) / ac * (a1 - a0 + 1)) : 0);
     else
@@ -849,7 +849,7 @@ static int EliraFrameIdx(Fighter *a, float *yoff)
         case AT_FWDH: return AtkFrame(a, EA_PUNCH_HEAVY, EA_PEAK[EA_PUNCH_HEAVY], EA_PEAK[EA_PUNCH_HEAVY], d->st, d->ac, d->rc);
         case AT_UPPER:
         { /* provisorio: canhao subindo (inicio da vitoria) e voltando */
-            float ac = fmaxf(d->ac, IAF_ACTIVE_VISUAL), rc = fmaxf(d->rc - (ac - d->ac), 0.02f);
+            float ac = fmaxf(d->ac, IAF_ELIRA_ACTIVE_VISUAL), rc = fmaxf(d->rc - (ac - d->ac), 0.02f);
             if (t < d->st) return EAFrame(EA_WIN, (int)(t / d->st * EP_UPPER));
             if (t < d->st + ac) return EAFrame(EA_WIN, EP_UPPER);
             return EAFrame(EA_WIN, EP_UPPER - (int)((t - d->st - ac) / rc * EP_UPPER));
@@ -1067,7 +1067,19 @@ static void DrawFighter(Fighter *a)
             x += (Rand01() - 0.5f) * 8 * k;
             fl = fmaxf(fl, 0.3f * k);
         }
-        DrawEF(f, x, a->y + yoff, a->face, 1.0f, a->alt ? IAF_ELIRA_ALT_TINT : WHITE, fl);
+        Color tint = a->alt ? IAF_ELIRA_ALT_TINT : WHITE;
+        if (a->st == ST_ATK && (a->atk == AT_LIGHT || a->atk == AT_HEAVY || a->atk == AT_FWDH || a->atk == AT_UPPER || a->atk == AT_LOW || a->atk == AT_AIR))
+        { /* a arte mexe pouco o corpo: no impacto ela vai 6 px a frente e deixa 2 copias apagadas para tras */
+            const Atk *d = &ATK[CH_ELIRA][a->atk];
+            float t = a->atkT - d->st, act = fmaxf(d->ac, IAF_ELIRA_ACTIVE_VISUAL);
+            if (t >= 0 && t < act + 0.06f)
+            {
+                float k = t < act ? 1.0f : 1 - (t - act) / 0.06f;
+                for (int g = 2; g >= 1; g--) DrawEF(f, x - a->face * g * 14 * k, a->y + yoff, a->face, 1.0f, Fade(FCol(a), 0.34f * k / g), 0);
+                x += a->face * 6 * k;
+            }
+        }
+        DrawEF(f, x, a->y + yoff, a->face, 1.0f, tint, fl);
     }
     else if (a->ch == CH_CLAUDE && texClaude.id) DrawCF(ClaudeFrameIdx(a), a->x + jx, a->y, a->face, CL_SCALE, a->alt ? IAF_CLAUDE_ALT_TINT : WHITE, flash);
     else
@@ -1257,7 +1269,7 @@ static void ApplyHit(Fighter *att, Fighter *def, float dmg, float stun, float pu
         HitSparks(at, att->ch == CH_ELIRA ? C_CYAN : FCol(att), 10 + (int)(dmg / 10), 420);
     }
     /* estrela de impacto no ponto do acerto (menor sobre a Elira, cujos quadros de dano ja tem efeito) */
-    ImpactSpark(at, att->ch == CH_ELIRA ? C_CYAN : FCol(att), (28 + dmg * 0.22f) * (def->ch == CH_ELIRA ? 0.6f : 1.0f));
+    ImpactSpark(at, att->ch == CH_ELIRA ? C_CYAN : FCol(att), (28 + dmg * 0.22f) * (def->ch == CH_ELIRA ? 0.6f : 1.0f) * (att->ch == CH_ELIRA ? 1.3f : 1.0f));
     hitstop = fmaxf(hitstop, HitstopFor(att));
     PlaySfx(HitstopFor(att) >= IAF_HITSTOP_HEAVY ? SFX_HEAVY : SFX_LIGHT);
     def->hitShake = hitstop;
@@ -1479,6 +1491,7 @@ static void UpdateFighter(Fighter *a, Fighter *o, IafInput in, float dt)
             const Atk *d = &ATK[a->ch][a->atk];
             float win = d->st + d->ac, t0 = a->atkT - dt;
             float adv = a->atk == AT_LIGHT ? IAF_LUNGE_LIGHT : (a->atk == AT_HEAVY ? IAF_LUNGE_HEAVY : (a->atk == AT_FWDH ? IAF_LUNGE_FWDH : (a->atk == AT_UPPER ? IAF_LUNGE_LIGHT : IAF_LUNGE_LOW)));
+            if (a->ch == CH_ELIRA) adv *= IAF_ELIRA_LUNGE_MUL; /* arte com pouco movimento: avanca mais */
             if (t0 < win) a->x += a->face * adv * fminf(dt, win - t0) / win;
         }
         if (ground && a->ch == CH_CLAUDE && (a->atk == AT_FWDH || a->atk == AT_HEAVY) && OnGround(o) && o->st != ST_KO)
