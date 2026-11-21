@@ -17,9 +17,12 @@ Elira-Jogo/
     ├── main.c                # Função main() e loop principal de execução
     ├── funcoes.c             # Implementação por extenso de todas as funções do jogo
     ├── invasao.c             # Modo Invasão (ação top-down), módulo separado das salas
+    ├── iafight.c             # Modo IA FIGHT (luta 1x1 lateral), módulo separado das salas
     ├── constantes.h          # Todas as diretivas #define e constantes do jogo
     ├── funcoes.h             # Estruturas (struct/enum), globais e protótipos das funções
     ├── invasao.h             # Interface pública do Modo Invasão (InvEnter/InvUpdate/InvDraw/InvUnload)
+    ├── iafight.h             # Interface pública do IA FIGHT (IafEnter/IafUpdate/IafDraw/IafUnload)
+    ├── iafight_elira.h       # Tabela de quadros do atlas de luta da Elira (gerada, não editar)
     ├── raylib.h              # Cabeçalho principal da biblioteca Raylib
     ├── raymath.h             # Cabeçalho de funções matemáticas da Raylib
     └── rlgl.h                # Cabeçalho da camada OpenGL (rlgl) da Raylib
@@ -89,17 +92,17 @@ Caso deseje compilar manualmente pelo terminal sem usar o `make`, execute na pas
 
 **No Windows (PowerShell / CMD):**
 ```powershell
-gcc -Isrc -std=c99 -Wall -Wextra src/main.c src/funcoes.c src/invasao.c -o ELIRA.exe -Lsrc -LC:/raylib/raylib/src -lraylib -lopengl32 -lgdi32 -lwinmm
+gcc -Isrc -std=c99 -Wall -Wextra src/main.c src/funcoes.c src/invasao.c src/iafight.c -o ELIRA.exe -Lsrc -LC:/raylib/raylib/src -lraylib -lopengl32 -lgdi32 -lwinmm
 ```
 
 **No Linux:**
 ```bash
-gcc -Isrc -std=c99 -Wall -Wextra src/main.c src/funcoes.c src/invasao.c -o ELIRA -Lsrc -lraylib -lGL -lm -lpthread -ldl -lrt -lX11
+gcc -Isrc -std=c99 -Wall -Wextra src/main.c src/funcoes.c src/invasao.c src/iafight.c -o ELIRA -Lsrc -lraylib -lGL -lm -lpthread -ldl -lrt -lX11
 ```
 
 **No macOS (com Raylib via Homebrew):**
 ```bash
-gcc -Isrc -std=c99 -Wall -Wextra src/main.c src/funcoes.c src/invasao.c -o ELIRA $(brew --prefix raylib)/lib/libraylib.a -framework Cocoa -framework IOKit -framework OpenGL -framework CoreVideo
+gcc -Isrc -std=c99 -Wall -Wextra src/main.c src/funcoes.c src/invasao.c src/iafight.c -o ELIRA $(brew --prefix raylib)/lib/libraylib.a -framework Cocoa -framework IOKit -framework OpenGL -framework CoreVideo
 ```
 
 ---

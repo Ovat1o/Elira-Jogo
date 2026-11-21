@@ -14,16 +14,21 @@ O objetivo do jogador é atravessar as eras resolvendo enigmas e tomando decisõ
 
 ## **Modos de jogo**
 
-O menu inicial oferece dois modos:
+O menu inicial oferece três modos:
 
 | Modo | Como entrar | O que é |
 | --- | --- | --- |
 | **Escape room** (padrão) | `INICIAR MISSAO` ou `ENTER` | O jogo principal: salas de 1990, 2008, 2026 e 2048 com enigmas, diário, ranking e finais. |
 | **Modo Invasão** | `MODO INVASAO [I]` ou `I` | Ação top-down em salas. Cada era vira um estágio com o seu chefe (O Coletor, O Filtro, O Algoritmo e O Oráculo), e no fim Elira enfrenta A.R.1.3.L. no Núcleo. Não grava ranking nem altera os finais do escape room. |
+| **IA FIGHT** | `IA FIGHT [F]` ou `F` | Luta 1x1 em visão lateral, uma "rinha de inteligências". Elira (protagonista), CLAUDE, CODEX e ANTIGRAVITY são jogáveis; no arcade o jogador enfrenta os outros três, melhor de 3 rounds. Não grava ranking nem altera os finais do escape room. |
 
 Controles do Modo Invasão: `WASD` move, `SETAS` atiram, `ESC` pausa, `Q` volta ao menu (na pausa ou na derrota), `R` recomeça o estágio, `ENTER` volta ao menu depois da vitória. Ao perder todos os corações, Elira volta ao início do estágio.
 
 O Modo Invasão fica em um módulo próprio (`src/invasao.c` + `src/invasao.h`), para não misturar o código de ação com as salas do escape room em `funcoes.c`. O `main.c` só faz o roteamento da tela `SCREEN_INVASION`. Os sprites do modo estão em `assets/sprites/invasao/`.
+
+Controles do IA FIGHT: `A/D` ou `SETAS` andam (segurar para trás defende), `W` pula, `S` agacha, `J`/`Z` golpe fraco, `K`/`X` golpe forte, `I`/`V` tiro de plasma (Elira), `L`/`C` especial (gasta metade da barra CARGA), agachado + golpe = rasteira, golpe no ar = chute aéreo, `P` pausa, `ESC` volta à seleção e, na seleção, ao menu.
+
+O IA FIGHT também é um módulo próprio (`src/iafight.c` + `src/iafight.h`); o `main.c` só roteia a tela `SCREEN_IAFIGHT`. As constantes do modo ficam em `constantes.h` (prefixo `IAF_`), a tabela de quadros da Elira em `src/iafight_elira.h` e o atlas em `assets/sprites/iafight/elira_luta.png`. As IAs são personagens originais desenhados com primitivas da Raylib, sem logos das marcas.
 
 ***
 
