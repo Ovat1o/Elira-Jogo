@@ -131,12 +131,12 @@ static const Atk ATK[CH_N][AT_SPECIAL] = {
                    {0.05f, 0.15f, 0.10f, 55, 248, 80, 54, 0.32f, 160, 2},
                    {0.24f, 0.10f, 0.34f, 108, 262, 170, 72, 0.50f, 420, 0},  /* soco forte de alcance longo */
                    {0.09f, 0.14f, 0.34f, 85, 210, 320, 290, 0.50f, 120, 0}}, /* uppercut */
-    [CH_CODEX] = {{0}, {0.06f, 0.07f, 0.14f, 52, 100, 168, 50, 0.30f, 180, 0},
-                  {0.20f, 0.10f, 0.32f, 120, 118, 200, 120, 0.48f, 330, 0},
-                  {0.09f, 0.08f, 0.22f, 55, 116, 46, 46, 0.32f, 170, 1},
-                  {0.06f, 0.15f, 0.10f, 60, 96, 150, 90, 0.34f, 170, 2},
-                  {0.22f, 0.10f, 0.32f, 105, 150, 170, 50, 0.48f, 330, 0},
-                  {0.09f, 0.13f, 0.34f, 80, 120, 300, 270, 0.50f, 120, 0}},
+    [CH_CODEX] = {{0}, {0.06f, 0.07f, 0.14f, 52, 116, 122, 50, 0.30f, 180, 0},  /* alcances na luva/tenis do sprite (2x) */
+                  {0.20f, 0.10f, 0.32f, 120, 122, 118, 56, 0.48f, 330, 0},  /* chute alto */
+                  {0.09f, 0.08f, 0.22f, 55, 120, 100, 64, 0.32f, 170, 1},   /* chute baixo */
+                  {0.06f, 0.15f, 0.10f, 60, 120, 120, 74, 0.34f, 170, 2},   /* aereo: chute alto */
+                  {0.22f, 0.10f, 0.32f, 105, 126, 120, 46, 0.48f, 330, 0},  /* soco longo */
+                  {0.09f, 0.13f, 0.34f, 80, 110, 300, 270, 0.50f, 120, 0}}, /* uppercut */
     [CH_ANTI] = {{0}, {0.07f, 0.08f, 0.14f, 44, 116, 176, 46, 0.28f, 160, 0},
                  {0.16f, 0.10f, 0.28f, 100, 140, 210, 80, 0.44f, 300, 0},
                  {0.09f, 0.09f, 0.20f, 45, 134, 46, 46, 0.30f, 150, 1},
@@ -1217,10 +1217,11 @@ static Rectangle Hurt(Fighter *a)
 {
     float w = a->ch == CH_CODEX ? 84 : 70, h = a->crouch ? 128 : (a->ch == CH_ELIRA ? 196 : 200);
     if (a->ch == CH_CLAUDE) { w = 232; h = a->crouch ? 160 : 204; } /* sprite largo e baixo (corpo 240x204 na tela) */
+    if (a->ch == CH_CODEX) { w = 150; h = a->crouch ? 150 : 198; }  /* nuvem do sprite: ~157 de largura, 198 de altura */
     if (a->down || a->st == ST_KO) h = 40;
     return (Rectangle){a->x - w / 2, a->y - h, w, h};
 }
-static float BodyHalf(Fighter *a) { return a->ch == CH_CLAUDE ? 112.0f : 31.0f; } /* meia largura do corpo para nao se sobreporem */
+static float BodyHalf(Fighter *a) { return a->ch == CH_CLAUDE ? 112.0f : (a->ch == CH_CODEX ? 68.0f : 31.0f); } /* meia largura do corpo para nao se sobreporem */
 static bool Overlap(Rectangle a, Rectangle b) { return a.x < b.x + b.width && b.x < a.x + a.width && a.y < b.y + b.height && b.y < a.y + a.height; }
 static bool OnGround(Fighter *a) { return a->y >= IAF_GROUND_Y - 0.5f; }
 static void SetState(Fighter *a, FState s) { a->st = s; a->stT = 0; }
@@ -1395,7 +1396,9 @@ static void UpdateSpecial(Fighter *a, Fighter *o, float dt)
             a->vx = 0;
             a->atkT = fminf(a->atkT, st + ac - 0.01f); /* segura a janela enquanto a sequencia roda */
             a->spT += dt;
-            o->x = a->x + a->face * 104;
+            o->x = a->x + a->face * fmaxf(104, BodyHalf(a) + BodyHalf(o) + 4); /* preso na frente da nuvem, sem atravessar */
+            if (o->x > IAF_WALL_R) { a->x -= o->x - IAF_WALL_R; o->x = IAF_WALL_R; } /* na parede, quem recua e o Codex */
+            if (o->x < IAF_WALL_L) { a->x += IAF_WALL_L - o->x; o->x = IAF_WALL_L; }
             if (o->st == ST_HIT) o->stun = fmaxf(o->stun, 0.2f);
             static const char *W[] = {"COMPILA", "LINKA", "TESTA", "EMPACOTA"};
             if (a->spT > 0.09f * (a->spHits + 1) && a->spHits < 4)
