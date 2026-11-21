@@ -437,6 +437,9 @@ Font GetGameFont(float pixelSize);
 void UnloadGameFonts(void);
 void DrawGameTextEx(const char *text, Vector2 position, float size, float spacing, Color color);
 Vector2 MeasureGameTextEx(const char *text, float size, float spacing);
+/* Texto da abertura em perspectiva (atlas unico, escala continua); usado tambem pelo Modo Invasao */
+void DrawCrawlTextEx(const char *text, Vector2 position, float size, float spacing, Color color);
+Vector2 MeasureCrawlTextEx(const char *text, float size, float spacing);
 void DrawGameText(const char *text, int x, int y, int size, Color color);
 int MeasureGameText(const char *text, int size);
 Vector2 GetVirtualMouse(void);

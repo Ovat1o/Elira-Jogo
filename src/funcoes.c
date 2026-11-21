@@ -293,7 +293,7 @@ static Font GetCrawlFont(void)
     return g_crawlFont;
 }
 
-static void DrawCrawlTextEx(const char *text, Vector2 position, float size,
+void DrawCrawlTextEx(const char *text, Vector2 position, float size,
                             float spacing, Color color)
 {
     if (!GameFontAvailable())
@@ -314,7 +314,7 @@ static void DrawCrawlTextEx(const char *text, Vector2 position, float size,
     DrawTextEx(font, text, position, realSize, spacing, color);
 }
 
-static Vector2 MeasureCrawlTextEx(const char *text, float size, float spacing)
+Vector2 MeasureCrawlTextEx(const char *text, float size, float spacing)
 {
     if (!GameFontAvailable()) return MeasureTextEx(GetFontDefault(), text, size, spacing);
 
