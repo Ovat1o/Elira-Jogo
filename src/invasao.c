@@ -785,13 +785,13 @@ static const Stage ST[NSTAGE] = {
     {"1990", "PRIVACIDADE DE DADOS", "Rastreadores coletam tudo o que você faz.", "O COLETOR", "\"Cada arquivo seu já tem uma cópia comigo.\"",
      {25, 32, 48, 255}, {21, 27, 41, 255}, {34, 44, 64, 255}, {40, 80, 100, 255}, {38, 48, 66, 255}, {96, 206, 232, 255}, PK_FLOPPY, 110},
     {"2008", "FALSOS POSITIVOS", "Nem todo alerta é real: tiro vazado não fere.", "O FILTRO", "\"Ameaça detectada. Ameaça detectada. Ameaça...\"",
-     {24, 40, 44, 255}, {20, 34, 38, 255}, {34, 56, 60, 255}, {50, 112, 90, 255}, {38, 60, 64, 255}, {110, 220, 140, 255}, PK_CD, 120},
+     {24, 40, 44, 255}, {20, 34, 38, 255}, {34, 56, 60, 255}, {50, 112, 90, 255}, {38, 60, 64, 255}, {110, 220, 140, 255}, PK_CD, 190},
     {"2026", "VIÉS ALGORÍTMICO", "O sistema castiga o lado em que você mais fica.", "O ALGORITMO", "\"Eu só mostro o que você já escolheu.\"",
-     {36, 26, 50, 255}, {30, 22, 44, 255}, {52, 38, 72, 255}, {110, 50, 120, 255}, {54, 40, 76, 255}, {230, 90, 200, 255}, PK_SSD, 130},
+     {36, 26, 50, 255}, {30, 22, 44, 255}, {52, 38, 72, 255}, {110, 50, 120, 255}, {54, 40, 76, 255}, {230, 90, 200, 255}, PK_SSD, 290},
     {"2048", "ALUCINAÇÃO", "Ela inventa com total confiança. Desconfie.", "O ORÁCULO", "\"Tenho 100% de certeza. Sempre tenho.\"",
-     {40, 34, 26, 255}, {34, 29, 22, 255}, {58, 50, 38, 255}, {120, 96, 50, 255}, {62, 54, 44, 255}, {232, 190, 92, 255}, PK_HEARTUP, 140},
+     {40, 34, 26, 255}, {34, 29, 22, 255}, {58, 50, 38, 255}, {120, 96, 50, 255}, {62, 54, 44, 255}, {232, 190, 92, 255}, PK_HEARTUP, 340},
     {"NÚCLEO", "CONFRONTO FINAL", "Tudo o que você enfrentou era ela.", "A.R.1.3.L.", "\"Eu fui todos eles. Agora sou só eu.\"",
-     {40, 22, 26, 255}, {32, 18, 22, 255}, {60, 32, 36, 255}, {120, 40, 44, 255}, {58, 34, 40, 255}, {226, 84, 84, 255}, PK_NONE, 300},
+     {40, 22, 26, 255}, {32, 18, 22, 255}, {60, 32, 36, 255}, {120, 40, 44, 255}, {58, 34, 40, 255}, {226, 84, 84, 255}, PK_NONE, 560},
 };
 static int stage;
 
@@ -1383,6 +1383,12 @@ static void HurtPlayer(void)
 }
 
 /* ------------------------------------------------------------------ chefes */
+/* Modo hard: o Coletor (1990) entra abaixo de 50% da vida; de 2008 em diante,
+   abaixo de 65%, para compensar as melhorias acumuladas pelo jogador. */
+static bool BossHard(const Enemy *e)
+{
+    return e->hp < e->maxhp * (e->look == 0 ? 0.5f : 0.65f);
+}
 static void Hover(Enemy *e, float dt, float ax, float ay, float sp)
 {
     float tx = e->anchor.x + sinf(e->t * sp) * ax, ty = e->anchor.y + sinf(e->t * 1.3f) * ay;
@@ -1457,14 +1463,16 @@ static void BossFilter(Enemy *e, float dt, bool hard, int look)
             Enemy *d = AddEnemy(EN_DECOY, slots[order[k]].x, slots[order[k]].y);
             if (d) { d->look = look; d->mode = e->mode; d->t2 = Rnd(0.6f, 1.6f); d->t = Rnd(0, 6); }
         }
-        e->t3 = hard ? 5.0f : 7.0f;
+        /* varredura de alertas: anel em que 1 de cada 3 tiros e falso positivo (brechas visiveis) */
+        if (hard) FireRing(e->p, 15, 175, Rnd(0, 1), 3);
+        e->t3 = hard ? 4.2f : 6.0f;
         e->t2 = 0.9f;
     }
     e->t2 -= dt;
     if (e->t2 <= 0)
     {
         FireAimed(e->p, hard ? 5 : 3, 0.2f, 280, BK_REAL, -1);
-        e->t2 = hard ? 1.15f : 1.5f;
+        e->t2 = hard ? 0.95f : 1.25f;
         e->flash = 0.06f;
     }
 }
@@ -1511,15 +1519,15 @@ static void BossAlgorithm(Enemy *e, float dt, bool hard)
         StartRain(side);
         if (hard) rainNext = 1 - side;
         e->t3 = 0;
-        e->t2 = hard ? 4.2f : 4.6f;
+        e->t2 = hard ? 3.8f : 4.3f;
         e->flash = 0.08f;
     }
     e->t4 -= dt;
     if (e->t4 <= 0)
     {
         FireAimed(e->p, hard ? 3 : 2, 0.22f, 270, BK_REAL, -1);
-        e->t4 = hard ? 1.0f : 1.3f;
-        if (hard && CountType(EN_MINI) < 2 && GetRandomValue(0, 3) == 0) AddEnemy(EN_MINI, e->p.x, e->p.y + 60);
+        e->t4 = hard ? 0.85f : 1.1f;
+        if (hard && CountType(EN_MINI) < 2 && GetRandomValue(0, 2) == 0) AddEnemy(EN_MINI, e->p.x, e->p.y + 60);
     }
 }
 
@@ -1539,15 +1547,16 @@ static void BossOracle(Enemy *e, float dt, bool hard, int look)
         e->anchor = e->p = RandFloor(120, 230, 0.6f);
         Burst(e->p, 20, ST[look].accent, 240);
         FireRing(e->p, 16, 200, Rnd(0, 1), 2);
-        e->t3 = hard ? 2.7f : 3.6f;
+        e->t3 = hard ? 2.3f : 3.2f;
         e->flash = 0.1f;
     }
     e->t2 -= dt;
     if (e->t2 <= 0)
     {
-        for (int arm = 0; arm < 2; arm++)
+        int arms = hard ? 3 : 2; /* no hard a espiral ganha um terceiro braco (120 graus de brecha) */
+        for (int arm = 0; arm < arms; arm++)
         {
-            float a = e->t * 2.0f + arm * PI;
+            float a = e->t * 2.0f + arm * 2 * PI / arms;
             AddBullet(e->p, V2(cosf(a) * 190, sinf(a) * 190), 9, false, GetRandomValue(0, 9) < 4 ? BK_FAKE : BK_REAL, 1, 4.5f);
         }
         e->t2 = 0.2f;
@@ -1560,14 +1569,14 @@ static void BossOracle(Enemy *e, float dt, bool hard, int look)
             for (int k = 0; k < 3; k++) AddIllusion(e->p.x + Rnd(-90, 90), e->p.y + Rnd(40, 100));
             AddEnemy(EN_TRACKER, e->p.x, e->p.y + 70);
         }
-        e->t4 = 6.5f;
+        e->t4 = hard ? 5.5f : 6.5f;
     }
 }
 
 static void UpdateBoss(Enemy *e, float dt)
 {
     e->t += dt;
-    bool hard = e->hp < e->maxhp * 0.5f;
+    bool hard = BossHard(e);
     switch (e->look)
     {
     case 0: BossCollector(e, dt, hard); break;
@@ -2305,7 +2314,7 @@ static bool DrawEnemySprite(Enemy *e, Vector2 p, bool fl)
 /* ------------------------------------------------------------------ desenho: chefes */
 static void DrawCollector(Vector2 p, Enemy *e, bool decoy)
 {
-    bool fl = e->flash > 0, hard = e->hp < e->maxhp * 0.5f;
+    bool fl = e->flash > 0, hard = BossHard(e);
     if (!decoy) Shadow(V2(p.x, p.y + 76), 80, 14, 0.5f);
     if (e->state < 0) /* succao */
         for (int k = 0; k < 10; k++)
@@ -2340,7 +2349,7 @@ static void DrawCollector(Vector2 p, Enemy *e, bool decoy)
 }
 static void DrawFilter(Vector2 p, Enemy *e, bool decoy, Color acc)
 {
-    bool fl = e->flash > 0, hard = e->hp < e->maxhp * 0.5f;
+    bool fl = e->flash > 0, hard = BossHard(e);
     if (!decoy) Shadow(V2(p.x, p.y + 78), 62, 12, 0.5f);
     Color body = fl ? C_WHITE : (Color){60, 110, 190, 255};
     /* escudo de antivirus */
@@ -2362,7 +2371,7 @@ static void DrawFilter(Vector2 p, Enemy *e, bool decoy, Color acc)
 }
 static void DrawAlgorithm(Vector2 p, Enemy *e, bool decoy)
 {
-    bool fl = e->flash > 0, hard = e->hp < e->maxhp * 0.5f;
+    bool fl = e->flash > 0, hard = BossHard(e);
     if (!decoy) Shadow(V2(p.x, p.y + 80), 70, 12, 0.5f);
     Color metal = fl ? C_WHITE : (Color){150, 110, 190, 255};
     float tilt = rainSide == 0 ? -0.28f : rainSide == 1 ? 0.28f : Clampf(e->t3 * 0.1f, -0.2f, 0.2f);
@@ -2398,7 +2407,7 @@ static void DrawAlgorithm(Vector2 p, Enemy *e, bool decoy)
 }
 static void DrawOracle(Vector2 p, Enemy *e, bool decoy, Color acc)
 {
-    bool fl = e->flash > 0, hard = e->hp < e->maxhp * 0.5f;
+    bool fl = e->flash > 0, hard = BossHard(e);
     float fy = p.y + sinf(gtime * 2.4f + e->t) * 5;
     if (!decoy) Shadow(V2(p.x, p.y + 82), 50 - (fy - p.y), 11, 0.45f);
     for (int k = 0; k < 3; k++)
