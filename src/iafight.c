@@ -959,6 +959,7 @@ static int ClaudeFrameIdx(Fighter *a)
 static Texture2D texCodex;
 #define XC_SCALE 2.0f
 #define XC_FRONT 76.0f /* do centro ate a frente da nuvem: placa de defesa e agarrao do especial */
+#define XC_LUNGE_MULT 3.4f /* avanco do corpo nos golpes em relacao aos outros (a luva alcanca pouco) */
 #define IAF_CODEX_ALT_TINT ((Color){150, 255, 185, 255}) /* sprite do Codex no espelho: luvas e rosto verdes */
 static int XAFrame(int anim, int i)
 {
@@ -1217,7 +1218,7 @@ static Rectangle Hurt(Fighter *a)
 {
     float w = a->ch == CH_CODEX ? 84 : 70, h = a->crouch ? 128 : (a->ch == CH_ELIRA ? 196 : 200);
     if (a->ch == CH_CLAUDE) { w = 232; h = a->crouch ? 160 : 204; } /* sprite largo e baixo (corpo 240x204 na tela) */
-    if (a->ch == CH_CODEX) { w = 150; h = a->crouch ? 150 : 198; }  /* nuvem do sprite: ~157 de largura, 198 de altura */
+    if (a->ch == CH_CODEX) { w = 130; h = a->crouch ? 150 : 198; }  /* nuvem do sprite (~157 de largura; as bordas fofas nao contam) */
     if (a->down || a->st == ST_KO) h = 40;
     return (Rectangle){a->x - w / 2, a->y - h, w, h};
 }
@@ -1546,6 +1547,7 @@ static void UpdateFighter(Fighter *a, Fighter *o, IafInput in, float dt)
             const Atk *d = &ATK[a->ch][a->atk];
             float win = d->st + d->ac, t0 = a->atkT - dt;
             float adv = a->atk == AT_LIGHT ? IAF_LUNGE_LIGHT : (a->atk == AT_HEAVY ? IAF_LUNGE_HEAVY : (a->atk == AT_FWDH ? IAF_LUNGE_FWDH : (a->atk == AT_UPPER ? IAF_LUNGE_LIGHT : IAF_LUNGE_LOW)));
+            if (a->ch == CH_CODEX) adv *= XC_LUNGE_MULT; /* pressao curta: entra no golpe com o corpo todo */
             if (t0 < win) a->x += a->face * adv * fminf(dt, win - t0) / win;
         }
         if (ground && a->ch == CH_CLAUDE && (a->atk == AT_FWDH || a->atk == AT_HEAVY) && OnGround(o) && o->st != ST_KO)
@@ -1650,7 +1652,7 @@ static void UpdateFighter(Fighter *a, Fighter *o, IafInput in, float dt)
         if (a->crouch) { if (a->st != ST_CROUCH) SetState(a, ST_CROUCH); a->vx = 0; }
         else if (holdFwd || holdBack)
         {
-            float sp = a->ch == CH_ANTI ? 290 : (a->ch == CH_CODEX ? 270 : 255);
+            float sp = a->ch == CH_ANTI ? 290 : (a->ch == CH_CODEX ? 300 : 255);
             a->vx = holdFwd ? a->face * sp : -a->face * sp * 0.8f;
             if (a->st != ST_WALK) SetState(a, ST_WALK);
         }
