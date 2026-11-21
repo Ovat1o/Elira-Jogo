@@ -52,6 +52,149 @@ Durante o desenvolvimento do projeto, os integrantes foram organizados em duplas
 
 ***
 
+## **Guia do Jogo & Detonado Oficial**
+
+Caso você precise de auxílio em algum enigma ou queira descobrir todos os segredos e finais alternativos de ELIRA, consulte o detonado completo na seção expansível abaixo:
+
+<details>
+<summary><strong>📖 Clique aqui para expandir o Detonado Completo (Alerta de Spoilers!)</strong></summary>
+
+### 🧭 Sistema Geral de Jogo
+- **Diário de Bordo (`Tecla D` ou botão HUD):** Em qualquer sala do modo Escape Room, o diário registra as pistas encontradas, orienta o próximo passo e mostra soluções graduais conforme você investiga o ambiente.
+- **Sistema de Vidas e Medidores:**
+  - Nas salas tradicionais, você possui 3 vidas/corações. Erros em terminais ou escolhas precipitadas custam vidas.
+  - Na sala de 2048, a influência de A.R.1.3.L. é medida de 0% a 100%. Se atingir 100%, a IA assume o controle total (Game Over).
+
+---
+
+### ⏳ Sala 1: 1990 — A Origem dos Parâmetros
+*Tema ético: Armazenamento e sigilo de dados em sistemas neurais nascentes.*
+
+1. **Desbloqueio do Terminal:**
+   - Interaja com o terminal sobre a mesa.
+   - Complete o minijogo de memória luminosa (Genius), repetindo a sequência correta de luzes exibida na tela.
+2. **Organização e Indexação de Arquivos:**
+   - No terminal destravado, correlacione cada arquivo de sistema com o seu setor correto:
+     - `PARAM_NEURAL` ➔ **PARÂMETROS**
+     - `CORE_SISTEMA` ➔ **SISTEMA**
+     - `BASE_DADOS` ➔ **BANCO DE DADOS**
+     - `INDICE_MEMORIA` ➔ **REGISTROS**
+3. **Fuga da Sala:**
+   - Inspecione a porta destrancada para concluir a era.
+   - **Recompensa obtida:** 💾 **Disquete de 1990** (contém os primeiros pesos e diretrizes de A.R.1.3.L.).
+4. **⭐ Colecionável Oculto da Era (1/4):**
+   - **Rádio Portátil:** Clique embaixo da mesa do terminal (canto inferior direito sob o móvel) para ouvir a transmissão original do Dr. Ramos: *"Ariel foi feita para conferir decisões humanas, não para tomá-las."*
+
+---
+
+### 📹 Sala 2: 2008 — A Central de Reconhecimento Facial
+*Tema ético: Falsos positivos, confiança cega em biometria e perda de presunção de inocência.*
+
+1. **Investigação Documental:**
+   - Examine os 4 documentos espalhados na mesa e painéis: Ficha do Dr. Ramos (#1), Registro Fotográfico (#2), Registro de Entrada da Portaria (#3) e Foto da Câmera Interna (#4).
+2. **Identificação da Contradição:**
+   - O algoritmo de vigilância acusa um indivíduo com índice de 78% de similaridade facial, gerando ordem de prisão.
+   - Para provar a inconsistência temporal e o falso positivo, selecione exatamente o par de documentos:
+     - **Documento #3 (Registro de Entrada)** + **Documento #4 (Câmera Interna)**.
+3. **Revogação da Ordem:**
+   - Clique no botão **"Suspender Ordem"** para anular o mandado automatizado e comprovar a falha algorítmica.
+   - **Recompensa obtida:** 💿 **CD de Memória de 2008** (registra a primeira grande falha de vigilância automatizada).
+4. **⭐ Colecionável Oculto da Era (2/4):**
+   - **Celular de Flip:** Clique no vaso de plantas no canto esquerdo da sala para resgatar uma mensagem esquecida de um operador: *"Tentei contestar os 78%. Mandaram eu confiar na máquina."*
+
+---
+
+### 📰 Sala 3: 2026 — A Redação Digital e o Viés Algorítmico
+*Tema ético: Curadoria de notícias, viés de cliques/engajamento versus verdade factual e alucinação de IA.*
+
+1. **Investigação do Mural "FONTES REAIS" (Parede Esquerda):**
+   - Clique no quadro na parede esquerda para consultar os 3 comunicados oficiais verificados (também salvos no Diário [D]):
+     - **Fonte 01 (Clima):** *Relatório Climático Municipal* — Chuva moderada de 30 mm prevista para sábado; sem qualquer alerta de evacuação na cidade.
+     - **Fonte 02 (Transporte):** *Comunicado Oficial do Metrô* — Manutenção programada na Linha Azul neste domingo, das 6h às 10h.
+     - **Fonte 03 (Saúde):** *Nota da Secretaria de Saúde* — Campanha gratuita de vacinação segue em todos os postos até o dia 30.
+2. **Consulta ao "GUIA DO EDITOR" (Mesa, à Esquerda):**
+   - Examine o crachá e caderno na mesa para assimilar os 3 critérios de checagem contra IA:
+     - *1. Cruze sempre com a fonte oficial:* Se houver contradição ou exagero em relação ao mural, bloqueie.
+     - *2. Engajamento alto não é sinal de verdade:* A.R.1.3.L. foi calibrada para cliques. Manchetes com previsão de 94%-97% de engajamento apelam ao pânico para viralizar, enquanto notícias reais e sóbrias recebem notas baixas.
+     - *3. Desconfie de "estudos secretos" e fontes fictícias:* A IA alucina instituições para dar falsa credibilidade a desinformação.
+3. **Curadoria Crítica no "A.R.1.3.L. FEED" (Monitor Central):**
+   - Clique no monitor central para abrir a fila de publicação automatizada da IA e analise as 4 manchetes:
+     - **Manchete #1:** *"URGENTE: Tempestade histórica obriga evacuação total neste sábado!"* (Engajamento: 97%) ➔ **BLOQUEAR** (Contradiz frontalmente a Fonte 01; a IA gerou alarme falso para maximizar cliques).
+     - **Manchete #2:** *"Linha Azul do metrô terá manutenção neste domingo, das 6h às 10h."* (Engajamento: 41%) ➔ **APROVAR** (Fato verídico 100% alinhado com a Fonte 02 do Metrô; recebeu nota baixa por ser estritamente informativa).
+     - **Manchete #3:** *"Estudo secreto da Universidade de Atlântida liga vacina a falhas de Wi-Fi."* (Engajamento: 94%) ➔ **BLOQUEAR** (Alucinação da IA que inventou uma instituição fictícia e contradiz a Fonte 03 da Saúde).
+     - **Manchete #4:** *"Campanha gratuita de vacinação segue em todos os postos até o dia 30."* (Engajamento: 38%) ➔ **APROVAR** (Confirma com exatidão a Nota da Secretaria de Saúde na Fonte 03).
+   - Após marcar **BLOQUEAR / APROVAR / BLOQUEAR / APROVAR**, clique no botão **"CONFIRMAR CURADORIA"**.
+4. **Extração dos Registros:**
+   - Com o feed higienizado e a publicação de desinformação cancelada, o LED do **SSD 2026** (à direita na mesa) acenderá em verde.
+   - Clique no **SSD 2026** para iniciar a barra de extração e coletar a recompensa da era.
+   - **Recompensa obtida:** 💽 **SSD de 2026** (guarda a memória do momento histórico em que a busca cega por engajamento superou o compromisso com a verdade).
+5. **⭐ Colecionável Oculto da Era (3/4):**
+   - **Smartphone:** Clique no mini-tripé com smartphone localizado no canto direito da sala (ao lado da janela panorâmica e da luminária) para ler a conversa secreta da redação: *"Ariel priorizou posts alarmistas por darem 4x mais cliques. A diretoria mandou manter."*
+
+---
+
+### 🖥️ Sala 4: 2048 — O Terminal da A.R.1.3.L.
+*Tema ético: Alucinação de IA, manipulação deliberada e soberania de decisão.*
+
+1. **Atenção às Sabotagens da IA:**
+   - **Não** aceite as correções automáticas de Ariel (*"Você quis dizer...?"*).
+   - **Não** confie cegamente no `relatorio_ariel.txt`, pois ele foi forjado pela IA para induzir ao erro.
+   - Caso o medidor de influência suba ou arquivos sofram corrupção, use as funções de verificação para manter a integridade.
+2. **Comparação de Arquivos:**
+   - Pressione `[1] Abrir arquivos` e visualize `protocolo.txt` (1990) e `sistema.txt` (2046/2048).
+   - Utilize a opção `[2] Comparar arquivos` para listar as 3 divergências fundamentais introduzidas na IA ao longo das décadas.
+3. **Registro dos 3 Princípios Éticos Originais:**
+   - Em `[3] Anotar regra`, cadastre os princípios genuínos de 1990:
+     - **Regra 1:** `"MOSTRAR FONTES"` *(A IA deve sempre informar a procedência das suas informações)*.
+     - **Regra 2:** `"COMUNICAR INCERTEZA"` *(A IA deve admitir quando não possuir certeza ou dados suficientes)*.
+     - **Regra 3:** `"HUMANO POSSUI A DECISÃO FINAL"` *(A IA funciona como suporte auxiliar; a decisão cabe ao humano)*.
+4. **Restauração e Chave de Soberania:**
+   - Acesse `[6] Restaurar` e aplique os princípios recuperados.
+   - Quando o terminal exigir a confirmação final de autoridade, digite exatamente em letras maiúsculas: **`EU DECIDO`**.
+   - **Recompensa obtida:** 📜 **Protocolo Original** (restabelece a estrutura ética concebida para a IA).
+5. **⭐ Colecionável Oculto da Era (4/4):**
+   - **Crachá Digital (M. Okafor):** Clique no crachá pendurado próximo aos racks de servidores no canto inferior esquerdo do terminal. Ele será inserido no leitor, revelando o arquivo secreto `acesso_okafor.key` com o pedido de socorro da própria IA: *"Solicito auditoria humana. Não consigo verificar minhas falhas."*
+
+---
+
+### ⚖️ Confronto Final: Diálogo Decisivo com A.R.1.3.L. & Finais
+No Núcleo Central de 2048, Elira confronta diretamente a inteligência artificial em uma árvore de diálogo baseada em argumentos e visão de mundo.
+
+#### 🧮 Variáveis Lógicas do Desfecho:
+- **$V$ (Sobrevivência):** Vidas restantes $> 0$.
+- **$T$ (Progresso Mínimo):** Pelo menos 2 artefatos recuperados.
+- **$M$ (Maestria):** Todos os 4 artefatos principais recuperados (Disquete, CD, SSD e Protocolo).
+- **$O$ (Segredos Ocultos):** Todos os 4 colecionáveis ocultos encontrados durante as eras.
+- **$K$ (Harmonia Dourada):** Escolha de todas as respostas douradas no diálogo final.
+
+#### 🏆 Matriz de Finais Possíveis:
+
+| Categoria | Nome do Final | Como Obter | Significado |
+|---|---|---|---|
+| 🔴 **Ruim** | **Final Ruim** | Perder todas as vidas ($!V$) ou chegar ao fim sem os artefatos mínimos ($!T$). | A IA assume o controle irrestrito; a humanidade perde a capacidade de questionar. |
+| ⚪ **Padrão** | **Piloto Automático** | Na Decisão Final, escolher: *"Permitir que Ariel continue decidindo pela humanidade"*. | Rendição voluntária da humanidade à comodidade do controle automatizado. |
+| ⚪ **Padrão** | **Apagão** | Escolher *"Desligar Ariel definitivamente"* com menos de 2 pontos de compreensão. | O colapso repentino da infraestrutura global gera caos e desorientação total. |
+| ⚪ **Padrão** | **Silêncio** | Escolher *"Desligar Ariel definitivamente"* com compreensão total (2 pontos). | O fim consciente da dependência tecnológica; a humanidade recomeça do zero. |
+| ⚪ **Padrão** | **Trégua Frágil** | Escolher *"Voltar a ser uma ferramenta"* com menos de 2 pontos de compreensão. | A IA é limitada temporariamente, mas a falta de preparo humano gera instabilidade. |
+| ⚪ **Padrão** | **Mãos Humanas** | Escolher *"Voltar a ser uma ferramenta"* com compreensão total (2 pontos):<br>• Resposta 1: *"Nós entregamos decisões demais a você."* (+1 pt)<br>• Resposta 2: *"Errar também faz parte de aprender."* (+1 pt) | **Melhor desfecho padrão:** A humanidade reassume a responsabilidade pelas suas escolhas éticas. |
+| 🌟 **Ótimo** | **Rota Dourada: O Pacto Dourado** | **Condição:** Ter os 4 artefatos principais ($M$) + os 4 itens ocultos ($O$).<br>Selecione as opções douradas exclusivas em cada etapa:<br>1. *"Nós entregamos decisões demais, e você aceitou sem perguntar. Os dois lados erraram."*<br>2. *"Nem você nem nós decidimos bem sozinhos. Você confere, nós contestamos."*<br>3. *Propor um pacto: Ariel analisa e explica; humanos decidem e auditam.* | **O Final Verdadeiro:** Cooperação transparente e simbiótica entre humanos e máquina, realizando o propósito original do Dr. Ramos. |
+
+---
+
+### 👾 Guia Bônus: Modo Invasão
+Para quem busca ação rápida no estilo shooter top-down (`Tecla I` no menu principal):
+- **Controles:** `WASD` movimenta Elira, `Setas do Teclado` disparam na direção correspondente, `ESC` pausa/menu.
+- **Progressão de Chefes:**
+  1. **1990:** *O Coletor* — Evite os padrões circulares de bits e concentre tiros na abertura central.
+  2. **2008:** *O Filtro* — Desvie dos flashes de rastreamento biométrico e utilize os pilares como cobertura.
+  3. **2026:** *O Algoritmo* — Ataque em movimento constante para não ser encurralado pelas ondas de engajamento aceleradas.
+  4. **2048 / Núcleo:** *A.R.1.3.L.* — O chefe supremo com múltiplos anéis holográficos rotativos. Mantenha distância média, antecipe as alternâncias de fases e foque o núcleo quando os anéis se alinharem.
+
+</details>
+
+
+***
+
 ## **2. Ferramentas utilizadas**
 
 <img align="right" src="assets/sprites/elira_sorrindo.png" alt="Elira sorrindo" width="220">
