@@ -14,16 +14,37 @@ O objetivo do jogador é atravessar as eras resolvendo enigmas e tomando decisõ
 
 ## **Modos de jogo**
 
-O menu inicial oferece dois modos:
+O menu inicial oferece três modos:
 
 | Modo | Como entrar | O que é |
 | --- | --- | --- |
 | **Escape room** (padrão) | `INICIAR MISSAO` ou `ENTER` | O jogo principal: salas de 1990, 2008, 2026 e 2048 com enigmas, diário, ranking e finais. |
 | **Modo Invasão** | `MODO INVASAO [I]` ou `I` | Ação top-down em salas. Cada era vira um estágio com o seu chefe (O Coletor, O Filtro, O Algoritmo e O Oráculo), e no fim Elira enfrenta A.R.1.3.L. no Núcleo. Não grava ranking nem altera os finais do escape room. |
+| **IA FIGHT** | `IA FIGHT [F]` ou `F` | Luta 1x1 em visão lateral, uma "rinha de inteligências". Elira, CLAUDE, CODEX e ANTIGRAVITY são jogáveis. Há três modos: 1 JOGADOR x CPU (arcade contra os outros três, melhor de 3 rounds), 1 x 1 (dois jogadores) e TREINO. Não grava ranking nem altera os finais do escape room. |
 
 Controles do Modo Invasão: `WASD` move, `SETAS` atiram, `ESC` pausa, `Q` volta ao menu (na pausa ou na derrota), `R` recomeça o estágio, `ENTER` volta ao menu depois da vitória. Ao perder todos os corações, Elira volta ao início do estágio.
 
 O Modo Invasão fica em um módulo próprio (`src/invasao.c` + `src/invasao.h`), para não misturar o código de ação com as salas do escape room em `funcoes.c`. O `main.c` só faz o roteamento da tela `SCREEN_INVASION`. Os sprites do modo estão em `assets/sprites/invasao/`.
+
+Controles do IA FIGHT (jogador 1 no teclado):
+
+| Ação | Teclado | Controle (Xbox / PlayStation) |
+| --- | --- | --- |
+| Andar / defender | `A`/`D` (segurar para trás defende) | analógico ou direcional |
+| Pular / agachar | `W` / `S` | A/✕ / baixo |
+| Golpe fraco | `J` | X/□ |
+| Golpe forte | `K` | Y/△ |
+| Soco longo / uppercut | frente + `K` / cima + `K` | frente + Y/△ / cima + Y/△ |
+| Golpe baixo / aéreo | agachado + golpe / golpe no ar | igual |
+| Tiro de plasma (Elira) | `I` | B/○ |
+| Especial (metade da barra CARGA) | `L` | RB/RT ou R1/R2 |
+| Dash | `D` `D` (dois toques para a frente) | LB/L1 |
+| Agarrão (colado; mesmo comando escapa) | `J` + `K` juntos | LT/L2 |
+| Pausa | `P` ou `ESC` | START |
+
+Combo: fraco, fraco, forte em sequência, encadeando quando os golpes acertam. No 1 x 1, o jogador 2 usa as `SETAS` e o teclado numérico (`1` fraco, `2` forte, `3` especial, `4` tiro), ou o segundo controle. `TAB`/SELECT abre a tela de controles. No TREINO, `F1` mostra ou esconde as caixas de colisão (também nas outras lutas), `F2` troca o comportamento do boneco e `F3` recoloca os dois no centro.
+
+O IA FIGHT também é um módulo próprio (`src/iafight.c` + `src/iafight.h`); o `main.c` só roteia a tela `SCREEN_IAFIGHT`. As constantes do modo ficam em `constantes.h` (prefixo `IAF_`). Os quatro lutadores usam sprites em pixel art: os atlas ficam em `assets/sprites/iafight/` e as tabelas de quadros em `src/iafight_<lutador>.h`. As arenas e o HUD ficam em `src/iafight_arena.h`, os sons em `assets/som/iafight/` e o guia para desenhar arenas em `docs/iafight/guia_arena/`.
 
 ***
 
