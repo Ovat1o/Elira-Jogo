@@ -1859,12 +1859,43 @@ static void Bevel(Rectangle r, Color base, float t)
 }
 static void Shadow(Vector2 p, float w, float h, float a) { DrawEllipse((int)p.x, (int)p.y, w, h, (Color){0, 0, 0, (unsigned char)(a * 255)}); }
 
+/* Cenario por estagio (piso, faixa de parede, obstaculos). Sem o PNG da era, volta ao desenho por primitivas. */
+static Texture2D texFloorT[NSTAGE], texWallT[NSTAGE], texObsT[NSTAGE];
+static const char *const STAGE_ART_KEY[NSTAGE] = {"1990", "2008", "2026", "2048", "nucleo"};
+#define INV_OBS_CELL 256
+
+static Texture2D LoadStageArt(const char *kind, int s, bool repeat)
+{
+    const char *path = TextFormat(ASSETS "sprites/invasao/%s_%s.png", kind, STAGE_ART_KEY[s]);
+    if (!FileExists(path)) return (Texture2D){0};
+    Texture2D t = LoadTexture(path);
+    SetTextureFilter(t, TEXTURE_FILTER_BILINEAR);
+    if (repeat) SetTextureWrap(t, TEXTURE_WRAP_REPEAT);
+    return t;
+}
+
+/* Faixa de parede repetida ao longo de 'length'; 'rot' gira a faixa (o lado de baixo da textura e o lado de dentro da sala). */
+static void DrawWallStrip(Texture2D t, Vector2 center, float length, float rot)
+{
+    float scale = WALL / (float)t.height;
+    Rectangle src = {0, 0, length / scale, (float)t.height};
+    Rectangle dst = {center.x, center.y, length, WALL};
+    DrawTexturePro(t, src, dst, V2(length / 2, WALL / 2), rot, WHITE);
+}
+
 static void DrawFloor(void)
 {
     const Stage *s = &ST[stage];
     Rectangle f = FLOOR_R();
     DrawRectangleRec(f, s->floorB);
     const int T = 50;
+    if (texFloorT[stage].id)
+    {
+        /* cada sala desloca o ladrilho para nao parecer repetida */
+        Rectangle src = {(float)(curX * 137 + curY * 53), (float)(curY * 91), f.width, f.height};
+        DrawTexturePro(texFloorT[stage], src, f, V2(0, 0), 0, WHITE);
+    }
+    else
     for (int ty = 0; ty * T < f.height; ty++)
         for (int tx = 0; tx * T < f.width; tx++)
         {
@@ -1971,6 +2002,19 @@ static void DrawWalls(void)
 {
     Rectangle f = FLOOR_R();
     Color wall = ST[stage].wall, acc = ST[stage].accent;
+    if (texWallT[stage].id)
+    {
+        Texture2D t = texWallT[stage];
+        DrawWallStrip(t, V2(ROOM.x + ROOM.width / 2, ROOM.y + WALL / 2), ROOM.width, 0);
+        DrawWallStrip(t, V2(ROOM.x + ROOM.width / 2, f.y + f.height + WALL / 2), ROOM.width, 180);
+        DrawWallStrip(t, V2(ROOM.x + WALL / 2, ROOM.y + ROOM.height / 2), ROOM.height, -90);
+        DrawWallStrip(t, V2(f.x + f.width + WALL / 2, ROOM.y + ROOM.height / 2), ROOM.height, 90);
+        Rectangle cs[4] = {{ROOM.x, ROOM.y, WALL, WALL}, {f.x + f.width, ROOM.y, WALL, WALL},
+                           {ROOM.x, f.y + f.height, WALL, WALL}, {f.x + f.width, f.y + f.height, WALL, WALL}};
+        for (int i = 0; i < 4; i++) Bevel(cs[i], Shade(wall, 1.3f), 4);
+        for (int d = 0; d < 4; d++) DrawDoor(d);
+        return;
+    }
     Bevel((Rectangle){ROOM.x, ROOM.y, ROOM.width, WALL}, wall, 4);
     Bevel((Rectangle){ROOM.x, f.y + f.height, ROOM.width, WALL}, Shade(wall, 0.85f), 4);
     Bevel((Rectangle){ROOM.x, ROOM.y, WALL, ROOM.height}, Shade(wall, 0.92f), 4);
@@ -1993,6 +2037,15 @@ static void DrawWalls(void)
 static void DrawObstacle(Rectangle o, int idx)
 {
     Shadow(V2(o.x + o.width / 2 + 6, o.y + o.height + 2), o.width * 0.55f, 9, 0.45f);
+    if (texObsT[stage].id)
+    {
+        int k = (idx + curX + curY) % 4;
+        float h = o.width * 1.18f;
+        Rectangle src = {(float)((k % 2) * INV_OBS_CELL), (float)((k / 2) * INV_OBS_CELL), INV_OBS_CELL, INV_OBS_CELL};
+        Rectangle dst = {o.x + o.width / 2 - h / 2, o.y + o.height + 4 - h, h, h};
+        DrawTexturePro(texObsT[stage], src, dst, V2(0, 0), 0, WHITE);
+        return;
+    }
     if (stage == 0 && idx % 2 == 0)
     { /* caixa de arquivo morto */
         Bevel((Rectangle){o.x, o.y + 10, o.width, o.height - 10}, (Color){130, 98, 62, 255}, 3);
@@ -3007,6 +3060,12 @@ void InvEnter(GameState *game)
         texBoss[1] = LoadTexSmooth(ASSETS "sprites/invasao/boss_2008.png");
         texBoss[2] = LoadTexSmooth(ASSETS "sprites/invasao/boss_2026.png");
         texBoss[3] = LoadTexSmooth(ASSETS "sprites/invasao/boss_2048.png");
+        for (int s = 0; s < NSTAGE; s++)
+        {
+            texFloorT[s] = LoadStageArt("piso", s, true);
+            texWallT[s] = LoadStageArt("parede", s, true);
+            texObsT[s] = LoadStageArt("obstaculos", s, false);
+        }
         SetTextureFilter(texFx, TEXTURE_FILTER_BILINEAR);
         LoadShotSfx();
         invLoaded = true;
@@ -3058,6 +3117,15 @@ void InvUnload(void)
     {
         if (texs[i]->id) UnloadTexture(*texs[i]);
         *texs[i] = (Texture2D){0};
+    }
+    for (int s = 0; s < NSTAGE; s++)
+    {
+        Texture2D *art[3] = {&texFloorT[s], &texWallT[s], &texObsT[s]};
+        for (int k = 0; k < 3; k++)
+        {
+            if (art[k]->id) UnloadTexture(*art[k]);
+            *art[k] = (Texture2D){0};
+        }
     }
     for (int px = 0; px < 97; px++)
     {
