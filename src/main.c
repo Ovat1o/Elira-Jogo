@@ -3,6 +3,7 @@
 #include <string.h>
 #include "funcoes.h"
 #include "invasao.h"
+#include "iafight.h"
 
 static bool TryUseAssetBase(const char *baseDirectory)
 {
@@ -58,7 +59,11 @@ static bool ValidateRequiredAssets(void)
         "assets/sprites/invasao/boss_1990.png",
         "assets/sprites/invasao/boss_2008.png",
         "assets/sprites/invasao/boss_2026.png",
-        "assets/sprites/invasao/boss_2048.png"
+        "assets/sprites/invasao/boss_2048.png",
+        IAF_ELIRA_ATLAS,
+        IAF_CLAUDE_ATLAS,
+        IAF_CODEX_ATLAS,
+        IAF_ANTI_ATLAS
     };
     bool valid = true;
 
@@ -131,7 +136,7 @@ int main(int argc, char **argv)
 
         if (bgmLoaded)
         {
-            SetMusicVolume(ambientBgm, (game.musicMuted || game.screen == SCREEN_INVASION) ? 0.0f : g_musicVolume);
+            SetMusicVolume(ambientBgm, (game.musicMuted || game.screen == SCREEN_INVASION || game.screen == SCREEN_IAFIGHT) ? 0.0f : g_musicVolume);
             UpdateMusicStream(ambientBgm);
         }
 
@@ -154,7 +159,7 @@ int main(int argc, char **argv)
             game.musicMuted = !game.musicMuted;
             if (bgmLoaded)
             {
-                SetMusicVolume(ambientBgm, (game.musicMuted || game.screen == SCREEN_INVASION) ? 0.0f : g_musicVolume);
+                SetMusicVolume(ambientBgm, (game.musicMuted || game.screen == SCREEN_INVASION || game.screen == SCREEN_IAFIGHT) ? 0.0f : g_musicVolume);
             }
             SetMessage(&game, game.musicMuted ? "Musica ambiente desativada [Mudo]."
                                               : "Musica ambiente ativada.");
@@ -174,7 +179,11 @@ int main(int argc, char **argv)
                 {
                     InvEnter(&game);
                 }
-                else if (Clicked((Rectangle){86, 458, 350, 50}) || IsKeyPressed(KEY_C))
+                else if (Clicked((Rectangle){86, 458, 350, 54}) || IsKeyPressed(KEY_F) || IafPadWantsEnter())
+                {
+                    IafEnter(&game);
+                }
+                else if (Clicked((Rectangle){86, 524, 350, 50}) || IsKeyPressed(KEY_C))
                 {
                     game.screen = SCREEN_SETTINGS;
                 }
@@ -325,6 +334,9 @@ int main(int argc, char **argv)
             case SCREEN_INVASION:
                 InvUpdate(&game, delta);
                 break;
+            case SCREEN_IAFIGHT:
+                IafUpdate(&game, delta);
+                break;
             case SCREEN_FINAL_DIALOGUE:
                 UpdateFinalDialogue(&game);
                 break;
@@ -414,6 +426,9 @@ int main(int argc, char **argv)
             case SCREEN_INVASION:
                 InvDraw();
                 break;
+            case SCREEN_IAFIGHT:
+                IafDraw();
+                break;
             case SCREEN_FINAL_DIALOGUE:
                 DrawFinalDialogue(&game);
                 break;
@@ -454,6 +469,7 @@ int main(int argc, char **argv)
     UnloadRewardSprites();
     UnloadMenuCover();
     InvUnload();
+    IafUnload();
     if (bgmLoaded)
     {
         UnloadMusicStream(ambientBgm);
