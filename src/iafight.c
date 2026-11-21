@@ -54,8 +54,9 @@ static void TxtO(const char *s, float cx, float y, int px, Color c, Color o)
 }
 
 /* ------------------------------------------------------------------ Elira: atlas de luta
-   Gerado por tools/elira_build.c a partir das fichas novas (tabela fixa de recortes, escala pela
-   guarda oficial). Para trocar quadros: editar a tabela do construtor e gerar de novo. */
+   Gerado fora do repositorio a partir do pacote de sprites da Elira (grade logica 144x144, pixel art).
+   O atlas guarda os pixels da arte; o jogo amplia com IAF_ELIRA_PIX em multiplos de 0,5 e filtro
+   POINT. Escudo, rasteira e dano agachada ainda vem das fichas antigas (igualadas pela cabeca). */
 #include "iafight_elira.h"
 static Texture2D texElira;
 static int EAFrame(int anim, int i)
@@ -66,9 +67,11 @@ static int EAFrame(int anim, int i)
     return EA_FIRST[anim] + i;
 }
 /* desenha o quadro f com os pes em (x, yFeet); espelha quando face < 0 */
+static float EliraScale(float sc) { return fmaxf(0.5f, roundf(sc * IAF_ELIRA_PIX * 2) / 2); } /* pixel inteiro */
 static void DrawEF(int f, float x, float yFeet, int face, float sc, Color tint, float flash)
 {
     const EFrame *e = &EF[f];
+    sc = EliraScale(sc);
     Rectangle src = {e->x, e->y, e->w, e->h};
     float w = e->w * sc, h = e->h * sc;
     float left = face > 0 ? x - e->ax * sc : x - (e->w - e->ax) * sc;
@@ -86,6 +89,7 @@ static void DrawEF(int f, float x, float yFeet, int face, float sc, Color tint, 
 static void DrawEFC(int f, Vector2 c, int face, float sc, Color tint)
 {
     const EFrame *e = &EF[f];
+    sc = EliraScale(sc);
     Rectangle src = {e->x, e->y, e->w, e->h};
     float ax = face > 0 ? e->ax : e->w - e->ax;
     if (face < 0) src.width = -src.width;
@@ -812,54 +816,83 @@ static int AtkFrame(Fighter *a, int anim, int a0, int a1, float st, float ac, fl
     }
     return EAFrame(anim, i);
 }
+/* quadros de impacto escolhidos no pacote (o calculo automatico pega o canhao, nao o membro) */
+#define EP_PUNCH 4
+#define EP_KICK 3
+#define EP_UPPER 4 /* uppercut provisorio: inicio da vitoria, canhao subindo */
+#define EP_SHOT_LAST 11 /* ultimo quadro do tiro: sem a bala da arte (a bala e o projetil do jogo) */
+#define EP_CHARGE_TOP 8 /* disparo carregado: orbe maior na boca do canhao */
 static int EliraFrameIdx(Fighter *a, float *yoff)
 {
     *yoff = 0;
-    if (a->st == ST_KO) { float t = a->stT; return EAFrame(EA_KO, t < 0.12f ? 0 : (t < 0.4f ? 1 : 2)); }
+    if (a->st == ST_KO) return EAFrame(EA_KO, (int)(a->stT / 0.045f));
     if (a->down)
-    { /* caida: deitada e depois levantando (o ultimo quadro e a guarda) */
-        if (a->downT > 0.36f) return EAFrame(EA_KO, 2);
-        return EAFrame(EA_GETUP, (int)((1 - a->downT / 0.36f) * 3));
+    { /* caida: deitada; ao fim, levantando */
+        if (a->downT > 0.36f) return EAFrame(EA_KO, EA_COUNT[EA_KO] - 1);
+        return EAFrame(EA_GETUP, (int)((1 - a->downT / 0.36f) * EA_COUNT[EA_GETUP]));
     }
-    if (a->st == ST_LOSE) return EAFrame(EA_DEFEAT, a->stT < 0.5f ? 0 : 1);
-    if (a->st == ST_WIN)
+    if (a->st == ST_LOSE) return EAFrame(EA_DEFEAT, (int)(a->stT * 12) % EA_COUNT[EA_DEFEAT]);
+    if (a->st == ST_WIN) return EAFrame(EA_WIN, (int)(a->stT * 12));
+    if (a->st == ST_HIT)
     {
-        float t = a->stT;
-        return EAFrame(EA_WIN, t < 0.5f ? (int)(t / 0.5f * 3) : 2 + ((int)((t - 0.5f) * 2.5f) % 2));
+        if (a->hitCrouch) return EAFrame(EA_HIT_CROUCH, a->stT < 0.12f ? 0 : 1);
+        return EAFrame(EA_HIT, (int)(a->stT * 26));
     }
-    if (a->st == ST_HIT) return EAFrame(a->hitCrouch ? EA_HIT_CROUCH : EA_HIT, a->stT < 0.12f ? 0 : 1);
     if (a->st == ST_ATK)
     {
         const Atk *d = &ATK[CH_ELIRA][a->atk < AT_SPECIAL ? a->atk : 0];
+        float t = a->atkT;
         switch (a->atk)
         {
-        case AT_LIGHT: return AtkFrame(a, EA_PUNCH, 1, 1, d->st, d->ac, d->rc);
-        case AT_HEAVY: return AtkFrame(a, EA_KICK, 2, 3, d->st, d->ac, d->rc);
-        case AT_FWDH: return AtkFrame(a, EA_PUNCH, 1, 1, d->st, d->ac, d->rc);  /* soco com avanco longo */
-        case AT_UPPER: return AtkFrame(a, EA_KICK, 2, 3, d->st, d->ac, d->rc);  /* sem uppercut na arte: chute alto */
-        case AT_LOW: return AtkFrame(a, EA_SWEEP, 2, 2, d->st, d->ac, d->rc);
-        case AT_AIR: return AtkFrame(a, EA_AIRKICK, 1, 1, d->st, d->ac, d->rc);
-        case AT_SHOT: return AtkFrame(a, EA_SHOT, 3, 3, IAF_SHOT_STARTUP, IAF_SHOT_ACTIVE, IAF_SHOT_RECOVERY);
-        case AT_SPECIAL: return AtkFrame(a, EA_RAJADA, 4, 4, SP_ST[CH_ELIRA], SP_AC[CH_ELIRA], SP_RC[CH_ELIRA]);
+        case AT_LIGHT: return AtkFrame(a, EA_PUNCH, EP_PUNCH, EP_PUNCH, d->st, d->ac, d->rc);
+        case AT_HEAVY: return AtkFrame(a, EA_KICK, EP_KICK, EP_KICK + 1, d->st, d->ac, d->rc);
+        case AT_FWDH: return AtkFrame(a, EA_PUNCH_HEAVY, EA_PEAK[EA_PUNCH_HEAVY], EA_PEAK[EA_PUNCH_HEAVY], d->st, d->ac, d->rc);
+        case AT_UPPER:
+        { /* provisorio: canhao subindo (inicio da vitoria) e voltando */
+            float ac = fmaxf(d->ac, IAF_ACTIVE_VISUAL), rc = fmaxf(d->rc - (ac - d->ac), 0.02f);
+            if (t < d->st) return EAFrame(EA_WIN, (int)(t / d->st * EP_UPPER));
+            if (t < d->st + ac) return EAFrame(EA_WIN, EP_UPPER);
+            return EAFrame(EA_WIN, EP_UPPER - (int)((t - d->st - ac) / rc * EP_UPPER));
+        }
+        case AT_LOW: return AtkFrame(a, EA_SWEEP, 2, 2, d->st, d->ac, d->rc); /* provisorio: ficha antiga */
+        case AT_AIR: return AtkFrame(a, EA_KICK, EP_KICK, EP_KICK + 1, d->st, d->ac, d->rc); /* chute do pacote no ar */
+        case AT_SHOT:
+            if (t < IAF_SHOT_STARTUP) return EAFrame(EA_SHOT, EP_SHOT_LAST);                   /* mira */
+            if (t < IAF_SHOT_STARTUP + 0.09f) return EAFrame(EA_SHOT, t < IAF_SHOT_STARTUP + 0.045f ? 0 : 1); /* clarao */
+            return EAFrame(EA_SHOT, EP_SHOT_LAST);
+        case AT_SPECIAL:
+        { /* Rajada Temporal: o orbe cresce na boca do canhao durante a carga; no disparo sai o nucleo do jogo */
+            float st = SP_ST[CH_ELIRA];
+            if (t < st) return EAFrame(EA_CHARGED_SHOT, (int)(t / st * (EP_CHARGE_TOP + 1)));
+            return EAFrame(EA_CHARGED_SHOT, t < st + 0.08f ? 0 : EA_COUNT[EA_CHARGED_SHOT] - 1);
+        }
         default: break;
         }
     }
     if (a->shieldOn || a->st == ST_BLOCK)
-    { /* defesa: 1o quadro ao entrar, 2o enquanto segura, 3o ao bloquear */
+    { /* defesa (escudo aprovado): 1o quadro ao entrar, 2o enquanto segura, 3o ao bloquear */
         int anim = a->crouch ? EA_DEF_CROUCH : EA_DEF;
         if (a->shieldHit > 0) return EAFrame(anim, 2);
         return EAFrame(anim, a->shieldT < 0.08f ? 0 : 1);
     }
-    if (a->st == ST_DASH) return EAFrame(EA_WALK_F, 2);
-    if (a->st == ST_JUMP) return EAFrame(EA_JUMP, a->vy < -250 ? 0 : (a->vy < 250 ? 1 : 2));
-    if (a->crouch) return EAFrame(EA_CROUCH, a->stT < 0.07f ? 0 : 1);
+    if (a->st == ST_DASH) return EAFrame(EA_DASH, (int)(a->dashT / IAF_DASH_TIME * EA_COUNT[EA_DASH]));
+    if (a->st == ST_JUMP)
+    { /* sobe (quadros 0-6) e desce (7-13) conforme a velocidade */
+        float k = Clamp((a->vy + IAF_JUMP_SPEED) / (2 * IAF_JUMP_SPEED), 0.0f, 1.0f);
+        return EAFrame(EA_JUMP, 2 + (int)(k * (EA_COUNT[EA_JUMP] - 4)));
+    }
+    if (a->crouch)
+    {
+        if (a->stT < 0.2f) return EAFrame(EA_CROUCH, (int)(a->stT / 0.2f * EA_COUNT[EA_CROUCH]));
+        return EAFrame(EA_CROUCH_IDLE, (int)(gt * 9) % EA_COUNT[EA_CROUCH_IDLE]);
+    }
     if (a->st == ST_WALK)
     {
         bool back = (a->vx * a->face) < 0;
-        return EAFrame(back ? EA_WALK_B : EA_WALK_F, (int)(a->anim * 10) % 6);
+        int anim = back ? EA_WALK_B : EA_WALK_F;
+        return EAFrame(anim, (int)(a->anim * 12) % EA_COUNT[anim]);
     }
-    *yoff = roundf((sinf(gt * 2.4f) - 1) * 1.0f); /* respiracao: 0 a 2 px */
-    return EAFrame(EA_IDLE, 0);
+    return EAFrame(EA_IDLE, (int)(gt * 9) % EA_COUNT[EA_IDLE]); /* a parada do pacote ja respira */
 }
 
 /* ------------------------------------------------------------------ Claude: atlas de luta
@@ -1118,7 +1151,7 @@ static float AtkTotal(Fighter *a)
 }
 static Rectangle Hurt(Fighter *a)
 {
-    float w = a->ch == CH_CODEX ? 84 : 70, h = a->crouch ? 128 : (a->ch == CH_ELIRA ? 196 : 200);
+    float w = a->ch == CH_CODEX ? 84 : (a->ch == CH_ELIRA ? 76 : 70), h = a->crouch ? (a->ch == CH_ELIRA ? 132 : 128) : (a->ch == CH_ELIRA ? 214 : 200);
     if (a->ch == CH_CLAUDE) { w = 232; h = a->crouch ? 160 : 204; } /* sprite largo e baixo (corpo 240x204 na tela) */
     if (a->down || a->st == ST_KO) h = 40;
     return (Rectangle){a->x - w / 2, a->y - h, w, h};
@@ -1238,7 +1271,7 @@ static void SpawnProj(Fighter *a, bool big)
     for (int i = 0; i < IAF_MAX_PROJ; i++)
         if (!proj[i].on)
         {
-            proj[i] = (Proj){true, a->x + a->face * (big ? 140 : 96), a->y - IAF_MUZZLE_Y, a->face * (big ? 560.0f : 720.0f), Idx(a), big, false, big ? 55.0f : 70.0f, 0, 0, big ? 3 : 1};
+            proj[i] = (Proj){true, a->x + a->face * (big ? IAF_MUZZLE_X + 25 : IAF_MUZZLE_X), a->y - IAF_MUZZLE_Y, a->face * (big ? 560.0f : 720.0f), Idx(a), big, false, big ? 55.0f : 70.0f, 0, 0, big ? 3 : 1};
             return;
         }
 }
@@ -1254,7 +1287,7 @@ static void UpdateSpecial(Fighter *a, Fighter *o, float dt)
     switch (a->ch)
     {
     case CH_ELIRA:
-        if (t >= st && !a->spawned) { a->spawned = true; SpawnProj(a, true); PlaySfx(SFX_SP_FIRE); MuzzleFlash((Vector2){a->x + a->face * 120, a->y - IAF_MUZZLE_Y}, 44); a->vx = -a->face * 120; AddText((Vector2){a->x, a->y - 240}, "RAJADA TEMPORAL!", C_CYAN, 22); }
+        if (t >= st && !a->spawned) { a->spawned = true; SpawnProj(a, true); PlaySfx(SFX_SP_FIRE); MuzzleFlash((Vector2){a->x + a->face * IAF_MUZZLE_X, a->y - IAF_MUZZLE_Y}, 44); a->vx = -a->face * 120; AddText((Vector2){a->x, a->y - 240}, "RAJADA TEMPORAL!", C_CYAN, 22); }
         break;
     case CH_CLAUDE:
         if (t >= st + ac && !a->spawned && !a->countered)
@@ -1477,7 +1510,7 @@ static void UpdateFighter(Fighter *a, Fighter *o, IafInput in, float dt)
                 SpawnProj(a, false);
                 PlaySfx(SFX_SHOT);
                 a->shotCd = IAF_SHOT_COOLDOWN;
-                MuzzleFlash((Vector2){a->x + a->face * 96, a->y - IAF_MUZZLE_Y}, 26);
+                MuzzleFlash((Vector2){a->x + a->face * IAF_MUZZLE_X, a->y - IAF_MUZZLE_Y}, 26);
                 a->x -= a->face * IAF_SHOT_RECOIL; /* recuo do disparo */
             }
         }
@@ -2310,10 +2343,10 @@ static void DrawCharacterBig(CharId ch, float x, float yFeet, int face, float sc
 {
     if (ch == CH_ELIRA)
     {
-        int f = EAFrame(EA_IDLE, 0);
-        float yo = roundf((sinf(gt * 2.4f) - 1) * 1.0f) * sc;
-        if (st == ST_WIN) { f = EAFrame(EA_WIN, 2 + ((int)(gt * 2.5f) % 2)); yo = 0; }
-        if (st == ST_KO) { f = EAFrame(EA_DEFEAT, 1); yo = 0; }
+        int f = EAFrame(EA_IDLE, (int)(gt * 9) % EA_COUNT[EA_IDLE]);
+        float yo = 0;
+        if (st == ST_WIN) f = EAFrame(EA_WIN, EA_COUNT[EA_WIN] - 3 + ((int)(gt * 3) % 3));
+        if (st == ST_KO) f = EAFrame(EA_DEFEAT, (int)(gt * 12) % EA_COUNT[EA_DEFEAT]);
         DrawEF(f, x, yFeet + yo, face, sc, g_altPal ? IAF_ELIRA_ALT_TINT : WHITE, 0);
         return;
     }
@@ -2331,7 +2364,7 @@ static void DrawCharacterBig(CharId ch, float x, float yFeet, int face, float sc
 }
 static void IafEliraPortrait(Rectangle dst, int face)
 {
-    /* retrato = parte de cima da guarda oficial */
+    /* retrato = parte de cima da parada do pacote */
     const EFrame *e = &EF[EAFrame(EA_IDLE, 0)];
     Rectangle src = {e->x, e->y, e->w, e->h * 0.6f};
     float k = fminf(dst.width / src.width, dst.height / src.height);
@@ -2786,7 +2819,7 @@ void IafEnter(GameState *game)
     if (!iafLoaded)
     {
         texElira = LoadTexture(IAF_ELIRA_ATLAS);
-        SetTextureFilter(texElira, TEXTURE_FILTER_BILINEAR);
+        SetTextureFilter(texElira, TEXTURE_FILTER_POINT); /* pixel art: sem suavizar */
         texClaude = LoadTexture(IAF_CLAUDE_ATLAS);
         SetTextureFilter(texClaude, TEXTURE_FILTER_POINT); /* pixel art: sem suavizar */
         LoadIafAudio();
