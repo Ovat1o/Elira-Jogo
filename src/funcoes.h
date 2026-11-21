@@ -40,7 +40,8 @@ typedef enum GameScreen
     SCREEN_INTRO_2046,
     SCREEN_TERMINAL_2046,
     SCREEN_RESULT_2046,
-    SCREEN_INVASION     /* Modo Invasao (src/invasao.c); manter sempre por ultimo */
+    SCREEN_INVASION,    /* Modo Invasao (src/invasao.c) */
+    SCREEN_IAFIGHT      /* Modo IA FIGHT (src/iafight.c); manter os modos extras sempre por ultimo */
 } GameScreen;
 
 /* --- SALA 2048 (identificadores com sufixo 2046 por historico): subestados, arquivos e desfechos do terminal --- */
