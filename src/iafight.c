@@ -54,8 +54,9 @@ static void TxtO(const char *s, float cx, float y, int px, Color c, Color o)
 }
 
 /* ------------------------------------------------------------------ Elira: atlas de luta
-   Gerado por tools/elira_build.c a partir das fichas novas (tabela fixa de recortes, escala pela
-   guarda oficial). Para trocar quadros: editar a tabela do construtor e gerar de novo. */
+   Gerado fora do repositorio a partir do pacote de sprites da Elira (grade logica 144x144, pixel art).
+   O atlas guarda os pixels da arte; o jogo amplia com IAF_ELIRA_PIX em multiplos de 0,5 e filtro
+   POINT. Escudo, rasteira e dano agachada ainda vem das fichas antigas (igualadas pela cabeca). */
 #include "iafight_elira.h"
 static Texture2D texElira;
 static int EAFrame(int anim, int i)
@@ -66,9 +67,11 @@ static int EAFrame(int anim, int i)
     return EA_FIRST[anim] + i;
 }
 /* desenha o quadro f com os pes em (x, yFeet); espelha quando face < 0 */
+static float EliraScale(float sc) { return fmaxf(0.5f, roundf(sc * IAF_ELIRA_PIX * 2) / 2); } /* pixel inteiro */
 static void DrawEF(int f, float x, float yFeet, int face, float sc, Color tint, float flash)
 {
     const EFrame *e = &EF[f];
+    sc = EliraScale(sc);
     Rectangle src = {e->x, e->y, e->w, e->h};
     float w = e->w * sc, h = e->h * sc;
     float left = face > 0 ? x - e->ax * sc : x - (e->w - e->ax) * sc;
@@ -86,6 +89,7 @@ static void DrawEF(int f, float x, float yFeet, int face, float sc, Color tint, 
 static void DrawEFC(int f, Vector2 c, int face, float sc, Color tint)
 {
     const EFrame *e = &EF[f];
+    sc = EliraScale(sc);
     Rectangle src = {e->x, e->y, e->w, e->h};
     float ax = face > 0 ? e->ax : e->w - e->ax;
     if (face < 0) src.width = -src.width;
@@ -137,12 +141,12 @@ static const Atk ATK[CH_N][AT_SPECIAL] = {
                   {0.06f, 0.15f, 0.10f, 60, 120, 120, 74, 0.34f, 170, 2},   /* aereo: chute alto */
                   {0.22f, 0.10f, 0.32f, 105, 126, 120, 46, 0.48f, 330, 0},  /* soco longo */
                   {0.09f, 0.13f, 0.34f, 80, 110, 300, 270, 0.50f, 120, 0}}, /* uppercut */
-    [CH_ANTI] = {{0}, {0.07f, 0.08f, 0.14f, 44, 116, 176, 46, 0.28f, 160, 0},
-                 {0.16f, 0.10f, 0.28f, 100, 140, 210, 80, 0.44f, 300, 0},
-                 {0.09f, 0.09f, 0.20f, 45, 134, 46, 46, 0.30f, 150, 1},
-                 {0.05f, 0.18f, 0.10f, 55, 104, 150, 90, 0.32f, 160, 2},
-                 {0.20f, 0.10f, 0.30f, 92, 160, 176, 50, 0.44f, 320, 0},
-                 {0.08f, 0.14f, 0.32f, 78, 126, 300, 270, 0.50f, 120, 0}},
+    [CH_ANTI] = {{0}, {0.07f, 0.08f, 0.14f, 48, 158, 175, 80, 0.28f, 160, 0}, /* alcances na ponta do golpe do sprite (2,5x) */
+                 {0.16f, 0.10f, 0.28f, 92, 160, 200, 110, 0.44f, 300, 0},  /* chute */
+                 {0.09f, 0.09f, 0.20f, 45, 152, 60, 56, 0.30f, 150, 1},     /* low kick */
+                 {0.05f, 0.18f, 0.10f, 26, 140, 110, 140, 0.32f, 160, 2},   /* ground slam: de cima para baixo */
+                 {0.20f, 0.10f, 0.30f, 65, 160, 190, 90, 0.44f, 320, 0},    /* heavy punch */
+                 {0.08f, 0.14f, 0.32f, 32, 150, 320, 300, 0.50f, 120, 0}},  /* uppercut (heavy punch subindo) */
 };
 /* especiais: preparo / janela ativa / recuperacao */
 static const float SP_ST[CH_N] = {0.42f, 0.08f, 0.14f, 0.22f};
@@ -344,6 +348,7 @@ static void BlockSpark(Vector2 p, Color c, int dir)
 static bool g_altPal = false; /* ligado enquanto desenha o lutador da direita num espelho */
 #define IAF_ELIRA_ALT_TINT ((Color){255, 178, 140, 255})
 #define IAF_CLAUDE_ALT_TINT ((Color){150, 196, 255, 255}) /* sprite do Claude no espelho: tom frio */
+#define IAF_ANTI_ALT_TINT ((Color){120, 110, 255, 255})   /* sprite do Antigravity no espelho: arco-iris puxado para o violeta */
 static Color AltCol(Color c)
 { /* gira o matiz e mantem brilho/saturacao */
     Vector3 h = ColorToHSV(c);
@@ -802,7 +807,7 @@ static int AtkFrame(Fighter *a, int anim, int a0, int a1, float st, float ac, fl
 {
     int n = EA_COUNT[anim], i;
     float t = a->atkT;
-    if (ac < IAF_ACTIVE_VISUAL) { rc = fmaxf(rc - (IAF_ACTIVE_VISUAL - ac), 0.02f); ac = IAF_ACTIVE_VISUAL; } /* segura o impacto */
+    if (ac < IAF_ELIRA_ACTIVE_VISUAL) { rc = fmaxf(rc - (IAF_ELIRA_ACTIVE_VISUAL - ac), 0.02f); ac = IAF_ELIRA_ACTIVE_VISUAL; } /* segura o impacto */
     if (t < st) i = a0 > 0 ? (int)(t / st * a0) : 0;
     else if (t < st + ac) i = a0 + (a1 > a0 ? (int)((t - st) / ac * (a1 - a0 + 1)) : 0);
     else
@@ -812,54 +817,83 @@ static int AtkFrame(Fighter *a, int anim, int a0, int a1, float st, float ac, fl
     }
     return EAFrame(anim, i);
 }
+/* quadros de impacto escolhidos no pacote (o calculo automatico pega o canhao, nao o membro) */
+#define EP_PUNCH 4
+#define EP_KICK 3
+#define EP_UPPER 4 /* uppercut provisorio: inicio da vitoria, canhao subindo */
+#define EP_SHOT_LAST 11 /* ultimo quadro do tiro: sem a bala da arte (a bala e o projetil do jogo) */
+#define EP_CHARGE_TOP 8 /* disparo carregado: orbe maior na boca do canhao */
 static int EliraFrameIdx(Fighter *a, float *yoff)
 {
     *yoff = 0;
-    if (a->st == ST_KO) { float t = a->stT; return EAFrame(EA_KO, t < 0.12f ? 0 : (t < 0.4f ? 1 : 2)); }
+    if (a->st == ST_KO) return EAFrame(EA_KO, (int)(a->stT / 0.045f));
     if (a->down)
-    { /* caida: deitada e depois levantando (o ultimo quadro e a guarda) */
-        if (a->downT > 0.36f) return EAFrame(EA_KO, 2);
-        return EAFrame(EA_GETUP, (int)((1 - a->downT / 0.36f) * 3));
+    { /* caida: deitada; ao fim, levantando */
+        if (a->downT > 0.36f) return EAFrame(EA_KO, EA_COUNT[EA_KO] - 1);
+        return EAFrame(EA_GETUP, (int)((1 - a->downT / 0.36f) * EA_COUNT[EA_GETUP]));
     }
-    if (a->st == ST_LOSE) return EAFrame(EA_DEFEAT, a->stT < 0.5f ? 0 : 1);
-    if (a->st == ST_WIN)
+    if (a->st == ST_LOSE) return EAFrame(EA_DEFEAT, (int)(a->stT * 12) % EA_COUNT[EA_DEFEAT]);
+    if (a->st == ST_WIN) return EAFrame(EA_WIN, (int)(a->stT * 12));
+    if (a->st == ST_HIT)
     {
-        float t = a->stT;
-        return EAFrame(EA_WIN, t < 0.5f ? (int)(t / 0.5f * 3) : 2 + ((int)((t - 0.5f) * 2.5f) % 2));
+        if (a->hitCrouch) return EAFrame(EA_HIT_CROUCH, a->stT < 0.12f ? 0 : 1);
+        return EAFrame(EA_HIT, (int)(a->stT * 26));
     }
-    if (a->st == ST_HIT) return EAFrame(a->hitCrouch ? EA_HIT_CROUCH : EA_HIT, a->stT < 0.12f ? 0 : 1);
     if (a->st == ST_ATK)
     {
         const Atk *d = &ATK[CH_ELIRA][a->atk < AT_SPECIAL ? a->atk : 0];
+        float t = a->atkT;
         switch (a->atk)
         {
-        case AT_LIGHT: return AtkFrame(a, EA_PUNCH, 1, 1, d->st, d->ac, d->rc);
-        case AT_HEAVY: return AtkFrame(a, EA_KICK, 2, 3, d->st, d->ac, d->rc);
-        case AT_FWDH: return AtkFrame(a, EA_PUNCH, 1, 1, d->st, d->ac, d->rc);  /* soco com avanco longo */
-        case AT_UPPER: return AtkFrame(a, EA_KICK, 2, 3, d->st, d->ac, d->rc);  /* sem uppercut na arte: chute alto */
-        case AT_LOW: return AtkFrame(a, EA_SWEEP, 2, 2, d->st, d->ac, d->rc);
-        case AT_AIR: return AtkFrame(a, EA_AIRKICK, 1, 1, d->st, d->ac, d->rc);
-        case AT_SHOT: return AtkFrame(a, EA_SHOT, 3, 3, IAF_SHOT_STARTUP, IAF_SHOT_ACTIVE, IAF_SHOT_RECOVERY);
-        case AT_SPECIAL: return AtkFrame(a, EA_RAJADA, 4, 4, SP_ST[CH_ELIRA], SP_AC[CH_ELIRA], SP_RC[CH_ELIRA]);
+        case AT_LIGHT: return AtkFrame(a, EA_PUNCH, EP_PUNCH, EP_PUNCH, d->st, d->ac, d->rc);
+        case AT_HEAVY: return AtkFrame(a, EA_KICK, EP_KICK, EP_KICK + 1, d->st, d->ac, d->rc);
+        case AT_FWDH: return AtkFrame(a, EA_PUNCH_HEAVY, EA_PEAK[EA_PUNCH_HEAVY], EA_PEAK[EA_PUNCH_HEAVY], d->st, d->ac, d->rc);
+        case AT_UPPER:
+        { /* provisorio: canhao subindo (inicio da vitoria) e voltando */
+            float ac = fmaxf(d->ac, IAF_ELIRA_ACTIVE_VISUAL), rc = fmaxf(d->rc - (ac - d->ac), 0.02f);
+            if (t < d->st) return EAFrame(EA_WIN, (int)(t / d->st * EP_UPPER));
+            if (t < d->st + ac) return EAFrame(EA_WIN, EP_UPPER);
+            return EAFrame(EA_WIN, EP_UPPER - (int)((t - d->st - ac) / rc * EP_UPPER));
+        }
+        case AT_LOW: return AtkFrame(a, EA_SWEEP, 2, 2, d->st, d->ac, d->rc); /* provisorio: ficha antiga */
+        case AT_AIR: return AtkFrame(a, EA_KICK, EP_KICK, EP_KICK + 1, d->st, d->ac, d->rc); /* chute do pacote no ar */
+        case AT_SHOT:
+            if (t < IAF_SHOT_STARTUP) return EAFrame(EA_SHOT, EP_SHOT_LAST);                   /* mira */
+            if (t < IAF_SHOT_STARTUP + 0.09f) return EAFrame(EA_SHOT, t < IAF_SHOT_STARTUP + 0.045f ? 0 : 1); /* clarao */
+            return EAFrame(EA_SHOT, EP_SHOT_LAST);
+        case AT_SPECIAL:
+        { /* Rajada Temporal: o orbe cresce na boca do canhao durante a carga; no disparo sai o nucleo do jogo */
+            float st = SP_ST[CH_ELIRA];
+            if (t < st) return EAFrame(EA_CHARGED_SHOT, (int)(t / st * (EP_CHARGE_TOP + 1)));
+            return EAFrame(EA_CHARGED_SHOT, t < st + 0.08f ? 0 : EA_COUNT[EA_CHARGED_SHOT] - 1);
+        }
         default: break;
         }
     }
     if (a->shieldOn || a->st == ST_BLOCK)
-    { /* defesa: 1o quadro ao entrar, 2o enquanto segura, 3o ao bloquear */
+    { /* defesa (escudo aprovado): 1o quadro ao entrar, 2o enquanto segura, 3o ao bloquear */
         int anim = a->crouch ? EA_DEF_CROUCH : EA_DEF;
         if (a->shieldHit > 0) return EAFrame(anim, 2);
         return EAFrame(anim, a->shieldT < 0.08f ? 0 : 1);
     }
-    if (a->st == ST_DASH) return EAFrame(EA_WALK_F, 2);
-    if (a->st == ST_JUMP) return EAFrame(EA_JUMP, a->vy < -250 ? 0 : (a->vy < 250 ? 1 : 2));
-    if (a->crouch) return EAFrame(EA_CROUCH, a->stT < 0.07f ? 0 : 1);
+    if (a->st == ST_DASH) return EAFrame(EA_DASH, (int)(a->dashT / IAF_DASH_TIME * EA_COUNT[EA_DASH]));
+    if (a->st == ST_JUMP)
+    { /* sobe (quadros 0-6) e desce (7-13) conforme a velocidade */
+        float k = Clamp((a->vy + IAF_JUMP_SPEED) / (2 * IAF_JUMP_SPEED), 0.0f, 1.0f);
+        return EAFrame(EA_JUMP, 2 + (int)(k * (EA_COUNT[EA_JUMP] - 4)));
+    }
+    if (a->crouch)
+    {
+        if (a->stT < 0.2f) return EAFrame(EA_CROUCH, (int)(a->stT / 0.2f * EA_COUNT[EA_CROUCH]));
+        return EAFrame(EA_CROUCH_IDLE, (int)(gt * 9) % EA_COUNT[EA_CROUCH_IDLE]);
+    }
     if (a->st == ST_WALK)
     {
         bool back = (a->vx * a->face) < 0;
-        return EAFrame(back ? EA_WALK_B : EA_WALK_F, (int)(a->anim * 10) % 6);
+        int anim = back ? EA_WALK_B : EA_WALK_F;
+        return EAFrame(anim, (int)(a->anim * 12) % EA_COUNT[anim]);
     }
-    *yoff = roundf((sinf(gt * 2.4f) - 1) * 1.0f); /* respiracao: 0 a 2 px */
-    return EAFrame(EA_IDLE, 0);
+    return EAFrame(EA_IDLE, (int)(gt * 9) % EA_COUNT[EA_IDLE]); /* a parada do pacote ja respira */
 }
 
 /* ------------------------------------------------------------------ Claude: atlas de luta
@@ -950,6 +984,100 @@ static int ClaudeFrameIdx(Fighter *a)
     if (a->crouch) return CAFrame(CA_CROUCH, (int)(a->stT / 0.035f));
     if (a->st == ST_WALK) return CALoop((a->vx * a->face) < 0 ? CA_WALK_B : CA_WALK_F, a->anim);
     return CALoop(CA_IDLE, gt);
+}
+
+/* ------------------------------------------------------------------ Antigravity: atlas de luta
+   Gerado fora do repositorio a partir do pacote de sprites (384x354 = grade nativa 128x118 em 3x).
+   O atlas guarda a grade nativa; o jogo amplia 2,5x com filtro POINT (~192 px de altura parada,
+   entre o Claude e a Elira). A flutuacao do desenho antigo continua (AntiHover). */
+#include "iafight_antigravity.h"
+static Texture2D texAnti;
+#define AG_SCALE 2.5f
+/* equilibrio do Antigravity (simulacao CPU x CPU contra Elira e Claude) */
+#define AG_WELL_SLAM_DMG 110.0f /* queda no fim do poco gravitacional */
+static int AGFrame(int anim, int i)
+{
+    int n = AA_COUNT[anim];
+    if (i < 0) i = 0;
+    if (i >= n) i = n - 1;
+    return AA_FIRST[anim] + i;
+}
+static int AGLoop(int anim, float t) { return AA_FIRST[anim] + ((int)(t / AA_DUR[anim]) % AA_COUNT[anim]); }
+static void DrawAF(int f, float x, float yFeet, int face, float sc, Color tint, float flash)
+{
+    const AFrame *e = &AF[f];
+    Rectangle src = {e->x, e->y, e->w, e->h};
+    float left = face > 0 ? x - e->ax * sc : x - (e->w - e->ax) * sc;
+    if (face < 0) src.width = -src.width;
+    Rectangle dst = {roundf(left), roundf(yFeet - e->ay * sc), e->w * sc, e->h * sc};
+    DrawTexturePro(texAnti, src, dst, (Vector2){0, 0}, 0, tint);
+    if (flash > 0)
+    {
+        BeginBlendMode(BLEND_ADDITIVE);
+        DrawTexturePro(texAnti, src, dst, (Vector2){0, 0}, 0, Fade(WHITE, flash));
+        EndBlendMode();
+    }
+}
+/* flutuacao: o "A" fica um pouco acima do chao, subindo e descendo (menos caido) */
+static float AntiHover(Fighter *a)
+{
+    if (a->st == ST_KO || a->down || a->st == ST_LOSE) return 0;
+    return 16 + 5 * sinf(gt * 2.4f);
+}
+/* golpe: preparo usa [f0, a0), ativo [a0, a1], recuperacao (a1, f1] */
+static int AntiAtkFrame(Fighter *a, int anim, int f0, int a0, int a1, int f1, float st, float ac, float rc)
+{
+    float t = a->atkT;
+    int i;
+    if (ac < IAF_ACTIVE_VISUAL) { rc = fmaxf(rc - (IAF_ACTIVE_VISUAL - ac), 0.02f); ac = IAF_ACTIVE_VISUAL; }
+    if (t < st) i = f0 + (int)(t / st * (a0 - f0));
+    else if (t < st + ac) i = a0 + (int)((t - st) / ac * (a1 - a0 + 1));
+    else i = a1 + 1 + (int)((t - st - ac) / rc * (f1 - a1));
+    if (i > f1) i = f1;
+    return AGFrame(anim, i);
+}
+static int AntiFrameIdx(Fighter *a)
+{
+    int nk = AA_COUNT[AA_KO];
+    if (a->st == ST_KO) return AGFrame(AA_KO, (int)(a->stT / AA_DUR[AA_KO]));
+    if (a->down)
+    { /* caida; ao levantar, o nocaute tocado ao contrario */
+        if (a->downT > 0.36f) return AGFrame(AA_KO, nk - 1);
+        return AGFrame(AA_KO, 7 + (int)(a->downT / 0.36f * (nk - 8)));
+    }
+    if (a->st == ST_LOSE) return AGFrame(AA_KO, nk - 1);
+    if (a->st == ST_WIN) return AGLoop(AA_VICTORY, a->stT);
+    if (a->st == ST_HIT) return AGFrame(AA_HIT, (int)(a->stT / 0.4f * AA_COUNT[AA_HIT]));
+    if (a->st == ST_ATK)
+    {
+        const Atk *d = &ATK[CH_ANTI][a->atk < AT_SPECIAL ? a->atk : 0];
+        switch (a->atk)
+        {
+        case AT_LIGHT: return AntiAtkFrame(a, AA_JAB, 0, 6, 10, 17, d->st, d->ac, d->rc);
+        case AT_HEAVY: return AntiAtkFrame(a, AA_KICK, 0, 8, 11, 21, d->st, d->ac, d->rc);
+        case AT_FWDH: return AntiAtkFrame(a, AA_HEAVY, 0, 9, 14, 21, d->st, d->ac, d->rc);
+        case AT_UPPER: return AntiAtkFrame(a, AA_HEAVY, 4, 12, 14, 21, d->st, d->ac, d->rc); /* sem uppercut no pacote: o soco que mais sobe */
+        case AT_LOW: return AntiAtkFrame(a, AA_LOWKICK, 0, 9, 12, 19, d->st, d->ac, d->rc);
+        case AT_AIR: return AntiAtkFrame(a, AA_SLAM, 10, 14, 17, 24, d->st, d->ac, d->rc); /* pula a subida: so a queda */
+        case AT_SPECIAL:
+        {
+            float tot = SP_ST[CH_ANTI] + SP_AC[CH_ANTI] + SP_RC[CH_ANTI];
+            return AGFrame(AA_SPECIAL, (int)(a->atkT / tot * AA_COUNT[AA_SPECIAL]));
+        }
+        default: break;
+        }
+    }
+    if (a->shieldOn || a->st == ST_BLOCK)
+    { /* escudo: entra (0-2) e fica nos quadros com o escudo erguido */
+        if (a->crouch) return AGFrame(AA_CROUCH, 4);
+        if (a->shieldT < 0.1f && a->st != ST_BLOCK) return AGFrame(AA_BLOCK, (int)(a->shieldT / 0.05f));
+        return AGFrame(AA_BLOCK, 2 + ((int)(a->stT / AA_DUR[AA_BLOCK]) % 13));
+    }
+    if (a->st == ST_DASH) return AGFrame(AA_DASH, (int)(a->dashT / IAF_DASH_TIME * AA_COUNT[AA_DASH]));
+    if (a->st == ST_JUMP) return AGFrame(AA_JUMP, 3 + (int)((a->vy + IAF_JUMP_SPEED) / (2 * IAF_JUMP_SPEED) * 17));
+    if (a->crouch) return AGFrame(AA_CROUCH, (int)(a->stT / AA_DUR[AA_CROUCH]) < 4 ? (int)(a->stT / AA_DUR[AA_CROUCH]) : 4);
+    if (a->st == ST_WALK) return AGLoop((a->vx * a->face) < 0 ? AA_WALK_B : AA_WALK_F, a->anim);
+    return AGLoop(AA_IDLE, gt);
 }
 
 /* ------------------------------------------------------------------ Codex: atlas de luta
@@ -1100,7 +1228,7 @@ static void DrawFighter(Fighter *a)
     float flash = a->flash > 0 ? Clamp(a->flash / 0.12f, 0.0f, 1.0f) * 0.8f : 0;
     float alt = IAF_GROUND_Y - a->y;
     float jx = a->hitShake > 0 ? (Rand01() - 0.5f) * 2 * IAF_HIT_SHAKE_PX : 0; /* tremor no impacto */
-    DrawShadow(a->x, (a->ch == CH_CLAUDE && texClaude.id ? 118 : (a->ch == CH_CODEX && texCodex.id ? 84 : 52)) - fminf(alt, 200) * 0.12f);
+    DrawShadow(a->x, (a->ch == CH_CLAUDE && texClaude.id ? 118 : (a->ch == CH_ANTI && texAnti.id ? 104 : (a->ch == CH_CODEX && texCodex.id ? 84 : 52))) - fminf(alt, 200) * 0.12f);
     if (a->inv > 0 && fmodf(a->inv, 0.1f) < 0.05f && a->st != ST_KO) return;
     if (a->st == ST_DASH)
     { /* rastro: copias apagadas para tras (sprites) e linhas de velocidade (todos) */
@@ -1110,6 +1238,7 @@ static void DrawFighter(Fighter *a)
             float gx = a->x - a->face * k * 34, al = 0.32f / k;
             if (a->ch == CH_ELIRA) { float yo; DrawEF(EliraFrameIdx(a, &yo), gx, a->y, a->face, 1.0f, Fade(c, al), 0); }
             else if (a->ch == CH_CLAUDE && texClaude.id) DrawCF(ClaudeFrameIdx(a), gx, a->y, a->face, CL_SCALE, Fade(c, al), 0);
+            else if (a->ch == CH_ANTI && texAnti.id) DrawAF(AntiFrameIdx(a), gx, a->y - AntiHover(a), a->face, AG_SCALE, Fade(c, al), 0);
             else if (a->ch == CH_CODEX && texCodex.id) DrawXF(CodexFrameIdx(a), gx, a->y, a->face, XC_SCALE, Fade(c, al), 0);
         }
         for (int l = 0; l < 6; l++)
@@ -1130,9 +1259,22 @@ static void DrawFighter(Fighter *a)
             x += (Rand01() - 0.5f) * 8 * k;
             fl = fmaxf(fl, 0.3f * k);
         }
-        DrawEF(f, x, a->y + yoff, a->face, 1.0f, a->alt ? IAF_ELIRA_ALT_TINT : WHITE, fl);
+        Color tint = a->alt ? IAF_ELIRA_ALT_TINT : WHITE;
+        if (a->st == ST_ATK && (a->atk == AT_LIGHT || a->atk == AT_HEAVY || a->atk == AT_FWDH || a->atk == AT_UPPER || a->atk == AT_LOW || a->atk == AT_AIR))
+        { /* a arte mexe pouco o corpo: no impacto ela vai 6 px a frente e deixa 2 copias apagadas para tras */
+            const Atk *d = &ATK[CH_ELIRA][a->atk];
+            float t = a->atkT - d->st, act = fmaxf(d->ac, IAF_ELIRA_ACTIVE_VISUAL);
+            if (t >= 0 && t < act + 0.06f)
+            {
+                float k = t < act ? 1.0f : 1 - (t - act) / 0.06f;
+                for (int g = 2; g >= 1; g--) DrawEF(f, x - a->face * g * 14 * k, a->y + yoff, a->face, 1.0f, Fade(FCol(a), 0.34f * k / g), 0);
+                x += a->face * 6 * k;
+            }
+        }
+        DrawEF(f, x, a->y + yoff, a->face, 1.0f, tint, fl);
     }
     else if (a->ch == CH_CLAUDE && texClaude.id) DrawCF(ClaudeFrameIdx(a), a->x + jx, a->y, a->face, CL_SCALE, a->alt ? IAF_CLAUDE_ALT_TINT : WHITE, flash);
+    else if (a->ch == CH_ANTI && texAnti.id) DrawAF(AntiFrameIdx(a), a->x + jx, a->y - AntiHover(a), a->face, AG_SCALE, a->alt ? IAF_ANTI_ALT_TINT : WHITE, flash);
     else if (a->ch == CH_CODEX && texCodex.id) DrawXF(CodexFrameIdx(a), a->x + jx, a->y, a->face, XC_SCALE, a->alt ? IAF_CODEX_ALT_TINT : WHITE, flash);
     else
     {
@@ -1141,9 +1283,9 @@ static void DrawFighter(Fighter *a)
         DrawPuppet(a->ch, a->x + jx, a->y, a->face, 1.0f, p, flash, a->vx);
         g_altPal = false;
     }
-    DrawAttackTrail(a, jx);
-    /* defesa das IAs: placa hexagonal na frente (a Elira tem quadros proprios) */
-    if (a->st == ST_BLOCK && a->ch != CH_ELIRA)
+    if (!(a->ch == CH_ANTI && texAnti.id)) DrawAttackTrail(a, jx); /* os golpes do Antigravity ja trazem o rastro no desenho */
+    /* defesa das IAs: placa hexagonal na frente (a Elira e o Antigravity tem quadros proprios) */
+    if (a->st == ST_BLOCK && a->ch != CH_ELIRA && !(a->ch == CH_ANTI && texAnti.id))
     {
         Color c = FCol(a);
         float cy = a->crouch ? a->y - 60 : a->y - 120, cx = a->x + a->face * 52;
@@ -1216,13 +1358,14 @@ static float AtkTotal(Fighter *a)
 }
 static Rectangle Hurt(Fighter *a)
 {
-    float w = a->ch == CH_CODEX ? 84 : 70, h = a->crouch ? 128 : (a->ch == CH_ELIRA ? 196 : 200);
+    float w = a->ch == CH_CODEX ? 84 : (a->ch == CH_ELIRA ? 76 : 70), h = a->crouch ? (a->ch == CH_ELIRA ? 132 : 128) : (a->ch == CH_ELIRA ? 214 : 200);
     if (a->ch == CH_CLAUDE) { w = 232; h = a->crouch ? 160 : 204; } /* sprite largo e baixo (corpo 240x204 na tela) */
+    if (a->ch == CH_ANTI) { w = 200; h = a->crouch ? 155 : 205; }   /* "A" de 225x192 na tela, flutuando ~16 px */
     if (a->ch == CH_CODEX) { w = 130; h = a->crouch ? 150 : 198; }  /* nuvem do sprite (~157 de largura; as bordas fofas nao contam) */
     if (a->down || a->st == ST_KO) h = 40;
     return (Rectangle){a->x - w / 2, a->y - h, w, h};
 }
-static float BodyHalf(Fighter *a) { return a->ch == CH_CLAUDE ? 112.0f : (a->ch == CH_CODEX ? 68.0f : 31.0f); } /* meia largura do corpo para nao se sobreporem */
+static float BodyHalf(Fighter *a) { return a->ch == CH_CLAUDE ? 112.0f : (a->ch == CH_ANTI ? 100.0f : (a->ch == CH_CODEX ? 68.0f : 31.0f)); } /* meia largura do corpo para nao se sobreporem */
 static bool Overlap(Rectangle a, Rectangle b) { return a.x < b.x + b.width && b.x < a.x + a.width && a.y < b.y + b.height && b.y < a.y + a.height; }
 static bool OnGround(Fighter *a) { return a->y >= IAF_GROUND_Y - 0.5f; }
 static void SetState(Fighter *a, FState s) { a->st = s; a->stT = 0; }
@@ -1323,7 +1466,7 @@ static void ApplyHit(Fighter *att, Fighter *def, float dmg, float stun, float pu
         HitSparks(at, att->ch == CH_ELIRA ? C_CYAN : FCol(att), 10 + (int)(dmg / 10), 420);
     }
     /* estrela de impacto no ponto do acerto (menor sobre a Elira, cujos quadros de dano ja tem efeito) */
-    ImpactSpark(at, att->ch == CH_ELIRA ? C_CYAN : FCol(att), (28 + dmg * 0.22f) * (def->ch == CH_ELIRA ? 0.6f : 1.0f));
+    ImpactSpark(at, att->ch == CH_ELIRA ? C_CYAN : FCol(att), (28 + dmg * 0.22f) * (def->ch == CH_ELIRA ? 0.6f : 1.0f) * (att->ch == CH_ELIRA ? 1.3f : 1.0f));
     hitstop = fmaxf(hitstop, HitstopFor(att));
     PlaySfx(HitstopFor(att) >= IAF_HITSTOP_HEAVY ? SFX_HEAVY : SFX_LIGHT);
     def->hitShake = hitstop;
@@ -1337,7 +1480,7 @@ static void SpawnProj(Fighter *a, bool big)
     for (int i = 0; i < IAF_MAX_PROJ; i++)
         if (!proj[i].on)
         {
-            proj[i] = (Proj){true, a->x + a->face * (big ? 140 : 96), a->y - IAF_MUZZLE_Y, a->face * (big ? 560.0f : 720.0f), Idx(a), big, false, big ? 55.0f : 70.0f, 0, 0, big ? 3 : 1};
+            proj[i] = (Proj){true, a->x + a->face * (big ? IAF_MUZZLE_X + 25 : IAF_MUZZLE_X), a->y - IAF_MUZZLE_Y, a->face * (big ? 560.0f : 720.0f), Idx(a), big, false, big ? 55.0f : 70.0f, 0, 0, big ? 3 : 1};
             return;
         }
 }
@@ -1353,7 +1496,7 @@ static void UpdateSpecial(Fighter *a, Fighter *o, float dt)
     switch (a->ch)
     {
     case CH_ELIRA:
-        if (t >= st && !a->spawned) { a->spawned = true; SpawnProj(a, true); PlaySfx(SFX_SP_FIRE); MuzzleFlash((Vector2){a->x + a->face * 120, a->y - IAF_MUZZLE_Y}, 44); a->vx = -a->face * 120; AddText((Vector2){a->x, a->y - 240}, "RAJADA TEMPORAL!", C_CYAN, 22); }
+        if (t >= st && !a->spawned) { a->spawned = true; SpawnProj(a, true); PlaySfx(SFX_SP_FIRE); MuzzleFlash((Vector2){a->x + a->face * IAF_MUZZLE_X, a->y - IAF_MUZZLE_Y}, 44); a->vx = -a->face * 120; AddText((Vector2){a->x, a->y - 240}, "RAJADA TEMPORAL!", C_CYAN, 22); }
         break;
     case CH_CLAUDE:
         if (t >= st + ac && !a->spawned && !a->countered)
@@ -1473,7 +1616,7 @@ static void UpdateWell(float dt)
         {
             HitSparks((Vector2){well.x, well.y}, C_VIOLET, 30, 500);
             AddText((Vector2){well.x, well.y - 120}, "QUEDA LIVRE!", C_VIOLET, 24);
-            ApplyHit(a, o, 130, 0.7f, 120, 0, (Vector2){o->x, o->y - 100}, true, true);
+            ApplyHit(a, o, AG_WELL_SLAM_DMG, 0.7f, 120, 0, (Vector2){o->x, o->y - 100}, true, true);
             o->vy = 900; /* derrubada para baixo */
         }
         well.on = false;
@@ -1548,6 +1691,7 @@ static void UpdateFighter(Fighter *a, Fighter *o, IafInput in, float dt)
             float win = d->st + d->ac, t0 = a->atkT - dt;
             float adv = a->atk == AT_LIGHT ? IAF_LUNGE_LIGHT : (a->atk == AT_HEAVY ? IAF_LUNGE_HEAVY : (a->atk == AT_FWDH ? IAF_LUNGE_FWDH : (a->atk == AT_UPPER ? IAF_LUNGE_LIGHT : IAF_LUNGE_LOW)));
             if (a->ch == CH_CODEX) adv *= XC_LUNGE_MULT; /* pressao curta: entra no golpe com o corpo todo */
+            if (a->ch == CH_ELIRA) adv *= IAF_ELIRA_LUNGE_MUL; /* arte com pouco movimento: avanca mais */
             if (t0 < win) a->x += a->face * adv * fminf(dt, win - t0) / win;
         }
         if (ground && a->ch == CH_CLAUDE && (a->atk == AT_FWDH || a->atk == AT_HEAVY) && OnGround(o) && o->st != ST_KO)
@@ -1579,7 +1723,7 @@ static void UpdateFighter(Fighter *a, Fighter *o, IafInput in, float dt)
                 SpawnProj(a, false);
                 PlaySfx(SFX_SHOT);
                 a->shotCd = IAF_SHOT_COOLDOWN;
-                MuzzleFlash((Vector2){a->x + a->face * 96, a->y - IAF_MUZZLE_Y}, 26);
+                MuzzleFlash((Vector2){a->x + a->face * IAF_MUZZLE_X, a->y - IAF_MUZZLE_Y}, 26);
                 a->x -= a->face * IAF_SHOT_RECOIL; /* recuo do disparo */
             }
         }
@@ -1620,7 +1764,11 @@ static void UpdateFighter(Fighter *a, Fighter *o, IafInput in, float dt)
             StartAtk(a, AT_UPPER);
             break;
         }
-        if ((in.lightP || in.heavyP) && !a->airAtkUsed) { a->airAtkUsed = true; a->atk = AT_AIR; a->atkT = 0; a->hitDone = false; a->st = ST_ATK; a->stT = 0; }
+        if ((in.lightP || in.heavyP) && !a->airAtkUsed)
+        {
+            a->airAtkUsed = true; a->atk = AT_AIR; a->atkT = 0; a->hitDone = false; a->st = ST_ATK; a->stT = 0;
+            if (a->ch == CH_ANTI) a->vy = fmaxf(a->vy, IAF_ANTI_SLAM_VY); /* ground slam: mergulha com a gravidade */
+        }
         break;
     default: /* parado / andando / agachado */
         a->crouch = ground && in.down;
@@ -1682,9 +1830,9 @@ static void UpdateFighter(Fighter *a, Fighter *o, IafInput in, float dt)
     if (!held)
     {
         float g = IAF_GRAVITY;
-        if (a->ch == CH_ANTI && !ground && in.up && a->vy > 0 && a->hoverT < 0.9f) { g = IAF_GRAVITY * 0.12f; a->hoverT += dt; } /* plana */
+        if (a->ch == CH_ANTI && a->st == ST_JUMP && !ground && in.up && a->vy > 0 && a->hoverT < 0.9f) { g = IAF_GRAVITY * 0.12f; a->hoverT += dt; } /* plana */
         if (!ground || a->vy < 0) a->vy += g * dt;
-        if (a->ch == CH_ANTI && !ground && in.up && a->vy > 120 && a->hoverT < 0.9f) a->vy = 120;
+        if (a->ch == CH_ANTI && a->st == ST_JUMP && !ground && in.up && a->vy > 120 && a->hoverT < 0.9f) a->vy = 120;
         a->x += a->vx * dt;
         a->y += a->vy * dt;
         if (a->y >= IAF_GROUND_Y)
@@ -2412,10 +2560,10 @@ static void DrawCharacterBig(CharId ch, float x, float yFeet, int face, float sc
 {
     if (ch == CH_ELIRA)
     {
-        int f = EAFrame(EA_IDLE, 0);
-        float yo = roundf((sinf(gt * 2.4f) - 1) * 1.0f) * sc;
-        if (st == ST_WIN) { f = EAFrame(EA_WIN, 2 + ((int)(gt * 2.5f) % 2)); yo = 0; }
-        if (st == ST_KO) { f = EAFrame(EA_DEFEAT, 1); yo = 0; }
+        int f = EAFrame(EA_IDLE, (int)(gt * 9) % EA_COUNT[EA_IDLE]);
+        float yo = 0;
+        if (st == ST_WIN) f = EAFrame(EA_WIN, EA_COUNT[EA_WIN] - 3 + ((int)(gt * 3) % 3));
+        if (st == ST_KO) f = EAFrame(EA_DEFEAT, (int)(gt * 12) % EA_COUNT[EA_DEFEAT]);
         DrawEF(f, x, yFeet + yo, face, sc, g_altPal ? IAF_ELIRA_ALT_TINT : WHITE, 0);
         return;
     }
@@ -2431,6 +2579,14 @@ static void DrawCharacterBig(CharId ch, float x, float yFeet, int face, float sc
         DrawXF(f, x, yFeet, face, fmaxf(1.0f, roundf(XC_SCALE * sc * 0.75f * 2) / 2), g_altPal ? IAF_CODEX_ALT_TINT : WHITE, 0);
         return;
     }
+    if (ch == CH_ANTI && texAnti.id)
+    { /* mesma regra: escala em passos de 0,5 */
+        int f = st == ST_WIN ? AGLoop(AA_VICTORY, gt) : (st == ST_KO ? AGFrame(AA_KO, AA_COUNT[AA_KO] - 1) : AGLoop(AA_IDLE, gt));
+        float s2 = fmaxf(1.0f, roundf(AG_SCALE * sc * 0.75f * 2) / 2);
+        float hov = st == ST_KO ? 0 : (16 + 5 * sinf(gt * 2.4f)) * s2 / AG_SCALE;
+        DrawAF(f, x, yFeet - hov, face, s2, g_altPal ? IAF_ANTI_ALT_TINT : WHITE, 0);
+        return;
+    }
     Fighter tmp;
     memset(&tmp, 0, sizeof tmp);
     tmp.ch = ch; tmp.st = st; tmp.face = face; tmp.x = x;
@@ -2439,7 +2595,7 @@ static void DrawCharacterBig(CharId ch, float x, float yFeet, int face, float sc
 }
 static void IafEliraPortrait(Rectangle dst, int face)
 {
-    /* retrato = parte de cima da guarda oficial */
+    /* retrato = parte de cima da parada do pacote */
     const EFrame *e = &EF[EAFrame(EA_IDLE, 0)];
     Rectangle src = {e->x, e->y, e->w, e->h * 0.6f};
     float k = fminf(dst.width / src.width, dst.height / src.height);
@@ -2894,9 +3050,11 @@ void IafEnter(GameState *game)
     if (!iafLoaded)
     {
         texElira = LoadTexture(IAF_ELIRA_ATLAS);
-        SetTextureFilter(texElira, TEXTURE_FILTER_BILINEAR);
+        SetTextureFilter(texElira, TEXTURE_FILTER_POINT); /* pixel art: sem suavizar */
         texClaude = LoadTexture(IAF_CLAUDE_ATLAS);
         SetTextureFilter(texClaude, TEXTURE_FILTER_POINT); /* pixel art: sem suavizar */
+        texAnti = LoadTexture(IAF_ANTI_ATLAS); /* sem o arquivo, id = 0 e volta o desenho antigo */
+        SetTextureFilter(texAnti, TEXTURE_FILTER_POINT);
         texCodex = LoadTexture(IAF_CODEX_ATLAS);
         SetTextureFilter(texCodex, TEXTURE_FILTER_POINT);
         LoadIafAudio();
@@ -2990,6 +3148,6 @@ bool IafPadWantsEnter(void)
 
 void IafUnload(void)
 {
-    if (iafLoaded) { UnloadTexture(texElira); if (texClaude.id) UnloadTexture(texClaude); texClaude = (Texture2D){0}; if (texCodex.id) UnloadTexture(texCodex); texCodex = (Texture2D){0};UnloadIafAudio(); }
+    if (iafLoaded) { UnloadTexture(texElira); if (texClaude.id) UnloadTexture(texClaude); texClaude = (Texture2D){0}; if (texAnti.id) UnloadTexture(texAnti); texAnti = (Texture2D){0}; if (texCodex.id) UnloadTexture(texCodex); texCodex = (Texture2D){0};UnloadIafAudio(); }
     iafLoaded = false;
 }
