@@ -60,6 +60,7 @@ static const ArenaDef ARENAS[] = {
 };
 #define AR_DEFS ((int)(sizeof ARENAS / sizeof ARENAS[0]))
 static Texture2D arTex[AR_DEFS][AL_N];
+static RenderTexture2D arPrevRT[AR_DEFS]; /* retrato das arenas desenhadas no codigo (tela de selecao) */
 static int arPick = 0;            /* arena marcada na tela de selecao (indice em ARENAS); a revanche mantem */
 static int arCur = 0;             /* arena da luta atual */
 static int arArena = AR_PNG;      /* como a arena da luta e desenhada (ARENAS[arCur].kind) */
@@ -89,6 +90,11 @@ static void ArenaLoadAssets(void)
 }
 static void ArenaUnloadAssets(void)
 {
+    for (int i = 0; i < AR_DEFS; i++)
+    {
+        if (arPrevRT[i].id) UnloadRenderTexture(arPrevRT[i]);
+        arPrevRT[i] = (RenderTexture2D){0};
+    }
     for (int i = 0; i < AR_DEFS; i++)
         for (int l = 0; l < AL_N; l++)
         {
@@ -540,6 +546,28 @@ static void DrawStageFloor(void)
     DrawFloorLines();
 }
 
+/* retrato de cada arena desenhada no codigo para a tela de selecao (so quando IAF_ARENAS_DESENHADAS = 1);
+   chamado em IafEnter, fora do desenho do quadro */
+static void ArenaBakePreviews(void)
+{
+    int keepKind = arArena, keepCur = arCur;
+    for (int i = 0; i < AR_DEFS; i++)
+    {
+        if (ARENAS[i].kind == AR_PNG || arPrevRT[i].id) continue;
+        arPrevRT[i] = LoadRenderTexture(SCREEN_WIDTH / 2, SCREEN_HEIGHT / 2);
+        arArena = ARENAS[i].kind; arCur = i;
+        Camera2D cam = {0};
+        cam.zoom = 0.5f;
+        BeginTextureMode(arPrevRT[i]);
+        ClearBackground(C_BG);
+        BeginMode2D(cam);
+        DrawStage();
+        DrawStageFloor();
+        EndMode2D();
+        EndTextureMode();
+    }
+    arArena = keepKind; arCur = keepCur;
+}
 /* camada da frente (opcional), por cima dos lutadores; chamada depois de desenhar os dois */
 static void DrawStageFront(void)
 {
