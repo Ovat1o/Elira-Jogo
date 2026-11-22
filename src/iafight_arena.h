@@ -48,6 +48,9 @@ typedef struct { const char *name, *tag; const char *file[AL_N]; int kind; } Are
                        AR_DIR "arena_" n "_plateia_2.png", AR_DIR "arena_" n "_chao.png", AR_DIR "arena_" n "_frente.png"}
 #define AR_IMAGEM(f) {AR_DIR f, NULL, NULL, NULL, NULL, NULL}
 #define AR_EM_BREVE {"EM CONSTRUÇÃO", "uma arena nova está sendo desenhada", {NULL}, AR_PNG}
+/* PENDENTE (quando as outras arenas chegarem): cartao ALEATORIA ("?") no fim da fileira. Ideia: uma linha
+   com kind AR_RANDOM; em ArenaConfirm, guardar arPick = -1; em ArenaSortear, se arPick < 0, sortear entre as
+   linhas destravadas (ArenaLocked falso). Na miniatura, um "?" sobre o chiado. */
 static const ArenaDef ARENAS[] = {
     {"POSTO VICE 2026", "posto de gasolina ao entardecer, em 2026", AR_IMAGEM("arena_vice2026.png"), AR_PNG},
     AR_EM_BREVE,

@@ -3046,10 +3046,10 @@ static void DrawSelectScreen(bool vs)
 /* ------------------------------------------------------------------ selecao de arena
    Depois dos lutadores (1 x CPU, 1 x 1 e treino) e antes do VS: cartoes grandes com miniatura e nome, e a
    previa grande da arena marcada. Cartao travado (EM BREVE) nao confirma e toca o som de negado.
-   No 1 x 1 o cursor e dos dois jogadores: quem confirmar primeiro escolhe. B / ESC volta aos lutadores. */
+   No 1 x 1 quem escolhe e sempre o P1; o P2 so pode voltar aos lutadores (B / 2), para trocar o dele.
+   B / ESC volta aos lutadores. */
 static int arSel = 0;         /* cartao marcado */
 static float arDenyT = 0;     /* > 0: tremor do cartao travado que tentaram escolher */
-static int arDecider = -1;    /* 1 x 1: quem escolheu a arena (0 = P1, 1 = P2) */
 static Vector2 arMouseLast;
 static Rectangle ArenaCard(int i)
 {
@@ -3121,7 +3121,7 @@ static void DrawArenaSelect(void)
     bool locked = ArenaLocked(arSel);
     DrawBackdrop(C_CYAN);
     TxtO("ESCOLHA A ARENA", SCREEN_WIDTH / 2.0f, 14, 48, C_WHITE, C_INK);
-    const char *sub = trainMode ? "TREINO" : (versusMode ? "1 x 1  -  P1 ou P2: quem confirmar primeiro escolhe" : "1 JOGADOR x CPU  -  a arena vale para todo o arcade");
+    const char *sub = trainMode ? "TREINO" : (versusMode ? "1 x 1  -  o P1 escolhe a arena  (P2: B volta aos lutadores)" : "1 JOGADOR x CPU  -  a arena vale para todo o arcade");
     TxtC(sub, SCREEN_WIDTH / 2.0f, 68, 16, trainMode ? C_GREEN : C_CYAN);
     /* previa grande, com os dois lutadores na escala da luta */
     Rectangle pv = AR_PREVIEW;
@@ -3160,7 +3160,7 @@ static void DrawArenaSelect(void)
         TxtC(nm, c.x + c.width / 2, c.y + c.height - 32, 18, lk ? C_DIM : (on ? C_WHITE : Fade(C_WHITE, 0.75f)));
         if (on)
         { /* cursor: quem pode mexer nele */
-            const char *tag = versusMode ? "1P  2P" : "1P";
+            const char *tag = "1P";
             float tw = TxtW(tag, 16) + 14;
             DrawRectangleRec((Rectangle){c.x, c.y - 22, tw, 22}, lk ? C_RED : C_CYAN);
             TxtC(tag, c.x + tw / 2, c.y - 19, 16, C_INK);
@@ -3169,12 +3169,11 @@ static void DrawArenaSelect(void)
     if (arDenyT > 0) TxtO("ARENA TRAVADA", SCREEN_WIDTH / 2.0f, pv.y + 22, 36, C_RED, C_INK);
     TxtC("A/D, SETAS ou CONTROLE: escolher    ENTER / A: confirmar    ESC / B: voltar aos lutadores    mouse: clicar", SCREEN_WIDTH / 2.0f, SCREEN_HEIGHT - 22, 14, C_DIM);
 }
-/* confirma o cartao marcado (p = jogador que confirmou no 1 x 1); travado: nega */
-static void ArenaConfirm(int p)
+/* confirma o cartao marcado; travado: nega */
+static void ArenaConfirm(void)
 {
     if (ArenaLocked(arSel)) { arDenyT = 0.3f; PlaySfx(SFX_DENY); return; }
     arPick = arSel;
-    arDecider = p;
     iafScreen = SC_VERSUS;
     scT = 0;
 }
@@ -3190,17 +3189,12 @@ static void UpdateArenaSelect(float dt)
     if (arDenyT > 0) arDenyT -= dt;
     int mv = 0;
     bool ok = false, back = false;
-    int who = 0;
     if (versusMode)
-    { /* os dois mexem no mesmo cursor */
-        for (int p = 0; p < 2; p++)
-        {
-            if (PlayerNavP(p, PN_LEFT) || PlayerNavP(p, PN_UP)) mv = -1;
-            if (PlayerNavP(p, PN_RIGHT) || PlayerNavP(p, PN_DOWN)) mv = 1;
-            if (!ok && scT > 0.15f && PlayerNavP(p, PN_OK)) { ok = true; who = p; }
-            if (PlayerNavP(p, PN_UNDO)) back = true;
-        }
-        back = back || IsKeyPressed(KEY_ESCAPE);
+    { /* so o P1 mexe e confirma; os dois podem voltar aos lutadores */
+        if (PlayerNavP(0, PN_LEFT) || PlayerNavP(0, PN_UP)) mv = -1;
+        if (PlayerNavP(0, PN_RIGHT) || PlayerNavP(0, PN_DOWN)) mv = 1;
+        ok = scT > 0.15f && PlayerNavP(0, PN_OK);
+        back = PlayerNavP(0, PN_UNDO) || PlayerNavP(1, PN_UNDO) || IsKeyPressed(KEY_ESCAPE);
     }
     else
     {
@@ -3221,7 +3215,7 @@ static void UpdateArenaSelect(float dt)
         }
     if (back) { ArenaBack(); return; }
     if (mv) arSel = (arSel + mv + AR_DEFS) % AR_DEFS;
-    if (ok) ArenaConfirm(who);
+    if (ok) ArenaConfirm();
 }
 static void DrawSelect(void) { DrawSelectScreen(false); }
 static void UpdateSelect(void)
@@ -3272,8 +3266,7 @@ static void DrawVersus(void)
     }
     TxtO(d, SCREEN_WIDTH / 2.0f, 40, 32, C_AMBER, C_INK);
     char an[96];
-    if (versusMode && arDecider >= 0) snprintf(an, sizeof an, "ARENA: %s  (escolha do P%d)", ARENAS[arPick].name, arDecider + 1);
-    else snprintf(an, sizeof an, "ARENA: %s", ARENAS[arPick].name);
+    snprintf(an, sizeof an, "ARENA: %s", ARENAS[arPick].name);
     TxtC(an, SCREEN_WIDTH / 2.0f, 84, 18, C_WHITE);
     TxtC("ENTER / A: lutar    ESC / B: trocar a arena", SCREEN_WIDTH / 2.0f, SCREEN_HEIGHT - 30, 16, C_DIM);
 }
