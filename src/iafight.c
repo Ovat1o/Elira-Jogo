@@ -3167,7 +3167,7 @@ static void DrawArenaSelect(void)
         }
     }
     if (arDenyT > 0) TxtO("ARENA TRAVADA", SCREEN_WIDTH / 2.0f, pv.y + 22, 36, C_RED, C_INK);
-    TxtC("A/D, SETAS ou CONTROLE: escolher    ENTER / A: confirmar    ESC / B: voltar aos lutadores    mouse: clicar", SCREEN_WIDTH / 2.0f, SCREEN_HEIGHT - 22, 14, C_DIM);
+    TxtC("A/D, SETAS ou CONTROLE: escolher    ENTER / A: confirmar    ESC / B: voltar aos lutadores", SCREEN_WIDTH / 2.0f, SCREEN_HEIGHT - 22, 14, C_DIM);
 }
 /* confirma o cartao marcado; travado: nega */
 static void ArenaConfirm(void)
