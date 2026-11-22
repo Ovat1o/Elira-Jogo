@@ -2819,6 +2819,7 @@ static void DrawFight(void)
     else if (fz[1].shieldOn || fz[1].st == ST_BLOCK) first = 0;
     DrawFighter(&fz[first]);
     DrawFighter(&fz[1 - first]);
+    DrawStageFront();
     DrawProjectiles();
     DrawParts();
     if (showBoxes) DrawBoxes();
@@ -2980,12 +2981,12 @@ static void DrawSelectScreen(bool vs)
         Rectangle arBox = {SCREEN_WIDTH / 2.0f - 180.0f, 104.0f, 360.0f, 34.0f};
         Vector2 vm = GetVirtualMouse();
         bool hover = CheckCollisionPointRec(vm, arBox);
-        Color arCol = arSelected < 0 ? C_CYAN : C_AMBER;
+        Color arCol = C_AMBER;
         DrawRectangleRounded(arBox, 0.30f, 6, (Color){14, 18, 36, 240});
         DrawRectangleRoundedLinesEx(arBox, 0.30f, 6, hover ? 2.5f : 1.5f, Fade(arCol, hover ? 0.95f : 0.70f));
         char arTxt[96];
-        snprintf(arTxt, sizeof arTxt, "[Q] <  ARENA: %s  > [E]", ArenaName(arSelected));
-        TxtC(arTxt, SCREEN_WIDTH / 2.0f, arBox.y + 9.0f, 15, arSelected < 0 ? C_WHITE : C_AMBER);
+        snprintf(arTxt, sizeof arTxt, "[Q] <  ARENA: %s  > [E]", ARENAS[arPick].name);
+        TxtC(arTxt, SCREEN_WIDTH / 2.0f, arBox.y + 9.0f, 15, C_AMBER);
     }
 
     /* grade central */
@@ -3055,9 +3056,11 @@ static void DrawSelectScreen(bool vs)
 }
 static void CycleArena(int dir)
 {
-    int total = AR_COUNT + 1; /* -1 (ALEATORIA) ate AR_COUNT - 1 */
-    int idx = (arSelected + 1 + dir + total) % total;
-    arSelected = idx - 1;
+    for (int k = 0; k < AR_DEFS; k++)
+    { /* proxima arena destravada */
+        arPick = (arPick + dir + AR_DEFS) % AR_DEFS;
+        if (!ArenaLocked(arPick)) break;
+    }
     PlaySfx(SFX_MOVE);
 }
 static void UpdateArenaPickerInput(void)

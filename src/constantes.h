@@ -122,6 +122,9 @@
 /* ========================================================================= */
 /* MODO IA FIGHT (src/iafight.c) - LUTA 1x1 EM VISAO LATERAL                 */
 /* ========================================================================= */
+#ifndef IAF_ARENAS_DESENHADAS
+#define IAF_ARENAS_DESENHADAS 0 /* 1 = arenas desenhadas no codigo (Nucleo e Laboratorio 1990) voltam a tela de arenas */
+#endif
 #define IAF_ELIRA_ATLAS     "assets/sprites/iafight/elira_luta.png" /* atlas de luta da Elira */
 #define IAF_CLAUDE_ATLAS    "assets/sprites/iafight/claude_luta.png" /* atlas de luta do Claude */
 #define IAF_CODEX_ATLAS     "assets/sprites/iafight/codex_luta.png"  /* atlas de luta do Codex */

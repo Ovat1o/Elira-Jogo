@@ -25,40 +25,83 @@ static float arPrevHp[2] = {IAF_HP_MAX, IAF_HP_MAX};
 static float arLastGt = 0;
 static bool arKoSeen = false;
 
-/* arena da luta: sorteada a cada luta ou escolhida na tela de selecao (ArenaSortear, chamada em StartMatch) */
-enum { AR_NUCLEO, AR_LAB1990, AR_VICE2026, AR_COUNT };
-static int arArena = AR_NUCLEO;
-static int arSelected = -1; /* -1 = ALEATORIA, 0..AR_COUNT-1 = arena fixa */
-static const char *ArenaName(int id)
-{
-    switch (id)
-    {
-    case AR_NUCLEO:   return "ARENA DO NÚCLEO";
-    case AR_LAB1990:  return "LABORATÓRIO 1990";
-    case AR_VICE2026: return "POSTO VICE 2026";
-    default:          return "ALEATÓRIA";
-    }
-}
-static void ArenaSortear(void)
-{
-    arArena = (arSelected >= 0 && arSelected < AR_COUNT) ? arSelected : GetRandomValue(0, AR_COUNT - 1);
-}
+/* ------------------------------------------------------------------ tabela de arenas
+   Cada linha de ARENAS e um cartao da tela de selecao de arena, na ordem em que aparece.
+
+   DESTRAVAR UMA ARENA NOVA (desenhada pelo guia docs/iafight/guia_arena/GUIA_ARENA.md):
+     1. copie as camadas para assets/sprites/iafight/ com os nomes do guia:
+        arena_<nome>_fundo.png, _meio.png, _plateia.png, _chao.png e, se houver,
+        _plateia_2.png (plateia empolgada) e _frente.png (na frente dos lutadores);
+     2. troque uma linha AR_EM_BREVE por  {"NOME NA TELA", "legenda curta", AR_CAMADAS("<nome>"), AR_PNG},
+     3. (opcional) ponha a camada de fundo na lista do --verify-assets em main.c.
+   As camadas podem ter 320x180 (o jogo amplia 4x, sem suavizar) ou 1280x720. Uma arena de imagem unica,
+   como a Vice 2026, usa so a camada de fundo: AR_IMAGEM("arquivo.png"). Camada que falta e pulada; sem a
+   de fundo, o cartao continua travado (EM BREVE) e nao pode ser escolhido.
+
+   ARENAS DESENHADAS NO CODIGO (Nucleo e Laboratorio 1990): o codigo continua aqui embaixo, mas elas
+   ficam fora da selecao. Para religar, defina IAF_ARENAS_DESENHADAS 1 em constantes.h. */
+enum { AR_NUCLEO, AR_LAB1990, AR_PNG };                                   /* como a arena e desenhada */
+enum { AL_FUNDO, AL_MEIO, AL_PLATEIA, AL_PLATEIA2, AL_CHAO, AL_FRENTE, AL_N }; /* camadas do guia */
+typedef struct { const char *name, *tag; const char *file[AL_N]; int kind; } ArenaDef;
+#define AR_DIR "assets/sprites/iafight/"
+#define AR_CAMADAS(n) {AR_DIR "arena_" n "_fundo.png", AR_DIR "arena_" n "_meio.png", AR_DIR "arena_" n "_plateia.png", \
+                       AR_DIR "arena_" n "_plateia_2.png", AR_DIR "arena_" n "_chao.png", AR_DIR "arena_" n "_frente.png"}
+#define AR_IMAGEM(f) {AR_DIR f, NULL, NULL, NULL, NULL, NULL}
+#define AR_EM_BREVE {"EM CONSTRUÇÃO", "uma arena nova está sendo desenhada", {NULL}, AR_PNG}
+static const ArenaDef ARENAS[] = {
+    {"POSTO VICE 2026", "posto de gasolina ao entardecer, em 2026", AR_IMAGEM("arena_vice2026.png"), AR_PNG},
+    AR_EM_BREVE,
+    AR_EM_BREVE,
+    AR_EM_BREVE,
+#if IAF_ARENAS_DESENHADAS
+    {"ARENA DO NÚCLEO", "sala de servidores do núcleo", {NULL}, AR_NUCLEO},
+    {"LABORATÓRIO 1990", "fitas magnéticas e terminais verdes", {NULL}, AR_LAB1990},
+#endif
+};
+#define AR_DEFS ((int)(sizeof ARENAS / sizeof ARENAS[0]))
+static Texture2D arTex[AR_DEFS][AL_N];
+static int arPick = 0;            /* arena marcada na tela de selecao (indice em ARENAS); a revanche mantem */
+static int arCur = 0;             /* arena da luta atual */
+static int arArena = AR_PNG;      /* como a arena da luta e desenhada (ARENAS[arCur].kind) */
 #define AR_LINE_COL (arArena == AR_LAB1990 ? C_AMBER : C_CYAN) /* cor das linhas do piso */
 
-static Texture2D arViceBg;
-
+static bool ArenaLocked(int i) { return ARENAS[i].kind == AR_PNG && arTex[i][AL_FUNDO].id == 0; }
+/* arena da luta = a escolhida na tela de arenas (chamada em StartMatch) */
+static void ArenaSortear(void)
+{
+    if (arPick < 0 || arPick >= AR_DEFS || ArenaLocked(arPick))
+        for (arPick = 0; arPick < AR_DEFS - 1 && ArenaLocked(arPick); arPick++) { }
+    arCur = arPick;
+    arArena = ARENAS[arCur].kind;
+    if (arArena == AR_PNG && ArenaLocked(arCur)) arArena = AR_NUCLEO; /* nenhuma arena PNG no disco: volta a desenhada */
+}
 static void ArenaLoadAssets(void)
 {
-    const char *path = "assets/sprites/iafight/arena_vice2026.png";
-    if (!FileExists(path)) return;
-    arViceBg = LoadTexture(path);
-    if (arViceBg.id) SetTextureFilter(arViceBg, TEXTURE_FILTER_BILINEAR);
+    for (int i = 0; i < AR_DEFS; i++)
+        for (int l = 0; l < AL_N; l++)
+        {
+            const char *f = ARENAS[i].file[l];
+            if (!f || !FileExists(f)) continue;
+            arTex[i][l] = LoadTexture(f);
+            /* pixel art do guia (320x180) amplia sem suavizar; imagem do tamanho da tela, suave */
+            if (arTex[i][l].id) SetTextureFilter(arTex[i][l], arTex[i][l].width < SCREEN_WIDTH ? TEXTURE_FILTER_POINT : TEXTURE_FILTER_BILINEAR);
+        }
 }
-
 static void ArenaUnloadAssets(void)
 {
-    if (arViceBg.id) UnloadTexture(arViceBg);
-    arViceBg = (Texture2D){0};
+    for (int i = 0; i < AR_DEFS; i++)
+        for (int l = 0; l < AL_N; l++)
+        {
+            if (arTex[i][l].id) UnloadTexture(arTex[i][l]);
+            arTex[i][l] = (Texture2D){0};
+        }
+}
+/* uma camada esticada no retangulo (a tela inteira na luta; o cartao e a previa na selecao) */
+static void ArenaLayer(int i, int l, Rectangle dst, Color tint)
+{
+    Texture2D t = arTex[i][l];
+    if (!t.id) return;
+    DrawTexturePro(t, (Rectangle){0, 0, (float)t.width, (float)t.height}, dst, (Vector2){0, 0}, 0, tint);
 }
 
 static unsigned Hash(unsigned x) { x ^= x >> 16; x *= 0x7feb352d; x ^= x >> 15; x *= 0x846ca68b; x ^= x >> 16; return x; }
@@ -137,9 +180,8 @@ static void DrawArenaScreen(void)
     Txt("RINHA DE INTELIGÊNCIAS", scr.x + 18, scr.y + 9, 18, Fade(C_CYAN, 0.55f));
     float blink = 0.35f + 0.35f * (sinf(gt * 4) > 0 ? 1 : 0);
     DrawCircle((int)(scr.x + 24), (int)(scr.y + 39), 4, Fade(C_RED, blink));
-    const char *liveLabel = arArena == AR_VICE2026 ? "AO VIVO  //  POSTO VICE 2026"
-                          : (arArena == AR_LAB1990 ? "AO VIVO  //  LABORATÓRIO 1990"
-                                                   : "AO VIVO  //  ARENA DO NÚCLEO");
+    char liveLabel[80];
+    snprintf(liveLabel, sizeof liveLabel, "AO VIVO  //  %s", arArena == AR_PNG ? ARENAS[arCur].name : (arArena == AR_LAB1990 ? "LABORATÓRIO 1990" : "ARENA DO NÚCLEO"));
     Txt(liveLabel, scr.x + 34, scr.y + 32, 13, Fade(C_DIM, 0.6f));
     /* sinal: fica mais agitado quando a plateia se empolga */
     float amp = 6 + 10 * fmaxf(arHype, arKoT > 0 ? 1.0f : 0.0f);
@@ -460,12 +502,20 @@ static void DrawLabFront(void)
 static void DrawStage(void)
 {
     ArenaReact();
-    if (arArena == AR_VICE2026 && arViceBg.id != 0)
-    {
-        Rectangle src = {0, 0, (float)arViceBg.width, (float)arViceBg.height};
-        Rectangle dstShake = {-16, -16, (float)SCREEN_WIDTH + 32, (float)SCREEN_HEIGHT + 32};
-        DrawTexturePro(arViceBg, src, dstShake, (Vector2){0, 0}, 0, WHITE);
+    if (arArena == AR_PNG)
+    { /* camadas PNG (guia da arena): fundo, meio, plateia (empolgada nos golpes fortes, se houver), telao e chao */
+        Rectangle full = {0, 0, (float)SCREEN_WIDTH, (float)SCREEN_HEIGHT};
+        ArenaLayer(arCur, AL_FUNDO, (Rectangle){-16, -16, SCREEN_WIDTH + 32.0f, SCREEN_HEIGHT + 32.0f}, WHITE); /* borda para o tremor */
+        ArenaLayer(arCur, AL_FUNDO, full, WHITE);
+        ArenaLayer(arCur, AL_MEIO, full, WHITE);
+        bool hyped = arTex[arCur][AL_PLATEIA2].id && (arHype > 0.3f || arKoT > 0) && fmodf(gt * 6, 2) < 1;
+        ArenaLayer(arCur, hyped ? AL_PLATEIA2 : AL_PLATEIA, full, WHITE);
         DrawArenaScreen();
+        if (arTex[arCur][AL_CHAO].id)
+        {
+            ArenaLayer(arCur, AL_CHAO, (Rectangle){-16, 0, SCREEN_WIDTH + 32.0f, SCREEN_HEIGHT + 16.0f}, WHITE);
+            ArenaLayer(arCur, AL_CHAO, full, WHITE);
+        }
         return;
     }
     if (arArena == AR_LAB1990)
@@ -485,12 +535,15 @@ static void DrawStage(void)
 /* Reflexo e linhas do piso; chamado logo depois de DrawStage. */
 static void DrawStageFloor(void)
 {
-    if (arArena == AR_VICE2026 && arViceBg.id != 0)
-    {
-        return;
-    }
+    if (arArena == AR_PNG) return; /* o piso ja vem desenhado na camada */
     DrawFloorReflections();
     DrawFloorLines();
+}
+
+/* camada da frente (opcional), por cima dos lutadores; chamada depois de desenhar os dois */
+static void DrawStageFront(void)
+{
+    if (arArena == AR_PNG) ArenaLayer(arCur, AL_FRENTE, (Rectangle){0, 0, (float)SCREEN_WIDTH, (float)SCREEN_HEIGHT}, WHITE);
 }
 
 /* ------------------------------------------------------------------ HUD da luta */
