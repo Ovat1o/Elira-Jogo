@@ -210,10 +210,11 @@ static float hitstop = 0, shake = 0;
    Volume segue o do jogo: no padrao (g_musicVolume = 0,45) a musica fica em IAF_MUSIC_VOLUME e os
    efeitos em IAF_SFX_VOLUME; o mudo do jogo (tecla M) silencia tudo. Sem dispositivo de audio ou sem
    os arquivos, o modo continua funcionando em silencio. */
-enum { SFX_LIGHT, SFX_HEAVY, SFX_BLOCK, SFX_SHOT, SFX_SP_CHARGE, SFX_SP_FIRE, SFX_KO, SFX_FALL, SFX_MOVE, SFX_OK, SFX_DASH, VOX_ROUND, VOX_LUTEM, VOX_WIN, SFX_N };
+enum { SFX_LIGHT, SFX_HEAVY, SFX_BLOCK, SFX_SHOT, SFX_SP_CHARGE, SFX_SP_FIRE, SFX_KO, SFX_FALL, SFX_MOVE, SFX_OK, SFX_DASH, SFX_DENY, VOX_ROUND, VOX_LUTEM, VOX_WIN, SFX_N };
 static const char *SFX_FILE[SFX_N] = {"golpe_fraco.wav", "golpe_forte.wav", "defesa.wav", "tiro.wav", "especial_carga.wav",
                                       "especial_disparo.wav", "impacto_ko.wav", "queda.wav", "menu_mover.wav", "menu_confirmar.wav",
                                       "menu_mover.wav" /* dash: o bip do menu bem mais grave vira um whoosh */,
+                                      "defesa.wav" /* negado (arena travada): o som da defesa bem grave */,
                                       "voz_round.wav", "voz_lutem.wav", "voz_vitoria.wav"};
 #define IAF_SFX_VOICES 3 /* copias de cada efeito para sobrepor golpes seguidos */
 static Sound sfx[SFX_N][IAF_SFX_VOICES];
@@ -253,6 +254,7 @@ static void PlaySfx(int id)
     if (vol <= 0.001f) return;
     SetSoundVolume(*s, vol);
     if (id == SFX_DASH) SetSoundPitch(*s, 0.55f + Rand01() * 0.06f);
+    else if (id == SFX_DENY) SetSoundPitch(*s, 0.5f);
     else SetSoundPitch(*s, id >= VOX_ROUND || id == SFX_MOVE || id == SFX_OK ? 1.0f : 0.95f + Rand01() * 0.1f); /* golpes variam um pouco */
     PlaySound(*s);
 }
@@ -1345,7 +1347,7 @@ static void DrawFighter(Fighter *a)
    (desenho da arena e do HUD em iafight_arena.h, incluido mais abaixo, depois do estado da luta) */
 
 /* ------------------------------------------------------------------ jogo: estado */
-typedef enum { SC_MODE, SC_SELECT, SC_VERSUS, SC_FIGHT, SC_RESULT, SC_FINAL, SC_CONTROLS } IafScreen;
+typedef enum { SC_MODE, SC_SELECT, SC_ARENA, SC_VERSUS, SC_FIGHT, SC_RESULT, SC_FINAL, SC_CONTROLS } IafScreen;
 typedef enum { RS_INTRO, RS_FIGHT, RS_KO, RS_TIMEUP } RState;
 static IafScreen iafScreen = SC_SELECT;
 static int sel = 0, playerCh = CH_ELIRA;
@@ -2819,6 +2821,7 @@ static void DrawFight(void)
     else if (fz[1].shieldOn || fz[1].st == ST_BLOCK) first = 0;
     DrawFighter(&fz[first]);
     DrawFighter(&fz[1 - first]);
+    DrawStageFront();
     DrawProjectiles();
     DrawParts();
     if (showBoxes) DrawBoxes();
@@ -2975,19 +2978,6 @@ static void DrawSelectScreen(bool vs)
     else if (tr) DrawSelPanel(1, cur[1], "BONECO", C_GREEN, false, false);
     else DrawSelPanel(1, cur[1], "CPU", C_AMBER, false, false);
 
-    /* seletor de arena (entre subtitulo e grade central) */
-    {
-        Rectangle arBox = {SCREEN_WIDTH / 2.0f - 180.0f, 104.0f, 360.0f, 34.0f};
-        Vector2 vm = GetVirtualMouse();
-        bool hover = CheckCollisionPointRec(vm, arBox);
-        Color arCol = arSelected < 0 ? C_CYAN : C_AMBER;
-        DrawRectangleRounded(arBox, 0.30f, 6, (Color){14, 18, 36, 240});
-        DrawRectangleRoundedLinesEx(arBox, 0.30f, 6, hover ? 2.5f : 1.5f, Fade(arCol, hover ? 0.95f : 0.70f));
-        char arTxt[96];
-        snprintf(arTxt, sizeof arTxt, "[Q] <  ARENA: %s  > [E]", ArenaName(arSelected));
-        TxtC(arTxt, SCREEN_WIDTH / 2.0f, arBox.y + 9.0f, 15, arSelected < 0 ? C_WHITE : C_AMBER);
-    }
-
     /* grade central */
     TxtC("LUTADORES", SCREEN_WIDTH / 2.0f, 150, 16, C_DIM);
     for (int i = 0; i < CH_N; i++)
@@ -3053,35 +3043,183 @@ static void DrawSelectScreen(bool vs)
     }
     TxtC("TAB / SELECT: ver controles      ESC: voltar ao modo", SCREEN_WIDTH / 2.0f, SCREEN_HEIGHT - 26, 14, C_DIM);
 }
-static void CycleArena(int dir)
+/* ------------------------------------------------------------------ selecao de arena
+   Depois dos lutadores (1 x CPU, 1 x 1 e treino) e antes do VS: cartoes grandes com miniatura e nome, e a
+   previa grande da arena marcada. Cartao travado (EM BREVE) nao confirma e toca o som de negado.
+   No 1 x 1 quem escolhe e sempre o P1; o P2 so pode voltar aos lutadores (B / 2), para trocar o dele.
+   B / ESC volta aos lutadores. */
+static int arSel = 0;         /* cartao marcado */
+static float arDenyT = 0;     /* > 0: tremor do cartao travado que tentaram escolher */
+static Vector2 arMouseLast;
+static Rectangle ArenaCard(int i)
 {
-    int total = AR_COUNT + 1; /* -1 (ALEATORIA) ate AR_COUNT - 1 */
-    int idx = (arSelected + 1 + dir + total) % total;
-    arSelected = idx - 1;
-    PlaySfx(SFX_MOVE);
+    float gap = 24, w = fminf(236, (SCREEN_WIDTH - 80 - (AR_DEFS - 1) * gap) / AR_DEFS), h = (w - 16) * 9 / 16 + 46; /* miniatura 16:9 */
+    float x0 = SCREEN_WIDTH / 2.0f - (AR_DEFS * w + (AR_DEFS - 1) * gap) / 2;
+    return (Rectangle){x0 + i * (w + gap), 522, w, h};
 }
-static void UpdateArenaPickerInput(void)
+static Rectangle ArenaCardPic(int i)
 {
-    bool prevKey = IsKeyPressed(KEY_Q) ||
-                   (padNow[0].on && padNow[0].b[GAMEPAD_BUTTON_LEFT_TRIGGER_1] && !padPrev[0].b[GAMEPAD_BUTTON_LEFT_TRIGGER_1]);
-    bool nextKey = IsKeyPressed(KEY_E) ||
-                   (padNow[0].on && padNow[0].b[GAMEPAD_BUTTON_RIGHT_TRIGGER_1] && !padPrev[0].b[GAMEPAD_BUTTON_RIGHT_TRIGGER_1]);
-    if (prevKey) { CycleArena(-1); return; }
-    if (nextKey) { CycleArena(1); return; }
-    if (IsMouseButtonPressed(MOUSE_LEFT_BUTTON))
-    {
-        Rectangle arBox = {SCREEN_WIDTH / 2.0f - 180.0f, 104.0f, 360.0f, 34.0f};
-        Vector2 vm = GetVirtualMouse();
-        if (CheckCollisionPointRec(vm, arBox))
+    Rectangle c = ArenaCard(i);
+    return (Rectangle){c.x + 8, c.y + 8, c.width - 16, c.height - 46};
+}
+static const Rectangle AR_PREVIEW = {336, 92, 608, 342};
+static void OpenArenaSelect(void)
+{
+    arSel = arPick;
+    arDenyT = 0;
+    arMouseLast = GetVirtualMouse();
+    iafScreen = SC_ARENA;
+    scT = 0;
+}
+/* chiado de TV para a arena que ainda nao existe */
+static void DrawStatic(Rectangle r, float px, unsigned seed)
+{
+    DrawRectangleRec(r, (Color){12, 14, 28, 255});
+    int nx = (int)(r.width / px), ny = (int)(r.height / px);
+    unsigned fr = (unsigned)(gt * 10);
+    for (int y = 0; y < ny; y++)
+        for (int x = 0; x < nx; x++)
         {
-            CycleArena(vm.x < arBox.x + 80.0f ? -1 : 1);
+            float v = HashF(seed * 7919u + fr * 104729u + (unsigned)(y * 977 + x));
+            if (v > 0.6f) DrawRectangle((int)(r.x + x * px), (int)(r.y + y * px), (int)px, (int)px, Fade((Color){120, 130, 170, 255}, (v - 0.6f) * 0.9f));
+        }
+}
+static void DrawPadlock(Vector2 c, float s, Color col)
+{
+    DrawRing((Vector2){c.x, c.y - s * 0.30f}, s * 0.22f, s * 0.34f, 180, 360, 24, col); /* argola */
+    DrawRectangle((int)(c.x - s * 0.34f), (int)(c.y - s * 0.32f), (int)(s * 0.12f), (int)(s * 0.14f), col);
+    DrawRectangle((int)(c.x + s * 0.22f), (int)(c.y - s * 0.32f), (int)(s * 0.12f), (int)(s * 0.14f), col);
+    DrawRectangleRounded((Rectangle){c.x - s * 0.5f, c.y - s * 0.2f, s, s * 0.75f}, 0.2f, 4, col);
+    DrawCircleV((Vector2){c.x, c.y + s * 0.08f}, s * 0.1f, C_INK);
+    DrawRectangle((int)(c.x - s * 0.035f), (int)(c.y + s * 0.1f), (int)(s * 0.07f), (int)(s * 0.22f), C_INK);
+}
+/* a imagem da arena i no retangulo (miniatura do cartao ou previa grande) */
+static void DrawArenaPic(int i, Rectangle dst, bool big)
+{
+    if (ArenaLocked(i))
+    {
+        DrawStatic(dst, big ? 8 : 5, (unsigned)i + 1);
+        DrawPadlock((Vector2){dst.x + dst.width / 2, dst.y + dst.height * (big ? 0.42f : 0.46f)}, dst.height * (big ? 0.26f : 0.34f), Fade(C_DIM, 0.95f));
+        return;
+    }
+    if (ARENAS[i].kind != AR_PNG)
+    { /* arena desenhada no codigo: retrato feito em ArenaBakePreviews */
+        RenderTexture2D *t = &arPrevRT[i];
+        if (t->id) DrawTexturePro(t->texture, (Rectangle){0, 0, (float)t->texture.width, -(float)t->texture.height}, dst, (Vector2){0, 0}, 0, WHITE);
+        else DrawRectangleRec(dst, (Color){18, 22, 42, 255});
+        return;
+    }
+    ArenaLayer(i, AL_FUNDO, dst, WHITE);
+    ArenaLayer(i, AL_MEIO, dst, WHITE);
+    ArenaLayer(i, AL_PLATEIA, dst, WHITE);
+    ArenaLayer(i, AL_CHAO, dst, WHITE);
+    ArenaLayer(i, AL_FRENTE, dst, WHITE);
+}
+static void DrawArenaSelect(void)
+{
+    const ArenaDef *d = &ARENAS[arSel];
+    bool locked = ArenaLocked(arSel);
+    DrawBackdrop(C_CYAN);
+    TxtO("ESCOLHA A ARENA", SCREEN_WIDTH / 2.0f, 14, 48, C_WHITE, C_INK);
+    const char *sub = trainMode ? "TREINO" : (versusMode ? "1 x 1  -  o P1 escolhe a arena  (P2: B volta aos lutadores)" : "1 JOGADOR x CPU  -  a arena vale para todo o arcade");
+    TxtC(sub, SCREEN_WIDTH / 2.0f, 68, 16, trainMode ? C_GREEN : C_CYAN);
+    /* previa grande, com os dois lutadores na escala da luta */
+    Rectangle pv = AR_PREVIEW;
+    DrawRectangle((int)pv.x - 6, (int)pv.y - 6, (int)pv.width + 12, (int)pv.height + 12, C_INK);
+    DrawArenaPic(arSel, pv, true);
+    if (!locked)
+    {
+        float k = pv.width / SCREEN_WIDTH, gy = pv.y + IAF_GROUND_Y * k;
+        CharId a = (CharId)playerCh, b = (CharId)(versusMode ? selP[1] : ladder[ladderPos]);
+        DrawCharacterBig(a, pv.x + 420 * k, gy, 1, 0.5f, ST_IDLE);
+        g_altPal = versusMode && a == b;
+        DrawCharacterBig(b, pv.x + 860 * k, gy, -1, 0.5f, ST_IDLE);
+        g_altPal = false;
+    }
+    else
+    {
+        TxtO("EM CONSTRUÇÃO", pv.x + pv.width / 2, pv.y + pv.height * 0.66f, 40, C_AMBER, C_INK);
+        TxtC("os colegas estão desenhando esta arena", pv.x + pv.width / 2, pv.y + pv.height * 0.66f + 52, 16, C_WHITE);
+    }
+    DrawRectangleLinesEx((Rectangle){pv.x - 3, pv.y - 3, pv.width + 6, pv.height + 6}, 3, locked ? Fade(C_DIM, 0.8f) : C_CYAN);
+    TxtO(locked ? "EM BREVE" : d->name, SCREEN_WIDTH / 2.0f, 444, 28, locked ? C_DIM : C_WHITE, C_INK);
+    TxtC(d->tag, SCREEN_WIDTH / 2.0f, 476, 14, C_DIM);
+    /* cartoes */
+    for (int i = 0; i < AR_DEFS; i++)
+    {
+        Rectangle c = ArenaCard(i), p = ArenaCardPic(i);
+        bool on = i == arSel, lk = ArenaLocked(i);
+        float dx = (on && arDenyT > 0) ? sinf(arDenyT * 60) * 6 * arDenyT / 0.3f : 0;
+        c.x += dx; p.x += dx;
+        if (on) DrawRectangleRounded((Rectangle){c.x - 6, c.y - 6, c.width + 12, c.height + 12}, 0.08f, 6, Fade(lk ? C_RED : C_CYAN, 0.18f + 0.1f * sinf(gt * 6)));
+        DrawRectangleRounded(c, 0.06f, 6, (Color){14, 18, 36, 255});
+        DrawArenaPic(i, p, false);
+        if (lk) DrawRectangleRec(p, Fade(C_INK, 0.25f));
+        DrawRectangleRoundedLinesEx(c, 0.06f, 6, on ? 3 : 1.5f, on ? (lk ? C_RED : C_CYAN) : Fade(lk ? C_DIM : C_CYAN, 0.45f));
+        const char *nm = lk ? "EM BREVE" : ARENAS[i].name;
+        TxtC(nm, c.x + c.width / 2, c.y + c.height - 32, 18, lk ? C_DIM : (on ? C_WHITE : Fade(C_WHITE, 0.75f)));
+        if (on)
+        { /* cursor: quem pode mexer nele */
+            const char *tag = "1P";
+            float tw = TxtW(tag, 16) + 14;
+            DrawRectangleRec((Rectangle){c.x, c.y - 22, tw, 22}, lk ? C_RED : C_CYAN);
+            TxtC(tag, c.x + tw / 2, c.y - 19, 16, C_INK);
         }
     }
+    if (arDenyT > 0) TxtO("ARENA TRAVADA", SCREEN_WIDTH / 2.0f, pv.y + 22, 36, C_RED, C_INK);
+    TxtC("A/D, SETAS ou CONTROLE: escolher    ENTER / A: confirmar    ESC / B: voltar aos lutadores", SCREEN_WIDTH / 2.0f, SCREEN_HEIGHT - 22, 14, C_DIM);
+}
+/* confirma o cartao marcado; travado: nega */
+static void ArenaConfirm(void)
+{
+    if (ArenaLocked(arSel)) { arDenyT = 0.3f; PlaySfx(SFX_DENY); return; }
+    arPick = arSel;
+    iafScreen = SC_VERSUS;
+    scT = 0;
+}
+static void ArenaBack(void)
+{
+    if (versusMode) { readyP[0] = readyP[1] = false; readyT = 0; }
+    if (trainMode) { trainPick = 1; sel = trainDummy; } /* volta ao boneco */
+    iafScreen = SC_SELECT;
+    scT = 0;
+}
+static void UpdateArenaSelect(float dt)
+{
+    if (arDenyT > 0) arDenyT -= dt;
+    int mv = 0;
+    bool ok = false, back = false;
+    if (versusMode)
+    { /* so o P1 mexe e confirma; os dois podem voltar aos lutadores */
+        if (PlayerNavP(0, PN_LEFT) || PlayerNavP(0, PN_UP)) mv = -1;
+        if (PlayerNavP(0, PN_RIGHT) || PlayerNavP(0, PN_DOWN)) mv = 1;
+        ok = scT > 0.15f && PlayerNavP(0, PN_OK);
+        back = PlayerNavP(0, PN_UNDO) || PlayerNavP(1, PN_UNDO) || IsKeyPressed(KEY_ESCAPE);
+    }
+    else
+    {
+        if (NavLeftP() || NavUpP()) mv = -1;
+        if (NavRightP() || NavDownP()) mv = 1;
+        ok = scT > 0.15f && NavOkP();
+        back = NavBackP();
+    }
+    /* mouse: passar por cima marca, clicar confirma */
+    Vector2 m = GetVirtualMouse();
+    bool moved = m.x != arMouseLast.x || m.y != arMouseLast.y;
+    arMouseLast = m;
+    for (int i = 0; i < AR_DEFS; i++)
+        if (CheckCollisionPointRec(m, ArenaCard(i)))
+        {
+            if (moved) arSel = i;
+            if (IsMouseButtonPressed(MOUSE_LEFT_BUTTON)) { arSel = i; ok = true; }
+        }
+    if (back) { ArenaBack(); return; }
+    if (mv) arSel = (arSel + mv + AR_DEFS) % AR_DEFS;
+    if (ok) ArenaConfirm();
 }
 static void DrawSelect(void) { DrawSelectScreen(false); }
 static void UpdateSelect(void)
 {
-    UpdateArenaPickerInput();
     if (NavLeftP()) sel = (sel + CH_N - 1) % CH_N;
     if (NavRightP()) sel = (sel + 1) % CH_N;
     if (NavUpP() || NavDownP()) sel ^= 2; /* grade 2 x 2: troca de linha */
@@ -3093,12 +3231,12 @@ static void UpdateSelect(void)
             trainDummy = sel; sel = playerCh;
             ladderPos = 0; ladder[0] = trainDummy;
             trainLast = trainComboDmg = 0; trainComboHits = 0; trainLastBlocked = false;
-            iafScreen = SC_VERSUS; scT = 0;
+            OpenArenaSelect();
             return;
         }
         playerCh = sel;
         BuildLadder();
-        iafScreen = SC_VERSUS; scT = 0;
+        OpenArenaSelect();
     }
 }
 static void DrawVersus(void)
@@ -3127,7 +3265,10 @@ static void DrawVersus(void)
         TxtO("P2", SCREEN_WIDTH - 300, 640, 30, C_RED, C_INK);
     }
     TxtO(d, SCREEN_WIDTH / 2.0f, 40, 32, C_AMBER, C_INK);
-    TxtC("ENTER / A: lutar", SCREEN_WIDTH / 2.0f, SCREEN_HEIGHT - 30, 16, C_DIM);
+    char an[96];
+    snprintf(an, sizeof an, "ARENA: %s", ARENAS[arPick].name);
+    TxtC(an, SCREEN_WIDTH / 2.0f, 84, 18, C_WHITE);
+    TxtC("ENTER / A: lutar    ESC / B: trocar a arena", SCREEN_WIDTH / 2.0f, SCREEN_HEIGHT - 30, 16, C_DIM);
 }
 static void IafDrawResult(bool final)
 {
@@ -3342,7 +3483,6 @@ static void UpdateSelectVs(float dt)
         scT = 0;
         return;
     }
-    UpdateArenaPickerInput();
     for (int p = 0; p < 2; p++)
     {
         if (!readyP[p])
@@ -3362,8 +3502,7 @@ static void UpdateSelectVs(float dt)
             playerCh = selP[0];
             ladderPos = 0;
             ladder[0] = selP[1];
-            iafScreen = SC_VERSUS;
-            scT = 0;
+            OpenArenaSelect();
             readyT = 0;
         }
     }
@@ -3427,6 +3566,7 @@ void IafEnter(GameState *game)
         texCodex = LoadTexture(IAF_CODEX_ATLAS);
         SetTextureFilter(texCodex, TEXTURE_FILTER_POINT);
         ArenaLoadAssets();
+        ArenaBakePreviews();
         LoadIafAudio();
         iafLoaded = true;
     }
@@ -3453,7 +3593,7 @@ void IafUpdate(GameState *game, float dt)
     iafMuted = game->musicMuted;
     /* estado antes da atualizacao: mudou cursor = som de mover; mudou de tela/confirmou = som de confirmar */
     IafScreen pScr = iafScreen;
-    int pSel = sel, pMode = modeSel, pS0 = selP[0], pS1 = selP[1], pRes = resSel;
+    int pSel = sel, pMode = modeSel, pS0 = selP[0], pS1 = selP[1], pRes = resSel, pAr = arSel;
     bool pR0 = readyP[0], pR1 = readyP[1];
     switch (iafScreen)
     {
@@ -3474,9 +3614,13 @@ void IafUpdate(GameState *game, float dt)
         }
         UpdateSelect();
         break;
+    case SC_ARENA:
+        if (ControlsKeyP()) { OpenControls(); break; }
+        UpdateArenaSelect(dt);
+        break;
     case SC_VERSUS:
         if (NavOkP() || scT > 2.6f) { StartMatch(); iafScreen = SC_FIGHT; scT = 0; }
-        else if (NavBackP()) iafScreen = SC_SELECT;
+        else if (NavBackP()) OpenArenaSelect();
         break;
     case SC_FIGHT: UpdateFight(dt); break;
     case SC_RESULT:
@@ -3493,7 +3637,7 @@ void IafUpdate(GameState *game, float dt)
         if (scT > 0.6f && (NavOkP() || NavBackP())) { iafScreen = SC_SELECT; scT = 0; }
         break;
     }
-    if (sel != pSel || modeSel != pMode || selP[0] != pS0 || selP[1] != pS1 || resSel != pRes) PlaySfx(SFX_MOVE);
+    if (sel != pSel || modeSel != pMode || selP[0] != pS0 || selP[1] != pS1 || resSel != pRes || arSel != pAr) PlaySfx(SFX_MOVE);
     if ((iafScreen != pScr && pScr != SC_FIGHT && iafScreen != SC_FIGHT) || (readyP[0] && !pR0) || (readyP[1] && !pR1)) PlaySfx(SFX_OK);
     UpdateIafMusic(iafScreen == SC_FIGHT ? 1 : 0);
 }
@@ -3506,6 +3650,7 @@ void IafDraw(void)
     case SC_MODE: DrawMode(); break;
     case SC_CONTROLS: DrawControls(); break;
     case SC_SELECT: if (versusMode) DrawSelectVs(); else DrawSelect(); break;
+    case SC_ARENA: DrawArenaSelect(); break;
     case SC_VERSUS: DrawVersus(); break;
     case SC_FIGHT: DrawFight(); break;
     case SC_RESULT: if (versusMode) DrawResultVs(); else IafDrawResult(false); break;

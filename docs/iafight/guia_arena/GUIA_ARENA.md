@@ -196,11 +196,11 @@ Fonte das medidas: worktree `wt-modocombate`, branch `modocombate`.
 - `Hurt()`: Elira 70×196, Codex 84×200, Claude 232×204.
 - Quadros IDLE: Elira 218 px de altura em escala 1, Claude 102 px × `CL_SCALE` 2 = 204 px.
 
-Integração sugerida:
-- Carregar as camadas com `TEXTURE_FILTER_POINT` e desenhar com `DrawTexturePro`, escala 4, em (0,0).
-- Ordem: `fundo → meio → plateia → chão`, no lugar de `DrawArenaBack/DrawCrowd/DrawFloorBase/DrawFrontRacks`. Depois `DrawStageFloor` (reflexo e linhas), lutadores e `frente`.
-- Manter `DrawArenaScreen()` (telão) e `DrawHUD()` desenhados pelo código.
-- Reflexo: a camada de cobertura de `DrawFloorReflections` usa a cor do piso. Com piso em PNG, o mais simples é redesenhar `chao.png` por cima do reflexo com alfa ~0,72.
-- Tremor da câmera (`shake * 24`, até ±12 px): desenhar `fundo` e `chao` ampliados 1 pixel de arte para cada lado, ou limitar o offset, para não aparecer a cor de limpeza na borda.
+Como uma arena entra no jogo (já implementado):
+- A tela **ESCOLHA A ARENA** lê a tabela `ARENAS` em `src/iafight_arena.h`. Cada linha é um cartão.
+- Para destravar uma arena: copie as camadas para `assets/sprites/iafight/` com os nomes deste guia e troque uma linha `AR_EM_BREVE` da tabela por `{"NOME NA TELA", "legenda curta", AR_CAMADAS("<nome>"), AR_PNG},`. Se quiser, ponha a camada de fundo na lista do `--verify-assets`, em `src/main.c`.
+- Camada que falta é pulada (`meio`, `plateia_2` e `frente` são opcionais). Sem a camada de **fundo** no disco, o cartão continua travado (EM BREVE).
+- O jogo desenha `fundo → meio → plateia (ou plateia_2 nos golpes fortes) → telão → chão`, depois os lutadores e por fim `frente`. Camadas de 320×180 são ampliadas 4x sem suavizar. Uma imagem única de 1280×720, como a Posto Vice 2026, também serve: `AR_IMAGEM("arquivo.png")`.
+- `fundo` e `chao` são desenhados também um pouco maiores por baixo, para o tremor da câmera não mostrar a borda.
+- O telão mostra `AO VIVO // <NOME NA TELA>`. O HUD continua desenhado pelo código.
 - Linha 155 = y 620–623 na tela, porque 622 não é múltiplo de 4. A diferença de 2 px não aparece.
-- Nova arena: novo valor no `enum { AR_NUCLEO, AR_LAB1990, ... }` e em `ArenaSortear`. O texto do telão (`AO VIVO // ...`) recebe o nome da arena.
