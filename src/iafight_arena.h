@@ -55,8 +55,8 @@ typedef struct { const char *name, *tag; const char *file[AL_N]; int kind; const
    linhas destravadas (ArenaLocked falso). Na miniatura, um "?" sobre o chiado. */
 static const ArenaDef ARENAS[] = {
     {"POSTO VICE 2026", "posto de gasolina ao entardecer, em 2026", AR_IMAGEM("arena_vice2026.png"), AR_PNG, "musica_vice2026.ogg"},
-    {"CESAR SCHOOL", "entrada da faculdade no Bairro do Recife", AR_IMAGEM("arena_cesar.png"), AR_PNG, NULL}, /* sem trilha propria: toca a musica_luta */
-    AR_EM_BREVE,
+    {"CESAR SCHOOL (BRUM)", "prédio Brum da faculdade no Bairro do Recife", AR_IMAGEM("arena_cesar.png"), AR_PNG, NULL}, /* sem trilha propria: toca a musica_luta */
+    {"CESAR SCHOOL (TIRADENTES)", "prédio Tiradentes da faculdade no Bairro do Recife", AR_IMAGEM("arena_cesar_tiradentes.png"), AR_PNG, NULL},
     AR_EM_BREVE,
 #if IAF_ARENAS_DESENHADAS
     {"ARENA DO NÚCLEO", "sala de servidores do núcleo", {NULL}, AR_NUCLEO, NULL},
@@ -65,6 +65,7 @@ static const ArenaDef ARENAS[] = {
 };
 #define AR_DEFS ((int)(sizeof ARENAS / sizeof ARENAS[0]))
 static Texture2D arTex[AR_DEFS][AL_N];
+static Texture2D arBoiVoador;             /* easter egg: boi voador no cenario Tiradentes */
 static RenderTexture2D arPrevRT[AR_DEFS]; /* retrato das arenas desenhadas no codigo (tela de selecao) */
 static int arPick = 0;            /* arena marcada na tela de selecao (indice em ARENAS); a revanche mantem */
 static int arCur = 0;             /* arena da luta atual */
@@ -94,9 +95,16 @@ static void ArenaLoadAssets(void)
             /* pixel art do guia (320x180) amplia sem suavizar; imagem do tamanho da tela, suave */
             if (arTex[i][l].id) SetTextureFilter(arTex[i][l], arTex[i][l].width < SCREEN_WIDTH ? TEXTURE_FILTER_POINT : TEXTURE_FILTER_BILINEAR);
         }
+    if (FileExists(AR_DIR "boi_voador.png"))
+    {
+        arBoiVoador = LoadTexture(AR_DIR "boi_voador.png");
+        if (arBoiVoador.id) SetTextureFilter(arBoiVoador, TEXTURE_FILTER_POINT);
+    }
 }
 static void ArenaUnloadAssets(void)
 {
+    if (arBoiVoador.id) UnloadTexture(arBoiVoador);
+    arBoiVoador = (Texture2D){0};
     for (int i = 0; i < AR_DEFS; i++)
     {
         if (arPrevRT[i].id) UnloadRenderTexture(arPrevRT[i]);
@@ -491,6 +499,35 @@ static void DrawStage(void)
         ArenaLayer(arCur, AL_MEIO, full, WHITE);
         bool hyped = arTex[arCur][AL_PLATEIA2].id && (arHype > 0.3f || arKoT > 0) && fmodf(gt * 6, 2) < 1;
         ArenaLayer(arCur, hyped ? AL_PLATEIA2 : AL_PLATEIA, full, WHITE);
+        if (arBoiVoador.id && strstr(ARENAS[arCur].name, "TIRADENTES") != NULL)
+        {
+            float bw = (float)arBoiVoador.width, bh = (float)arBoiVoador.height;
+            float cyc = fmodf(gt, 16.0f);
+            bool active = false;
+            float bx = 0.0f, dir = 1.0f;
+            if (cyc < 7.5f)
+            {
+                float u = cyc / 7.5f;
+                bx = -bw - 20.0f + u * (SCREEN_WIDTH + bw * 2.0f + 40.0f);
+                dir = 1.0f;
+                active = true;
+            }
+            else if (cyc >= 8.0f && cyc < 15.5f)
+            {
+                float u = (cyc - 8.0f) / 7.5f;
+                bx = SCREEN_WIDTH + bw + 20.0f - u * (SCREEN_WIDTH + bw * 2.0f + 40.0f);
+                dir = -1.0f;
+                active = true;
+            }
+            if (active)
+            {
+                float by = 112.0f + sinf(gt * 2.8f) * 14.0f;
+                float rot = cosf(gt * 2.8f) * 5.0f * dir;
+                Rectangle src = {0, 0, bw * dir, bh};
+                Rectangle dst = {bx, by, bw, bh};
+                DrawTexturePro(arBoiVoador, src, dst, (Vector2){bw * 0.5f, bh * 0.5f}, rot, WHITE);
+            }
+        }
         if (arTex[arCur][AL_CHAO].id)
         {
             ArenaLayer(arCur, AL_CHAO, (Rectangle){-16, 0, SCREEN_WIDTH + 32.0f, SCREEN_HEIGHT + 16.0f}, WHITE);
