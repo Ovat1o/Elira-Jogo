@@ -1507,6 +1507,13 @@ static void ApplyHit(Fighter *att, Fighter *def, float dmg, float stun, float pu
         if (def->hp <= 0) KO(def, dir);
         return;
     }
+    att->combo = (att->comboT > 0) ? att->combo + 1 : 1;
+    att->comboT = 0.9f;
+    if (att->combo >= IAF_COMBO_SCALE_FROM)
+    { /* combo longo: do 4o acerto em diante cada golpe tira menos (acumula), com piso */
+        float f = powf(1.0f - IAF_COMBO_SCALE_STEP, (float)(att->combo - IAF_COMBO_SCALE_FROM + 1));
+        dmg *= fmaxf(f, IAF_COMBO_SCALE_MIN);
+    }
     def->hp -= dmg;
     def->flash = def->ch == CH_ELIRA ? 0 : 0.12f; /* quadros de dano da Elira ja trazem o efeito */
     def->hitCrouch = def->crouch;
@@ -1519,8 +1526,6 @@ static void ApplyHit(Fighter *att, Fighter *def, float dmg, float stun, float pu
     if (launch || !OnGround(def)) { def->vy = -560; def->down = false; def->stun = stun + 0.3f; def->juggle++; }
     def->meter = fminf(IAF_METER_MAX, def->meter + 6);
     att->meter = fminf(IAF_METER_MAX, att->meter + dmg * 0.09f);
-    att->combo = (att->comboT > 0) ? att->combo + 1 : 1;
-    att->comboT = 0.9f;
     if (trainMode && att == &fz[0])
     { /* treino: dano do golpe e do combo */
         trainLast = dmg; trainLastBlocked = false;
