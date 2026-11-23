@@ -141,7 +141,7 @@ static const Atk ATK[CH_N][AT_SPECIAL] = {
     [CH_ANTI] = {{0}, {0.07f, 0.08f, 0.14f, 48, 158, 175, 80, 0.20f, 160, 0}, /* alcances na ponta do golpe do sprite (2,5x) */
                  {0.16f, 0.10f, 0.28f, 92, 160, 200, 110, 0.44f, 300, 0},  /* chute */
                  {0.09f, 0.09f, 0.20f, 45, 152, 60, 56, 0.30f, 150, 1},     /* low kick */
-                 {0.05f, 0.18f, 0.10f, 26, 140, 110, 140, 0.32f, 160, 2},   /* ground slam: de cima para baixo */
+                 {0.05f, 0.18f, 0.10f, 26, 140, 110, 140, 0.24f, 160, 2},   /* ground slam: de cima para baixo */
                  {0.20f, 0.10f, 0.30f, 65, 160, 190, 90, 0.44f, 320, 0},    /* heavy punch */
                  {0.08f, 0.14f, 0.32f, 32, 150, 320, 300, 0.50f, 120, 0}},  /* uppercut (heavy punch subindo) */
 };
@@ -1888,7 +1888,10 @@ static void UpdateFighter(Fighter *a, Fighter *o, IafInput in, float dt)
             else SetState(a, ST_IDLE);
             a->atk = AT_NONE;
         }
-        if (a->atk == AT_AIR && ground && a->vy >= 0 && a->stT > 0.05f) { SetState(a, ST_IDLE); a->atk = AT_NONE; }
+        /* pousou: o aereo acaba; a pisada do Antigravity (que mergulha) termina a recuperacao no chao, senao
+           pular e pisar colado acertava a cada 8 quadros, antes de o oponente sair do atordoamento */
+        if (a->atk == AT_AIR && ground && a->vy >= 0 && a->stT > 0.05f && !(a->ch == CH_ANTI && a->atkT < AtkTotal(a))) { SetState(a, ST_IDLE); a->atk = AT_NONE; }
+        else if (a->atk == AT_AIR && ground && a->vy >= 0) a->vx = 0; /* pisada: parada no chao ate recuperar */
         if (a->atk != AT_SPECIAL && a->atk != AT_AIR && ground) a->vx *= 1 - 10 * dt;
         if (a->atk == AT_SPECIAL && a->ch != CH_CODEX) a->vx *= 1 - 10 * dt;
         if (a->atk == AT_SPECIAL && a->ch == CH_CODEX && a->atkT > SP_ST[CH_CODEX] + SP_AC[CH_CODEX]) a->vx *= 1 - 12 * dt;
