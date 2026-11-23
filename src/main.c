@@ -65,7 +65,8 @@ static bool ValidateRequiredAssets(void)
         IAF_CODEX_ATLAS,
         IAF_ANTI_ATLAS,
         "assets/sprites/iafight/arena_vice2026.png",
-        IAF_AUDIO_DIR "musica_vice2026.ogg"
+        IAF_AUDIO_DIR "musica_vice2026.ogg",
+        "assets/sprites/iafight/arena_cesar.png"
     };
     bool valid = true;
 

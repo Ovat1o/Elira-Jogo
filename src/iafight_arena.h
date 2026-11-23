@@ -55,7 +55,7 @@ typedef struct { const char *name, *tag; const char *file[AL_N]; int kind; const
    linhas destravadas (ArenaLocked falso). Na miniatura, um "?" sobre o chiado. */
 static const ArenaDef ARENAS[] = {
     {"POSTO VICE 2026", "posto de gasolina ao entardecer, em 2026", AR_IMAGEM("arena_vice2026.png"), AR_PNG, "musica_vice2026.ogg"},
-    AR_EM_BREVE,
+    {"CESAR SCHOOL", "entrada da faculdade no Bairro do Recife", AR_IMAGEM("arena_cesar.png"), AR_PNG},
     AR_EM_BREVE,
     AR_EM_BREVE,
 #if IAF_ARENAS_DESENHADAS
@@ -178,36 +178,6 @@ static void DrawRack(float x, float y, float w, float h, float depth, int seed)
     }
 }
 
-/* telao alto e discreto: fica acima das cabecas (y < 170) e com pouco contraste */
-static void DrawArenaScreen(void)
-{
-    Rectangle scr = {420, 106, 440, 54};
-    for (int s = 0; s < 2; s++)
-    { /* cabos que seguram o telao */
-        float cx = scr.x + 40 + s * (scr.width - 80);
-        DrawLineEx((Vector2){cx, 46}, (Vector2){cx, scr.y}, 2, (Color){26, 30, 52, 255});
-    }
-    DrawRectangleRounded((Rectangle){scr.x - 6, scr.y - 6, scr.width + 12, scr.height + 12}, 0.2f, 6, (Color){12, 14, 28, 255});
-    DrawRectangleRounded(scr, 0.18f, 6, (Color){9, 18, 30, 255});
-    DrawRectangleRoundedLinesEx(scr, 0.18f, 6, 1.5f, Fade(C_CYAN, 0.22f));
-    Txt("RINHA DE INTELIGÊNCIAS", scr.x + 18, scr.y + 9, 18, Fade(C_CYAN, 0.55f));
-    float blink = 0.35f + 0.35f * (sinf(gt * 4) > 0 ? 1 : 0);
-    DrawCircle((int)(scr.x + 24), (int)(scr.y + 39), 4, Fade(C_RED, blink));
-    char liveLabel[80];
-    snprintf(liveLabel, sizeof liveLabel, "AO VIVO  //  %s", arArena == AR_PNG ? ARENAS[arCur].name : (arArena == AR_LAB1990 ? "LABORATÓRIO 1990" : "ARENA DO NÚCLEO"));
-    Txt(liveLabel, scr.x + 34, scr.y + 32, 13, Fade(C_DIM, 0.6f));
-    /* sinal: fica mais agitado quando a plateia se empolga */
-    float amp = 6 + 10 * fmaxf(arHype, arKoT > 0 ? 1.0f : 0.0f);
-    Vector2 prev = {0};
-    for (int i = 0; i <= 40; i++)
-    {
-        float xx = scr.x + 270 + i * 150 / 40.0f;
-        float yy = scr.y + 27 + sinf(i * 0.6f + gt * 3) * amp * 0.5f * sinf(i * 0.17f + gt) + sinf(i * 1.9f - gt * 6) * amp * 0.25f;
-        if (i) DrawLineEx(prev, (Vector2){xx, yy}, 1.5f, Fade(C_TEAL, 0.45f));
-        prev = (Vector2){xx, yy};
-    }
-}
-
 static void DrawArenaBack(void)
 {
     DrawRectangleGradientV(0, 0, SCREEN_WIDTH, (int)AR_FLOOR_Y, (Color){5, 7, 18, 255}, (Color){16, 20, 42, 255});
@@ -226,7 +196,6 @@ static void DrawArenaBack(void)
     /* luz baixa entre as fileiras (faixa do cenario, nao da tela) */
     /* tambem destaca os lutadores escuros (contorno contra um fundo um pouco mais claro) */
     DrawRectangleGradientV(0, 330, SCREEN_WIDTH, 226, Fade((Color){40, 70, 120, 255}, 0.0f), Fade((Color){40, 70, 120, 255}, 0.30f));
-    DrawArenaScreen();
     /* fileira do meio */
     for (int i = 0; i < 16; i++)
     {
@@ -474,7 +443,6 @@ static void DrawLabBack(void)
     float hm = gt * 0.05f, mm = gt * 0.6f;
     DrawLineEx(ck, (Vector2){ck.x + sinf(hm) * 16, ck.y - cosf(hm) * 16}, 3, (Color){30, 26, 30, 255});
     DrawLineEx(ck, (Vector2){ck.x + sinf(mm) * 25, ck.y - cosf(mm) * 25}, 2, (Color){30, 26, 30, 255});
-    DrawArenaScreen();
     /* fileira de armarios de fita, com o console central (mainframe) */
     for (int i = 0; i < 13; i++)
     {
@@ -523,7 +491,6 @@ static void DrawStage(void)
         ArenaLayer(arCur, AL_MEIO, full, WHITE);
         bool hyped = arTex[arCur][AL_PLATEIA2].id && (arHype > 0.3f || arKoT > 0) && fmodf(gt * 6, 2) < 1;
         ArenaLayer(arCur, hyped ? AL_PLATEIA2 : AL_PLATEIA, full, WHITE);
-        DrawArenaScreen();
         if (arTex[arCur][AL_CHAO].id)
         {
             ArenaLayer(arCur, AL_CHAO, (Rectangle){-16, 0, SCREEN_WIDTH + 32.0f, SCREEN_HEIGHT + 16.0f}, WHITE);
