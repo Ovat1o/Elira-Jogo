@@ -222,7 +222,9 @@ static int sfxNext[SFX_N];
 static int iafSfxPlays[SFX_N]; /* quantas vezes cada efeito foi pedido (usado pelos testes) */
 static Music musSel, musFight, musArena; /* musArena: trilha propria da arena da luta (campo music de ARENAS) */
 static bool musLoaded = false, iafMuted = false;
-static int musCur = -1;                   /* -1 nenhuma, 0 selecao, 1 luta, 2 trilha da arena */
+static int iafMusLvl = IAF_VOL_LVL_PADRAO, iafSfxLvl = IAF_VOL_LVL_PADRAO; /* volume do modo (menu): 0..IAF_VOL_LVL_MAX */
+static float IafLvlMult(int lvl) { return (float)lvl / IAF_VOL_LVL_PADRAO; } /* nivel padrao = volume de sempre */
+static int musCur = -1;                  /* -1 nenhuma, 0 selecao, 1 luta, 2 trilha da arena */
 static const char *musArenaFile = NULL;   /* arquivo carregado (ou tentado) em musArena */
 static const char *ArenaMusicFile(void);  /* trilha da arena da luta ou NULL (iafight_arena.h) */
 static float AudioMaster(void) { return iafMuted ? 0.0f : Clamp(g_musicVolume / 0.45f, 0.0f, 2.5f); }
@@ -252,7 +254,7 @@ static void PlaySfx(int id)
     Sound *s = &sfx[id][sfxNext[id]];
     sfxNext[id] = (sfxNext[id] + 1) % IAF_SFX_VOICES;
     if (!IsAudioDeviceReady() || s->frameCount == 0) return;
-    float vol = fminf(1.0f, IAF_SFX_VOLUME * AudioMaster());
+    float vol = fminf(1.0f, IAF_SFX_VOLUME * AudioMaster() * IafLvlMult(iafSfxLvl));
     if (vol <= 0.001f) return;
     SetSoundVolume(*s, vol);
     if (id == SFX_DASH) SetSoundPitch(*s, 0.55f + Rand01() * 0.06f);
@@ -295,7 +297,7 @@ static void UpdateIafMusic(int want)
     Music *m = IafMusic(musCur);
     if (!m) return;
     float gain = musCur == 2 ? IAF_ARENA_MUSIC_GAIN : (musCur == 0 ? IAF_SELECT_MUSIC_GAIN : 1.0f); /* arena mais alta, selecao mais baixa */
-    SetMusicVolume(*m, fminf(1.0f, IAF_MUSIC_VOLUME * gain * AudioMaster()));
+    SetMusicVolume(*m, fminf(1.0f, IAF_MUSIC_VOLUME * gain * AudioMaster() * IafLvlMult(iafMusLvl)));
     UpdateMusicStream(*m);
 }
 static void UnloadIafAudio(void)
@@ -3460,7 +3462,7 @@ static const char *MODE_SUB[3] = {"Arcade: enfrente as outras três inteligênci
 static const Color MODE_COL[3] = {{96, 214, 240, 255}, {230, 80, 84, 255}, {110, 220, 120, 255}};
 static void DrawMode(void)
 {
-    DrawBackdrop(MODE_COL[modeSel]);
+    DrawBackdrop(modeSel < 3 ? MODE_COL[modeSel] : C_AMBER);
     TxtO("IA FIGHT", SCREEN_WIDTH / 2.0f, 70, 96, C_WHITE, C_INK);
     TxtC("RINHA DE INTELIGÊNCIAS", SCREEN_WIDTH / 2.0f, 176, 24, C_CYAN);
     for (int i = 0; i < 3; i++)
@@ -3474,12 +3476,40 @@ static void DrawMode(void)
         TxtC(MODE_TXT[i], r.x + r.width / 2, r.y + 18, 40, on ? C_WHITE : C_DIM);
         TxtC(MODE_SUB[i], r.x + r.width / 2, r.y + 70, 16, on ? Fade(c, 0.95f) : Fade(C_DIM, 0.7f));
     }
-    TxtC("W/S, SETAS ou CONTROLE: escolher    ENTER / A: confirmar    TAB / SELECT: controles    ESC / B: voltar ao menu", SCREEN_WIDTH / 2.0f, SCREEN_HEIGHT - 30, 16, C_DIM);
+    for (int k = 0; k < 2; k++)
+    { /* volume do modo: 3 = musica, 4 = efeitos; A/D ou setas ajustam */
+        Rectangle r = {SCREEN_WIDTH / 2.0f - 300 + k * 310, 612, 290, 54};
+        bool on = modeSel == 3 + k;
+        int lvl = k == 0 ? iafMusLvl : iafSfxLvl;
+        if (on) DrawRectangleRounded((Rectangle){r.x - 6, r.y - 6, r.width + 12, r.height + 12}, 0.3f, 8, Fade(C_AMBER, 0.22f + 0.1f * sinf(gt * 5)));
+        DrawRectangleRounded(r, 0.3f, 8, (Color){14, 18, 36, 255});
+        DrawRectangleRoundedLinesEx(r, 0.3f, 8, on ? 3 : 1.5f, on ? C_AMBER : Fade(C_AMBER, 0.4f));
+        Txt(k == 0 ? "MÚSICA" : "EFEITOS", r.x + 16, r.y + 17, 20, on ? C_WHITE : C_DIM);
+        Txt("<", r.x + 112, r.y + 15, 22, on && lvl > 0 ? C_AMBER : Fade(C_DIM, 0.5f));
+        for (int b = 0; b < IAF_VOL_LVL_MAX; b++)
+        {
+            float h = 10 + b * 2.2f;
+            Rectangle bar = {r.x + 132 + b * 13, r.y + 40 - h, 9, h};
+            DrawRectangleRec(bar, b < lvl ? (on ? C_AMBER : Fade(C_AMBER, 0.55f)) : Fade(C_DIM, 0.25f));
+        }
+        Txt(">", r.x + 266, r.y + 15, 22, on && lvl < IAF_VOL_LVL_MAX ? C_AMBER : Fade(C_DIM, 0.5f));
+    }
+    TxtC("W/S ou SETAS: escolher    A/D: volume    ENTER / A: confirmar    TAB / SELECT: controles    ESC / B: voltar ao menu", SCREEN_WIDTH / 2.0f, SCREEN_HEIGHT - 30, 16, C_DIM);
 }
 static void UpdateMode(void)
 {
-    if (NavUpP() || NavLeftP()) modeSel = (modeSel + 2) % 3;
-    if (NavDownP() || NavRightP()) modeSel = (modeSel + 1) % 3;
+    if (NavUpP()) modeSel = (modeSel + 4) % 5;
+    if (NavDownP()) modeSel = (modeSel + 1) % 5;
+    if (modeSel >= 3)
+    { /* faixa de volume: esquerda/direita mudam o nivel; o efeito de menu toca no volume novo */
+        int *lvl = modeSel == 3 ? &iafMusLvl : &iafSfxLvl;
+        int d = (NavRightP() ? 1 : 0) - (NavLeftP() ? 1 : 0);
+        int nv = (int)Clamp((float)(*lvl + d), 0.0f, (float)IAF_VOL_LVL_MAX);
+        if (nv != *lvl) { *lvl = nv; PlaySfx(SFX_MOVE); }
+        return;
+    }
+    if (NavLeftP()) modeSel = (modeSel + 2) % 3;
+    if (NavRightP()) modeSel = (modeSel + 1) % 3;
     if (scT > 0.15f && NavOkP())
     {
         versusMode = modeSel == 1;
