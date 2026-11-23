@@ -139,7 +139,9 @@
 #define IAF_SPECIAL_COST    50.0f    /* CARGA gasta por especial */
 #define IAF_AUDIO_DIR       "assets/som/iafight/" /* efeitos, vozes e musicas do modo */
 #define IAF_MUSIC_VOLUME    0.5f     /* musica do modo no volume padrao do jogo (0,45) */
-#define IAF_SFX_VOLUME      0.8f     /* efeitos e vozes no volume padrao do jogo */
+#define IAF_ARENA_MUSIC_GAIN 1.4f    /* trilha propria da arena (Posto Vice 2026) um pouco mais alta que a musica_luta */
+#define IAF_SELECT_MUSIC_GAIN 0.6f   /* musica das telas de selecao (lutador e arena) mais baixa */
+#define IAF_SFX_VOLUME      0.45f    /* efeitos e vozes no volume padrao do jogo (era 0,8: alto demais no evento) */
 #define IAF_ROUND_TIME      60.0f    /* cronometro do round (s); curto para o ritmo de evento */
 #define IAF_INTRO_ROUND     0.7f     /* abertura: "ROUND n" fica ate este instante (s) */
 #define IAF_INTRO_TOTAL     1.2f     /* abertura: "LUTEM!" ate a luta comecar (s) */

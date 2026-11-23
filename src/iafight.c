@@ -294,7 +294,8 @@ static void UpdateIafMusic(int want)
     }
     Music *m = IafMusic(musCur);
     if (!m) return;
-    SetMusicVolume(*m, fminf(1.0f, IAF_MUSIC_VOLUME * AudioMaster()));
+    float gain = musCur == 2 ? IAF_ARENA_MUSIC_GAIN : (musCur == 0 ? IAF_SELECT_MUSIC_GAIN : 1.0f); /* arena mais alta, selecao mais baixa */
+    SetMusicVolume(*m, fminf(1.0f, IAF_MUSIC_VOLUME * gain * AudioMaster()));
     UpdateMusicStream(*m);
 }
 static void UnloadIafAudio(void)
