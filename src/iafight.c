@@ -3550,6 +3550,170 @@ static void UpdateResultVs(void)
     scT = 0;
 }
 
+/* Limpa residuos de recorte (pixels semitransparentes, halo cinza e pixels orfaos)
+   e endurece o contorno escuro externo dos atlas de pixel art (Elira e Antigravity). */
+static Texture2D LoadFighterAtlasClean(const char *path)
+{
+    if (!FileExists(path)) return (Texture2D){0};
+    Image img = LoadImage(path);
+    if (!img.data) return (Texture2D){0};
+    ImageFormat(&img, PIXELFORMAT_UNCOMPRESSED_R8G8B8A8);
+    int w = img.width, h = img.height;
+    Color *px = (Color *)img.data;
+
+    /* 0. Fecha fendas transparentes de 1 px presas dentro do corpo do sprite
+          (horizontais, verticais e diagonais de 45 graus presentes no atlas original) */
+    Color *orig = (Color *)malloc((size_t)w * (size_t)h * sizeof(Color));
+    if (orig)
+    {
+        memcpy(orig, px, (size_t)w * (size_t)h * sizeof(Color));
+        for (int y = 1; y < h - 1; y++)
+        {
+            for (int x = 1; x < w - 1; x++)
+            {
+                int i = y * w + x;
+                if (orig[i].a >= 55) continue;
+                bool u = orig[i - w].a > 200;
+                bool d = orig[i + w].a > 200;
+                bool l = orig[i - 1].a > 200;
+                bool r = orig[i + 1].a > 200;
+                bool ul = orig[i - w - 1].a > 200;
+                bool ur = orig[i - w + 1].a > 200;
+                bool dl = orig[i + w - 1].a > 200;
+                bool dr = orig[i + w + 1].a > 200;
+
+                bool pinOrDiag = (u && d && l && r);
+                bool vBridge = (u && d) && ((ul && dl) || (ur && dr));
+                bool hBridge = (l && r) && ((ul && ur) || (dl && dr));
+
+                if (pinOrDiag)
+                {
+                    Color a = orig[i - w], b = orig[i + w], c = orig[i - 1], e = orig[i + 1];
+                    px[i] = (Color){(unsigned char)(((int)a.r + b.r + c.r + e.r) / 4),
+                                    (unsigned char)(((int)a.g + b.g + c.g + e.g) / 4),
+                                    (unsigned char)(((int)a.b + b.b + c.b + e.b) / 4), 255};
+                }
+                else if (vBridge)
+                {
+                    Color a = orig[i - w], b = orig[i + w];
+                    px[i] = (Color){(unsigned char)(((int)a.r + b.r) / 2),
+                                    (unsigned char)(((int)a.g + b.g) / 2),
+                                    (unsigned char)(((int)a.b + b.b) / 2), 255};
+                }
+                else if (hBridge)
+                {
+                    Color a = orig[i - 1], b = orig[i + 1];
+                    px[i] = (Color){(unsigned char)(((int)a.r + b.r) / 2),
+                                    (unsigned char)(((int)a.g + b.g) / 2),
+                                    (unsigned char)(((int)a.b + b.b) / 2), 255};
+                }
+            }
+        }
+        free(orig);
+    }
+
+    /* 1. Zera apenas poeira quase invisivel (c.a < 55) na borda externa;
+          NUNCA apaga pixels internos cercados por pixels solidos (evita rasgos no torso/ombro) */
+    for (int y = 1; y < h - 1; y++)
+    {
+        for (int x = 1; x < w - 1; x++)
+        {
+            int i = y * w + x;
+            Color c = px[i];
+            if (c.a == 0) continue;
+            bool adjEmpty = (px[i - 1].a < 55 || px[i + 1].a < 55 ||
+                             px[i - w].a < 55 || px[i + w].a < 55);
+            if (!adjEmpty)
+            {
+                /* Pixel interno: garante opacidade solida se nao for efeito colorido suave */
+                if (c.a >= 80) px[i].a = 255;
+                continue;
+            }
+            unsigned char mn = c.r < c.g ? (c.r < c.b ? c.r : c.b) : (c.g < c.b ? c.g : c.b);
+            unsigned char mx = c.r > c.g ? (c.r > c.b ? c.r : c.b) : (c.g > c.b ? c.g : c.b);
+            if (c.a < 55 || (c.a < 195 && (mx - mn) <= 44))
+            {
+                px[i] = (Color){0, 0, 0, 0};
+            }
+        }
+    }
+
+    /* 2. Remove halo cinza/branco externo e filetes/espinhos soltos na borda (2 passes)
+          Sem comer armadura branca solida (c.a == 255 com n4 >= 3) */
+    unsigned char *rem = (unsigned char *)malloc((size_t)w * (size_t)h);
+    if (rem)
+    {
+        for (int pass = 0; pass < 2; pass++)
+        {
+            int removed = 0;
+            memset(rem, 0, (size_t)w * (size_t)h);
+            for (int y = 1; y < h - 1; y++)
+            {
+                for (int x = 1; x < w - 1; x++)
+                {
+                    int i = y * w + x;
+                    Color c = px[i];
+                    if (c.a == 0) continue;
+                    int n4 = (px[i - 1].a > 0) + (px[i + 1].a > 0) +
+                             (px[i - w].a > 0) + (px[i + w].a > 0);
+                    if (n4 == 4) continue;
+
+                    unsigned char mn = c.r < c.g ? (c.r < c.b ? c.r : c.b) : (c.g < c.b ? c.g : c.b);
+                    unsigned char mx = c.r > c.g ? (c.r > c.b ? c.r : c.b) : (c.g > c.b ? c.g : c.b);
+                    bool neutral = (mx - mn) <= 40;
+
+                    /* Remove apenas:
+                       - pixels orfaos isolados (n4 <= 1) neutros
+                       - filetes finos cinzas (n4 <= 2 com mx <= 220, nunca comendo branco puro opaco da armadura!)
+                       - qualquer pixel neutro semitransparente (c.a < 252) na borda */
+                    if ((n4 <= 1 && neutral && mn >= 38) ||
+                        (n4 <= 2 && neutral && mn >= 52 && mx <= 220) ||
+                        (neutral && mn >= 55 && c.a < 252))
+                    {
+                        rem[i] = 1;
+                        removed++;
+                    }
+                }
+            }
+            for (int i = 0; i < w * h; i++)
+            {
+                if (rem[i]) px[i] = (Color){0, 0, 0, 0};
+            }
+            if (removed == 0) break;
+        }
+        free(rem);
+    }
+
+    /* 3. Endurece o contorno escuro externo (alpha 255 solido em C_INK) */
+    for (int y = 1; y < h - 1; y++)
+    {
+        for (int x = 1; x < w - 1; x++)
+        {
+            int i = y * w + x;
+            Color c = px[i];
+            if (c.a == 0) continue;
+            bool adjTrans = (px[i - 1].a == 0 || px[i + 1].a == 0 ||
+                             px[i - w].a == 0 || px[i + w].a == 0);
+            if (!adjTrans) continue;
+            unsigned char mn = c.r < c.g ? (c.r < c.b ? c.r : c.b) : (c.g < c.b ? c.g : c.b);
+            unsigned char mx = c.r > c.g ? (c.r > c.b ? c.r : c.b) : (c.g > c.b ? c.g : c.b);
+            if ((mx - mn) <= 42 && mx <= 185)
+            {
+                px[i] = C_INK; /* contorno escuro 100% opaco e uniforme */
+            }
+            else if (c.a > 170)
+            {
+                px[i].a = 255;
+            }
+        }
+    }
+
+    Texture2D t = LoadTextureFromImage(img);
+    UnloadImage(img);
+    if (t.id) SetTextureFilter(t, TEXTURE_FILTER_POINT);
+    return t;
+}
+
 /* ------------------------------------------------------------------ interface com o jogo (iafight.h) */
 static bool iafLoaded = false;
 
@@ -3557,14 +3721,11 @@ void IafEnter(GameState *game)
 {
     if (!iafLoaded)
     {
-        texElira = LoadTexture(IAF_ELIRA_ATLAS);
-        SetTextureFilter(texElira, TEXTURE_FILTER_POINT); /* pixel art: sem suavizar */
+        texElira = LoadFighterAtlasClean(IAF_ELIRA_ATLAS);
         texClaude = LoadTexture(IAF_CLAUDE_ATLAS);
         SetTextureFilter(texClaude, TEXTURE_FILTER_POINT); /* pixel art: sem suavizar */
-        texAnti = LoadTexture(IAF_ANTI_ATLAS); /* sem o arquivo, id = 0 e volta o desenho antigo */
-        SetTextureFilter(texAnti, TEXTURE_FILTER_POINT);
-        texCodex = LoadTexture(IAF_CODEX_ATLAS);
-        SetTextureFilter(texCodex, TEXTURE_FILTER_POINT);
+        texAnti = LoadFighterAtlasClean(IAF_ANTI_ATLAS); /* sem o arquivo, id = 0 e volta o desenho antigo */
+        texCodex = LoadFighterAtlasClean(IAF_CODEX_ATLAS);
         ArenaLoadAssets();
         ArenaBakePreviews();
         LoadIafAudio();
