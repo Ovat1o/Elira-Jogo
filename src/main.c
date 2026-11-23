@@ -64,7 +64,8 @@ static bool ValidateRequiredAssets(void)
         IAF_CLAUDE_ATLAS,
         IAF_CODEX_ATLAS,
         IAF_ANTI_ATLAS,
-        "assets/sprites/iafight/arena_vice2026.png"
+        "assets/sprites/iafight/arena_vice2026.png",
+        "assets/sprites/iafight/arena_cesar.png"
     };
     bool valid = true;
 
