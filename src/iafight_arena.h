@@ -55,7 +55,7 @@ typedef struct { const char *name, *tag; const char *file[AL_N]; int kind; const
    linhas destravadas (ArenaLocked falso). Na miniatura, um "?" sobre o chiado. */
 static const ArenaDef ARENAS[] = {
     {"POSTO VICE 2026", "posto de gasolina ao entardecer, em 2026", AR_IMAGEM("arena_vice2026.png"), AR_PNG, "musica_vice2026.ogg"},
-    {"CESAR SCHOOL", "entrada da faculdade no Bairro do Recife", AR_IMAGEM("arena_cesar.png"), AR_PNG},
+    {"CESAR SCHOOL", "entrada da faculdade no Bairro do Recife", AR_IMAGEM("arena_cesar.png"), AR_PNG, NULL}, /* sem trilha propria: toca a musica_luta */
     AR_EM_BREVE,
     AR_EM_BREVE,
 #if IAF_ARENAS_DESENHADAS
