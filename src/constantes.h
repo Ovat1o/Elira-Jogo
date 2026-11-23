@@ -179,6 +179,7 @@
 #define IAF_CHAIN_WINDOW    0.15f    /* combo fraco > fraco > forte: janela do cancelamento depois do acerto (s) */
 #define IAF_CHAIN_SCALE2    0.90f    /* dano do 2o golpe do combo */
 #define IAF_CHAIN_SCALE3    0.80f    /* dano do 3o golpe do combo */
+#define IAF_CHAIN_STUN_PAD  0.06f    /* combo pela janela: atordoamento minimo = preparo do golpe seguinte + isto (s) */
 #define IAF_GRAB_TOGETHER   0.05f    /* fraco e forte com ate este intervalo contam como juntos (agarrao) (s) */
 #define IAF_GRAB_RANGE      30.0f    /* alcance do agarrao alem dos corpos encostados (px) */
 #define IAF_GRAB_HOLD       0.25f    /* segura o oponente; nesse tempo ele escapa com fraco + forte (s) */
