@@ -118,27 +118,28 @@ typedef struct { float st, ac, rc, dmg, rx, top, h, stun, push; int type; } Atk;
 /* por lutador: -, fraco, forte, rasteira, aereo, soco longo (frente + forte), uppercut (cima + forte).
    O uppercut tem caixa alta (top grande): pega quem esta pulando por cima.
    Atordoamento do fraco (0,20 s) menor que preparo + recuperacao dele: jab atras de jab sem o cancelamento
-   deixa o oponente livre antes do proximo acerto (sem loop). O combo pela janela segura o atordoamento (ChainStun). */
+   deixa o oponente livre antes do proximo acerto (sem loop). O combo pela janela segura o atordoamento (ChainStun).
+   Dano do fraco (34 a 39) cerca de 25% abaixo do original: apertar so o fraco nao rende tanto quanto o forte. */
 static const Atk ATK[CH_N][AT_SPECIAL] = {
-    [CH_ELIRA] = {{0}, {0.06f, 0.08f, 0.15f, 45, 112, 168, 46, 0.20f, 170, 0},
+    [CH_ELIRA] = {{0}, {0.06f, 0.08f, 0.15f, 34, 112, 168, 46, 0.20f, 170, 0},
                   {0.14f, 0.12f, 0.26f, 95, 112, 200, 95, 0.45f, 300, 0}, /* chute alto (forte); alcances na ponta da arte */
                   {0.08f, 0.09f, 0.20f, 42, 150, 46, 44, 0.30f, 150, 1},
                   {0.05f, 0.16f, 0.10f, 55, 105, 125, 76, 0.32f, 160, 2}, /* aereo: pe do chute entre 49 e 125 px acima dos pes */
                   {0.20f, 0.10f, 0.30f, 90, 128, 168, 50, 0.45f, 330, 0},  /* soco longo */
                   {0.08f, 0.14f, 0.32f, 80, 90, 300, 270, 0.50f, 120, 0}}, /* uppercut (chute alto) */
-    [CH_CLAUDE] = {{0}, {0.07f, 0.08f, 0.15f, 52, 240, 162, 66, 0.20f, 170, 0}, /* alcances no punho/pe do sprite (2x) */
+    [CH_CLAUDE] = {{0}, {0.07f, 0.08f, 0.15f, 39, 240, 162, 66, 0.20f, 170, 0}, /* alcances no punho/pe do sprite (2x) */
                    {0.17f, 0.10f, 0.30f, 106, 250, 150, 72, 0.45f, 380, 0},   /* chute frontal */
                    {0.10f, 0.08f, 0.22f, 50, 228, 44, 44, 0.32f, 160, 1},
                    {0.05f, 0.15f, 0.10f, 55, 248, 80, 54, 0.32f, 160, 2},
                    {0.24f, 0.10f, 0.34f, 108, 262, 170, 72, 0.50f, 420, 0},  /* soco forte de alcance longo */
                    {0.09f, 0.14f, 0.34f, 85, 210, 320, 290, 0.50f, 120, 0}}, /* uppercut */
-    [CH_CODEX] = {{0}, {0.06f, 0.07f, 0.14f, 52, 116, 122, 50, 0.20f, 180, 0},  /* alcances na luva/tenis do sprite (2x) */
+    [CH_CODEX] = {{0}, {0.06f, 0.07f, 0.14f, 39, 116, 122, 50, 0.20f, 180, 0},  /* alcances na luva/tenis do sprite (2x) */
                   {0.20f, 0.10f, 0.32f, 120, 122, 118, 56, 0.48f, 330, 0},  /* chute alto */
                   {0.09f, 0.08f, 0.22f, 55, 120, 100, 64, 0.32f, 170, 1},   /* chute baixo */
                   {0.06f, 0.15f, 0.10f, 60, 120, 120, 74, 0.34f, 170, 2},   /* aereo: chute alto */
                   {0.22f, 0.10f, 0.32f, 105, 126, 120, 46, 0.48f, 330, 0},  /* soco longo */
                   {0.09f, 0.13f, 0.34f, 80, 110, 300, 270, 0.50f, 120, 0}}, /* uppercut */
-    [CH_ANTI] = {{0}, {0.07f, 0.08f, 0.14f, 48, 158, 175, 80, 0.20f, 160, 0}, /* alcances na ponta do golpe do sprite (2,5x) */
+    [CH_ANTI] = {{0}, {0.07f, 0.08f, 0.14f, 36, 158, 175, 80, 0.20f, 160, 0}, /* alcances na ponta do golpe do sprite (2,5x) */
                  {0.16f, 0.10f, 0.28f, 92, 160, 200, 110, 0.44f, 300, 0},  /* chute */
                  {0.09f, 0.09f, 0.20f, 45, 152, 60, 56, 0.30f, 150, 1},     /* low kick */
                  {0.05f, 0.18f, 0.10f, 26, 140, 110, 140, 0.24f, 160, 2},   /* ground slam: de cima para baixo */
