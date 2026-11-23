@@ -33,7 +33,9 @@ static bool arKoSeen = false;
         arena_<nome>_fundo.png, _meio.png, _plateia.png, _chao.png e, se houver,
         _plateia_2.png (plateia empolgada) e _frente.png (na frente dos lutadores);
      2. troque uma linha AR_EM_BREVE por  {"NOME NA TELA", "legenda curta", AR_CAMADAS("<nome>"), AR_PNG},
-     3. (opcional) ponha a camada de fundo na lista do --verify-assets em main.c.
+     3. (opcional) ponha a camada de fundo na lista do --verify-assets em main.c;
+     4. (opcional) trilha propria: o nome do .ogg (em assets/som/iafight/) no ultimo campo da linha, como na
+        Vice 2026. Sem ele, a luta na arena toca a musica_luta.ogg.
    As camadas podem ter 320x180 (o jogo amplia 4x, sem suavizar) ou 1280x720. Uma arena de imagem unica,
    como a Vice 2026, usa so a camada de fundo: AR_IMAGEM("arquivo.png"). Camada que falta e pulada; sem a
    de fundo, o cartao continua travado (EM BREVE) e nao pode ser escolhido.
@@ -42,23 +44,23 @@ static bool arKoSeen = false;
    ficam fora da selecao. Para religar, defina IAF_ARENAS_DESENHADAS 1 em constantes.h. */
 enum { AR_NUCLEO, AR_LAB1990, AR_PNG };                                   /* como a arena e desenhada */
 enum { AL_FUNDO, AL_MEIO, AL_PLATEIA, AL_PLATEIA2, AL_CHAO, AL_FRENTE, AL_N }; /* camadas do guia */
-typedef struct { const char *name, *tag; const char *file[AL_N]; int kind; } ArenaDef;
+typedef struct { const char *name, *tag; const char *file[AL_N]; int kind; const char *music; } ArenaDef;
 #define AR_DIR "assets/sprites/iafight/"
 #define AR_CAMADAS(n) {AR_DIR "arena_" n "_fundo.png", AR_DIR "arena_" n "_meio.png", AR_DIR "arena_" n "_plateia.png", \
                        AR_DIR "arena_" n "_plateia_2.png", AR_DIR "arena_" n "_chao.png", AR_DIR "arena_" n "_frente.png"}
 #define AR_IMAGEM(f) {AR_DIR f, NULL, NULL, NULL, NULL, NULL}
-#define AR_EM_BREVE {"EM CONSTRUÇÃO", "uma arena nova está sendo desenhada", {NULL}, AR_PNG}
+#define AR_EM_BREVE {"EM CONSTRUÇÃO", "uma arena nova está sendo desenhada", {NULL}, AR_PNG, NULL}
 /* PENDENTE (quando as outras arenas chegarem): cartao ALEATORIA ("?") no fim da fileira. Ideia: uma linha
    com kind AR_RANDOM; em ArenaConfirm, guardar arPick = -1; em ArenaSortear, se arPick < 0, sortear entre as
    linhas destravadas (ArenaLocked falso). Na miniatura, um "?" sobre o chiado. */
 static const ArenaDef ARENAS[] = {
-    {"POSTO VICE 2026", "posto de gasolina ao entardecer, em 2026", AR_IMAGEM("arena_vice2026.png"), AR_PNG},
+    {"POSTO VICE 2026", "posto de gasolina ao entardecer, em 2026", AR_IMAGEM("arena_vice2026.png"), AR_PNG, "musica_vice2026.ogg"},
     AR_EM_BREVE,
     AR_EM_BREVE,
     AR_EM_BREVE,
 #if IAF_ARENAS_DESENHADAS
-    {"ARENA DO NÚCLEO", "sala de servidores do núcleo", {NULL}, AR_NUCLEO},
-    {"LABORATÓRIO 1990", "fitas magnéticas e terminais verdes", {NULL}, AR_LAB1990},
+    {"ARENA DO NÚCLEO", "sala de servidores do núcleo", {NULL}, AR_NUCLEO, NULL},
+    {"LABORATÓRIO 1990", "fitas magnéticas e terminais verdes", {NULL}, AR_LAB1990, NULL},
 #endif
 };
 #define AR_DEFS ((int)(sizeof ARENAS / sizeof ARENAS[0]))
@@ -70,6 +72,8 @@ static int arArena = AR_PNG;      /* como a arena da luta e desenhada (ARENAS[ar
 #define AR_LINE_COL (arArena == AR_LAB1990 ? C_AMBER : C_CYAN) /* cor das linhas do piso */
 
 static bool ArenaLocked(int i) { return ARENAS[i].kind == AR_PNG && arTex[i][AL_FUNDO].id == 0; }
+/* trilha propria da arena da luta (UpdateIafMusic) ou NULL para a musica_luta */
+static const char *ArenaMusicFile(void) { return arCur >= 0 && arCur < AR_DEFS && !ArenaLocked(arCur) ? ARENAS[arCur].music : NULL; }
 /* arena da luta = a escolhida na tela de arenas (chamada em StartMatch) */
 static void ArenaSortear(void)
 {

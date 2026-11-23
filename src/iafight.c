@@ -220,9 +220,11 @@ static const char *SFX_FILE[SFX_N] = {"golpe_fraco.wav", "golpe_forte.wav", "def
 static Sound sfx[SFX_N][IAF_SFX_VOICES];
 static int sfxNext[SFX_N];
 static int iafSfxPlays[SFX_N]; /* quantas vezes cada efeito foi pedido (usado pelos testes) */
-static Music musSel, musFight;
+static Music musSel, musFight, musArena; /* musArena: trilha propria da arena da luta (campo music de ARENAS) */
 static bool musLoaded = false, iafMuted = false;
-static int musCur = -1; /* -1 nenhuma, 0 selecao, 1 luta */
+static int musCur = -1;                   /* -1 nenhuma, 0 selecao, 1 luta, 2 trilha da arena */
+static const char *musArenaFile = NULL;   /* arquivo carregado (ou tentado) em musArena */
+static const char *ArenaMusicFile(void);  /* trilha da arena da luta ou NULL (iafight_arena.h) */
 static float AudioMaster(void) { return iafMuted ? 0.0f : Clamp(g_musicVolume / 0.45f, 0.0f, 2.5f); }
 static void LoadIafAudio(void)
 {
@@ -258,19 +260,39 @@ static void PlaySfx(int id)
     else SetSoundPitch(*s, id >= VOX_ROUND || id == SFX_MOVE || id == SFX_OK ? 1.0f : 0.95f + Rand01() * 0.1f); /* golpes variam um pouco */
     PlaySound(*s);
 }
-/* toca a trilha pedida (0 selecao, 1 luta, -1 silencio) e mantem o stream andando */
+static Music *IafMusic(int id) { return id == 0 ? &musSel : (id == 1 ? &musFight : (id == 2 ? &musArena : NULL)); }
+/* carrega a trilha da arena (uma por vez); tenta cada arquivo uma vez so: se faltar, a luta usa a musica_luta */
+static bool LoadArenaMusic(const char *file)
+{
+    if (musArenaFile && strcmp(musArenaFile, file) == 0) return musArena.stream.buffer != NULL;
+    if (musArena.stream.buffer) UnloadMusicStream(musArena);
+    musArena = (Music){0};
+    musArenaFile = file;
+    char path[256];
+    snprintf(path, sizeof path, "%s%s", IAF_AUDIO_DIR, file);
+    if (FileExists(path)) musArena = LoadMusicStream(path);
+    musArena.looping = true;
+    return musArena.stream.buffer != NULL;
+}
+/* toca a trilha pedida (0 selecao, 1 luta, -1 silencio) e mantem o stream andando. Na luta, a arena com
+   trilha propria (ARENAS[].music) toca a dela; as outras tocam a musica_luta */
 static void UpdateIafMusic(int want)
 {
     if (!musLoaded) return;
+    if (want == 1)
+    {
+        const char *f = ArenaMusicFile();
+        if (musCur == 2 && (!f || strcmp(f, musArenaFile) != 0)) { StopMusicStream(musArena); musCur = -1; } /* arena mudou */
+        if (f && LoadArenaMusic(f)) want = 2;
+    }
     if (want != musCur)
     {
-        if (musCur == 0) StopMusicStream(musSel);
-        if (musCur == 1) StopMusicStream(musFight);
+        Music *old = IafMusic(musCur), *nw = IafMusic(want);
+        if (old) StopMusicStream(*old);
         musCur = want;
-        if (want == 0) PlayMusicStream(musSel);
-        if (want == 1) PlayMusicStream(musFight);
+        if (nw) PlayMusicStream(*nw);
     }
-    Music *m = musCur == 0 ? &musSel : (musCur == 1 ? &musFight : NULL);
+    Music *m = IafMusic(musCur);
     if (!m) return;
     SetMusicVolume(*m, fminf(1.0f, IAF_MUSIC_VOLUME * AudioMaster()));
     UpdateMusicStream(*m);
@@ -285,6 +307,9 @@ static void UnloadIafAudio(void)
     }
     memset(sfx, 0, sizeof sfx);
     if (musLoaded) { UnloadMusicStream(musSel); UnloadMusicStream(musFight); }
+    if (musArena.stream.buffer) UnloadMusicStream(musArena);
+    musArena = (Music){0};
+    musArenaFile = NULL;
     musLoaded = false;
     musCur = -1;
 }

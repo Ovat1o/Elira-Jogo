@@ -42,6 +42,9 @@ ARQUIVOS (duracao)
   voz_vitoria.wav        1,04 s  "Vitoria!" robotico
   musica_selecao.ogg    38,4 s   100 BPM, Am-F-C-G, calma, arpejos de servidor (loop)
   musica_luta.ogg       64,0 s   150 BPM, Em-C-D-B, energia alta, lead na parte B (loop)
+  musica_vice2026.ogg   73,2 s   118 BPM, Gm9-Ebmaj7-Cm9-D7, electro-funk frances, so na arena
+                                 POSTO VICE 2026 (loop). Gerada por iafight_audio/vice/gerar_vice2026.py,
+                                 fora do repo; autoria e regras no LEIAME de la.
 
 COMO REGERAR
   python -m pip install numpy soundfile
