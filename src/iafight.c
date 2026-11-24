@@ -1685,8 +1685,9 @@ static bool cpu[2] = {false, true};
 static bool trainMode = false;
 static int trainPick = 0;           /* selecao do treino: 0 = lutador, 1 = boneco */
 static int trainDummy = CH_CLAUDE;  /* lutador do boneco */
-static int dummyMode = 0;           /* boneco: 0 parado, 1 defende sempre, 2 pula */
-static const char *DUMMY_TXT[3] = {"PARADO", "DEFENDE SEMPRE", "PULA"};
+static int dummyMode = 0;           /* boneco: 0 parado, 1 defende sempre, 2 pula, 3 luta (a IA joga com ele) */
+#define DUMMY_MODES 4
+static const char *DUMMY_TXT[DUMMY_MODES] = {"PARADO", "DEFENDE SEMPRE", "PULA", "LUTA (IA)"};
 static float trainLast = 0, trainComboDmg = 0; /* dano do ultimo golpe e do combo atual do jogador */
 static int trainComboHits = 0;
 static bool trainLastBlocked = false;
@@ -2977,9 +2978,9 @@ static IafInput DummyInput(void)
     return in;
 }
 /* um quadro do treino: teclas do treino, vida e carga cheias, cronometro parado; devolve a entrada do boneco */
-static IafInput TrainStep(void)
+static IafInput TrainStep(float dt)
 {
-    if (IsKeyPressed(KEY_F2) || AnyPadRawPressed(GAMEPAD_BUTTON_LEFT_THUMB)) dummyMode = (dummyMode + 1) % 3;
+    if (IsKeyPressed(KEY_F2) || AnyPadRawPressed(GAMEPAD_BUTTON_LEFT_THUMB)) dummyMode = (dummyMode + 1) % DUMMY_MODES;
     if (IsKeyPressed(KEY_F4) && texElira2.id) eliraNovos = !eliraNovos; /* modo de teste: sprites novos da Elira */
     if (IsKeyPressed(KEY_F3) || AnyPadRawPressed(GAMEPAD_BUTTON_RIGHT_THUMB))
     { /* volta os dois para o meio */
@@ -2991,9 +2992,10 @@ static IafInput TrainStep(void)
     for (int k = 0; k < 2; k++)
     {
         Fighter *f = &fz[k];
-        f->meter = IAF_METER_MAX;
+        if (!(k == 1 && dummyMode == 3)) f->meter = IAF_METER_MAX; /* lutando, o boneco enche a barra como numa luta */
         if (fz[1 - k].comboT <= 0 && f->st != ST_HIT && !f->down && f->hp < IAF_HP_MAX) f->hp = f->hpShown = IAF_HP_MAX; /* fim do combo: vida cheia */
     }
+    if (dummyMode == 3) return CpuInput(1, dt); /* o boneco luta: serve para ver qualquer lutador (e a Iara) jogando */
     return DummyInput();
 }
 /* caixa do golpe do lutador (mesma conta do acerto em UpdateFighter): 0 = sem golpe, 1 = fora do ativo, 2 = ativo */
@@ -3096,7 +3098,7 @@ static void UpdateFight(float dt)
     if (rstate == RS_FIGHT)
     {
         IafInput i0 = cpu[0] ? CpuInput(0, dt) : HumanInput(0);
-        IafInput i1 = trainMode ? TrainStep() : (cpu[1] ? CpuInput(1, dt) : HumanInput(1)); /* treino: boneco */
+        IafInput i1 = trainMode ? TrainStep(dt) : (cpu[1] ? CpuInput(1, dt) : HumanInput(1)); /* treino: boneco */
         SimStep(dt, i0, i1);
         roundTimer -= dt;
         bool k0 = fz[0].st == ST_KO, k1 = fz[1].st == ST_KO;
@@ -3422,7 +3424,7 @@ static void DrawSelectScreen(bool vs)
     if (tr)
     {
         TxtC("vida infinita e carga cheia", SCREEN_WIDTH / 2.0f, by, 14, C_DIM);
-        TxtC("boneco parado, defendendo ou pulando (F2 / L3)", SCREEN_WIDTH / 2.0f, by + 20, 14, C_DIM);
+        TxtC("boneco parado, defendendo, pulando ou lutando (F2 / L3)", SCREEN_WIDTH / 2.0f, by + 20, 14, C_DIM);
         TxtC("caixas de colisão: F1 / SELECT", SCREEN_WIDTH / 2.0f, by + 40, 14, C_DIM);
         DrawSelInfo(0, cur[0], dum ? "escolhido   ESC / B: trocar" : NULL, PCOL[0], false);
         DrawSelInfo(1, cur[1], "boneco de treino", C_GREEN, false);
