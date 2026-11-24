@@ -173,12 +173,12 @@ static const Atk ATK[CH_N][AT_SPECIAL] = {
                  {0.20f, 0.10f, 0.30f, 65, 160, 190, 90, 0.44f, 320, 0},    /* heavy punch */
                  {0.08f, 0.14f, 0.32f, 32, 150, 320, 300, 0.50f, 120, 0}},  /* uppercut (heavy punch subindo) */
     /* Iara: alcance (rx), topo e altura da caixa em px da escala 1 (guarda de 210 px), vezes IAF_IARA_ESCALA */
-    [CH_IARA] = {{0}, {0.07f, 0.08f, 0.15f, 36, IRK(105), IRK(165), IRK(50), 0.20f, 170, 0},  /* garra rapida: alcance nos riscos da garra */
-                 {0.15f, 0.11f, 0.28f, 96, IRK(114), IRK(210), IRK(110), 0.45f, 320, 0},  /* golpe de cauda forte: arco alto */
+    [CH_IARA] = {{0}, {0.07f, 0.08f, 0.15f, 36, IRK(103), IRK(162), IRK(49), 0.20f, 170, 0},  /* garra rapida: alcance nos riscos da garra */
+                 {0.15f, 0.11f, 0.28f, 96, IRK(109), IRK(200), IRK(105), 0.45f, 320, 0},  /* golpe de cauda forte: arco alto */
                  {0.09f, 0.09f, 0.21f, 44, IRK(150), IRK(46), IRK(44), 0.30f, 150, 1},    /* chicote de agua rente ao chao (agachada) */
-                 {0.05f, 0.16f, 0.10f, 55, IRK(115), IRK(100), IRK(100), 0.32f, 160, 2},  /* aereo: cauda chicoteando para baixo */
+                 {0.05f, 0.16f, 0.10f, 55, IRK(102), IRK(88), IRK(88), 0.32f, 160, 2},  /* aereo: cauda chicoteando para baixo */
                  {0.21f, 0.10f, 0.30f, 88, IRK(150), IRK(175), IRK(70), 0.45f, 330, 0},   /* golpe longo: garra e mechas lancadas */
-                 {0.08f, 0.14f, 0.32f, 80, IRK(95), IRK(300), IRK(270), 0.50f, 120, 0}},  /* uppercut: sobe num jato de agua */
+                 {0.08f, 0.14f, 0.32f, 80, IRK(87), IRK(277), IRK(250), 0.50f, 120, 0}},  /* uppercut: sobe num jato de agua */
 };
 /* especiais: preparo / janela ativa / recuperacao */
 static const float SP_ST[CH_N] = {0.42f, 0.08f, 0.14f, 0.22f, 0.50f}; /* Iara: canta e se transforma antes da onda */
