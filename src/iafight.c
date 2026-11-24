@@ -3395,11 +3395,26 @@ static void DrawBackdrop(Color accent)
 }
 
 /* ------------------------------------------------------------------ selecao de lutador
-   Paineis grandes do 1P (esquerda) e do 2P/CPU (direita) com o lutador animado; no centro a grade
-   com um retrato por lutador e os cursores dos jogadores. Serve ao 1 jogador e ao 1 x 1. */
+   Paineis grandes do 1P (esquerda) e do 2P/CPU (direita) com o lutador animado em palco sci-fi;
+   no centro, a grade 2x4 (8 slots: 5 lutadores desbloqueados + 3 slots bloqueados 'EM BREVE'). */
+#define SEL_GRID_SLOTS 8
 static const Color PCOL[2] = {{96, 214, 240, 255}, {230, 80, 84, 255}}; /* cursor/rotulo do 1P e do 2P */
-/* recorte do retrato (rosto e tronco) dentro do 1o quadro da parada, em pixels da arte de cada atlas */
-static const Rectangle THUMB_CUT[CH_N] = {{0, 0, 66, 66}, {0, 0, 160, 102}, {0, 0, 80, 80}, {2, 0, 86, 78}, {0, 0, IR_THUMB_PX, IR_THUMB_PX}};
+/* recorte centralizado (rosto e tronco) dentro do 1o quadro da parada, em pixels da arte de cada atlas */
+static const Rectangle THUMB_CUT[CH_N] = {
+    {7, 0, 68, 68},                    /* ELIRA: w=82, ax=41 -> centrado em 41 */
+    {18, 0, 124, 102},                 /* CLAUDE: w=160, ax=80 -> centrado em 80 */
+    {3, 0, 83, 83},                    /* CODEX: w=89, ax=39 -> centrado na nuvem */
+    {10, 0, 89, 89},                   /* ANTIGRAVITY: w=109, ax=54.7 -> centrado em 54.5 */
+    {0, 0, IR_THUMB_PX, IR_THUMB_PX}   /* IARA: retrato 72x72 pre-escalado */
+};
+static Color LogoMix(Color a, Color b, float t);
+static float LogoAdv(const Font *f, char ch, float sc);
+static float LogoWidth(const Font *f, const char *s, float sc);
+static void LogoPass(const Font *f, const char *s, float x, float y, float px, float ox, float oy,
+                     int mode, Color flat, Color top, Color mid, Color bot, float sweep);
+static void Tri2(Vector2 a, Vector2 b, Vector2 c, Color col);
+static void DrawPadlock(Vector2 c, float s, Color col);
+
 static void DrawThumb(CharId ch, Rectangle dst, bool alt)
 {
     Texture2D tex = texElira;
@@ -3408,7 +3423,7 @@ static void DrawThumb(CharId ch, Rectangle dst, bool alt)
     if (ch == CH_CLAUDE) { const CFrame *e = &CF[CA_FIRST[CA_IDLE]]; tex = texClaude; fr = (Rectangle){e->x, e->y, e->w, e->h}; if (alt) tint = IAF_CLAUDE_ALT_TINT; }
     else if (ch == CH_CODEX) { const XFrame *e = &XF[XA_FIRST[XA_IDLE]]; tex = texCodex; fr = (Rectangle){e->x, e->y, e->w, e->h}; if (alt) tint = IAF_CODEX_ALT_TINT; }
     else if (ch == CH_ANTI) { const AFrame *e = &AF[AA_FIRST[AA_IDLE]]; tex = texAnti; fr = (Rectangle){e->x, e->y, e->w, e->h}; if (alt) tint = IAF_ANTI_ALT_TINT; }
-    else if (ch == CH_IARA) { const IFrame *e = &IRF[IR_FIRST[IR_THUMB]]; tex = texIara; /* retrato pre-escalado (1:1 no cartao) */ fr = (Rectangle){e->x, e->y, e->w, e->h}; if (alt) tint = IAF_IARA_ALT_TINT; }
+    else if (ch == CH_IARA) { const IFrame *e = &IRF[IR_FIRST[IR_THUMB]]; tex = texIara; fr = (Rectangle){e->x, e->y, e->w, e->h}; if (alt) tint = IAF_IARA_ALT_TINT; }
     else { const EFrame *e = &EF[EAFrame(EA_IDLE, 0)]; fr = (Rectangle){e->x, e->y, e->w, e->h}; if (alt) tint = IAF_ELIRA_ALT_TINT; }
     if (!tex.id)
     { /* sem o atlas: o boneco desenhado, pequeno */
@@ -3433,79 +3448,345 @@ static void LadderFor(int ch, int out[3])
         if (c != ch) out[n++] = c;
     out[2] = CH_ELIRA;
 }
+/* grade 2 colunas x 4 linhas (8 quadrados iguais no centro da tela) */
 static Rectangle GridCell(int i)
 {
-    const float cs = 112, gap = 12;
-    float x0 = SCREEN_WIDTH / 2.0f - cs - gap / 2;
-    if (i == CH_IARA) return (Rectangle){x0, 176 + 2 * (cs + gap) + 14, 2 * cs + gap, 84}; /* cartao de colab, separado da grade */
-    return (Rectangle){x0 + (i % 2) * (cs + gap), 176 + (i / 2) * (cs + gap), cs, cs};
+    const float cs = 104.0f, gap = 12.0f;
+    float x0 = SCREEN_WIDTH / 2.0f - cs - gap * 0.5f;
+    float y0 = 120.0f;
+    return (Rectangle){x0 + (i % 2) * (cs + gap), y0 + (i / 2) * (cs + gap), cs, cs};
 }
-/* cursor da selecao: esquerda/direita percorre os 4 e a convidada; cima/baixo troca a linha da grade e
-   desce (ou sobe) para o cartao de colab, abaixo da grade */
+/* navegacao 2x4 pelos 5 lutadores desbloqueados (slots 0..4), pulando os 3 bloqueados (5..7) */
 static int SelMove(int c, int dx, int dy)
 {
-    if (dx) return (c + dx + CH_N) % CH_N;
+    if (c < 0 || c >= CH_N) c = 0;
+    if (dx) return (c + (dx > 0 ? 1 : -1) + CH_N) % CH_N;
     if (!dy) return c;
-    if (c == CH_IARA) return dy > 0 ? 0 : 2;
-    if (dy > 0) return c < 2 ? c + 2 : CH_IARA;
-    return c >= 2 ? c - 2 : CH_IARA;
+    if (dy > 0)
+    {
+        if (c == 0) return 2;
+        if (c == 2) return 4;
+        if (c == 4) return 0;
+        if (c == 1) return 3;
+        return 4; /* de 3 (Antigravity) desce para 4 (Iara) */
+    }
+    else
+    {
+        if (c == 0) return 4;
+        if (c == 2) return 0;
+        if (c == 4) return 2;
+        if (c == 1) return 3;
+        return 1; /* de 3 (Antigravity) sobe para 1 (Claude) */
+    }
 }
-/* cartao da Iara: personagem de colab (jogo parceiro), com o selo COLAB */
-static void DrawThumb(CharId ch, Rectangle dst, bool alt);
-static void DrawColabCard(bool on)
+
+/* Titulo 'SELECIONE SUA IA' no mesmo estilo de fogo de DrawIafTitleLogo */
+static void DrawIafSelectLogo(void)
 {
-    Rectangle g = GridCell(CH_IARA);
-    Color c = CHCOL[CH_IARA], red = {156, 65, 86, 255};
-    DrawRectangleRec(g, (Color){14, 22, 34, 255});
-    DrawRectangleGradientH((int)g.x, (int)g.y, (int)g.width, (int)g.height, Fade(c, on ? 0.30f : 0.12f), Fade(c, 0));
-    DrawThumb(CH_IARA, (Rectangle){g.x + 6, g.y + 6, g.height - 12, g.height - 12}, false);
-    float tx = g.x + g.height + 2;
-    Txt("IARA", tx, g.y + 18, 24, on ? c : Fade(c, 0.85f));
-    Txt("convidada do", tx, g.y + 46, 12, C_DIM);
-    Txt("jogo parceiro", tx, g.y + 60, 12, C_DIM);
-    DrawRectangleLinesEx(g, 2, on ? c : Fade(c, 0.4f));
-    /* selo COLAB no canto */
-    float bw = TxtW("COLAB", 14) + 14;
-    Rectangle b = {g.x + g.width - bw - 6, g.y - 9, bw, 20};
-    DrawRectangleRec(b, red);
-    DrawRectangleLinesEx(b, 1, ColorLerp(red, WHITE, 0.4f));
-    TxtC("COLAB", b.x + bw / 2, b.y + 2, 14, C_WHITE);
+    const float cx = SCREEN_WIDTH / 2.0f;
+    const float px = 76.0f, ty = 14.0f;
+    Font f = GetGameFont(px);
+    float sc = px / (float)f.baseSize;
+    const char *part0 = "SELECIONE SUA";
+    const char *part1 = "IA";
+    float w0 = LogoWidth(&f, part0, sc), wSp = LogoAdv(&f, ' ', sc), w1 = LogoWidth(&f, part1, sc);
+    float total = w0 + wSp + w1;
+    float x0 = cx - total / 2.0f;
+    float x1 = x0 + w0 + wSp;
+    float pulse = 0.5f + 0.5f * sinf(gt * 3.0f);
+
+    /* aura quente + faixas diagonais de velocidade atras do titulo */
+    for (int k = 3; k >= 1; k--)
+        DrawEllipse((int)cx, 54, 420 + k * 34, 30 + k * 8, Fade((Color){255, 90, 22, 255}, 0.042f + 0.014f * pulse));
+    Vector2 s1a = {cx - 460, 84}, s1b = {cx + 420, 22}, s1c = {cx + 475, 22}, s1d = {cx - 405, 84};
+    Tri2(s1a, s1b, s1c, Fade((Color){210, 28, 32, 255}, 0.34f));
+    Tri2(s1a, s1c, s1d, Fade((Color){210, 28, 32, 255}, 0.34f));
+    DrawLineEx((Vector2){cx - 480, 92}, (Vector2){cx + 480, 28}, 2.0f, Fade(C_AMBER, 0.44f));
+    DrawLineEx((Vector2){cx - 420, 98}, (Vector2){cx + 500, 44}, 1.3f, Fade((Color){255, 65, 30, 255}, 0.48f));
+
+    /* chamas animadas em 3 camadas subindo por tras do titulo */
+    for (int fl = 0; fl < 18; fl++)
+    {
+        float u = (fl + 0.5f) / 18.0f;
+        float fx = x0 - 14.0f + u * (total + 28.0f);
+        float wv1 = sinf(gt * (5.2f + (fl % 4) * 1.1f) + fl * 1.7f);
+        float wv2 = cosf(gt * (7.4f + (fl % 3) * 1.3f) + fl * 2.3f);
+        float edge = 1.0f - fabsf(u - 0.5f) * 0.65f;
+        float fh = (38.0f + 20.0f * (0.5f + 0.5f * wv1)) * edge;
+        float fw = (18.0f + 7.0f * (0.5f + 0.5f * wv2));
+        float baseY = ty + 72.0f;
+        float sway = wv2 * 9.0f;
+
+        Tri2((Vector2){fx - fw, baseY}, (Vector2){fx + fw, baseY},
+             (Vector2){fx + sway, baseY - fh - 22.0f}, Fade((Color){230, 32, 18, 255}, 0.36f));
+        Tri2((Vector2){fx - fw * 0.68f, baseY}, (Vector2){fx + fw * 0.68f, baseY},
+             (Vector2){fx + sway * 0.75f, baseY - fh * 0.78f - 14.0f}, Fade((Color){255, 128, 24, 255}, 0.42f));
+        Tri2((Vector2){fx - fw * 0.36f, baseY}, (Vector2){fx + fw * 0.36f, baseY},
+             (Vector2){fx + sway * 0.45f, baseY - fh * 0.50f - 6.0f}, Fade((Color){255, 232, 110, 255}, 0.45f));
+    }
+
+    const char *segS[2] = {part0, part1};
+    float segX[2] = {x0, x1};
+    Color vinho = {110, 14, 28, 255}, vinhoDk = {64, 8, 20, 255};
+
+    /* contorno C_INK ao redor da base e da extrusao */
+    for (int q = 0; q < 2; q++)
+    {
+        for (int a = 0; a < 8; a++)
+        {
+            float ang = a * 0.7853982f;
+            float ox = cosf(ang) * 3.4f, oy = sinf(ang) * 3.4f;
+            LogoPass(&f, segS[q], segX[q], ty, px, ox, oy, 0, C_INK, C_INK, C_INK, C_INK, 0);
+            LogoPass(&f, segS[q], segX[q], ty, px, ox + 9.0f, oy + 12.0f, 0, C_INK, C_INK, C_INK, C_INK, 0);
+        }
+        for (int a = 0; a < 4; a++)
+        {
+            float ang = a * 1.5707963f;
+            LogoPass(&f, segS[q], segX[q], ty, px, 4.5f + cosf(ang) * 3.4f, 6.0f + sinf(ang) * 3.4f, 0, C_INK, C_INK, C_INK, C_INK, 0);
+        }
+    }
+    /* extrusao 3D em vinho */
+    for (int q = 0; q < 2; q++)
+        for (int k = 6; k >= 1; k--)
+            LogoPass(&f, segS[q], segX[q], ty, px, k * 1.45f, k * 1.9f, 0, k > 3 ? vinhoDk : vinho, vinho, vinho, vinho, 0);
+
+    /* preenchimento: 'SELECIONE SUA' ouro -> laranja -> fogo, 'IA' vermelho incandescente -> carmesim */
+    float sweep = fmodf(gt * 320.0f, total + 440.0f) + x0 - 220.0f;
+    LogoPass(&f, part0, x0, ty, px, 0, 0, 1, C_WHITE, (Color){255, 232, 70, 255}, (Color){255, 140, 30, 255}, (Color){226, 44, 30, 255}, sweep);
+    LogoPass(&f, part1, x1, ty, px, 0, 0, 1, C_WHITE, (Color){255, 128, 86, 255}, (Color){238, 38, 34, 255}, (Color){155, 12, 22, 255}, sweep);
+
+    /* brasas incandescentes subindo ao redor do titulo */
+    for (int s = 0; s < 18; s++)
+    {
+        float spd = 0.36f + (s % 5) * 0.09f;
+        float ph = fmodf(gt * spd + s * 0.217f, 1.0f);
+        float baseX = x0 - 24.0f + fmodf(s * 83.7f, total + 48.0f);
+        float drift = sinf(gt * (2.6f + (s % 4) * 0.7f) + s * 1.9f) * (8.0f + (s % 3) * 4.0f);
+        float ex = baseX + drift + ph * 12.0f;
+        float ey = (ty + 66.0f) - ph * 72.0f;
+        float fade = sinf(ph * 3.14159f);
+        if (fade < 0.05f) continue;
+        float sz = (1.8f + (s % 3) * 0.85f) * (0.6f + 0.5f * fade);
+        Color ember = (s % 3 == 0) ? (Color){255, 238, 120, 255}
+                    : ((s % 3 == 1) ? (Color){255, 130, 32, 255}
+                                    : (Color){245, 52, 26, 255});
+        DrawLineEx((Vector2){ex - 3.0f, ey + 6.0f + sz}, (Vector2){ex, ey}, sz * 0.7f, Fade(ember, fade * 0.40f));
+        DrawCircleV((Vector2){ex, ey}, sz * 1.6f, Fade((Color){255, 90, 20, 255}, fade * 0.26f));
+        DrawRectanglePro((Rectangle){ex, ey, sz * 1.5f, sz * 1.0f}, (Vector2){sz * 0.75f, sz * 0.5f}, -28.0f, Fade(ember, fade * 0.95f));
+    }
 }
-/* escala do lutador no painel: ~1,1x o tamanho da luta, com o pixel da arte inteiro */
-static const float PANEL_SC[CH_N] = {1.1f, 1.4f, 1.67f, 1.4f, 1.4f};
-/* painel grande de um lado: rotulo (1P / 2P / CPU), nome e o lutador animado */
+
+/* escala do lutador no painel: ~1,15x o tamanho da luta, com o pixel da arte inteiro */
+static const float PANEL_SC[CH_N] = {1.15f, 1.45f, 1.68f, 1.45f, 1.42f};
+/* palco sci-fi de preview do lutador selecionado (1P a esquerda, 2P/CPU/BONECO a direita) */
 static void DrawSelPanel(int side, int ch, const char *tag, Color tagCol, bool alt, bool ready)
 {
-    Rectangle r = {side == 0 ? 32.0f : SCREEN_WIDTH - 32.0f - 396, 108, 396, 478};
+    Rectangle r = {side == 0 ? 28.0f : SCREEN_WIDTH - 28.0f - 460.0f, 114.0f, 460.0f, 540.0f};
     Color c = alt ? AltCol(CHCOL[ch]) : CHCOL[ch];
-    DrawRectangleRounded(r, 0.04f, 6, (Color){14, 18, 36, 255});
-    DrawRectangleGradientV((int)r.x + 4, (int)(r.y + r.height * 0.35f), (int)r.width - 8, (int)(r.height * 0.65f) - 4, Fade(c, 0), Fade(c, 0.30f));
-    DrawRectangleRoundedLinesEx(r, 0.04f, 6, ready ? 5 : 2, ready ? tagCol : Fade(tagCol, 0.7f));
-    float tx = side == 0 ? r.x + 20 : r.x + r.width - 20;
-    float tw = TxtW(tag, 40), nw = TxtW(NAME[ch], 34);
-    TxtO(tag, side == 0 ? tx + tw / 2 : tx - tw / 2, r.y + 10, 40, tagCol, C_INK);
-    TxtO(NAME[ch], side == 0 ? tx + nw / 2 : tx - nw / 2, r.y + 54, 34, c, C_INK);
-    if (alt) { const char *s = "cor alternativa"; Txt(s, side == 0 ? tx : tx - TxtW(s, 14), r.y + 96, 14, C_DIM); }
-    float fy = r.y + r.height - 26;
-    DrawEllipse((int)(r.x + r.width / 2), (int)fy + 2, 130, 12, Fade(BLACK, 0.5f));
-    DrawEllipseLines((int)(r.x + r.width / 2), (int)fy + 2, 136, 13, Fade(c, 0.6f));
+    float pulse = 0.70f + 0.30f * sinf(gt * 3.4f);
+    int bx = (int)r.x, by = (int)r.y, bw = (int)r.width, bh = (int)r.height;
+
+    /* 1. Aura externa (quando pronto) ou sombra profunda */
+    if (ready)
+    {
+        Rectangle glowOuter = {r.x - 8, r.y - 6, r.width + 16, r.height + 12};
+        DrawRectangleRounded(glowOuter, 0.06f, 8, Fade(tagCol, 0.18f + 0.08f * sinf(gt * 5.0f)));
+    }
+    else
+    {
+        Rectangle shadowRec = {r.x + 5, r.y + 6, r.width, r.height};
+        DrawRectangleRounded(shadowRec, 0.05f, 8, Fade(C_INK, 0.65f));
+    }
+
+    /* 2. Base escura cyberpunk + gradientes de palco e holofote superior */
+    DrawRectangleRounded(r, 0.05f, 8, (Color){9, 13, 26, 248});
+    DrawRectangleGradientV(bx + 4, by + 4, bw - 8, bh / 3, Fade(tagCol, 0.12f), Fade(tagCol, 0.0f));
+    DrawRectangleGradientV(bx + 4, by + bh / 3, bw - 8, (bh * 2) / 3 - 4, Fade(c, 0.0f), Fade(c, 0.34f));
+
+    /* Cone de holofote suave vindo do topo ate o pedestal */
+    float cx = r.x + r.width * 0.5f;
+    float fy = r.y + r.height - 46.0f;
+    Tri2((Vector2){cx - 55.0f, r.y + 84.0f}, (Vector2){cx + 55.0f, r.y + 84.0f},
+         (Vector2){cx - 165.0f, fy}, Fade(c, 0.055f));
+    Tri2((Vector2){cx + 55.0f, r.y + 84.0f}, (Vector2){cx + 165.0f, fy},
+         (Vector2){cx - 165.0f, fy}, Fade(c, 0.055f));
+
+    /* Feixes diagonais de energia e aneis tecnologicos atras do personagem */
+    for (int l = 0; l < 4; l++)
+    {
+        float ly0 = r.y + 135.0f + l * 82.0f;
+        float ly1 = ly0 - 54.0f;
+        float xA = side == 0 ? (r.x + 14.0f) : (r.x + r.width - 14.0f);
+        float xB = side == 0 ? (r.x + r.width - 14.0f) : (r.x + 14.0f);
+        DrawLineEx((Vector2){xA, ly0}, (Vector2){xB, ly1}, 1.4f, Fade(c, 0.10f + (l % 2) * 0.05f));
+    }
+    DrawRing((Vector2){cx, r.y + 305.0f}, 108.0f, 111.0f, gt * 18.0f * (side == 0 ? 1 : -1),
+             gt * 18.0f * (side == 0 ? 1 : -1) + 250.0f, 36, Fade(c, 0.14f));
+    DrawRing((Vector2){cx, r.y + 305.0f}, 82.0f, 84.0f, -gt * 24.0f * (side == 0 ? 1 : -1),
+             -gt * 24.0f * (side == 0 ? 1 : -1) + 200.0f, 32, Fade(tagCol, 0.12f));
+
+    /* 3. Barra lateral luminosa externa (esquerda no 1P, direita no 2P/CPU) */
+    int stripeX = (side == 0) ? (bx + 4) : (bx + bw - 11);
+    DrawRectangle(stripeX - 2, by + 10, 11, bh - 20, Fade(tagCol, 0.25f));
+    DrawRectangle(stripeX, by + 10, 7, bh - 20, ready ? C_WHITE : tagCol);
+
+    /* 4. Cabecalho estilizado do palco: badge 1P/2P/CPU/BONECO + nome do lutador */
+    Rectangle hdr = {r.x + 14.0f, r.y + 12.0f, r.width - 28.0f, 76.0f};
+    DrawRectangleRounded(hdr, 0.14f, 6, Fade((Color){6, 9, 20, 255}, 0.78f));
+    DrawRectangleGradientH((int)hdr.x + 2, (int)hdr.y + 2, (int)hdr.width - 4, (int)hdr.height - 4,
+                           side == 0 ? Fade(tagCol, 0.24f) : Fade(c, 0.08f),
+                           side == 0 ? Fade(c, 0.08f) : Fade(tagCol, 0.24f));
+    DrawLine((int)hdr.x + 10, (int)(hdr.y + hdr.height - 2), (int)(hdr.x + hdr.width - 10),
+             (int)(hdr.y + hdr.height - 2), Fade(c, 0.55f));
+
+    /* Badge da tag (1P / 2P / CPU / BONECO) */
+    float tagW = fmaxf(72.0f, TxtW(tag, 24) + 26.0f);
+    Rectangle tagBox = {side == 0 ? (hdr.x + 12.0f) : (hdr.x + hdr.width - 12.0f - tagW), hdr.y + 10.0f, tagW, 30.0f};
+    DrawRectangleRounded(tagBox, 0.25f, 6, tagCol);
+    DrawRectangleRoundedLinesEx(tagBox, 0.25f, 6, 1.8f, C_WHITE);
+    TxtC(tag, tagBox.x + tagBox.width * 0.5f, tagBox.y + 3.0f, 24, C_INK);
+
+    /* Nome do lutador com sombra + halo luminoso */
+    float nameSize = 34.0f;
+    float nw = TxtW(NAME[ch], (int)nameSize);
+    float nameCX = side == 0 ? (tagBox.x + tagBox.width + 16.0f + nw * 0.5f)
+                             : (tagBox.x - 16.0f - nw * 0.5f);
+    TxtC(NAME[ch], nameCX + 2, hdr.y + 10.0f, (int)nameSize, C_INK);
+    TxtC(NAME[ch], nameCX - 1, hdr.y + 8.0f, (int)nameSize, Fade(c, 0.45f));
+    TxtC(NAME[ch], nameCX + 1, hdr.y + 8.0f, (int)nameSize, Fade(c, 0.45f));
+    TxtO(NAME[ch], nameCX, hdr.y + 8.0f, (int)nameSize, C_WHITE, C_INK);
+
+    /* Sub-linha do cabecalho: titulo do especial / paleta alternativa */
+    const char *subInfo = alt ? "PALETA ALTERNATIVA  //  ESPELHO" : SPNAME[ch];
+    (void)SPDESC;
+    float subW = TxtW(subInfo, 13);
+    float subX = side == 0 ? (hdr.x + 14.0f) : (hdr.x + hdr.width - 14.0f - subW);
+    Txt(subInfo, subX, hdr.y + 50.0f, 13, alt ? C_AMBER : Fade(c, 0.92f));
+
+    /* 5. Plataforma / Pedestal Holografico Luminoso sob os pes */
+    DrawEllipse((int)cx, (int)fy + 5, 162, 22, Fade(C_INK, 0.70f));
+    DrawEllipse((int)cx, (int)fy + 2, 148, 17, Fade(c, 0.22f + 0.08f * pulse));
+    DrawEllipseLines((int)cx, (int)fy + 2, 152, 18, Fade(c, 0.85f));
+    DrawEllipseLines((int)cx, (int)fy + 2, 122, 13, Fade(tagCol, 0.65f));
+    DrawEllipse((int)cx, (int)fy + 1, 88, 8, Fade(C_WHITE, 0.14f * pulse));
+    /* Marcadores tecnologicos na borda do pedestal */
+    for (int m = -2; m <= 2; m++)
+    {
+        float mx = cx + m * 46.0f;
+        DrawLineEx((Vector2){mx - 6, fy + 16}, (Vector2){mx + 6, fy + 16}, 2.5f, Fade(c, 0.80f));
+    }
+
+    /* 6. Personagem animado em destaque no palco */
     g_altPal = alt;
-    DrawCharacterBig((CharId)ch, r.x + r.width / 2, fy, side == 0 ? 1 : -1, PANEL_SC[ch], ST_IDLE);
+    DrawCharacterBig((CharId)ch, cx, fy, side == 0 ? 1 : -1, PANEL_SC[ch], ST_IDLE);
     g_altPal = false;
-    if (ready) { float pw = TxtW("PRONTO!", 30); TxtO("PRONTO!", side == 0 ? tx + pw / 2 : tx - pw / 2, r.y + 118, 30, tagCol, C_INK); }
+
+    /* 7. Moldura externa, trilhos de telemetria e cantoneiras sci-fi nos 4 cantos */
+    DrawRectangleRoundedLinesEx(r, 0.05f, 8, ready ? 3.2f : 2.0f,
+                                ready ? tagCol : Fade(c, 0.65f * pulse + 0.20f));
+    DrawLine(bx + 26, by + 4, bx + bw - 26, by + 4, Fade(c, 0.45f));
+    DrawLine(bx + 26, by + bh - 5, bx + bw - 26, by + bh - 5, Fade(c, 0.45f));
+
+    float tick = 20.0f, pad = 2.0f, th = ready ? 3.0f : 2.4f;
+    Color tc = ready ? C_AMBER : tagCol;
+    DrawLineEx((Vector2){r.x + pad, r.y + pad}, (Vector2){r.x + pad + tick, r.y + pad}, th, tc);
+    DrawLineEx((Vector2){r.x + pad, r.y + pad}, (Vector2){r.x + pad, r.y + pad + tick}, th, tc);
+    DrawLineEx((Vector2){r.x + r.width - pad, r.y + pad}, (Vector2){r.x + r.width - pad - tick, r.y + pad}, th, tc);
+    DrawLineEx((Vector2){r.x + r.width - pad, r.y + pad}, (Vector2){r.x + r.width - pad, r.y + pad + tick}, th, tc);
+    DrawLineEx((Vector2){r.x + pad, r.y + r.height - pad}, (Vector2){r.x + pad + tick, r.y + r.height - pad}, th, tc);
+    DrawLineEx((Vector2){r.x + pad, r.y + r.height - pad}, (Vector2){r.x + pad, r.y + r.height - pad - tick}, th, tc);
+    DrawLineEx((Vector2){r.x + r.width - pad, r.y + r.height - pad}, (Vector2){r.x + r.width - pad - tick, r.y + r.height - pad}, th, tc);
+    DrawLineEx((Vector2){r.x + r.width - pad, r.y + r.height - pad}, (Vector2){r.x + r.width - pad, r.y + r.height - pad - tick}, th, tc);
+
+    /* 8. Faixa estilizada de PRONTO */
+    if (ready)
+    {
+        Rectangle rb = {r.x + 28.0f, r.y + r.height - 40.0f, r.width - 56.0f, 30.0f};
+        DrawRectangleRounded(rb, 0.25f, 6, (Color){10, 16, 30, 245});
+        DrawRectangleGradientH((int)rb.x + 2, (int)rb.y + 2, (int)rb.width - 4, (int)rb.height - 4,
+                               Fade(tagCol, 0.40f), Fade(C_AMBER, 0.35f));
+        DrawRectangleRoundedLinesEx(rb, 0.25f, 6, 2.0f, C_AMBER);
+        TxtO(">>  PRONTO!  <<", rb.x + rb.width * 0.5f, rb.y + 4.0f, 20, C_WHITE, C_INK);
+    }
 }
-/* rodape discreto de um lado: especial, descricao e a linha de estado/controles */
-static void DrawSelInfo(int side, int ch, const char *status, Color stCol, bool alt)
+
+static void DrawSelectGridSlot(int i, bool on)
 {
-    Rectangle r = {side == 0 ? 32.0f : SCREEN_WIDTH / 2.0f + 8, 600, SCREEN_WIDTH / 2.0f - 40, 86};
-    Color c = alt ? AltCol(CHCOL[ch]) : CHCOL[ch];
-    DrawRectangleRounded(r, 0.15f, 6, (Color){12, 14, 30, 255});
-    DrawRectangleRoundedLinesEx(r, 0.15f, 6, 1.5f, Fade(c, 0.5f));
-    Txt("ESPECIAL:", r.x + 14, r.y + 10, 16, C_WHITE);
-    Txt(SPNAME[ch], r.x + 14 + TxtW("ESPECIAL:", 16) + 8, r.y + 10, 16, c);
-    Txt(SPDESC[ch], r.x + 14, r.y + 36, 13, C_DIM);
-    if (status) Txt(status, r.x + 14, r.y + 60, 14, stCol);
+    Rectangle g = GridCell(i);
+    bool locked = (i >= CH_N);
+    float pulse = 0.72f + 0.28f * sinf(gt * 3.5f);
+    int gx = (int)g.x, gy = (int)g.y, gw = (int)g.width, gh = (int)g.height;
+
+    /* Sombra projetada */
+    DrawRectangleRounded((Rectangle){g.x + 3, g.y + 4, g.width, g.height}, 0.10f, 6, Fade(C_INK, 0.60f));
+
+    if (locked)
+    {
+        /* Slot bloqueado (6, 7, 8): fundo escuro, trama diagonal sutil, cadeado e 'EM BREVE' */
+        DrawRectangleRounded(g, 0.10f, 6, (Color){10, 13, 24, 245});
+        for (int k = 10; k < gw + gh; k += 14)
+        {
+            float xA = g.x + fmaxf(4.0f, (float)(k - gh + 4));
+            float yA = g.y + fminf((float)(gh - 4), (float)k);
+            float xB = g.x + fminf((float)(gw - 4), (float)k);
+            float yB = g.y + fmaxf(4.0f, (float)(k - gw + 4));
+            DrawLineEx((Vector2){xA, yA}, (Vector2){xB, yB}, 1.0f, Fade(C_DIM, 0.08f));
+        }
+        DrawRectangleRoundedLinesEx(g, 0.10f, 6, 1.5f, Fade(C_DIM, 0.28f));
+
+        /* Cantoneiras discretas */
+        float tk = 8.0f, pd = 2.0f;
+        Color lc = Fade(C_DIM, 0.45f);
+        DrawLineEx((Vector2){g.x + pd, g.y + pd}, (Vector2){g.x + pd + tk, g.y + pd}, 1.8f, lc);
+        DrawLineEx((Vector2){g.x + pd, g.y + pd}, (Vector2){g.x + pd, g.y + pd + tk}, 1.8f, lc);
+        DrawLineEx((Vector2){g.x + g.width - pd, g.y + g.height - pd}, (Vector2){g.x + g.width - pd - tk, g.y + g.height - pd}, 1.8f, lc);
+        DrawLineEx((Vector2){g.x + g.width - pd, g.y + g.height - pd}, (Vector2){g.x + g.width - pd, g.y + g.height - pd - tk}, 1.8f, lc);
+
+        DrawPadlock((Vector2){g.x + g.width * 0.5f, g.y + g.height * 0.44f}, 30.0f, Fade(C_DIM, 0.55f));
+        TxtC("EM BREVE", g.x + g.width * 0.5f, g.y + g.height - 22.0f, 12, Fade(C_DIM, 0.65f));
+        return;
+    }
+
+    Color c = CHCOL[i];
+    DrawRectangleRounded(g, 0.10f, 6, (Color){14, 19, 38, 248});
+    DrawRectangleGradientV(gx + 2, gy + 2, gw - 4, gh - 4,
+                           Fade(c, on ? 0.16f : 0.05f), Fade(c, on ? 0.44f : 0.20f));
+    /* Reflexo especular no topo do quadrado */
+    DrawRectangle(gx + 5, gy + 3, gw - 10, 14, Fade(C_WHITE, on ? 0.07f : 0.025f));
+
+    /* Retrato bem enquadrado */
+    DrawThumb((CharId)i, (Rectangle){g.x + 7.0f, g.y + 6.0f, g.width - 14.0f, g.height - 24.0f}, false);
+
+    /* Faixa inferior com o nome curto do lutador */
+    DrawRectangle(gx + 2, gy + gh - 20, gw - 4, 18, Fade((Color){6, 9, 18, 255}, 0.82f));
+    const char *shortName = (i == CH_ANTI) ? "ANTIGRAV." : NAME[i];
+    TxtC(shortName, g.x + g.width * 0.5f, g.y + g.height - 18.0f, 13, on ? C_WHITE : Fade(c, 0.90f));
+
+    /* Moldura e cantoneiras sci-fi nos 4 cantos */
+    DrawRectangleRoundedLinesEx(g, 0.10f, 6, on ? 2.4f : 1.6f, on ? C_WHITE : Fade(c, 0.55f * pulse + 0.15f));
+    float tk = on ? 12.0f : 8.0f, pd = 2.0f, th = on ? 2.4f : 1.8f;
+    Color tc = on ? C_AMBER : c;
+    DrawLineEx((Vector2){g.x + pd, g.y + pd}, (Vector2){g.x + pd + tk, g.y + pd}, th, tc);
+    DrawLineEx((Vector2){g.x + pd, g.y + pd}, (Vector2){g.x + pd, g.y + pd + tk}, th, tc);
+    DrawLineEx((Vector2){g.x + g.width - pd, g.y + pd}, (Vector2){g.x + g.width - pd - tk, g.y + pd}, th, tc);
+    DrawLineEx((Vector2){g.x + g.width - pd, g.y + pd}, (Vector2){g.x + g.width - pd, g.y + pd + tk}, th, tc);
+    DrawLineEx((Vector2){g.x + pd, g.y + g.height - pd}, (Vector2){g.x + pd + tk, g.y + g.height - pd}, th, tc);
+    DrawLineEx((Vector2){g.x + pd, g.y + g.height - pd}, (Vector2){g.x + pd, g.y + g.height - pd - tk}, th, tc);
+    DrawLineEx((Vector2){g.x + g.width - pd, g.y + g.height - pd}, (Vector2){g.x + g.width - pd - tk, g.y + g.height - pd}, th, tc);
+    DrawLineEx((Vector2){g.x + g.width - pd, g.y + g.height - pd}, (Vector2){g.x + g.width - pd, g.y + g.height - pd - tk}, th, tc);
+
+    /* Selo discreto COLAB no canto superior direito da Iara */
+    if (i == CH_IARA)
+    {
+        Color badgeCol = {175, 58, 86, 255};
+        float bw = TxtW("COLAB", 10) + 10.0f;
+        Rectangle b = {g.x + g.width - bw - 4.0f, g.y + 4.0f, bw, 15.0f};
+        DrawRectangleRounded(b, 0.3f, 4, badgeCol);
+        DrawRectangleRoundedLinesEx(b, 0.3f, 4, 1.0f, ColorLerp(badgeCol, WHITE, 0.45f));
+        TxtC("COLAB", b.x + bw * 0.5f, b.y + 2.0f, 10, C_WHITE);
+    }
 }
+
 static void DrawSelectScreen(bool vs)
 {
     int lad[3];
@@ -3515,80 +3796,73 @@ static void DrawSelectScreen(bool vs)
     if (tr) { cur[0] = dum ? playerCh : sel; cur[1] = dum ? sel : trainDummy; }
     bool mirror = vs && cur[0] == cur[1];
     DrawBackdrop(vs ? C_DIM : CHCOL[sel]);
-    TxtO("IA FIGHT", SCREEN_WIDTH / 2.0f, 14, 56, C_WHITE, C_INK);
-    const char *sub = vs ? "1 x 1  -  ESCOLHAM SEUS LUTADORES" : "1 JOGADOR x CPU  -  ESCOLHA SEU LUTADOR";
-    if (tr) sub = dum ? "TREINO  -  ESCOLHA O BONECO" : "TREINO  -  ESCOLHA SEU LUTADOR";
-    TxtC(sub, SCREEN_WIDTH / 2.0f, 76, 18, tr ? C_GREEN : C_CYAN);
+
+    /* 1. Titulo em chamas 'SELECIONE SUA IA' ampliado (sem subtitulo redundante) */
+    DrawIafSelectLogo();
+
+    /* 2. Palcos laterais de preview dos lutadores (sem os antigos cards de especial embaixo) */
     DrawSelPanel(0, cur[0], "1P", PCOL[0], false, (vs && readyP[0]) || dum);
     if (vs) DrawSelPanel(1, cur[1], "2P", PCOL[1], mirror, readyP[1]);
     else if (tr) DrawSelPanel(1, cur[1], "BONECO", C_GREEN, false, false);
     else DrawSelPanel(1, cur[1], "CPU", C_AMBER, false, false);
 
-    /* grade central */
-    TxtC("LUTADORES", SCREEN_WIDTH / 2.0f, 150, 16, C_DIM);
-    for (int i = 0; i < CH_MAIN; i++)
+    /* 3. Grade central 2x4 (8 quadrados: 5 lutadores + 3 bloqueados) */
+    for (int i = 0; i < SEL_GRID_SLOTS; i++)
     {
-        Rectangle g = GridCell(i);
-        bool on = cur[0] == i || ((vs || dum) && cur[1] == i);
-        DrawRectangleRec(g, (Color){18, 24, 46, 255});
-        DrawRectangleGradientV((int)g.x, (int)(g.y + g.height / 2), (int)g.width, (int)(g.height / 2), Fade(CHCOL[i], 0), Fade(CHCOL[i], on ? 0.35f : 0.15f));
-        DrawThumb((CharId)i, (Rectangle){g.x + 6, g.y + 6, g.width - 12, g.height - 12}, false);
-        DrawRectangleLinesEx(g, 2, on ? CHCOL[i] : Fade(CHCOL[i], 0.4f));
+        bool on = (i < CH_N) && (cur[0] == i || ((vs || dum) && cur[1] == i));
+        DrawSelectGridSlot(i, on);
     }
+
+    /* 4. Cursores luminosos 1P / 2P / BONECO */
     for (int p = 0; p < ((vs || dum) ? 2 : 1); p++)
-    { /* cursores: 1P em cima, 2P (ou o boneco do treino) embaixo; no mesmo quadrado o de baixo fica por fora */
+    {
         Rectangle g = GridCell(cur[p]);
-        float o = (p == 1 && cur[0] == cur[1]) ? 9 : 3;
+        float o = (p == 1 && cur[0] == cur[1]) ? 7.0f : 2.5f;
         Rectangle rr = {g.x - o, g.y - o, g.width + 2 * o, g.height + 2 * o};
         bool rd = (vs && readyP[p]) || (dum && p == 0);
-        Color pc = dum && p == 1 ? C_GREEN : PCOL[p];
-        const char *tag = p == 0 ? "1P" : (dum ? "BONECO" : "2P");
-        float tw = TxtW(tag, 18) + 16;
-        DrawRectangleLinesEx(rr, rd ? 5 : 4, Fade(pc, rd ? 1.0f : 0.65f + 0.35f * sinf(gt * 6)));
-        Rectangle tg = p == 0 ? (Rectangle){rr.x, rr.y - 22, tw, 24} : (Rectangle){rr.x + rr.width - tw, rr.y + rr.height - 2, tw, 24};
-        DrawRectangleRec(tg, pc);
-        TxtC(tag, tg.x + tw / 2, tg.y + 3, 18, C_INK);
+        Color pc = (dum && p == 1) ? C_GREEN : PCOL[p];
+        const char *tag = (p == 0) ? "1P" : (dum ? "BONECO" : "2P");
+        float tw = TxtW(tag, 15) + 14.0f;
+        float glowA = rd ? 1.0f : (0.70f + 0.30f * sinf(gt * 6.5f));
+
+        DrawRectangleRounded((Rectangle){rr.x - 3, rr.y - 3, rr.width + 6, rr.height + 6},
+                             0.12f, 6, Fade(pc, 0.22f * glowA));
+        DrawRectangleRoundedLinesEx(rr, 0.10f, 6, rd ? 4.0f : 3.2f, Fade(pc, glowA));
+
+        Rectangle tg = (p == 0) ? (Rectangle){rr.x, rr.y - 19.0f, tw, 20.0f}
+                                : (Rectangle){rr.x + rr.width - tw, rr.y + rr.height - 1.0f, tw, 20.0f};
+        DrawRectangleRounded(tg, 0.25f, 4, pc);
+        DrawRectangleRoundedLinesEx(tg, 0.25f, 4, 1.2f, C_WHITE);
+        TxtC(tag, tg.x + tw * 0.5f, tg.y + 2.0f, 15, C_INK);
     }
-    DrawColabCard(cur[0] == CH_IARA || ((vs || dum) && cur[1] == CH_IARA));
-    float by = GridCell(CH_IARA).y + GridCell(CH_IARA).height + 18;
+
+    /* 5. Informacoes enxutas de modo abaixo da grade central e rodape de controles */
+    float by = GridCell(6).y + GridCell(6).height + 16.0f;
     if (tr)
     {
-        TxtC("vida infinita e carga cheia", SCREEN_WIDTH / 2.0f, by, 14, C_DIM);
-        TxtC("boneco parado, defendendo, pulando ou lutando (F2 / L3)", SCREEN_WIDTH / 2.0f, by + 20, 14, C_DIM);
-        TxtC("caixas de colisão: F1 / SELECT", SCREEN_WIDTH / 2.0f, by + 40, 14, C_DIM);
-        DrawSelInfo(0, cur[0], dum ? "escolhido   ESC / B: trocar" : NULL, PCOL[0], false);
-        DrawSelInfo(1, cur[1], "boneco de treino", C_GREEN, false);
-        TxtC("A/D, W/S, SETAS ou CONTROLE: escolher    ENTER / A: confirmar    TAB / SELECT: controles    ESC / B: voltar", SCREEN_WIDTH / 2.0f, SCREEN_HEIGHT - 26, 14, C_DIM);
+        TxtC("VIDA INFINITA E CARGA CHEIA  |  F1: CAIXAS  |  F2: MODO DO BONECO", SCREEN_WIDTH / 2.0f, by, 13, C_DIM);
+        if (dum) TxtC("1P escolhido  -  ESC / B: voltar para trocar o 1P", SCREEN_WIDTH / 2.0f, by + 20.0f, 13, PCOL[0]);
+        TxtC("A/D, W/S, SETAS, CONTROLE ou MOUSE: escolher    ENTER / A: confirmar    TAB / SELECT: controles    ESC / B: voltar", SCREEN_WIDTH / 2.0f, SCREEN_HEIGHT - 24, 14, C_DIM);
         return;
     }
     if (!vs)
-    { /* ordem do arcade de quem esta marcado */
-        char t[96];
-        snprintf(t, sizeof t, "%s > %s > %s", NAME[lad[0]], NAME[lad[1]], NAME[lad[2]]);
-        TxtC("ARCADE  -  MELHOR DE 3 ROUNDS", SCREEN_WIDTH / 2.0f, by, 14, C_DIM);
-        TxtC(t, SCREEN_WIDTH / 2.0f, by + 20, 16, Fade(C_WHITE, 0.85f));
-        if (lad[2] == CH_ELIRA) TxtC("a Elira é a chefe final", SCREEN_WIDTH / 2.0f, by + 40, 14, C_DIM);
-        DrawSelInfo(0, cur[0], NULL, C_DIM, false);
-        DrawSelInfo(1, cur[1], "1º desafio do arcade", C_AMBER, false);
-        TxtC("A/D, W/S, SETAS ou CONTROLE: escolher    ENTER / A: confirmar    TAB / SELECT: controles    ESC / B: voltar", SCREEN_WIDTH / 2.0f, SCREEN_HEIGHT - 26, 14, C_DIM);
+    {
+        TxtC(lad[2] == CH_ELIRA ? "MELHOR DE 3 ROUNDS  (ELIRA E A CHEFE FINAL)" : "MELHOR DE 3 ROUNDS", SCREEN_WIDTH / 2.0f, by + 6.0f, 13, C_DIM);
+        TxtC("A/D, W/S, SETAS, CONTROLE ou MOUSE: escolher    ENTER / A: confirmar    TAB / SELECT: controles    ESC / B: voltar", SCREEN_WIDTH / 2.0f, SCREEN_HEIGHT - 24, 14, C_DIM);
         return;
     }
-    TxtC("MELHOR DE 3 ROUNDS", SCREEN_WIDTH / 2.0f, by, 14, C_DIM);
-    for (int p = 0; p < 2; p++)
-    {
-        const char *st;
-        Color sc = C_DIM;
-        if (readyP[p]) { st = p == 0 ? "PRONTO!   K ou B: desfazer" : "PRONTO!   2 ou B: desfazer"; sc = PCOL[p]; }
-        else if (padNow[p].on) { st = p == 0 ? "controle 1 conectado  -  A confirma" : "controle 2 conectado  -  A confirma"; sc = C_GREEN; }
-        else st = p == 0 ? "teclado: A/D/W/S escolhe  -  J confirma" : "teclado: SETAS escolhem  -  1 confirma";
-        DrawSelInfo(p, cur[p], st, sc, p == 1 && mirror);
-    }
+    TxtC("1 x 1  -  MELHOR DE 3 ROUNDS", SCREEN_WIDTH / 2.0f, by, 14, C_AMBER);
+    const char *vsHint = (padNow[0].on || padNow[1].on)
+                       ? "1P: A/D/W/S + J (ou Controle 1)    |    2P: SETAS + 1 (ou Controle 2)"
+                       : "1P: A/D/W/S escolhe, J confirma, K desfaz    |    2P: SETAS escolhem, 1 confirma, 2 desfaz";
+    TxtC(vsHint, SCREEN_WIDTH / 2.0f, by + 20.0f, 13, C_DIM);
     if (readyP[0] && readyP[1])
     {
-        DrawRectangle(440, 292, 400, 92, Fade(C_INK, 0.75f));
+        DrawRectangleRounded((Rectangle){440, 292, 400, 92}, 0.15f, 8, Fade(C_INK, 0.88f));
+        DrawRectangleRoundedLinesEx((Rectangle){440, 292, 400, 92}, 0.15f, 8, 2.5f, C_AMBER);
         TxtO("LUTEM!", SCREEN_WIDTH / 2.0f, 300, 72, C_AMBER, C_INK);
     }
-    TxtC("TAB / SELECT: ver controles      ESC: voltar ao modo", SCREEN_WIDTH / 2.0f, SCREEN_HEIGHT - 26, 14, C_DIM);
+    TxtC("TAB / SELECT: ver controles      ESC: voltar ao modo", SCREEN_WIDTH / 2.0f, SCREEN_HEIGHT - 24, 14, C_DIM);
 }
 /* ------------------------------------------------------------------ selecao de arena
    Depois dos lutadores (1 x CPU, 1 x 1 e treino) e antes do VS: cartoes grandes com miniatura e nome, e a
@@ -3769,10 +4043,32 @@ static void UpdateSelect(void)
 {
     if (NavLeftP()) sel = SelMove(sel, -1, 0);
     if (NavRightP()) sel = SelMove(sel, 1, 0);
-    if (NavUpP()) sel = SelMove(sel, 0, -1); /* grade 2 x 2 e, embaixo, o cartao de colab */
+    if (NavUpP()) sel = SelMove(sel, 0, -1);
     if (NavDownP()) sel = SelMove(sel, 0, 1);
-    if (NavOkP())
+
+    bool ok = (scT > 0.15f && NavOkP());
+    Vector2 m = GetVirtualMouse();
+    bool moved = (m.x != arMouseLast.x || m.y != arMouseLast.y);
+    arMouseLast = m;
+    for (int i = 0; i < SEL_GRID_SLOTS; i++)
     {
+        if (CheckCollisionPointRec(m, GridCell(i)))
+        {
+            if (i < CH_N)
+            {
+                if (moved && sel != i) { sel = i; PlaySfx(SFX_MOVE); }
+                if (scT > 0.15f && IsMouseButtonPressed(MOUSE_BUTTON_LEFT)) { sel = i; ok = true; }
+            }
+            else if (scT > 0.15f && IsMouseButtonPressed(MOUSE_BUTTON_LEFT))
+            {
+                PlaySfx(SFX_DENY);
+            }
+        }
+    }
+
+    if (ok)
+    {
+        if (sel < 0 || sel >= CH_N) { PlaySfx(SFX_DENY); return; }
         if (trainMode && trainPick == 0) { playerCh = sel; trainPick = 1; sel = trainDummy; PlaySfx(SFX_OK); return; } /* agora o boneco */
         if (trainMode)
         {
@@ -4408,6 +4704,30 @@ static void UpdateSelectVs(float dt)
         scT = 0;
         return;
     }
+    Vector2 m = GetVirtualMouse();
+    bool moved = (m.x != arMouseLast.x || m.y != arMouseLast.y);
+    arMouseLast = m;
+    for (int i = 0; i < SEL_GRID_SLOTS; i++)
+    {
+        if (CheckCollisionPointRec(m, GridCell(i)))
+        {
+            int targetP = !readyP[0] ? 0 : (!readyP[1] ? 1 : -1);
+            if (i < CH_N && targetP >= 0)
+            {
+                if (moved && selP[targetP] != i) { selP[targetP] = i; PlaySfx(SFX_MOVE); }
+                if (scT > 0.15f && IsMouseButtonPressed(MOUSE_BUTTON_LEFT))
+                {
+                    selP[targetP] = i;
+                    readyP[targetP] = true;
+                    PlaySfx(SFX_OK);
+                }
+            }
+            else if (i >= CH_N && scT > 0.15f && IsMouseButtonPressed(MOUSE_BUTTON_LEFT))
+            {
+                PlaySfx(SFX_DENY);
+            }
+        }
+    }
     for (int p = 0; p < 2; p++)
     {
         if (!readyP[p])
@@ -4416,7 +4736,7 @@ static void UpdateSelectVs(float dt)
             if (PlayerNavP(p, PN_RIGHT)) selP[p] = SelMove(selP[p], 1, 0);
             if (PlayerNavP(p, PN_UP)) selP[p] = SelMove(selP[p], 0, -1);
             if (PlayerNavP(p, PN_DOWN)) selP[p] = SelMove(selP[p], 0, 1);
-            if (scT > 0.15f && PlayerNavP(p, PN_OK)) readyP[p] = true;
+            if (scT > 0.15f && PlayerNavP(p, PN_OK) && selP[p] >= 0 && selP[p] < CH_N) readyP[p] = true;
         }
         else if (PlayerNavP(p, PN_UNDO)) readyP[p] = false;
     }
