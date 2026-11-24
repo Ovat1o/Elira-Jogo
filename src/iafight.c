@@ -888,27 +888,34 @@ static int AtkFrame2(Fighter *a, int anim, int a0, int a1, float st, float ac, f
 static int EliraFrameIdxV2(Fighter *a)
 {
     if (a->st == ST_KO || a->down) return -1;
-    if (a->st == ST_LOSE) return E2Frame(E2_DEFEAT, (int)(a->stT * 12)); /* cai e fica no ultimo quadro */
-    if (a->st == ST_WIN) return E2Frame(E2_WIN, (int)(a->stT * 12));
-    if (a->st == ST_HIT) return a->hitCrouch ? E2Frame(E2_HIT_CROUCH, a->stT < 0.12f ? 1 : 2) : -1;
+    if (a->st == ST_LOSE) return E2Frame(E2_DEFEAT, (int)(a->stT * 10)); /* cai e fica no ultimo quadro */
+    if (a->st == ST_WIN) return E2Frame(E2_WIN, (int)(a->stT * 10));
+    if (a->st == ST_HIT)
+    { /* dano agachada: tranco (1), cabeca para tras (2) ate quase o fim do atordoamento, volta (3) */
+        if (!a->hitCrouch) return -1;
+        return E2Frame(E2_HIT_CROUCH, a->stT < 0.06f ? 1 : (a->stun > 0.08f ? 2 : 3));
+    }
     if (a->st == ST_ATK)
     {
         const Atk *d = &ATK[CH_ELIRA][a->atk < AT_SPECIAL ? a->atk : 0];
         float t = a->atkT;
         switch (a->atk)
         {
-        case AT_LIGHT: return AtkFrame2(a, E2_PUNCH, E2_PEAK[E2_PUNCH], E2_PEAK[E2_PUNCH], d->st, d->ac, d->rc);
-        case AT_HEAVY: return AtkFrame2(a, E2_KICK, E2_PEAK[E2_KICK], E2_PEAK[E2_KICK], d->st, d->ac, d->rc);
-        case AT_FWDH: return AtkFrame2(a, E2_PUNCH_HEAVY, E2_PEAK[E2_PUNCH_HEAVY], E2_PEAK[E2_PUNCH_HEAVY], d->st, d->ac, d->rc);
-        case AT_UPPER: return AtkFrame2(a, E2_UPPER, E2_PEAK[E2_UPPER], E2_PEAK[E2_UPPER], d->st, d->ac, d->rc);
-        case AT_LOW: return AtkFrame2(a, E2_SWEEP, E2_PEAK[E2_SWEEP], E2_PEAK[E2_SWEEP], d->st, d->ac, d->rc);
-        case AT_AIR: return AtkFrame2(a, E2_AIR, E2_PEAK[E2_AIR], E2_PEAK[E2_AIR], d->st, d->ac, d->rc);
+        /* preparo = quadros [0, a0); ativo = [a0, a1] (o de maior alcance, E2_PEAK, no ativo); recuperacao = o resto */
+        case AT_LIGHT: return AtkFrame2(a, E2_PUNCH, 2, 2, d->st, d->ac, d->rc);        /* 5: guarda, recolhe, SOCO, volta, guarda */
+        case AT_HEAVY: return AtkFrame2(a, E2_KICK, 3, 4, d->st, d->ac, d->rc);         /* 7: joelho sobe, chute alto (3-4), desce */
+        case AT_FWDH: return AtkFrame2(a, E2_PUNCH_HEAVY, 3, 4, d->st, d->ac, d->rc);   /* 7: passo, avanco, canhao esticado (3-4) */
+        case AT_UPPER: return AtkFrame2(a, E2_UPPER, 3, 4, d->st, d->ac, d->rc);        /* 8: agacha, sobe com o punho (3-4), cai */
+        case AT_LOW: return AtkFrame2(a, E2_SWEEP, 3, 4, d->st, d->ac, d->rc);          /* 7: perna estica (3-4) e recolhe */
+        case AT_AIR: return AtkFrame2(a, E2_AIR, 2, 3, d->st, d->ac, d->rc);            /* 6: encolhida, chute esticado (2-3) */
         case AT_SPECIAL:
-        {
-            float st = SP_ST[CH_ELIRA], rest = SP_AC[CH_ELIRA] + SP_RC[CH_ELIRA];
+        { /* 10: guarda, firma, segura, carga (3-5) no preparo; o quadro do DISPARO (6) comeca junto com o
+             nucleo do jogo (SpawnProj em t = SP_ST) e fica IAF_ELIRA_SP_FLASH s; depois recuo, volta e guarda */
+            float st = SP_ST[CH_ELIRA], rest = SP_AC[CH_ELIRA] + SP_RC[CH_ELIRA] - IAF_ELIRA_SP_FLASH;
             int pk = E2_PEAK[E2_SPECIAL], n = E2_COUNT[E2_SPECIAL];
             if (t < st) return E2Frame(E2_SPECIAL, (int)(t / st * pk));
-            return E2Frame(E2_SPECIAL, pk + (int)((t - st) / rest * (n - pk)));
+            if (t < st + IAF_ELIRA_SP_FLASH) return E2Frame(E2_SPECIAL, pk);
+            return E2Frame(E2_SPECIAL, pk + 1 + (int)((t - st - IAF_ELIRA_SP_FLASH) / rest * (n - pk - 1)));
         }
         default: return -1;
         }
@@ -916,14 +923,14 @@ static int EliraFrameIdxV2(Fighter *a)
     if (a->shieldOn || a->st == ST_BLOCK)
     {
         if (a->crouch) return -1; /* defesa agachada: a atual */
-        if (a->shieldHit > 0) return E2Frame(E2_DEF, 3);
-        return E2Frame(E2_DEF, a->shieldT < 0.08f ? 1 : E2_COUNT[E2_DEF] - 1);
+        if (a->shieldHit > 0) return E2Frame(E2_DEF, 3); /* bloqueou: o escudo treme (3 <-> 4) */
+        return E2Frame(E2_DEF, 1 + (int)(a->shieldT / 0.04f)); /* ergue o canhao, abre o escudo e fica no ultimo */
     }
     if (a->st == ST_DASH || a->st == ST_JUMP) return -1;
     if (a->crouch)
     { /* abaixa e fica no ultimo quadro (agachada parada) */
-        int n = E2_COUNT[E2_CROUCH];
-        return E2Frame(E2_CROUCH, a->stT < 0.2f ? (int)(a->stT / 0.2f * n) : n - 1);
+        int n = E2_COUNT[E2_CROUCH]; /* o quadro 0 e a guarda em pe */
+        return E2Frame(E2_CROUCH, 1 + (int)(a->stT / 0.15f * (n - 1)));
     }
     return -1;
 }
