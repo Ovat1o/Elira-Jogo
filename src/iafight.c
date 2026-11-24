@@ -1133,6 +1133,35 @@ static int ClaudeFrameIdx(Fighter *a)
     return CALoop(CA_IDLE, gt);
 }
 
+/* ------------------------------------------------------------------ Codex e Antigravity: quadros comuns
+   Os dois atlas (sprites novos, feitos no ChatGPT) tem as mesmas animacoes de reacao com o mesmo numero de
+   quadros: dano em pe e agachado (4: guarda, tranco, tranco maximo, volta), queda (7: tranco, 2 no ar, bate no
+   chao, 2 quicando, caido parado) e levantar (6). Estas funcoes dao o indice DENTRO da animacao. */
+static int IaHitIdx(Fighter *a) { return a->stT < 0.05f ? 1 : (a->stun > 0.08f ? 2 : 3); }
+/* queda presa a fisica: tranco no acerto, no ar subindo (1) e descendo (2), bate no chao no instante do pouso */
+static int IaFallIdx(Fighter *a)
+{
+    if (!a->down && a->stT < 0.06f) return 0; /* stT zera no acerto */
+    if (!OnGround(a)) return a->vy < 0 ? 1 : 2;
+    float g = a->groundT;
+    return g < 0.07f ? 3 : (g < 0.14f ? 4 : (g < 0.24f ? 5 : 6));
+}
+static bool IaLaunched(Fighter *a) { return a->st == ST_HIT && (!OnGround(a) || a->vy < 0) && !a->grabbed; }
+/* golpe: preparo usa os quadros [0, a0), ativo [a0, a1] (o de maior alcance), recuperacao o resto */
+static int IaAtkIdx(Fighter *a, int n, int a0, int a1, float st, float ac, float rc)
+{
+    float t = a->atkT;
+    int i;
+    if (ac < IAF_ACTIVE_VISUAL) { rc = fmaxf(rc - (IAF_ACTIVE_VISUAL - ac), 0.02f); ac = IAF_ACTIVE_VISUAL; }
+    if (t < st) i = (int)(t / st * a0);
+    else if (t < st + ac) i = a0 + (int)((t - st) / ac * (a1 - a0 + 1));
+    else i = a1 + 1 + (int)((t - st - ac) / rc * (n - 1 - a1));
+    return i;
+}
+#define IA_IDLE_DUR 0.10f /* parada: segundos por quadro (8 quadros) */
+#define IA_WALK_DUR 0.07f /* andar: segundos por quadro (8 quadros) */
+#define IA_SP_FLASH 0.10f /* especial do Antigravity: quadro do disparo na tela (s) */
+
 /* ------------------------------------------------------------------ Antigravity: atlas de luta
    Gerado fora do repositorio a partir do pacote de sprites (384x354 = grade nativa 128x118 em 3x).
    O atlas guarda a grade nativa; o jogo amplia 2,5x com filtro POINT (~192 px de altura parada,
@@ -1228,8 +1257,8 @@ static int AntiFrameIdx(Fighter *a)
 }
 
 /* ------------------------------------------------------------------ Codex: atlas de luta
-   Gerado fora do repositorio a partir do pacote Codex Fighter V2 (grade nativa 128x128).
-   O atlas guarda 1 pixel da arte por pixel; 2x na tela = ~198 px de altura (Elira ~218, Claude ~204). */
+   Gerado fora do repositorio (ia_novos_tool/montar.py) a partir das tiras novas do Victor. O atlas guarda
+   pixels logicos; 2x na tela = ~200 px de altura parada, como o antigo (Elira ~218, Claude ~204). */
 #include "iafight_codex.h"
 static Texture2D texCodex;
 #define XC_SCALE 2.0f
@@ -1243,7 +1272,7 @@ static int XAFrame(int anim, int i)
     if (i >= n) i = n - 1;
     return XA_FIRST[anim] + i;
 }
-static int XALoop(int anim, float t) { return XA_FIRST[anim] + ((int)(t / XA_DUR[anim]) % XA_COUNT[anim]); }
+static int XALoop(int anim, float t, float dur) { return XA_FIRST[anim] + ((int)(t / dur) % XA_COUNT[anim]); }
 static void DrawXF(int f, float x, float yFeet, int face, float sc, Color tint, float flash)
 {
     const XFrame *e = &XF[f];
@@ -1259,66 +1288,69 @@ static void DrawXF(int f, float x, float yFeet, int face, float sc, Color tint, 
         EndBlendMode();
     }
 }
-/* golpe: preparo usa os quadros [0, a0), ativo [a0, a1] (punho/pe esticado), recuperacao o resto */
-static int CodexAtkFrame(Fighter *a, int anim, int a0, int a1, float st, float ac, float rc)
+static int CodexAtkFrame(Fighter *a, int anim, int a0, int a1, const Atk *d)
 {
-    int n = XA_COUNT[anim], i;
-    float t = a->atkT;
-    if (ac < IAF_ACTIVE_VISUAL) { rc = fmaxf(rc - (IAF_ACTIVE_VISUAL - ac), 0.02f); ac = IAF_ACTIVE_VISUAL; }
-    if (t < st) i = (int)(t / st * a0);
-    else if (t < st + ac) i = a0 + (int)((t - st) / ac * (a1 - a0 + 1));
-    else i = a1 + 1 + (int)((t - st - ac) / rc * (n - 1 - a1));
-    return XAFrame(anim, i);
+    return XAFrame(anim, IaAtkIdx(a, XA_COUNT[anim], a0, a1, d->st, d->ac, d->rc));
+}
+/* explosao verde do golpe final do deploy forcado (efeito sem o Codex, no ponto do impacto) */
+static struct { bool on; float x, y, t0; int face; } cxBoom;
+#define CX_BOOM_DUR 0.07f /* segundos por quadro da explosao */
+static void DrawCodexBoom(void)
+{
+    if (!cxBoom.on || !texCodex.id) return;
+    int i = (int)((gt - cxBoom.t0) / CX_BOOM_DUR);
+    if (i < 0 || i >= XA_COUNT[XA_FX_IMPACT]) { cxBoom.on = false; return; }
+    DrawXF(XA_FIRST[XA_FX_IMPACT] + i, cxBoom.x, cxBoom.y, cxBoom.face, XC_SCALE, WHITE, 0);
 }
 static int CodexFrameIdx(Fighter *a)
 {
-    int nk = XA_COUNT[XA_KO];
-    if (a->st == ST_KO) return XAFrame(XA_KO, (int)(a->stT / 0.06f));
+    if (a->st == ST_KO || IaLaunched(a)) return XAFrame(XA_KO, IaFallIdx(a));
     if (a->down)
-    { /* caido; ao levantar, a queda tocada ao contrario */
-        if (a->downT > 0.36f) return XAFrame(XA_KO, nk - 1);
-        return XAFrame(XA_KO, (int)(a->downT / 0.36f * (nk - 1)));
+    { /* caido; o levantar ocupa os ultimos 0,36 s */
+        if (a->downT > 0.36f) return XAFrame(XA_KO, IaFallIdx(a));
+        return XAFrame(XA_GETUP, (int)((0.36f - a->downT) / 0.36f * XA_COUNT[XA_GETUP]));
     }
-    if (a->st == ST_LOSE) return XAFrame(XA_KO, nk - 1);
-    if (a->st == ST_WIN) return XALoop(XA_VICTORY, a->stT);
-    if (a->st == ST_HIT) return XAFrame(XA_HIT, (int)(a->stT / 0.4f * XA_COUNT[XA_HIT]));
+    if (a->st == ST_LOSE) return XAFrame(XA_DEFEAT, (int)(a->stT * 10)); /* murcha e cai de joelhos */
+    if (a->st == ST_WIN) return XAFrame(XA_VICTORY, (int)(a->stT * 10));  /* socos no ar e pose de campeao */
+    if (a->st == ST_HIT) return XAFrame(a->hitCrouch ? XA_HIT_CROUCH : XA_HIT, IaHitIdx(a));
     if (a->st == ST_ATK)
     {
         const Atk *d = &ATK[CH_CODEX][a->atk < AT_SPECIAL ? a->atk : 0];
         switch (a->atk)
         {
-        case AT_LIGHT: return CodexAtkFrame(a, XA_LIGHT, 6, 11, d->st, d->ac, d->rc);
-        case AT_HEAVY: return CodexAtkFrame(a, XA_KICK, 9, 17, d->st, d->ac, d->rc);
-        case AT_FWDH: return CodexAtkFrame(a, XA_LONG, 11, 16, d->st, d->ac, d->rc);
-        case AT_UPPER: return CodexAtkFrame(a, XA_UPPER, 7, 12, d->st, d->ac, d->rc);
-        case AT_LOW: return CodexAtkFrame(a, XA_LOWKICK, 7, 13, d->st, d->ac, d->rc);
-        case AT_AIR: return CodexAtkFrame(a, XA_KICK, 9, 17, d->st, d->ac, d->rc); /* sem aereo no pacote: chute alto */
+        case AT_LIGHT: return CodexAtkFrame(a, XA_LIGHT, 2, 2, d);     /* 5: gira o ombro, JAB esticado, recolhe */
+        case AT_HEAVY: return CodexAtkFrame(a, XA_KICK, 2, 4, d);      /* 7: joelho, perna esticada no alto (2-4) */
+        case AT_FWDH: return CodexAtkFrame(a, XA_LONG, 3, 4, d);       /* 7: passo, direto muito esticado (3-4) */
+        case AT_UPPER: return CodexAtkFrame(a, XA_UPPER, 3, 5, d);     /* 8: afunda, luva para o alto (3-5), desce */
+        case AT_LOW: return CodexAtkFrame(a, XA_LOWKICK, 3, 4, d);     /* 7: agacha, varre, perna esticada (3-4) */
+        case AT_AIR: return CodexAtkFrame(a, XA_AIR, 2, 3, d);         /* 6: encolhe, martelada descendo (2-3) */
         case AT_SPECIAL:
-        { /* deploy forcado: carga no preparo, investida com o punho, socos da sequencia e o disparo final */
-            float st = SP_ST[CH_CODEX], ac = SP_AC[CH_CODEX], rc = SP_RC[CH_CODEX];
-            if (a->atkT < st) return XALoop(XA_CHARGE, a->atkT);
+        { /* deploy forcado: compila (carga) no preparo; investida com o direto; preso: jab, direto e dois ganchos
+             (um soco por golpe da sequencia), puxa as luvas e o golpe final; depois recua */
+            float st = SP_ST[CH_CODEX], ac = SP_AC[CH_CODEX], t = a->atkT;
+            if (t < st) return XAFrame(XA_CHARGE, 3 + (int)(t / st * 5)); /* o >_ fica verde e a barra enche */
             if (a->caught)
             {
-                if (a->spHits < 4) return XAFrame(XA_SPECIAL, 11 + (int)(fmodf(a->spT, 0.09f) / 0.09f * 6));
-                return XAFrame(XA_SPECIAL, 17 + (int)((a->spT - 0.36f) / 0.14f * 7));
+                if (a->spHits < 4) return XAFrame(XA_SPECIAL, 2 * a->spHits + (fmodf(a->spT, 0.09f) < 0.045f ? 0 : 1));
+                return XAFrame(XA_SPECIAL, a->spT < 0.43f ? 8 : 9);
             }
-            if (a->atkT < st + ac) return XAFrame(XA_SPECIAL, 8 + (int)((a->atkT - st) / ac * 9));
-            return XAFrame(XA_SPECIAL, 21 + (int)((a->atkT - st - ac) / rc * 7));
+            if (t < st + ac) return XAFrame(XA_SPECIAL, 2 + ((int)(t * 12) % 2)); /* investida: direto com rastro */
+            if (a->spHits >= 4 && t < st + ac + 0.14f) return XAFrame(XA_SPECIAL, 10); /* golpe final */
+            return XAFrame(XA_SPECIAL, 11);
         }
         default: break;
         }
     }
     if (a->shieldOn || a->st == ST_BLOCK)
-    {
-        if (a->crouch) return XAFrame(XA_CROUCH, XA_COUNT[XA_CROUCH] - 1);
-        float t = a->stT / XA_DUR[XA_GUARD];
-        return t < 3 ? XAFrame(XA_GUARD, (int)t) : XA_FIRST[XA_GUARD] + 3 + ((int)t - 3) % 10; /* entra e segura a guarda */
+    { /* guarda fechada: junta as luvas (1-4) e segura; no bloqueio, a faisca nas luvas */
+        if (a->shieldHit > 0 && !a->crouch) return XAFrame(XA_GUARD_HIT, a->shieldHit > 0.07f ? 1 : 2);
+        return XAFrame(a->crouch ? XA_GUARD_CROUCH : XA_GUARD, 1 + (int)(a->shieldT / 0.04f));
     }
     if (a->st == ST_DASH) return XAFrame(XA_DASH, (int)(a->dashT / IAF_DASH_TIME * XA_COUNT[XA_DASH]));
-    if (a->st == ST_JUMP) return XAFrame(XA_JUMP, 1 + (int)((a->vy + IAF_JUMP_SPEED) / (2 * IAF_JUMP_SPEED) * 9));
+    if (a->st == ST_JUMP) return XAFrame(XA_JUMP, 1 + (int)((a->vy + IAF_JUMP_SPEED) / (2 * IAF_JUMP_SPEED) * 6));
     if (a->crouch) return XAFrame(XA_CROUCH, (int)(a->stT / 0.035f));
-    if (a->st == ST_WALK) return XALoop((a->vx * a->face) < 0 ? XA_WALK_B : XA_WALK_F, a->anim);
-    return XALoop(XA_IDLE, gt);
+    if (a->st == ST_WALK) return XALoop((a->vx * a->face) < 0 ? XA_WALK_B : XA_WALK_F, a->anim, IA_WALK_DUR);
+    return XALoop(XA_IDLE, gt, IA_IDLE_DUR);
 }
 
 /* ------------------------------------------------------------------ desenho de um lutador */
@@ -1553,6 +1585,7 @@ static void ClearFx(void)
     memset(parts, 0, sizeof(parts));
     memset(impacts, 0, sizeof(impacts));
     memset(&well, 0, sizeof(well));
+    cxBoom.on = false;
     memset(bufT, 0, sizeof(bufT));
     for (int k = 0; k < 2; k++) pressAge[k][0] = pressAge[k][1] = 9;
     hitstop = 0; shake = 0;
@@ -1739,6 +1772,7 @@ static void UpdateSpecial(Fighter *a, Fighter *o, float dt)
             else if (a->spHits >= 4 && a->spT > 0.5f)
             {
                 AddText((Vector2){o->x, o->y - 260}, "DEPLOY!", C_GREEN, 30);
+                cxBoom.on = true; cxBoom.x = o->x - a->face * 20; cxBoom.y = o->y - 115; cxBoom.t0 = gt; cxBoom.face = a->face;
                 ApplyHit(a, o, 70, 0.6f, 460, 0, (Vector2){o->x - a->face * 20, o->y - 120}, true, true);
                 a->caught = false;
                 a->atkT = st + ac;
@@ -1818,6 +1852,7 @@ static void ChainStun(Fighter *a, Fighter *o)
 static void StartAtk(Fighter *a, AtkKind k)
 {
     a->atk = k; a->atkT = 0; a->hitDone = false; a->spawned = false; a->caught = false; a->countered = false;
+    a->spHits = 0; /* so o desenho do especial do Codex le depois da sequencia */
     a->chain = k == AT_LIGHT ? 1 : 0; a->cancelT = 0;
     if (a->st != ST_JUMP) a->vx = 0;
     SetState(a, ST_ATK);
@@ -2982,6 +3017,7 @@ static void DrawFight(void)
     DrawFighter(&fz[1 - first]);
     DrawStageFront();
     DrawProjectiles();
+    DrawCodexBoom();
     DrawParts();
     if (showBoxes) DrawBoxes();
     EndMode2D();
@@ -3011,7 +3047,7 @@ static void DrawCharacterBig(CharId ch, float x, float yFeet, int face, float sc
     }
     if (ch == CH_CODEX && texCodex.id)
     { /* mesma regra do Claude: escala em passos de 0,5 do pixel da arte */
-        int f = st == ST_WIN ? XALoop(XA_VICTORY, gt) : (st == ST_KO ? XAFrame(XA_KO, XA_COUNT[XA_KO] - 1) : XALoop(XA_IDLE, gt));
+        int f = st == ST_WIN ? XAFrame(XA_VICTORY, XA_COUNT[XA_VICTORY] - 1) : (st == ST_KO ? XAFrame(XA_KO, XA_COUNT[XA_KO] - 1) : XALoop(XA_IDLE, gt, IA_IDLE_DUR));
         DrawXF(f, x, yFeet, face, fmaxf(1.0f, roundf(XC_SCALE * sc * 0.75f * 2) / 2), g_altPal ? IAF_CODEX_ALT_TINT : WHITE, 0);
         return;
     }
