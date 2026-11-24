@@ -210,6 +210,7 @@ typedef struct
     int chain;        /* combo fraco > fraco > forte: 1 = 1o fraco, 2 = 2o fraco, 3 = forte final (0 = fora do combo) */
     float cancelT;    /* > 0: o golpe acertou e pode ser cancelado no proximo do combo */
     bool grabbed;     /* preso num agarrao do oponente */
+    float groundT;    /* tempo no chao desde o ultimo pouso (0 no ar): quadros da queda */
 } Fighter;
 
 /* leftP/rightP: tocou na direcao agora (toque duplo = dash); dashP: botao de dash (LB / L1);
@@ -884,14 +885,40 @@ static int AtkFrame2(Fighter *a, int anim, int a0, int a1, float st, float ac, f
 #define EP_UPPER 4 /* uppercut provisorio: inicio da vitoria, canhao subindo */
 #define EP_SHOT_LAST 11 /* ultimo quadro do tiro: sem a bala da arte (a bala e o projetil do jogo) */
 #define EP_CHARGE_TOP 8 /* disparo carregado: orbe maior na boca do canhao */
-/* sprites novos: quadro do estado, ou -1 quando a animacao nao tem arte nova (usa a atual) */
-static int EliraFrameIdxV2(Fighter *a)
+/* queda nova (E2_KO), presa a fisica: impacto (0) no acerto; no ar, pes saindo (1) subindo, voo inclinado (2) no
+   alto, quase horizontal (3) descendo; no chao, bate de costas (4) no instante do pouso, quica (5), deitada (6) e
+   deitada parada (7) enquanto estiver caida. Os quadros no ar guardam a altura da grade da arte; essa altura extra
+   some conforme ela desce (yoff), para o pouso nao dar salto. */
+static int EliraKoFrame(Fighter *a, float *yoff)
 {
-    if (a->st == ST_KO || a->down) return -1;
+    if (!a->down && a->stT < IAF_ELIRA_KO_IMPACT) return E2Frame(E2_KO, 0); /* stT zera no acerto */
+    if (!OnGround(a))
+    {
+        int k = a->vy < -200 ? 1 : (a->vy < 200 ? 2 : 3);
+        const EFrame *e = &EF2[E2_FIRST[E2_KO] + k];
+        float lift = (e->ay - e->h) * EliraScale(1.0f); /* altura do quadro acima da linha dos pes na grade */
+        float h = IAF_GROUND_Y - a->y;
+        *yoff = lift * (1.0f - Clamp(h / IAF_ELIRA_KO_APEX, 0.0f, 1.0f));
+        return E2Frame(E2_KO, k);
+    }
+    float g = a->groundT;
+    return E2Frame(E2_KO, g < 0.07f ? 4 : (g < 0.14f ? 5 : (g < 0.24f ? 6 : 7)));
+}
+/* sprites novos: quadro do estado, ou -1 quando a animacao nao tem arte nova (usa a atual) */
+static int EliraFrameIdxV2(Fighter *a, float *yoff)
+{
+    if (a->st == ST_KO) return EliraKoFrame(a, yoff); /* nocaute: cai e fica deitada */
+    if (a->down)
+    { /* caida: deitada nova ate o levantar; o levantar e o antigo (EA_GETUP), que comeca reclinado com a cabeca
+         do mesmo lado (esquerda), entao corta direto da deitada nova para o 1o quadro dele */
+        if (a->downT > 0.36f) return EliraKoFrame(a, yoff);
+        return -1;
+    }
     if (a->st == ST_LOSE) return E2Frame(E2_DEFEAT, (int)(a->stT * 10)); /* cai e fica no ultimo quadro */
     if (a->st == ST_WIN) return E2Frame(E2_WIN, (int)(a->stT * 10));
     if (a->st == ST_HIT)
     { /* dano agachada: tranco (1), cabeca para tras (2) ate quase o fim do atordoamento, volta (3) */
+        if ((!OnGround(a) || a->vy < 0) && !a->grabbed) return EliraKoFrame(a, yoff); /* lancada: voa como na queda */
         if (a->hitCrouch) return E2Frame(E2_HIT_CROUCH, a->stT < 0.06f ? 1 : (a->stun > 0.08f ? 2 : 3));
         /* dano em pe (stT zera a cada acerto): impacto (1) no instante do acerto, tranco maximo (3) no meio do
            atordoamento, recuperacao (4) no fim; atordoamento curto (fraco = 0,20 s) pula o tranco (2) */
@@ -943,7 +970,7 @@ static int EliraFrameIdx(Fighter *a, float *yoff)
     *yoff = 0;
     if (EliraV2())
     {
-        int f = EliraFrameIdxV2(a);
+        int f = EliraFrameIdxV2(a, yoff);
         if (f >= 0) return f;
     }
     if (a->st == ST_KO) return EAFrame(EA_KO, (int)(a->stT / 0.045f));
@@ -2087,6 +2114,7 @@ static void UpdateFighter(Fighter *a, Fighter *o, IafInput in, float dt)
     if (a->x < IAF_WALL_L) a->x = IAF_WALL_L;
     if (a->x > IAF_WALL_R) a->x = IAF_WALL_R;
     a->hpShown = a->hpShown > a->hp ? fmaxf(a->hp, a->hpShown - 260 * dt * (a->flash > 0 ? 0 : 1)) : a->hp;
+    a->groundT = OnGround(a) ? a->groundT + dt : 0;
 }
 
 static void UpdateProjectiles(float dt)

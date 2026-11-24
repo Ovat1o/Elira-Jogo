@@ -132,6 +132,8 @@
 #endif
 #define IAF_ELIRA_SP_FLASH  0.10f    /* sprites novos: quadro do clarao do especial na tela depois do disparo (s) */
 #define IAF_ELIRA_HIT_SHORT 0.25f    /* sprites novos: dano em pe com atordoamento menor que isto pula o quadro do tranco (s) */
+#define IAF_ELIRA_KO_IMPACT 0.06f    /* sprites novos: quadro do impacto da queda no inicio do nocaute (s) */
+#define IAF_ELIRA_KO_APEX   55.0f    /* sprites novos: altura (px) em que o voo da queda usa toda a altura da grade */
 #define IAF_CLAUDE_ATLAS    "assets/sprites/iafight/claude_luta.png" /* atlas de luta do Claude */
 #define IAF_CODEX_ATLAS     "assets/sprites/iafight/codex_luta.png"  /* atlas de luta do Codex */
 #define IAF_ANTI_ATLAS      "assets/sprites/iafight/antigravity_luta.png" /* atlas de luta do Antigravity */
