@@ -150,12 +150,12 @@ static const Atk ATK[CH_N][AT_SPECIAL] = {
                   {0.05f, 0.16f, 0.10f, 55, 105, 125, 76, 0.32f, 160, 2}, /* aereo: pe do chute entre 49 e 125 px acima dos pes */
                   {0.20f, 0.10f, 0.30f, 90, 128, 168, 50, 0.45f, 330, 0},  /* soco longo */
                   {0.08f, 0.14f, 0.32f, 80, 90, 300, 270, 0.50f, 120, 0}}, /* uppercut (chute alto) */
-    [CH_CLAUDE] = {{0}, {0.07f, 0.08f, 0.15f, 39, 240, 162, 66, 0.20f, 170, 0}, /* alcances no punho/pe do sprite (2x) */
-                   {0.17f, 0.10f, 0.30f, 106, 250, 150, 72, 0.45f, 380, 0},   /* chute frontal */
-                   {0.10f, 0.08f, 0.22f, 50, 228, 44, 44, 0.32f, 160, 1},
-                   {0.05f, 0.15f, 0.10f, 55, 248, 80, 54, 0.32f, 160, 2},
-                   {0.24f, 0.10f, 0.34f, 108, 262, 170, 72, 0.50f, 420, 0},  /* soco forte de alcance longo */
-                   {0.09f, 0.14f, 0.34f, 85, 210, 320, 290, 0.50f, 120, 0}}, /* uppercut */
+    [CH_CLAUDE] = {{0}, {0.07f, 0.08f, 0.15f, 39, 180, 122, 50, 0.20f, 170, 0}, /* alcances no punho/pe do sprite (1.5x) */
+                   {0.17f, 0.10f, 0.30f, 106, 188, 112, 54, 0.45f, 380, 0},   /* chute frontal */
+                   {0.10f, 0.08f, 0.22f, 50, 171, 33, 33, 0.32f, 160, 1},
+                   {0.05f, 0.15f, 0.10f, 55, 186, 60, 40, 0.32f, 160, 2},
+                   {0.24f, 0.10f, 0.34f, 108, 196, 128, 54, 0.50f, 420, 0},  /* soco forte de alcance longo */
+                   {0.09f, 0.14f, 0.34f, 85, 158, 240, 218, 0.50f, 120, 0}}, /* uppercut */
     [CH_CODEX] = {{0}, {0.06f, 0.07f, 0.14f, 39, 116, 122, 50, 0.20f, 180, 0},  /* alcances na luva/tenis do sprite (2x) */
                   {0.20f, 0.10f, 0.32f, 120, 122, 118, 56, 0.48f, 330, 0},  /* chute alto */
                   {0.09f, 0.08f, 0.22f, 55, 120, 100, 64, 0.32f, 170, 1},   /* chute baixo */
@@ -1021,9 +1021,9 @@ static int EliraFrameIdx(Fighter *a, float *yoff)
    Ampliado com filtro POINT: 2x = 4 px de tela por pixel da arte, ~204 px de altura (como a Elira). */
 #include "iafight_claude.h"
 static Texture2D texClaude;
-#define CL_SCALE 2.0f
-#define CL_FRONT 190.0f /* do centro ate a frente do corpo largo: prisma, feixe e pulso de luz */
-#define CL_STRIKE_REACH 256.0f /* ponta do punho (soco forte) e do pe (chute frontal) no quadro mais esticado */
+#define CL_SCALE 1.5f
+#define CL_FRONT 142.0f /* do centro ate a frente do corpo: prisma, feixe e pulso de luz */
+#define CL_STRIKE_REACH 192.0f /* ponta do punho (soco forte) e do pe (chute frontal) no quadro mais esticado */
 /* equilibrio do prisma (o especial do Claude causava ~6x o dano do especial dos outros) */
 #define CL_PRISM_COUNTER_DMG 60.0f /* feixe de resposta quando o prisma apara um golpe */
 #define CL_REFLECT_MULT 0.7f       /* dano do projetil refletido em relacao ao original */
@@ -1358,7 +1358,7 @@ static void DrawFighter(Fighter *a)
     float flash = a->flash > 0 ? Clamp(a->flash / 0.12f, 0.0f, 1.0f) * 0.8f : 0;
     float alt = IAF_GROUND_Y - a->y;
     float jx = a->hitShake > 0 ? (Rand01() - 0.5f) * 2 * IAF_HIT_SHAKE_PX : 0; /* tremor no impacto */
-    DrawShadow(a->x, (a->ch == CH_CLAUDE && texClaude.id ? 118 : (a->ch == CH_ANTI && texAnti.id ? 104 : (a->ch == CH_CODEX && texCodex.id ? 84 : 52))) - fminf(alt, 200) * 0.12f);
+    DrawShadow(a->x, (a->ch == CH_CLAUDE && texClaude.id ? 88 : (a->ch == CH_ANTI && texAnti.id ? 104 : (a->ch == CH_CODEX && texCodex.id ? 84 : 52))) - fminf(alt, 200) * 0.12f);
     if (a->inv > 0 && fmodf(a->inv, 0.1f) < 0.05f && a->st != ST_KO) return;
     if (a->st == ST_DASH)
     { /* rastro: copias apagadas para tras (sprites) e linhas de velocidade (todos) */
@@ -1419,7 +1419,7 @@ static void DrawFighter(Fighter *a)
     {
         Color c = FCol(a);
         float cy = a->crouch ? a->y - 60 : a->y - 120, cx = a->x + a->face * 52;
-        if (a->ch == CH_CLAUDE && texClaude.id) { cy = a->crouch ? a->y - 90 : a->y - 140; cx = a->x + a->face * 172; } /* na frente do braco erguido */
+        if (a->ch == CH_CLAUDE && texClaude.id) { cy = a->crouch ? a->y - 68 : a->y - 105; cx = a->x + a->face * 130; } /* na frente do braco erguido */
         if (a->ch == CH_CODEX && texCodex.id) { cy = a->crouch ? a->y - 80 : a->y - 112; cx = a->x + a->face * (XC_FRONT + 22); } /* na frente das luvas */
         DrawPoly((Vector2){cx, cy}, 6, 40, 0, Fade(c, 0.18f));
         DrawPolyLinesEx((Vector2){cx, cy}, 6, 40, 0, 3, Fade(c, 0.85f));
@@ -1501,7 +1501,7 @@ static Rectangle Hurt(Fighter *a)
 {
     float w = a->ch == CH_CODEX ? 84 : (a->ch == CH_ELIRA ? 96 : 70), h = a->crouch ? (a->ch == CH_ELIRA ? 132 : 128) : (a->ch == CH_ELIRA ? 214 : 200);
     float lift = 0; /* a caixa sobe junto com o desenho que flutua */
-    if (a->ch == CH_CLAUDE) { w = 232; h = a->crouch ? 160 : 204; } /* sprite largo e baixo (corpo 240x204 na tela) */
+    if (a->ch == CH_CLAUDE) { w = 174; h = a->crouch ? 120 : 153; } /* sprite reduzido (1.5x) para permitir pular por cima */
     if (a->ch == CH_ANTI) { w = 184; h = a->crouch ? 155 : 205; lift = AntiHover(a); } /* "A" de 225x192 na tela, flutuando ~16 px */
     if (a->ch == CH_CODEX) { w = 130; h = a->crouch ? 150 : 198; }  /* nuvem do sprite (~157 de largura; as bordas fofas nao contam) */
     if (a->down || a->st == ST_KO) h = 40;
@@ -1509,7 +1509,7 @@ static Rectangle Hurt(Fighter *a)
 }
 /* meia largura do corpo para nao se sobreporem: o tronco do sprite (colunas com pelo menos 35% da
    altura), sem canhao, bracos e cabelo, que podem passar na frente do oponente */
-static float BodyHalf(Fighter *a) { return a->ch == CH_CLAUDE ? 120.0f : (a->ch == CH_ANTI ? 90.0f : (a->ch == CH_CODEX ? 70.0f : 50.0f)); }
+static float BodyHalf(Fighter *a) { return a->ch == CH_CLAUDE ? 80.0f : (a->ch == CH_ANTI ? 90.0f : (a->ch == CH_CODEX ? 70.0f : 50.0f)); }
 static bool Overlap(Rectangle a, Rectangle b) { return a.x < b.x + b.width && b.x < a.x + a.width && a.y < b.y + b.height && b.y < a.y + a.height; }
 static bool OnGround(Fighter *a) { return a->y >= IAF_GROUND_Y - 0.5f; }
 static void SetState(Fighter *a, FState s) { a->st = s; a->stT = 0; }
@@ -3018,7 +3018,7 @@ static void DrawBackdrop(Color accent)
    com um retrato por lutador e os cursores dos jogadores. Serve ao 1 jogador e ao 1 x 1. */
 static const Color PCOL[2] = {{96, 214, 240, 255}, {230, 80, 84, 255}}; /* cursor/rotulo do 1P e do 2P */
 /* recorte do retrato (rosto e tronco) dentro do 1o quadro da parada, em pixels da arte de cada atlas */
-static const Rectangle THUMB_CUT[CH_N] = {{0, 0, 66, 66}, {22, 2, 116, 76}, {0, 0, 80, 80}, {2, 0, 86, 78}};
+static const Rectangle THUMB_CUT[CH_N] = {{0, 0, 66, 66}, {0, 0, 160, 102}, {0, 0, 80, 80}, {2, 0, 86, 78}};
 static void DrawThumb(CharId ch, Rectangle dst, bool alt)
 {
     Texture2D tex = texElira;
@@ -3563,39 +3563,176 @@ static const char *MODE_SUB[3] = {"Arcade: enfrente as outras três inteligênci
                                   "Dois jogadores na mesma tela: controle ou teclado. Melhor de 3.",
                                   "Escolha o lutador e o boneco. Vida infinita, carga cheia e caixas (F1)."};
 static const Color MODE_COL[3] = {{96, 214, 240, 255}, {230, 80, 84, 255}, {110, 220, 120, 255}};
+
+static void DrawIafCyberCard(Rectangle r, Color accent, bool on, float tickMax)
+{
+    float pulse = 0.72f + 0.28f * sinf(gt * 3.2f);
+    int bx = (int)r.x;
+    int by = (int)r.y;
+    int bw = (int)r.width;
+    int bh = (int)r.height;
+
+    /* 1. Aura / Glow externo suave em camadas (selecionado) ou sombra projetada (repouso) */
+    if (on)
+    {
+        Rectangle glowOuter = {r.x - 10, r.y - 7, r.width + 20, r.height + 14};
+        Rectangle glowInner = {r.x - 4, r.y - 4, r.width + 8, r.height + 8};
+        DrawRectangleRounded(glowOuter, 0.20f, 8, Fade(accent, 0.14f + 0.05f * sinf(gt * 4.5f)));
+        DrawRectangleRounded(glowInner, 0.16f, 8, Fade(accent, 0.28f));
+    }
+    else
+    {
+        Rectangle shadowRec = {r.x + 4, r.y + 5, r.width, r.height};
+        DrawRectangleRounded(shadowRec, 0.14f, 8, Fade(C_INK, 0.60f));
+    }
+
+    /* 2. Base escura sci-fi com gradiente horizontal e reflexo especular superior */
+    DrawRectangleRounded(r, 0.14f, 8, (Color){8, 13, 26, 246});
+
+    Color gradLeft = on ? Fade(accent, 0.40f) : Fade(accent, 0.16f);
+    Color gradRight = on ? Fade(accent, 0.08f) : Fade((Color){14, 18, 36, 255}, 0.05f);
+    DrawRectangleGradientH(bx + 3, by + 2, bw - 6, bh - 4, gradLeft, gradRight);
+
+    DrawRectangle(bx + 6, by + 3, bw - 12, (bh - 6) / 2,
+                  Fade(C_WHITE, on ? 0.055f : 0.022f));
+
+    /* 3. Feixe holografico varrendo o card quando selecionado */
+    if (on)
+    {
+        float sweepW = 76.0f;
+        float barX = r.x + fmodf(gt * 380.0f, r.width + sweepW * 2.0f) - sweepW;
+        float clipStart = fmaxf(r.x + 8.0f, barX);
+        float clipEnd = fminf(r.x + r.width - 8.0f, barX + sweepW);
+        if (clipEnd > clipStart)
+        {
+            DrawRectangleGradientH((int)clipStart, by + 3, (int)(clipEnd - clipStart), bh - 6,
+                                   Fade(C_WHITE, 0.0f), Fade(C_WHITE, 0.17f));
+        }
+    }
+
+    /* 4. Barra lateral luminosa de energia (esquerda) */
+    int stripeW = on ? 8 : 5;
+    DrawRectangle(bx + 4, by + 6, stripeW + 6, bh - 12, Fade(accent, on ? 0.36f : 0.16f));
+    DrawRectangle(bx + 4, by + 6, stripeW, bh - 12, on ? C_WHITE : accent);
+    if (on)
+    {
+        DrawRectangle(bx + 5, by + 8, stripeW - 2, bh - 16, accent);
+    }
+
+    /* 5. Moldura principal e trilhos horizontais de telemetria */
+    Color borderColor = on ? C_WHITE : Fade(accent, 0.62f * pulse + 0.18f);
+    DrawRectangleRoundedLinesEx(r, 0.14f, 8, on ? 2.5f : 1.6f, borderColor);
+
+    DrawLine(bx + 24, by + 4, bx + bw - 26, by + 4, Fade(accent, on ? 0.55f : 0.22f));
+    DrawLine(bx + 24, by + bh - 5, bx + bw - 26, by + bh - 5, Fade(accent, on ? 0.55f : 0.22f));
+
+    /* 6. Cantoneiras tecnologicas nos 4 cantos */
+    float tickLen = on ? tickMax : (tickMax * 0.62f);
+    float pad = 2.0f;
+    float thick = on ? 2.5f : 2.0f;
+    Color tickCol = on ? C_AMBER : accent;
+    /* Superior esquerdo */
+    DrawLineEx((Vector2){r.x + pad, r.y + pad},
+               (Vector2){r.x + pad + tickLen, r.y + pad}, thick, tickCol);
+    DrawLineEx((Vector2){r.x + pad, r.y + pad},
+               (Vector2){r.x + pad, r.y + pad + tickLen}, thick, tickCol);
+    /* Superior direito */
+    DrawLineEx((Vector2){r.x + r.width - pad, r.y + pad},
+               (Vector2){r.x + r.width - pad - tickLen, r.y + pad}, thick, tickCol);
+    DrawLineEx((Vector2){r.x + r.width - pad, r.y + pad},
+               (Vector2){r.x + r.width - pad, r.y + pad + tickLen}, thick, tickCol);
+    /* Inferior esquerdo */
+    DrawLineEx((Vector2){r.x + pad, r.y + r.height - pad},
+               (Vector2){r.x + pad + tickLen, r.y + r.height - pad}, thick, tickCol);
+    DrawLineEx((Vector2){r.x + pad, r.y + r.height - pad},
+               (Vector2){r.x + pad, r.y + r.height - pad - tickLen}, thick, tickCol);
+    /* Inferior direito */
+    DrawLineEx((Vector2){r.x + r.width - pad, r.y + r.height - pad},
+               (Vector2){r.x + r.width - pad - tickLen, r.y + r.height - pad}, thick, tickCol);
+    DrawLineEx((Vector2){r.x + r.width - pad, r.y + r.height - pad},
+               (Vector2){r.x + r.width - pad, r.y + r.height - pad - tickLen}, thick, tickCol);
+}
+
 static void DrawMode(void)
 {
     DrawBackdrop(modeSel < 3 ? MODE_COL[modeSel] : C_AMBER);
     TxtO("IA FIGHT", SCREEN_WIDTH / 2.0f, 70, 96, C_WHITE, C_INK);
     TxtC("RINHA DE INTELIGÊNCIAS", SCREEN_WIDTH / 2.0f, 176, 24, C_CYAN);
+
+    float pulse = 0.72f + 0.28f * sinf(gt * 3.2f);
+    float slide = 3.5f + 2.8f * sinf(gt * 9.0f);
+
     for (int i = 0; i < 3; i++)
     {
         Rectangle r = {SCREEN_WIDTH / 2.0f - 300, 240.0f + i * 124, 600, 104};
         bool on = i == modeSel;
         Color c = MODE_COL[i];
-        if (on) DrawRectangleRounded((Rectangle){r.x - 8, r.y - 8, r.width + 16, r.height + 16}, 0.2f, 8, Fade(c, 0.22f + 0.1f * sinf(gt * 5)));
-        DrawRectangleRounded(r, 0.18f, 8, (Color){14, 18, 36, 255});
-        DrawRectangleRoundedLinesEx(r, 0.18f, 8, on ? 3 : 1.5f, on ? c : Fade(c, 0.4f));
-        TxtC(MODE_TXT[i], r.x + r.width / 2, r.y + 18, 40, on ? C_WHITE : C_DIM);
-        TxtC(MODE_SUB[i], r.x + r.width / 2, r.y + 70, 16, on ? Fade(c, 0.95f) : Fade(C_DIM, 0.7f));
+
+        DrawIafCyberCard(r, c, on, 18.0f);
+
+        /* Divisoria interna sutil entre titulo e subtitulo */
+        DrawLine((int)r.x + 36, (int)r.y + 62, (int)(r.x + r.width - 36), (int)r.y + 62,
+                 Fade(c, on ? 0.35f : 0.14f));
+
+        /* Chevrons animados (focado) ou marcador geometrico (repouso) */
+        if (on)
+        {
+            Txt(">>", r.x + 24 + slide, r.y + 21, 26, C_AMBER);
+            Txt("<", r.x + r.width - 38 - slide * 0.6f, r.y + 21, 26, Fade(c, 0.95f));
+        }
+        else
+        {
+            DrawRectangle((int)(r.x + r.width - 22), (int)(r.y + 31), 6, 6, Fade(c, 0.55f * pulse));
+        }
+
+        /* Titulo com sombra profunda e halo luminoso */
+        float cx = r.x + r.width / 2.0f + (on ? 2.0f : 0.0f);
+        TxtC(MODE_TXT[i], cx + 2, r.y + 18, 38, Fade(C_INK, 0.90f));
+        if (on)
+        {
+            TxtC(MODE_TXT[i], cx - 1, r.y + 16, 38, Fade(c, 0.42f));
+            TxtC(MODE_TXT[i], cx + 1, r.y + 16, 38, Fade(c, 0.42f));
+        }
+        TxtC(MODE_TXT[i], cx, r.y + 16, 38, on ? C_WHITE : (Color){210, 230, 242, 235});
+
+        /* Subtitulo com sombra para legibilidade nitida */
+        TxtC(MODE_SUB[i], r.x + r.width / 2.0f + 1, r.y + 72, 16, Fade(C_INK, 0.85f));
+        TxtC(MODE_SUB[i], r.x + r.width / 2.0f, r.y + 71, 16,
+             on ? c : (Color){185, 200, 220, 210});
     }
+
     for (int k = 0; k < 2; k++)
     { /* volume do modo: 3 = musica, 4 = efeitos; A/D ou setas ajustam */
         Rectangle r = {SCREEN_WIDTH / 2.0f - 300 + k * 310, 612, 290, 54};
         bool on = modeSel == 3 + k;
         int lvl = k == 0 ? iafMusLvl : iafSfxLvl;
-        if (on) DrawRectangleRounded((Rectangle){r.x - 6, r.y - 6, r.width + 12, r.height + 12}, 0.3f, 8, Fade(C_AMBER, 0.22f + 0.1f * sinf(gt * 5)));
-        DrawRectangleRounded(r, 0.3f, 8, (Color){14, 18, 36, 255});
-        DrawRectangleRoundedLinesEx(r, 0.3f, 8, on ? 3 : 1.5f, on ? C_AMBER : Fade(C_AMBER, 0.4f));
-        Txt(k == 0 ? "MÚSICA" : "EFEITOS", r.x + 16, r.y + 17, 20, on ? C_WHITE : C_DIM);
-        Txt("<", r.x + 112, r.y + 15, 22, on && lvl > 0 ? C_AMBER : Fade(C_DIM, 0.5f));
+        const char *vLabel = (k == 0) ? "MÚSICA" : "EFEITOS";
+
+        DrawIafCyberCard(r, C_AMBER, on, 13.0f);
+
+        if (on)
+        {
+            Txt(">>", r.x + 15 + slide * 0.45f, r.y + 18, 16, C_AMBER);
+        }
+
+        float lblX = r.x + (on ? 38.0f : 20.0f);
+        Txt(vLabel, lblX + 1, r.y + 18, 19, Fade(C_INK, 0.85f));
+        Txt(vLabel, lblX, r.y + 17, 19, on ? C_WHITE : (Color){210, 225, 238, 225});
+
+        Txt("<", r.x + 120, r.y + 15, 22, (on && lvl > 0) ? C_WHITE : (lvl > 0 ? Fade(C_AMBER, 0.75f) : Fade(C_DIM, 0.45f)));
         for (int b = 0; b < IAF_VOL_LVL_MAX; b++)
         {
             float h = 10 + b * 2.2f;
-            Rectangle bar = {r.x + 132 + b * 13, r.y + 40 - h, 9, h};
-            DrawRectangleRec(bar, b < lvl ? (on ? C_AMBER : Fade(C_AMBER, 0.55f)) : Fade(C_DIM, 0.25f));
+            Rectangle bar = {r.x + 138 + b * 12, r.y + 40 - h, 8, h};
+            bool lit = (b < lvl);
+            Color barCol = lit ? (on ? C_AMBER : Fade(C_AMBER, 0.65f)) : Fade(C_DIM, 0.28f);
+            DrawRectangleRec(bar, barCol);
+            if (lit && on)
+            {
+                DrawRectangleLines((int)bar.x, (int)bar.y, (int)bar.width, (int)bar.height, Fade(C_WHITE, 0.40f));
+            }
         }
-        Txt(">", r.x + 266, r.y + 15, 22, on && lvl < IAF_VOL_LVL_MAX ? C_AMBER : Fade(C_DIM, 0.5f));
+        Txt(">", r.x + 263, r.y + 15, 22, (on && lvl < IAF_VOL_LVL_MAX) ? C_WHITE : (lvl < IAF_VOL_LVL_MAX ? Fade(C_AMBER, 0.75f) : Fade(C_DIM, 0.45f)));
     }
     TxtC("W/S ou SETAS: escolher    A/D: volume    ENTER / A: confirmar    TAB / SELECT: controles    ESC / B: voltar ao menu", SCREEN_WIDTH / 2.0f, SCREEN_HEIGHT - 30, 16, C_DIM);
 }

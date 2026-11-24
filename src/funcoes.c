@@ -749,12 +749,28 @@ Vector2 GetVirtualMouse(void)
     return vm;
 }
 
+#define SETTINGS_RES_COUNT 3
+
+typedef struct {
+    int width;
+    int height;
+    const char *label;
+} SettingsResOption;
+
+static const SettingsResOption g_resOptions[SETTINGS_RES_COUNT] = {
+    { 1280,  720, "1280 x 720 (HD)" },
+    { 1600,  900, "1600 x 900 (HD+)" },
+    { 1920, 1080, "1920 x 1080 (FHD)" }
+};
+
+static bool g_resDropdownOpen = false;
+
 void ApplyResolution(int resIndex)
 {
-    if (resIndex < 0 || resIndex > 2) return;
+    if (resIndex < 0 || resIndex >= SETTINGS_RES_COUNT) return;
     g_currentRes = resIndex;
-    int w = (resIndex == 0) ? 1280 : (resIndex == 1 ? 1600 : 1920);
-    int h = (resIndex == 0) ? 720 : (resIndex == 1 ? 900 : 1080);
+    int w = g_resOptions[resIndex].width;
+    int h = g_resOptions[resIndex].height;
 
     if (IsWindowFullscreen())
     {
@@ -764,7 +780,11 @@ void ApplyResolution(int resIndex)
     int monitor = GetCurrentMonitor();
     int monW = GetMonitorWidth(monitor);
     int monH = GetMonitorHeight(monitor);
-    SetWindowPosition((monW - w) / 2, (monH - h) / 2);
+    int posX = (monW - w) / 2;
+    int posY = (monH - h) / 2;
+    if (posX < 0) posX = 0;
+    if (posY < 0) posY = 0;
+    SetWindowPosition(posX, posY);
 }
 
 void CenterText(const char *text, int y, int size, Color color)
@@ -1682,51 +1702,125 @@ void DrawTitleStartButton(Rectangle bounds, const char *label, Color accent)
     Vector2 mouse = GetVirtualMouse();
     bool hover = CheckCollisionPointRec(mouse, bounds);
     float time = (float)GetTime();
-    int size = 21;
-    int width = MeasureGameText(label, size);
+    float pulse = 0.72f + 0.28f * sinf(time * 3.2f);
 
-    float pulse = 0.70f + 0.30f * sinf(time * 3.0f);
-    Color borderColor = hover ? RAYWHITE : Fade(accent, pulse);
+    int bx = (int)bounds.x;
+    int by = (int)bounds.y;
+    int bw = (int)bounds.width;
+    int bh = (int)bounds.height;
 
-    /* Brilho ao redor do botao em hover */
+    /* 1. Aura / Glow externo suave em camadas */
     if (hover)
     {
-        Rectangle glowRec = {bounds.x - 4, bounds.y - 4, bounds.width + 8, bounds.height + 8};
-        DrawRectangleRounded(glowRec, 0.20f, 8, Fade(accent, 0.20f));
+        Rectangle glowOuter = {bounds.x - 8, bounds.y - 6, bounds.width + 16, bounds.height + 12};
+        Rectangle glowInner = {bounds.x - 3, bounds.y - 3, bounds.width + 6, bounds.height + 6};
+        DrawRectangleRounded(glowOuter, 0.22f, 8, Fade(accent, 0.14f));
+        DrawRectangleRounded(glowInner, 0.18f, 8, Fade(accent, 0.28f));
+    }
+    else
+    {
+        Rectangle shadowRec = {bounds.x + 3, bounds.y + 4, bounds.width, bounds.height};
+        DrawRectangleRounded(shadowRec, 0.14f, 8, Fade(BLACK, 0.55f));
     }
 
-    /* Corpo do botao */
-    DrawRectangleRounded(bounds, 0.16f, 8,
-                         hover ? Fade(accent, 0.28f) : Fade(PANEL_COLOR, 0.92f));
-    DrawRectangleRoundedLinesEx(bounds, 0.16f, 8, hover ? 2.5f : 1.8f, borderColor);
+    /* 2. Base escura sci-fi com gradiente horizontal e reflexo superior */
+    Color bgBase = (Color){8, 13, 25, 242};
+    DrawRectangleRounded(bounds, 0.14f, 8, bgBase);
 
-    /* Cantoneiras tecnologicas */
-    float tickLen = hover ? 14.0f : 8.0f;
-    float pad = 4.0f;
-    Color tickCol = hover ? GOLD_COLOR : Fade(accent, 0.85f);
-    DrawLineEx((Vector2){bounds.x + pad, bounds.y + pad},
-               (Vector2){bounds.x + pad + tickLen, bounds.y + pad}, 2, tickCol);
-    DrawLineEx((Vector2){bounds.x + pad, bounds.y + pad},
-               (Vector2){bounds.x + pad, bounds.y + pad + tickLen}, 2, tickCol);
-    DrawLineEx((Vector2){bounds.x + bounds.width - pad, bounds.y + bounds.height - pad},
-               (Vector2){bounds.x + bounds.width - pad - tickLen, bounds.y + bounds.height - pad}, 2, tickCol);
-    DrawLineEx((Vector2){bounds.x + bounds.width - pad, bounds.y + bounds.height - pad},
-               (Vector2){bounds.x + bounds.width - pad, bounds.y + bounds.height - pad - tickLen}, 2, tickCol);
+    Color gradLeft = hover ? Fade(accent, 0.42f) : Fade(accent, 0.18f);
+    Color gradRight = hover ? Fade(accent, 0.10f) : Fade(PANEL_COLOR, 0.05f);
+    DrawRectangleGradientH(bx + 3, by + 2, bw - 6, bh - 4, gradLeft, gradRight);
 
-    /* Feixe de luz varrendo o botao em hover */
+    /* Reflexo especular sutil na metade superior */
+    DrawRectangle(bx + 6, by + 3, bw - 12, (bh - 6) / 2,
+                  Fade(RAYWHITE, hover ? 0.06f : 0.025f));
+
+    /* 3. Feixe holografico varrendo o botao em hover */
     if (hover)
     {
-        float barX = bounds.x + fmodf(time * 300.0f, bounds.width + 40.0f) - 20.0f;
-        if (barX >= bounds.x && barX <= bounds.x + bounds.width - 20)
+        float sweepW = 54.0f;
+        float barX = bounds.x + fmodf(time * 340.0f, bounds.width + sweepW * 2.0f) - sweepW;
+        float clipStart = fmaxf(bounds.x + 8.0f, barX);
+        float clipEnd = fminf(bounds.x + bounds.width - 8.0f, barX + sweepW);
+        if (clipEnd > clipStart)
         {
-            DrawRectangleGradientH((int)barX, (int)bounds.y + 2, 20, (int)bounds.height - 4,
-                                   Fade(RAYWHITE, 0.0f), Fade(RAYWHITE, 0.25f));
+            DrawRectangleGradientH((int)clipStart, by + 3, (int)(clipEnd - clipStart), bh - 6,
+                                   Fade(RAYWHITE, 0.0f), Fade(RAYWHITE, 0.18f));
         }
     }
 
-    int textX = (int)(bounds.x + (bounds.width - width) / 2);
+    /* 4. Barra lateral luminosa de energia (esquerda) */
+    int stripeW = hover ? 8 : 5;
+    DrawRectangle(bx + 4, by + 6, stripeW + 5, bh - 12, Fade(accent, hover ? 0.35f : 0.16f));
+    DrawRectangle(bx + 4, by + 6, stripeW, bh - 12, hover ? RAYWHITE : accent);
+    if (hover)
+    {
+        DrawRectangle(bx + 5, by + 8, stripeW - 2, bh - 16, accent);
+    }
+
+    /* 5. Moldura principal e trilho interno */
+    Color borderColor = hover ? RAYWHITE : Fade(accent, 0.65f * pulse + 0.20f);
+    DrawRectangleRoundedLinesEx(bounds, 0.14f, 8, hover ? 2.4f : 1.6f, borderColor);
+
+    /* Linhas horizontais de telemetria no topo e base */
+    DrawLine(bx + 22, by + 4, bx + bw - 26, by + 4, Fade(accent, hover ? 0.55f : 0.22f));
+    DrawLine(bx + 22, by + bh - 5, bx + bw - 26, by + bh - 5, Fade(accent, hover ? 0.55f : 0.22f));
+
+    /* 6. Cantoneiras tecnologicas nos 4 cantos */
+    float tickLen = hover ? 16.0f : 10.0f;
+    float pad = 2.0f;
+    float thick = hover ? 2.5f : 2.0f;
+    Color tickCol = hover ? GOLD_COLOR : accent;
+    /* Superior esquerdo */
+    DrawLineEx((Vector2){bounds.x + pad, bounds.y + pad},
+               (Vector2){bounds.x + pad + tickLen, bounds.y + pad}, thick, tickCol);
+    DrawLineEx((Vector2){bounds.x + pad, bounds.y + pad},
+               (Vector2){bounds.x + pad, bounds.y + pad + tickLen}, thick, tickCol);
+    /* Superior direito */
+    DrawLineEx((Vector2){bounds.x + bounds.width - pad, bounds.y + pad},
+               (Vector2){bounds.x + bounds.width - pad - tickLen, bounds.y + pad}, thick, tickCol);
+    DrawLineEx((Vector2){bounds.x + bounds.width - pad, bounds.y + pad},
+               (Vector2){bounds.x + bounds.width - pad, bounds.y + pad + tickLen}, thick, tickCol);
+    /* Inferior esquerdo */
+    DrawLineEx((Vector2){bounds.x + pad, bounds.y + bounds.height - pad},
+               (Vector2){bounds.x + pad + tickLen, bounds.y + bounds.height - pad}, thick, tickCol);
+    DrawLineEx((Vector2){bounds.x + pad, bounds.y + bounds.height - pad},
+               (Vector2){bounds.x + pad, bounds.y + bounds.height - pad - tickLen}, thick, tickCol);
+    /* Inferior direito */
+    DrawLineEx((Vector2){bounds.x + bounds.width - pad, bounds.y + bounds.height - pad},
+               (Vector2){bounds.x + bounds.width - pad - tickLen, bounds.y + bounds.height - pad}, thick, tickCol);
+    DrawLineEx((Vector2){bounds.x + bounds.width - pad, bounds.y + bounds.height - pad},
+               (Vector2){bounds.x + bounds.width - pad, bounds.y + bounds.height - pad - tickLen}, thick, tickCol);
+
+    /* 7. Indicadores laterais e Chevrons animados no hover */
+    int size = 21;
+    int width = MeasureGameText(label, size);
+    float slide = hover ? (3.0f + 2.5f * sinf(time * 9.0f)) : 0.0f;
+    int textX = (int)(bounds.x + (bounds.width - width) / 2 + (hover ? 4.0f : 2.0f));
     int textY = (int)(bounds.y + (bounds.height - size) / 2);
-    DrawGameText(label, textX, textY, size, hover ? RAYWHITE : (Color){205, 235, 245, 255});
+
+    if (hover)
+    {
+        int chevY = (int)(bounds.y + (bounds.height - 18) / 2);
+        DrawGameText(">>", bx + 20 + (int)slide, chevY, 18, GOLD_COLOR);
+        DrawGameText("<", bx + bw - 26 - (int)(slide * 0.6f), chevY, 18, Fade(accent, 0.90f));
+    }
+    else
+    {
+        /* Pequeno marcador geometrico sci-fi a direita em repouso */
+        int pipX = bx + bw - 18;
+        int pipY = by + bh / 2;
+        DrawRectangle(pipX - 3, pipY - 3, 6, 6, Fade(accent, 0.55f * pulse));
+    }
+
+    /* 8. Tipografia com sombra profunda e brilho nitido */
+    DrawGameText(label, textX + 2, textY + 2, size, Fade(BLACK, 0.85f));
+    if (hover)
+    {
+        DrawGameText(label, textX - 1, textY, size, Fade(accent, 0.40f));
+        DrawGameText(label, textX + 1, textY, size, Fade(accent, 0.40f));
+    }
+    DrawGameText(label, textX, textY, size, hover ? RAYWHITE : (Color){220, 240, 250, 255});
 }
 
 void DrawTitle(void)
@@ -1762,12 +1856,14 @@ void DrawTitle(void)
         DrawRectangle(88, 291, 218, 2, GOLD_COLOR);
 
         DrawTitleStartButton(startButton, "INICIAR MISSAO", CYAN_COLOR);
-        DrawTitleStartButton(invasionButton, "MODO INVASAO [I]", (Color){230, 90, 200, 255});
-        DrawTitleStartButton(iaFightButton, "IA FIGHT [F]", (Color){120, 230, 150, 255});
-        DrawTitleStartButton(settingsButton, "CONFIGURACOES [C]", GOLD_COLOR);
+        DrawTitleStartButton(invasionButton, "MODO INVASAO", (Color){230, 90, 200, 255});
+        DrawTitleStartButton(iaFightButton, "IA FIGHT", (Color){120, 230, 150, 255});
+        DrawTitleStartButton(settingsButton, "CONFIGURACOES", GOLD_COLOR);
 
         float coverPromptAlpha = 0.40f + 0.55f * (0.5f + 0.5f * sinf(time * 3.4f));
-        DrawGameText("> ENTER: Iniciar  |  I: Invasao  |  F: IA Fight  |  C: Opcoes <", 93, 590, 15, Fade(GOLD_COLOR, coverPromptAlpha));
+        DrawGameText("> Clique em um modo para iniciar <", 122, 590, 15, Fade(GOLD_COLOR, coverPromptAlpha));
+        DrawGameText("* Jogo educacional e academico sem fins comerciais.", 88, 668, 12, Fade(LIGHTGRAY, 0.62f));
+        DrawGameText("  Marcas e referencias pertencem aos seus respectivos proprietarios.", 88, 684, 12, Fade(LIGHTGRAY, 0.48f));
         return; /* sem linhas CRT com a capa (sem filtro de tela) */
     }
 
@@ -1806,13 +1902,15 @@ void DrawTitle(void)
 
     /* 5. Botoes interativos */
     DrawTitleStartButton(startButton, "INICIAR MISSAO", CYAN_COLOR);
-    DrawTitleStartButton(invasionButton, "MODO INVASAO [I]", (Color){230, 90, 200, 255});
-    DrawTitleStartButton(iaFightButton, "IA FIGHT [F]", (Color){120, 230, 150, 255});
-    DrawTitleStartButton(settingsButton, "CONFIGURACOES [C]", GOLD_COLOR);
+    DrawTitleStartButton(invasionButton, "MODO INVASAO", (Color){230, 90, 200, 255});
+    DrawTitleStartButton(iaFightButton, "IA FIGHT", (Color){120, 230, 150, 255});
+    DrawTitleStartButton(settingsButton, "CONFIGURACOES", GOLD_COLOR);
 
-    /* 6. Indicador de atalhos pulsante */
+    /* 6. Indicador de selecao pulsante */
     float promptAlpha = 0.40f + 0.55f * (0.5f + 0.5f * sinf(time * 3.4f));
-    DrawGameText("> ENTER: Iniciar  |  I: Invasao  |  F: IA Fight  |  C: Opcoes <", 93, 590, 15, Fade(GOLD_COLOR, promptAlpha));
+    DrawGameText("> Clique em um modo para iniciar <", 122, 590, 15, Fade(GOLD_COLOR, promptAlpha));
+    DrawGameText("* Jogo educacional e academico sem fins comerciais.", 88, 668, 12, Fade(LIGHTGRAY, 0.62f));
+    DrawGameText("  Marcas e referencias pertencem aos seus respectivos proprietarios.", 88, 684, 12, Fade(LIGHTGRAY, 0.48f));
 
     /* 8. Linhas CRT retro */
     for (int y = 0; y < SCREEN_HEIGHT; y += 4)
@@ -1824,6 +1922,7 @@ void DrawTitle(void)
 void DrawSettings(const GameState *game)
 {
     DrawTitleSpaceBackground();
+    Vector2 vm = GetVirtualMouse();
 
     /* Painel Central de Configuracoes */
     Rectangle panel = {200, 75, 880, 570};
@@ -1854,89 +1953,170 @@ void DrawSettings(const GameState *game)
     Rectangle btnWindowed = {240, 218, 250, 44};
     Rectangle btnFullscreen = {510, 218, 280, 44};
 
-    bool winHover = CheckCollisionPointRec(GetVirtualMouse(), btnWindowed);
+    bool winHover = !g_resDropdownOpen && CheckCollisionPointRec(vm, btnWindowed);
     DrawRectangleRounded(btnWindowed, 0.20f, 6, !isFull ? Fade(CYAN_COLOR, 0.25f) : (winHover ? Fade(PANEL_LIGHT, 0.6f) : PANEL_COLOR));
     DrawRectangleRoundedLinesEx(btnWindowed, 0.20f, 6, 1.8f, !isFull ? CYAN_COLOR : (winHover ? RAYWHITE : PANEL_LIGHT));
     DrawGameText(!isFull ? "[X] MODO JANELA" : "    MODO JANELA", 280, 231, 16, !isFull ? RAYWHITE : GRAY);
 
-    bool fullHover = CheckCollisionPointRec(GetVirtualMouse(), btnFullscreen);
+    bool fullHover = !g_resDropdownOpen && CheckCollisionPointRec(vm, btnFullscreen);
     DrawRectangleRounded(btnFullscreen, 0.20f, 6, isFull ? Fade(CYAN_COLOR, 0.25f) : (fullHover ? Fade(PANEL_LIGHT, 0.6f) : PANEL_COLOR));
     DrawRectangleRoundedLinesEx(btnFullscreen, 0.20f, 6, 1.8f, isFull ? CYAN_COLOR : (fullHover ? RAYWHITE : PANEL_LIGHT));
     DrawGameText(isFull ? "[X] TELA CHEIA [F11]" : "    TELA CHEIA [F11]", 545, 231, 16, isFull ? RAYWHITE : GRAY);
 
-    /* --- SEÇÃO 2: RESOLUCAO DA JANELA --- */
-    DrawGameText("2. RESOLUCAO DE TELA (PROPORCAO 16:9)", 240, 282, 17, CYAN_COLOR);
-    DrawGameText("Selecione a resolucao da janela (redimensionamento automatico):", 240, 304, 13, LIGHTGRAY);
+    /* --- SEÇÃO 2: RESOLUCAO DA JANELA (DROPDOWN ESTILO STEAM) --- */
+    DrawGameText("2. RESOLUCAO DE TELA", 240, 282, 17, CYAN_COLOR);
+    DrawGameText("Selecione a resolucao da janela na lista suspensa (escala automatica):", 240, 304, 13, LIGHTGRAY);
 
-    const char *resLabels[3] = {
-        "1280 x 720 (HD)",
-        "1600 x 900 (HD+)",
-        "1920 x 1080 (FHD)"
-    };
-    for (int r = 0; r < 3; r++)
-    {
-        Rectangle resBtn = {(float)(240 + r * 266), 326, 246, 48};
-        bool isCurrent = (g_currentRes == r);
-        bool hover = CheckCollisionPointRec(GetVirtualMouse(), resBtn);
+    int curRes = (g_currentRes >= 0 && g_currentRes < SETTINGS_RES_COUNT) ? g_currentRes : 0;
+    Rectangle dropHeader = {240, 326, 460, 46};
+    bool dropHover = CheckCollisionPointRec(vm, dropHeader);
 
-        DrawRectangleRounded(resBtn, 0.20f, 6,
-                             isCurrent ? Fade(GOLD_COLOR, 0.24f)
-                                       : (hover ? Fade(CYAN_COLOR, 0.20f) : PANEL_COLOR));
-        DrawRectangleRoundedLinesEx(resBtn, 0.20f, 6, 1.8f,
-                                    isCurrent ? GOLD_COLOR : (hover ? CYAN_COLOR : PANEL_LIGHT));
+    DrawRectangleRounded(dropHeader, 0.18f, 6,
+                         g_resDropdownOpen ? Fade(CYAN_COLOR, 0.22f)
+                                           : (dropHover ? Fade(CYAN_COLOR, 0.16f) : PANEL_COLOR));
+    DrawRectangleRoundedLinesEx(dropHeader, 0.18f, 6, 1.8f,
+                                g_resDropdownOpen ? GOLD_COLOR : (dropHover ? CYAN_COLOR : PANEL_LIGHT));
 
-        const char *prefix = isCurrent ? "[X] " : "";
-        int txtWidth = MeasureGameText(TextFormat("%s%s", prefix, resLabels[r]), 15);
-        DrawGameText(TextFormat("%s%s", prefix, resLabels[r]),
-                 (int)(resBtn.x + (resBtn.width - txtWidth) / 2),
-                 (int)(resBtn.y + 16), 15,
-                 isCurrent ? GOLD_COLOR : (hover ? RAYWHITE : LIGHTGRAY));
-    }
+    DrawGameText(g_resOptions[curRes].label, (int)dropHeader.x + 18, (int)dropHeader.y + 14, 17, GOLD_COLOR);
+
+    /* Divisoria e seta do dropdown */
+    int arrowBoxX = (int)(dropHeader.x + dropHeader.width - 46);
+    DrawLine(arrowBoxX, (int)dropHeader.y + 8, arrowBoxX, (int)(dropHeader.y + dropHeader.height - 8),
+             Fade(g_resDropdownOpen ? GOLD_COLOR : CYAN_COLOR, 0.45f));
+    DrawGameText(g_resDropdownOpen ? "^" : "v", arrowBoxX + 17, (int)dropHeader.y + 14, 18,
+                 g_resDropdownOpen ? GOLD_COLOR : (dropHover ? RAYWHITE : CYAN_COLOR));
 
     if (isFull)
     {
-        DrawGameText("* Em Tela Cheia, o jogo preenche todo o monitor mantendo a proporcao correta (16:9).",
-                 240, 384, 12, Fade(CYAN_COLOR, 0.70f));
+        DrawGameText("* Em Tela Cheia, escolher uma resolucao alterna para Modo Janela automaticamente.",
+                 240, 382, 12, Fade(CYAN_COLOR, 0.70f));
     }
     else
     {
-        DrawGameText("* Clique em qualquer resolucao para redimensionar e centralizar a janela na tela.",
-                 240, 384, 12, Fade(LIGHTGRAY, 0.70f));
+        DrawGameText("* Clique na caixa acima para abrir a lista de resolucoes e redimensionar a janela.",
+                 240, 382, 12, Fade(LIGHTGRAY, 0.70f));
     }
 
-    /* --- SEÇÃO 3: AUDIO AMBIENTE --- */
+    /* --- SEÇÃO 3: AUDIO AMBIENTE (BARRA GRADUADA ESTILO IA FIGHT) --- */
     DrawGameText("3. TRILHA SONORA AMBIENTE", 240, 412, 17, CYAN_COLOR);
-    DrawGameText("Controle da musica ambiente retro sci-fi (atalho [M] a qualquer momento):", 240, 434, 13, LIGHTGRAY);
+    DrawGameText("Controle da musica ambiente (atalho [M] para mudo, [A/D] ou setas [</>] para volume):", 240, 434, 13, LIGHTGRAY);
 
-    Rectangle muteBtn = {240, 456, 230, 42};
-    bool muteHover = CheckCollisionPointRec(GetVirtualMouse(), muteBtn);
+    Rectangle muteBtn = {240, 456, 224, 48};
+    bool muteHover = !g_resDropdownOpen && CheckCollisionPointRec(vm, muteBtn);
     DrawRectangleRounded(muteBtn, 0.20f, 6,
                          game->musicMuted ? Fade(RED_COLOR, 0.22f) : (muteHover ? Fade(CYAN_COLOR, 0.20f) : PANEL_COLOR));
     DrawRectangleRoundedLinesEx(muteBtn, 0.20f, 6, 1.8f,
                                 game->musicMuted ? RED_COLOR : (muteHover ? CYAN_COLOR : PANEL_LIGHT));
     DrawGameText(game->musicMuted ? "MUSICA: MUDO [M]" : "MUSICA: ATIVA [M]",
-             262, 468, 15, game->musicMuted ? RED_COLOR : (muteHover ? RAYWHITE : CYAN_COLOR));
+             258, 472, 15, game->musicMuted ? RED_COLOR : (muteHover ? RAYWHITE : CYAN_COLOR));
 
-    /* Botoes de Volume */
-    const float volValues[4] = {0.20f, 0.45f, 0.75f, 1.00f};
-    const char *volLabels[4] = {"25%", "50%", "75%", "100%"};
-    for (int v = 0; v < 4; v++)
+    /* Painel da Barra de Volume estilo IA FIGHT */
+    Rectangle volBox = {480, 456, 456, 48};
+    DrawRectangleRounded(volBox, 0.18f, 6, PANEL_COLOR);
+    DrawRectangleRoundedLinesEx(volBox, 0.18f, 6, 1.8f, PANEL_LIGHT);
+
+    DrawGameText("VOLUME", (int)volBox.x + 16, (int)volBox.y + 10, 14, GOLD_COLOR);
+    DrawGameText("[A/D]", (int)volBox.x + 16, (int)volBox.y + 27, 11, GRAY);
+
+    int volLvl = game->musicMuted ? 0 : (int)(g_musicVolume * 10.0f + 0.5f);
+    if (volLvl < 0) volLvl = 0;
+    if (volLvl > 10) volLvl = 10;
+
+    Rectangle btnVolDec = {volBox.x + 98, volBox.y + 7, 32, 34};
+    Rectangle btnVolInc = {volBox.x + 322, volBox.y + 7, 32, 34};
+    bool decHover = !g_resDropdownOpen && CheckCollisionPointRec(vm, btnVolDec);
+    bool incHover = !g_resDropdownOpen && CheckCollisionPointRec(vm, btnVolInc);
+
+    DrawRectangleRounded(btnVolDec, 0.25f, 4, decHover ? Fade(CYAN_COLOR, 0.25f) : Fade(PANEL_LIGHT, 0.35f));
+    DrawRectangleRoundedLinesEx(btnVolDec, 0.25f, 4, 1.5f, decHover ? CYAN_COLOR : PANEL_LIGHT);
+    DrawGameText("<", (int)btnVolDec.x + 11, (int)btnVolDec.y + 8, 18, (volLvl > 0) ? (decHover ? RAYWHITE : GOLD_COLOR) : DARKGRAY);
+
+    for (int b = 0; b < 10; b++)
     {
-        Rectangle volBtn = {(float)(490 + v * 76), 456, 66, 42};
-        bool isCurVol = (!game->musicMuted && fabsf(g_musicVolume - volValues[v]) < 0.05f);
-        bool vHover = CheckCollisionPointRec(GetVirtualMouse(), volBtn);
-
-        DrawRectangleRounded(volBtn, 0.20f, 6,
-                             isCurVol ? Fade(GOLD_COLOR, 0.22f) : (vHover ? Fade(CYAN_COLOR, 0.20f) : PANEL_COLOR));
-        DrawRectangleRoundedLinesEx(volBtn, 0.20f, 6, 1.8f,
-                                    isCurVol ? GOLD_COLOR : (vHover ? CYAN_COLOR : PANEL_LIGHT));
-        DrawGameText(volLabels[v], (int)(volBtn.x + 16), (int)(volBtn.y + 13), 15,
-                 isCurVol ? GOLD_COLOR : (vHover ? RAYWHITE : LIGHTGRAY));
+        float bx = volBox.x + 140.0f + (float)b * 18.0f;
+        float bh = 12.0f + (float)b * 2.0f;
+        float by = volBox.y + 39.0f - bh;
+        Rectangle barHit = {bx - 2.0f, volBox.y + 6.0f, 16.0f, 36.0f};
+        bool bHover = !g_resDropdownOpen && CheckCollisionPointRec(vm, barHit);
+        bool lit = (b < volLvl);
+        Color bc = lit ? ((b < 7) ? CYAN_COLOR : GOLD_COLOR) : Fade(PANEL_LIGHT, 0.45f);
+        if (bHover && !lit) bc = Fade(CYAN_COLOR, 0.45f);
+        DrawRectangle((int)bx, (int)by, 12, (int)bh, bc);
+        if (lit || bHover)
+        {
+            DrawRectangleLines((int)bx, (int)by, 12, (int)bh, Fade(RAYWHITE, lit ? 0.35f : 0.65f));
+        }
     }
+
+    DrawRectangleRounded(btnVolInc, 0.25f, 4, incHover ? Fade(CYAN_COLOR, 0.25f) : Fade(PANEL_LIGHT, 0.35f));
+    DrawRectangleRoundedLinesEx(btnVolInc, 0.25f, 4, 1.5f, incHover ? CYAN_COLOR : PANEL_LIGHT);
+    DrawGameText(">", (int)btnVolInc.x + 11, (int)btnVolInc.y + 8, 18, (volLvl < 10) ? (incHover ? RAYWHITE : GOLD_COLOR) : DARKGRAY);
+
+    const char *pctText = game->musicMuted ? "MUDO" : TextFormat("%d%%", volLvl * 10);
+    Color pctColor = (game->musicMuted || volLvl == 0) ? RED_COLOR : GOLD_COLOR;
+    int pctW = MeasureGameText(pctText, 17);
+    DrawGameText(pctText, (int)(volBox.x + 362 + (82 - pctW) / 2), (int)volBox.y + 16, 17, pctColor);
 
     /* --- BOTAO VOLTAR --- */
     Rectangle backBtn = {490, 560, 300, 54};
-    DrawButton(backBtn, "< VOLTAR AO MENU [ESC]", CYAN_COLOR);
+    if (g_resDropdownOpen)
+    {
+        /* Desenha sem efeito de hover enquanto o dropdown estiver aberto por cima */
+        int bSize = 21;
+        int bWidth = MeasureGameText("< VOLTAR AO MENU [ESC]", bSize);
+        DrawRectangleRounded(backBtn, 0.16f, 8, PANEL_COLOR);
+        DrawRectangleRoundedLinesEx(backBtn, 0.16f, 8, 2, PANEL_LIGHT);
+        DrawGameText("< VOLTAR AO MENU [ESC]", (int)(backBtn.x + (backBtn.width - bWidth) / 2),
+                     (int)(backBtn.y + (backBtn.height - bSize) / 2), bSize, LIGHTGRAY);
+    }
+    else
+    {
+        DrawButton(backBtn, "< VOLTAR AO MENU [ESC]", CYAN_COLOR);
+    }
+
+    /* --- LISTA EXPANDIDA DO DROPDOWN (Z-ORDER NO TOPO) --- */
+    if (g_resDropdownOpen)
+    {
+        float itemH = 38.0f;
+        Rectangle dropList = {dropHeader.x, dropHeader.y + dropHeader.height + 4.0f,
+                              dropHeader.width, SETTINGS_RES_COUNT * itemH + 8.0f};
+        Rectangle shadowRec = {dropList.x + 6.0f, dropList.y + 6.0f, dropList.width, dropList.height};
+        DrawRectangleRounded(shadowRec, 0.08f, 6, Fade(BLACK, 0.65f));
+        DrawRectangleRounded(dropList, 0.08f, 6, (Color){10, 16, 30, 252});
+        DrawRectangleRoundedLinesEx(dropList, 0.08f, 6, 2.0f, CYAN_COLOR);
+
+        for (int r = 0; r < SETTINGS_RES_COUNT; r++)
+        {
+            Rectangle itemRec = {dropList.x + 5.0f, dropList.y + 4.0f + r * itemH,
+                                 dropList.width - 10.0f, itemH - 2.0f};
+            bool isCurrent = (curRes == r);
+            bool itemHover = CheckCollisionPointRec(vm, itemRec);
+
+            if (isCurrent || itemHover)
+            {
+                DrawRectangleRounded(itemRec, 0.18f, 4,
+                                     isCurrent ? Fade(GOLD_COLOR, 0.24f) : Fade(CYAN_COLOR, 0.22f));
+                DrawRectangle((int)itemRec.x + 2, (int)itemRec.y + 5, 4, (int)itemRec.height - 10,
+                              isCurrent ? GOLD_COLOR : CYAN_COLOR);
+            }
+
+            DrawGameText(g_resOptions[r].label, (int)itemRec.x + 16, (int)itemRec.y + 10, 15,
+                         isCurrent ? GOLD_COLOR : (itemHover ? RAYWHITE : LIGHTGRAY));
+
+            if (isCurrent)
+            {
+                int tagW = MeasureGameText("[ATUAL]", 13);
+                DrawGameText("[ATUAL]", (int)(itemRec.x + itemRec.width - tagW - 12),
+                             (int)itemRec.y + 11, 13, GOLD_COLOR);
+            }
+            else if (itemHover)
+            {
+                int tagW = MeasureGameText("APLICAR >", 12);
+                DrawGameText("APLICAR >", (int)(itemRec.x + itemRec.width - tagW - 12),
+                             (int)itemRec.y + 12, 12, CYAN_COLOR);
+            }
+        }
+    }
 
     /* Linhas CRT retro */
     for (int y = 0; y < SCREEN_HEIGHT; y += 4)
@@ -1947,13 +2127,56 @@ void DrawSettings(const GameState *game)
 
 void UpdateSettings(GameState *game, Music *bgm, bool bgmLoaded)
 {
+    Vector2 vm = GetVirtualMouse();
+    Rectangle dropHeader = {240, 326, 460, 46};
+
+    /* Se o dropdown de resolucao estiver aberto, ele tem prioridade de foco e consome cliques */
+    if (g_resDropdownOpen)
+    {
+        if (IsKeyPressed(KEY_ESCAPE))
+        {
+            g_resDropdownOpen = false;
+            return;
+        }
+
+        if (IsMouseButtonPressed(MOUSE_BUTTON_LEFT))
+        {
+            float itemH = 38.0f;
+            Rectangle dropList = {dropHeader.x, dropHeader.y + dropHeader.height + 4.0f,
+                                  dropHeader.width, SETTINGS_RES_COUNT * itemH + 8.0f};
+            for (int r = 0; r < SETTINGS_RES_COUNT; r++)
+            {
+                Rectangle itemRec = {dropList.x + 5.0f, dropList.y + 4.0f + r * itemH,
+                                     dropList.width - 10.0f, itemH - 2.0f};
+                if (CheckCollisionPointRec(vm, itemRec))
+                {
+                    ApplyResolution(r);
+                    g_resDropdownOpen = false;
+                    return;
+                }
+            }
+            /* Clicou no cabecalho ou fora da lista: fecha o dropdown e consome o clique */
+            g_resDropdownOpen = false;
+            return;
+        }
+        return;
+    }
+
     Rectangle btnWindowed = {240, 218, 250, 44};
     Rectangle btnFullscreen = {510, 218, 280, 44};
     Rectangle backBtn = {490, 560, 300, 54};
 
     if (Clicked(backBtn) || IsKeyPressed(KEY_ESCAPE))
     {
+        g_resDropdownOpen = false;
         game->screen = SCREEN_TITLE;
+        return;
+    }
+
+    /* Abrir dropdown de resolucao */
+    if (Clicked(dropHeader))
+    {
+        g_resDropdownOpen = true;
         return;
     }
 
@@ -1975,19 +2198,8 @@ void UpdateSettings(GameState *game, Music *bgm, bool bgmLoaded)
         }
     }
 
-    /* Resolucao */
-    for (int r = 0; r < 3; r++)
-    {
-        Rectangle resBtn = {(float)(240 + r * 266), 326, 246, 48};
-        if (Clicked(resBtn))
-        {
-            ApplyResolution(r);
-            break;
-        }
-    }
-
     /* Audio Mudo */
-    Rectangle muteBtn = {240, 456, 230, 42};
+    Rectangle muteBtn = {240, 456, 224, 48};
     if (Clicked(muteBtn))
     {
         game->musicMuted = !game->musicMuted;
@@ -1997,20 +2209,53 @@ void UpdateSettings(GameState *game, Music *bgm, bool bgmLoaded)
         }
     }
 
-    /* Volume */
-    const float volValues[4] = {0.20f, 0.45f, 0.75f, 1.00f};
-    for (int v = 0; v < 4; v++)
+    /* Controle de Volume Graduado (estilo IA FIGHT) */
+    Rectangle volBox = {480, 456, 456, 48};
+    Rectangle btnVolDec = {volBox.x + 98, volBox.y + 7, 32, 34};
+    Rectangle btnVolInc = {volBox.x + 322, volBox.y + 7, 32, 34};
+
+    int volLvl = game->musicMuted ? 0 : (int)(g_musicVolume * 10.0f + 0.5f);
+    if (volLvl < 0) volLvl = 0;
+    if (volLvl > 10) volLvl = 10;
+    int newLvl = -1;
+
+    if (Clicked(btnVolDec) || IsKeyPressed(KEY_LEFT) || IsKeyPressed(KEY_A))
     {
-        Rectangle volBtn = {(float)(490 + v * 76), 456, 66, 42};
-        if (Clicked(volBtn))
+        newLvl = (volLvl > 0) ? (volLvl - 1) : 0;
+    }
+    else if (Clicked(btnVolInc) || IsKeyPressed(KEY_RIGHT) || IsKeyPressed(KEY_D))
+    {
+        newLvl = (volLvl < 10) ? (volLvl + 1) : 10;
+    }
+    else if (IsMouseButtonDown(MOUSE_BUTTON_LEFT))
+    {
+        for (int b = 0; b < 10; b++)
         {
-            g_musicVolume = volValues[v];
-            game->musicMuted = false;
-            if (bgmLoaded)
+            float bx = volBox.x + 140.0f + (float)b * 18.0f;
+            Rectangle barHit = {bx - 3.0f, volBox.y + 6.0f, 18.0f, 36.0f};
+            if (CheckCollisionPointRec(vm, barHit))
             {
-                SetMusicVolume(*bgm, g_musicVolume);
+                newLvl = b + 1;
+                break;
             }
-            break;
+        }
+    }
+
+    if (newLvl >= 0)
+    {
+        if (newLvl == 0)
+        {
+            g_musicVolume = 0.0f;
+            game->musicMuted = true;
+        }
+        else
+        {
+            g_musicVolume = (float)newLvl / 10.0f;
+            game->musicMuted = false;
+        }
+        if (bgmLoaded)
+        {
+            SetMusicVolume(*bgm, game->musicMuted ? 0.0f : g_musicVolume);
         }
     }
 }
