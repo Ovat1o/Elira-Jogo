@@ -131,6 +131,7 @@
 #define IAF_ELIRA_SPRITES_NOVOS 0 /* 1 = a Elira usa os sprites novos em todos os modos (no treino, F4 alterna) */
 #endif
 #define IAF_ELIRA_SP_FLASH  0.10f    /* sprites novos: quadro do clarao do especial na tela depois do disparo (s) */
+#define IAF_ELIRA_HIT_SHORT 0.25f    /* sprites novos: dano em pe com atordoamento menor que isto pula o quadro do tranco (s) */
 #define IAF_CLAUDE_ATLAS    "assets/sprites/iafight/claude_luta.png" /* atlas de luta do Claude */
 #define IAF_CODEX_ATLAS     "assets/sprites/iafight/codex_luta.png"  /* atlas de luta do Codex */
 #define IAF_ANTI_ATLAS      "assets/sprites/iafight/antigravity_luta.png" /* atlas de luta do Antigravity */

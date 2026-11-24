@@ -892,8 +892,12 @@ static int EliraFrameIdxV2(Fighter *a)
     if (a->st == ST_WIN) return E2Frame(E2_WIN, (int)(a->stT * 10));
     if (a->st == ST_HIT)
     { /* dano agachada: tranco (1), cabeca para tras (2) ate quase o fim do atordoamento, volta (3) */
-        if (!a->hitCrouch) return -1;
-        return E2Frame(E2_HIT_CROUCH, a->stT < 0.06f ? 1 : (a->stun > 0.08f ? 2 : 3));
+        if (a->hitCrouch) return E2Frame(E2_HIT_CROUCH, a->stT < 0.06f ? 1 : (a->stun > 0.08f ? 2 : 3));
+        /* dano em pe (stT zera a cada acerto): impacto (1) no instante do acerto, tranco maximo (3) no meio do
+           atordoamento, recuperacao (4) no fim; atordoamento curto (fraco = 0,20 s) pula o tranco (2) */
+        float tot = a->stT + fmaxf(a->stun, 0), p = tot > 0 ? a->stT / tot : 1;
+        if (tot < IAF_ELIRA_HIT_SHORT) return E2Frame(E2_HIT, p < 0.3f ? 1 : (p < 0.65f ? 3 : 4));
+        return E2Frame(E2_HIT, p < 0.2f ? 1 : (p < 0.38f ? 2 : (p < 0.7f ? 3 : 4)));
     }
     if (a->st == ST_ATK)
     {
