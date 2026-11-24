@@ -3399,12 +3399,12 @@ static void DrawBackdrop(Color accent)
    no centro, a grade 2x4 (8 slots: 5 lutadores desbloqueados + 3 slots bloqueados 'EM BREVE'). */
 #define SEL_GRID_SLOTS 8
 static const Color PCOL[2] = {{96, 214, 240, 255}, {230, 80, 84, 255}}; /* cursor/rotulo do 1P e do 2P */
-/* recorte centralizado (rosto e tronco) dentro do 1o quadro da parada, em pixels da arte de cada atlas */
+/* recorte completo de cada lutador no 1o quadro da parada (fminf limita ao tamanho real do quadro) */
 static const Rectangle THUMB_CUT[CH_N] = {
-    {7, 0, 68, 68},                    /* ELIRA: w=82, ax=41 -> centrado em 41 */
-    {18, 0, 124, 102},                 /* CLAUDE: w=160, ax=80 -> centrado em 80 */
-    {3, 0, 83, 83},                    /* CODEX: w=89, ax=39 -> centrado na nuvem */
-    {10, 0, 89, 89},                   /* ANTIGRAVITY: w=109, ax=54.7 -> centrado em 54.5 */
+    {0, 0, 999, 999},                  /* ELIRA: corpo + canhao inteiros */
+    {0, 0, 999, 999},                  /* CLAUDE: corpo + bracos + pernas inteiros */
+    {0, 0, 999, 999},                  /* CODEX: nuvem + luvas inteiras */
+    {0, 0, 999, 999},                  /* ANTIGRAVITY: arco completo sem cortes */
     {0, 0, IR_THUMB_PX, IR_THUMB_PX}   /* IARA: retrato 72x72 pre-escalado */
 };
 static Color LogoMix(Color a, Color b, float t);
@@ -3422,7 +3422,7 @@ static void DrawThumb(CharId ch, Rectangle dst, bool alt)
     Color tint = WHITE;
     if (ch == CH_CLAUDE) { const CFrame *e = &CF[CA_FIRST[CA_IDLE]]; tex = texClaude; fr = (Rectangle){e->x, e->y, e->w, e->h}; if (alt) tint = IAF_CLAUDE_ALT_TINT; }
     else if (ch == CH_CODEX) { const XFrame *e = &XF[XA_FIRST[XA_IDLE]]; tex = texCodex; fr = (Rectangle){e->x, e->y, e->w, e->h}; if (alt) tint = IAF_CODEX_ALT_TINT; }
-    else if (ch == CH_ANTI) { const AFrame *e = &AF[AA_FIRST[AA_IDLE]]; tex = texAnti; fr = (Rectangle){e->x, e->y, e->w, e->h}; if (alt) tint = IAF_ANTI_ALT_TINT; }
+    else if (ch == CH_ANTI) { const AFrame *e = &AF[AA_FIRST[AA_IDLE] + 3]; tex = texAnti; fr = (Rectangle){e->x, e->y, e->w, e->h}; if (alt) tint = IAF_ANTI_ALT_TINT; }
     else if (ch == CH_IARA) { const IFrame *e = &IRF[IR_FIRST[IR_THUMB]]; tex = texIara; fr = (Rectangle){e->x, e->y, e->w, e->h}; if (alt) tint = IAF_IARA_ALT_TINT; }
     else { const EFrame *e = &EF[EAFrame(EA_IDLE, 0)]; fr = (Rectangle){e->x, e->y, e->w, e->h}; if (alt) tint = IAF_ELIRA_ALT_TINT; }
     if (!tex.id)
@@ -3436,6 +3436,7 @@ static void DrawThumb(CharId ch, Rectangle dst, bool alt)
     Rectangle src = {fr.x + c.x, fr.y + c.y, fminf(c.width, fr.width - c.x), fminf(c.height, fr.height - c.y)};
     float k = fminf(dst.width / src.width, dst.height / src.height);
     float w = roundf(src.width * k), h = roundf(src.height * k);
+    if (ch == CH_ANTI) src.width = -src.width; /* orientacao padrao (vermelho->amarelo->verde) */
     DrawTexturePro(tex, src, (Rectangle){roundf(dst.x + (dst.width - w) / 2), roundf(dst.y + (dst.height - h) / 2), w, h}, (Vector2){0, 0}, 0, tint);
 }
 /* ordem do arcade para quem escolhe 'ch' (a mesma de BuildLadder) */
@@ -3754,8 +3755,8 @@ static void DrawSelectGridSlot(int i, bool on)
     /* Reflexo especular no topo do quadrado */
     DrawRectangle(gx + 5, gy + 3, gw - 10, 14, Fade(C_WHITE, on ? 0.07f : 0.025f));
 
-    /* Retrato bem enquadrado */
-    DrawThumb((CharId)i, (Rectangle){g.x + 7.0f, g.y + 6.0f, g.width - 14.0f, g.height - 24.0f}, false);
+    /* Retrato bem enquadrado com respiro acima da faixa do nome */
+    DrawThumb((CharId)i, (Rectangle){g.x + 6.0f, g.y + 5.0f, g.width - 12.0f, g.height - 27.0f}, false);
 
     /* Faixa inferior com o nome curto do lutador */
     DrawRectangle(gx + 2, gy + gh - 20, gw - 4, 18, Fade((Color){6, 9, 18, 255}, 0.82f));
@@ -3775,15 +3776,21 @@ static void DrawSelectGridSlot(int i, bool on)
     DrawLineEx((Vector2){g.x + g.width - pd, g.y + g.height - pd}, (Vector2){g.x + g.width - pd - tk, g.y + g.height - pd}, th, tc);
     DrawLineEx((Vector2){g.x + g.width - pd, g.y + g.height - pd}, (Vector2){g.x + g.width - pd, g.y + g.height - pd - tk}, th, tc);
 
-    /* Selo discreto COLAB no canto superior direito da Iara */
+    /* Etiqueta chanfrada estilizada COLAB no canto superior esquerdo da Iara (sem cobrir o rosto) */
     if (i == CH_IARA)
     {
-        Color badgeCol = {175, 58, 86, 255};
-        float bw = TxtW("COLAB", 10) + 10.0f;
-        Rectangle b = {g.x + g.width - bw - 4.0f, g.y + 4.0f, bw, 15.0f};
-        DrawRectangleRounded(b, 0.3f, 4, badgeCol);
-        DrawRectangleRoundedLinesEx(b, 0.3f, 4, 1.0f, ColorLerp(badgeCol, WHITE, 0.45f));
-        TxtC("COLAB", b.x + bw * 0.5f, b.y + 2.0f, 10, C_WHITE);
+        float bx = g.x + 2.0f, by = g.y + 2.0f;
+        float bw = 46.0f, bh = 14.0f, cut = 7.0f;
+        Color bg0 = {140, 28, 72, 245};
+        Color bg1 = {215, 58, 108, 245};
+        Quad((Vector2){bx, by}, (Vector2){bx + bw, by},
+             (Vector2){bx + bw - cut, by + bh}, (Vector2){bx, by + bh}, bg0);
+        Tri2((Vector2){bx + bw * 0.45f, by}, (Vector2){bx + bw, by},
+             (Vector2){bx + bw - cut, by + bh}, Fade(bg1, 0.70f));
+        DrawLineEx((Vector2){bx, by + bh}, (Vector2){bx + bw - cut, by + bh}, 1.4f, C_AMBER);
+        DrawLineEx((Vector2){bx + bw - cut, by + bh}, (Vector2){bx + bw, by}, 1.4f, C_AMBER);
+        Txt("COLAB", bx + 5.0f, by + 2.5f, 9, C_INK);
+        Txt("COLAB", bx + 4.0f, by + 2.0f, 9, C_WHITE);
     }
 }
 
