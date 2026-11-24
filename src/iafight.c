@@ -156,12 +156,12 @@ static const Atk ATK[CH_N][AT_SPECIAL] = {
                   {0.05f, 0.16f, 0.10f, 55, 105, 125, 76, 0.32f, 160, 2}, /* aereo: pe do chute entre 49 e 125 px acima dos pes */
                   {0.20f, 0.10f, 0.30f, 90, 128, 168, 50, 0.45f, 330, 0},  /* soco longo */
                   {0.08f, 0.14f, 0.32f, 80, 90, 300, 270, 0.50f, 120, 0}}, /* uppercut (chute alto) */
-    [CH_CLAUDE] = {{0}, {0.07f, 0.08f, 0.15f, 39, 180, 122, 50, 0.20f, 170, 0}, /* alcances no punho/pe do sprite (1.5x) */
-                   {0.17f, 0.10f, 0.30f, 106, 188, 112, 54, 0.45f, 380, 0},   /* chute frontal */
-                   {0.10f, 0.08f, 0.22f, 50, 171, 33, 33, 0.32f, 160, 1},
-                   {0.05f, 0.15f, 0.10f, 55, 186, 60, 40, 0.32f, 160, 2},
-                   {0.24f, 0.10f, 0.34f, 108, 196, 128, 54, 0.50f, 420, 0},  /* soco forte de alcance longo */
-                   {0.09f, 0.14f, 0.34f, 85, 158, 240, 218, 0.50f, 120, 0}}, /* uppercut */
+    [CH_CLAUDE] = {{0}, {0.07f, 0.08f, 0.15f, 39, 216, 100, 50, 0.20f, 170, 0}, /* alcances na ponta do desenho (6x), ~10 px antes */
+                   {0.17f, 0.10f, 0.30f, 106, 165, 105, 60, 0.45f, 380, 0},   /* chute frontal */
+                   {0.10f, 0.08f, 0.22f, 50, 135, 33, 33, 0.32f, 160, 1},     /* rasteira: o desenho desliza so ~110 px; alcance menor que o antigo */
+                   {0.05f, 0.15f, 0.10f, 55, 190, 70, 60, 0.32f, 160, 2},     /* voadora: pe na ponta da diagonal, na altura dos pes */
+                   {0.24f, 0.10f, 0.34f, 108, 480, 128, 54, 0.50f, 420, 0},   /* soco forte: o braco estica ate ~530 px */
+                   {0.09f, 0.14f, 0.34f, 85, 175, 350, 250, 0.50f, 120, 0}}, /* uppercut: corpo e braco no alto (ate ~360 px) */
     [CH_CODEX] = {{0}, {0.06f, 0.07f, 0.14f, 39, 180, 138, 64, 0.20f, 180, 0},  /* alcances na luva/tenis do sprite (2x) */
                   {0.20f, 0.10f, 0.32f, 120, 100, 186, 114, 0.48f, 330, 0}, /* chute alto */
                   {0.09f, 0.08f, 0.22f, 55, 200, 46, 42, 0.32f, 170, 1},    /* chute baixo */
@@ -1079,9 +1079,12 @@ static int EliraFrameIdx(Fighter *a, float *yoff)
    Ampliado com filtro POINT: 2x = 4 px de tela por pixel da arte, ~204 px de altura (como a Elira). */
 #include "iafight_claude.h"
 static Texture2D texClaude;
-#define CL_SCALE 1.5f
-#define CL_FRONT 142.0f /* do centro ate a frente do corpo: prisma, feixe e pulso de luz */
-#define CL_STRIKE_REACH 192.0f /* ponta do punho (soco forte) e do pe (chute frontal) no quadro mais esticado */
+#define CL_SCALE 6.0f /* a arte nova e a mascote em 124x80 px nativos: 6x (~144 px de altura parada) */
+#define CL_FRONT 130.0f /* do centro ate o cristal do prisma (na frente do corpo): feixe e pulso de luz */
+#define CL_CRYSTAL_Y 90.0f /* altura do cristal acima dos pes (px) */
+#define CL_IMPACT_TIME 0.30f /* leque de luz do impacto do especial: duracao dos 6 quadros (s) */
+#define CL_BEAM_REACH 420.0f /* alcance do pulso de luz do especial sem ataque para refletir (o feixe do desenho vai a ~470 px) */
+#define CL_STRIKE_REACH 174.0f /* ponta do pe (chute frontal) no quadro mais esticado */
 /* equilibrio do prisma (o especial do Claude causava ~6x o dano do especial dos outros) */
 #define CL_PRISM_COUNTER_DMG 60.0f /* feixe de resposta quando o prisma apara um golpe */
 #define CL_REFLECT_MULT 0.7f       /* dano do projetil refletido em relacao ao original */
@@ -1120,45 +1123,58 @@ static int ClaudeAtkFrame(Fighter *a, int anim, int a0, int a1, float st, float 
     else i = a1 + 1 + (int)((t - st - ac) / rc * (n - 1 - a1));
     return CAFrame(anim, i);
 }
+static int IaHitIdx(Fighter *a);      /* definidas mais abaixo, junto dos quadros comuns do Codex e do Antigravity */
+static bool IaLaunched(Fighter *a);
+/* queda presa a fisica (8 quadros): tranco no acerto, no ar rodando (1-2), bate no chao no pouso, quica e fica caida */
+static int ClaudeFallIdx(Fighter *a)
+{
+    if (!a->down && a->stT < 0.06f) return 0; /* stT zera no acerto */
+    if (!OnGround(a)) return a->vy < 0 ? 1 : 2;
+    float g = a->groundT;
+    return g < 0.07f ? 3 : (g < 0.14f ? 4 : (g < 0.24f ? 5 : (g < 0.34f ? 6 : 7)));
+}
 static int ClaudeFrameIdx(Fighter *a)
 {
-    int nk = CA_COUNT[CA_KNOCKDOWN];
-    if (a->st == ST_KO) return CAFrame(CA_KNOCKDOWN, (int)(a->stT / 0.06f));
+    if (a->st == ST_KO || IaLaunched(a)) return CAFrame(CA_KNOCKDOWN, ClaudeFallIdx(a));
     if (a->down)
-    { /* caido; ao levantar, a queda tocada ao contrario */
-        if (a->downT > 0.36f) return CAFrame(CA_KNOCKDOWN, nk - 1);
-        return CAFrame(CA_KNOCKDOWN, (int)(a->downT / 0.36f * (nk - 1)));
+    { /* caido; o levantar ocupa os ultimos 0,36 s */
+        if (a->downT > 0.36f) return CAFrame(CA_KNOCKDOWN, ClaudeFallIdx(a));
+        return CAFrame(CA_GETUP, (int)((0.36f - a->downT) / 0.36f * CA_COUNT[CA_GETUP]));
     }
-    if (a->st == ST_LOSE) return CAFrame(CA_KNOCKDOWN, nk - 1);
+    if (a->st == ST_LOSE) return CAFrame(CA_DEFEAT, (int)(a->stT / CA_DUR[CA_DEFEAT]));
     if (a->st == ST_WIN) return CALoop(CA_VICTORY, a->stT);
-    if (a->st == ST_HIT) return CAFrame(CA_HURT, (int)(a->stT / 0.4f * CA_COUNT[CA_HURT]));
+    if (a->st == ST_HIT)
+    { /* dano em pe (5 quadros): tranco, tranco maximo enquanto dura o atordoamento, volta; agachado (4) como o do Codex */
+        if (a->hitCrouch) return CAFrame(CA_HURT_CROUCH, IaHitIdx(a));
+        return CAFrame(CA_HURT, a->stT < 0.04f ? 0 : (a->stT < 0.08f ? 1 : (a->stun > 0.08f ? 2 : (a->stun > 0.04f ? 3 : 4))));
+    }
     if (a->st == ST_ATK)
     {
         const Atk *d = &ATK[CH_CLAUDE][a->atk < AT_SPECIAL ? a->atk : 0];
         switch (a->atk)
         {
-        case AT_LIGHT: return ClaudeAtkFrame(a, CA_JAB, 2, 4, d->st, d->ac, d->rc);
-        case AT_HEAVY: return ClaudeAtkFrame(a, CA_FKICK, 3, 6, d->st, d->ac, d->rc);
-        case AT_FWDH: return ClaudeAtkFrame(a, CA_HEAVY, 4, 6, d->st, d->ac, d->rc);
-        case AT_UPPER: return ClaudeAtkFrame(a, CA_UPPER, 4, 7, d->st, d->ac, d->rc);
-        case AT_LOW: return ClaudeAtkFrame(a, CA_SWEEP, 4, 6, d->st, d->ac, d->rc);
-        case AT_AIR: return ClaudeAtkFrame(a, CA_AIRKICK, 4, 6, d->st, d->ac, d->rc);
+        case AT_LIGHT: return ClaudeAtkFrame(a, CA_JAB, 1, 3, d->st, d->ac, d->rc);     /* 6: dois socos (1 e 3) */
+        case AT_HEAVY: return ClaudeAtkFrame(a, CA_FKICK, 2, 3, d->st, d->ac, d->rc);   /* 7: chute frontal esticado (2-3) */
+        case AT_FWDH: return ClaudeAtkFrame(a, CA_HEAVY, 2, 4, d->st, d->ac, d->rc);    /* 8: braco esticado (2-4) */
+        case AT_UPPER: return ClaudeAtkFrame(a, CA_UPPER, 2, 4, d->st, d->ac, d->rc);   /* 8: agacha, sobe com o braco (2-4) */
+        case AT_LOW: return ClaudeAtkFrame(a, CA_SWEEP, 2, 4, d->st, d->ac, d->rc);     /* 7: deita e varre (2-4) */
+        case AT_AIR: return ClaudeAtkFrame(a, CA_AIRKICK, 2, 4, d->st, d->ac, d->rc);   /* 6: encolhe, voadora (2-4) */
         case AT_SPECIAL:
-        { /* prisma: carga em loop enquanto o escudo esta de pe; depois (ou ao refletir) o disparo */
+        { /* prisma: a carga (8) forma o cristal enquanto o escudo esta de pe; depois (ou ao refletir) o feixe (quadros 2-7) */
             float st = SP_ST[CH_CLAUDE], ac = SP_AC[CH_CLAUDE], rc = SP_RC[CH_CLAUDE];
-            if (a->atkT < st + ac) return CALoop(CA_CHARGE, a->atkT);
-            return CAFrame(CA_BLAST, (int)((a->atkT - st - ac) / rc * CA_COUNT[CA_BLAST]));
+            if (a->atkT < st + ac) return CAFrame(CA_CHARGE, (int)(a->atkT / (st + ac) * CA_COUNT[CA_CHARGE]));
+            return CAFrame(CA_BLAST, 2 + (int)((a->atkT - st - ac) / rc * (CA_COUNT[CA_BLAST] - 2)));
         }
         default: break;
         }
     }
     if (a->shieldOn || a->st == ST_BLOCK)
-    {
-        if (a->crouch) return CAFrame(CA_CROUCH, CA_COUNT[CA_CROUCH] - 1);
-        return CALoop(CA_BLOCK, a->stT);
+    { /* guarda: cruza os bracos (sobe e segura o ultimo quadro); no bloqueio, a faisca */
+        if (a->shieldHit > 0 && !a->crouch) return CAFrame(CA_BLOCK_HIT, a->shieldHit > 0.07f ? 1 : 2);
+        return CAFrame(a->crouch ? CA_BLOCK_CROUCH : CA_BLOCK, (int)(a->shieldT / 0.05f));
     }
     if (a->st == ST_DASH) return CAFrame(CA_DASH, (int)(a->dashT / IAF_DASH_TIME * CA_COUNT[CA_DASH]));
-    if (a->st == ST_JUMP) return CAFrame(CA_JUMP, 1 + (int)((a->vy + IAF_JUMP_SPEED) / (2 * IAF_JUMP_SPEED) * 9));
+    if (a->st == ST_JUMP) return CAFrame(CA_JUMP, 1 + (int)((a->vy + IAF_JUMP_SPEED) / (2 * IAF_JUMP_SPEED) * 4.99f)); /* 1-5: sobe, gira, prepara o pouso */
     if (a->crouch) return CAFrame(CA_CROUCH, (int)(a->stT / 0.035f));
     if (a->st == ST_WALK) return CALoop((a->vx * a->face) < 0 ? CA_WALK_B : CA_WALK_F, a->anim);
     return CALoop(CA_IDLE, gt);
@@ -1731,7 +1747,7 @@ static void DrawFighter(Fighter *a)
     float flash = a->flash > 0 ? Clamp(a->flash / 0.12f, 0.0f, 1.0f) * 0.8f : 0;
     float alt = IAF_GROUND_Y - a->y;
     float jx = a->hitShake > 0 ? (Rand01() - 0.5f) * 2 * IAF_HIT_SHAKE_PX : 0; /* tremor no impacto */
-    DrawShadow(a->x, (a->ch == CH_CLAUDE && texClaude.id ? 88 : (a->ch == CH_ANTI && texAnti.id ? 84 : (a->ch == CH_CODEX && texCodex.id ? 84 : (a->ch == CH_IARA && texIara.id ? IRK(62) : (a->ch == CH_AURA && texAura.id ? 66 : 52))))) - fminf(alt, 200) * 0.12f);
+    DrawShadow(a->x, (a->ch == CH_CLAUDE && texClaude.id ? 100 : (a->ch == CH_ANTI && texAnti.id ? 84 : (a->ch == CH_CODEX && texCodex.id ? 84 : (a->ch == CH_IARA && texIara.id ? IRK(62) : (a->ch == CH_AURA && texAura.id ? 66 : 52))))) - fminf(alt, 200) * 0.12f);
     if (a->ch == CH_IARA && texIara.id && alt > 30 && a->st != ST_KO)
     { /* no ar a poca fica no chao: aneis de agua embaixo dela */
         float k = Clamp(1 - alt / 420, 0.3f, 1.0f);
@@ -1800,9 +1816,9 @@ static void DrawFighter(Fighter *a)
         DrawPuppet(a->ch, a->x + jx, a->y, a->face, 1.0f, p, flash, a->vx);
         g_altPal = false;
     }
-    if (!(a->ch == CH_ANTI && texAnti.id) && !(a->ch == CH_IARA && texIara.id) && !(a->ch == CH_AURA && texAura.id)) DrawAttackTrail(a, jx); /* os golpes do Antigravity, da Iara e da AURA_67 ja trazem o rastro no desenho */
+    if (!(a->ch == CH_CLAUDE && texClaude.id) && !(a->ch == CH_ANTI && texAnti.id) && !(a->ch == CH_IARA && texIara.id) && !(a->ch == CH_AURA && texAura.id)) DrawAttackTrail(a, jx); /* os golpes do Antigravity, da Iara e da AURA_67 ja trazem o rastro no desenho */
     /* defesa das IAs: placa hexagonal na frente (a Elira e o Antigravity tem quadros proprios) */
-    if (a->st == ST_BLOCK && a->ch != CH_ELIRA && !(a->ch == CH_ANTI && texAnti.id) && !(a->ch == CH_IARA && texIara.id) && !(a->ch == CH_AURA && texAura.id)) /* a Iara ergue a parede de agua; a AURA_67 cruza os ossos */
+    if (a->st == ST_BLOCK && a->ch != CH_ELIRA && !(a->ch == CH_CLAUDE && texClaude.id) && !(a->ch == CH_ANTI && texAnti.id) && !(a->ch == CH_IARA && texIara.id) && !(a->ch == CH_AURA && texAura.id)) /* a Iara ergue a parede de agua; a AURA_67 cruza os ossos */
     {
         Color c = FCol(a);
         float cy = a->crouch ? a->y - 60 : a->y - 120, cx = a->x + a->face * 52;
@@ -1812,8 +1828,15 @@ static void DrawFighter(Fighter *a)
         DrawPolyLinesEx((Vector2){cx, cy}, 6, 40, 0, 3, Fade(c, 0.85f));
         DrawPolyLinesEx((Vector2){cx, cy}, 6, 28, 0, 1.5f, Fade(c, 0.5f));
     }
-    /* Claude: prisma refletor */
-    if (a->ch == CH_CLAUDE && a->st == ST_ATK && a->atk == AT_SPECIAL)
+    /* Claude: o cristal e o feixe ja vem no desenho; so o leque de luz do impacto (6 quadros) e desenhado a parte */
+    if (a->ch == CH_CLAUDE && texClaude.id && a->st == ST_ATK && a->atk == AT_SPECIAL)
+    {
+        float since = a->atkT - (SP_ST[CH_CLAUDE] + SP_AC[CH_CLAUDE]);
+        if (since >= 0 && since < CL_IMPACT_TIME)
+            DrawCF(CAFrame(CA_IMPACT, (int)(since / CL_IMPACT_TIME * CA_COUNT[CA_IMPACT])), a->x + jx, a->y, a->face, CL_SCALE, a->alt ? IAF_CLAUDE_ALT_TINT : WHITE, 0);
+    }
+    /* Claude (sem o atlas): prisma refletor desenhado no codigo */
+    if (a->ch == CH_CLAUDE && !texClaude.id && a->st == ST_ATK && a->atk == AT_SPECIAL)
     {
         float t = a->atkT, st = SP_ST[CH_CLAUDE], ac = SP_AC[CH_CLAUDE];
         float vis = t < st ? t / st : (t < st + ac ? 1 : 1 - (t - st - ac) / SP_RC[CH_CLAUDE]);
@@ -1838,7 +1861,7 @@ static void DrawFighter(Fighter *a)
     }
     if (a->beamT > 0)
     { /* feixe de resposta do prisma */
-        Vector2 o = (Vector2){a->x + a->face * CL_FRONT, a->y - 120};
+        Vector2 o = (Vector2){a->x + a->face * CL_FRONT, a->y - (texClaude.id ? CL_CRYSTAL_Y : 120.0f)};
         Color bands[3] = {{255, 140, 100, 255}, {255, 220, 130, 255}, {255, 255, 255, 255}};
         for (int i = 0; i < 3; i++)
             DrawLineEx(Vector2Add(o, (Vector2){0, (i - 1) * 6}), Vector2Add(a->beamTo, (Vector2){0, (i - 1) * 10}), (10 - i * 3) * (a->beamT / 0.35f) + 1, Fade(bands[i], a->beamT / 0.35f));
@@ -1895,7 +1918,7 @@ static Rectangle Hurt(Fighter *a)
 {
     float w = a->ch == CH_CODEX ? 84 : (a->ch == CH_ELIRA ? 96 : 70), h = a->crouch ? (a->ch == CH_ELIRA ? 132 : 128) : (a->ch == CH_ELIRA ? 214 : 200);
     float lift = 0; /* a caixa sobe junto com o desenho que flutua */
-    if (a->ch == CH_CLAUDE) { w = 174; h = a->crouch ? 120 : 153; } /* sprite reduzido (1.5x) para permitir pular por cima */
+    if (a->ch == CH_CLAUDE) { w = 186; h = a->crouch ? 108 : 150; } /* mascote 6x: tronco ~180 px de largura, ~145 de altura */
     if (a->ch == CH_ANTI) { w = 148; h = a->crouch ? 124 : 164; lift = AntiHover(a); } /* "A" em escala 2x (~180x164 na tela), flutuando ~13 px */
     if (a->ch == CH_CODEX) { w = 130; h = a->crouch ? 150 : 198; }  /* nuvem do sprite (~157 de largura; as bordas fofas nao contam) */
     if (a->ch == CH_IARA) { w = IRK(100); h = IRK(a->crouch ? 130 : 205); } /* tronco, cauda e poca (~210 x IAF_IARA_ESCALA com o cabelo) */
@@ -1905,7 +1928,7 @@ static Rectangle Hurt(Fighter *a)
 }
 /* meia largura do corpo para nao se sobreporem: o tronco do sprite (colunas com pelo menos 35% da
    altura), sem canhao, bracos e cabelo, que podem passar na frente do oponente */
-static float BodyHalf(Fighter *a) { return a->ch == CH_CLAUDE ? 80.0f : (a->ch == CH_ANTI ? 72.0f : (a->ch == CH_CODEX ? 70.0f : (a->ch == CH_IARA ? IRK(50.0f) : (a->ch == CH_AURA ? 54.0f : 50.0f)))); }
+static float BodyHalf(Fighter *a) { return a->ch == CH_CLAUDE ? 90.0f : (a->ch == CH_ANTI ? 72.0f : (a->ch == CH_CODEX ? 70.0f : (a->ch == CH_IARA ? IRK(50.0f) : (a->ch == CH_AURA ? 54.0f : 50.0f)))); }
 static bool Overlap(Rectangle a, Rectangle b) { return a.x < b.x + b.width && b.x < a.x + a.width && a.y < b.y + b.height && b.y < a.y + a.height; }
 static bool OnGround(Fighter *a) { return a->y >= IAF_GROUND_Y - 0.5f; }
 static void SetState(Fighter *a, FState s) { a->st = s; a->stT = 0; }
@@ -2062,9 +2085,9 @@ static void UpdateSpecial(Fighter *a, Fighter *o, float dt)
         if (t >= st + ac && !a->spawned && !a->countered)
         { /* sem ataque para refletir: pulso curto de luz */
             a->spawned = true;
-            HitSparks((Vector2){a->x + a->face * CL_FRONT, a->y - 120}, C_AMBER, 14, 300);
+            HitSparks((Vector2){a->x + a->face * CL_FRONT, a->y - (texClaude.id ? CL_CRYSTAL_Y : 120.0f)}, C_AMBER, 14, 300);
             PlaySfx(SFX_SP_FIRE);
-            if (fabsf(o->x - a->x) < CL_FRONT + 96 && fabsf(o->y - a->y) < 140) ApplyHit(a, o, 60, 0.35f, 260, 0, (Vector2){o->x, o->y - 120}, false, false);
+            if ((texClaude.id ? ((o->x - a->x) * a->face > -40 && fabsf(o->x - a->x) < CL_BEAM_REACH) : fabsf(o->x - a->x) < CL_FRONT + 96) && fabsf(o->y - a->y) < 140) ApplyHit(a, o, 60, 0.35f, 260, 0, (Vector2){o->x, o->y - 120}, false, false);
         }
         break;
     case CH_CODEX:
@@ -2363,7 +2386,7 @@ static void UpdateFighter(Fighter *a, Fighter *o, IafInput in, float dt)
             if (a->ch == CH_ELIRA) adv *= IAF_ELIRA_LUNGE_MUL; /* arte com pouco movimento: avanca mais */
             if (t0 < win) a->x += a->face * adv * fminf(dt, win - t0) / win;
         }
-        if (ground && a->ch == CH_CLAUDE && (a->atk == AT_FWDH || a->atk == AT_HEAVY) && OnGround(o) && o->st != ST_KO)
+        if (ground && a->ch == CH_CLAUDE && (a->atk == AT_HEAVY || (a->atk == AT_FWDH && !texClaude.id)) && OnGround(o) && o->st != ST_KO) /* o soco longo do desenho novo estica ~530 px: nao recua */
         { /* o punho/pe do sprite vai ate CL_STRIKE_REACH: colado, o Claude recua no preparo para o golpe
              terminar dentro do corpo do oponente em vez de atravessa-lo (na parede, quem recua e o oponente) */
             const Atk *d = &ATK[a->ch][a->atk];
