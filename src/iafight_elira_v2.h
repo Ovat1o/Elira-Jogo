@@ -10,7 +10,7 @@
 #ifndef IAFIGHT_ELIRA_V2_H
 #define IAFIGHT_ELIRA_V2_H
 
-static const EFrame EF2[91] = {
+static const EFrame EF2[98] = {
     {1, 1, 66, 96, 37.8f, 96.0f, -1.0f, -1.0f}, /* PUNCH */
     {69, 1, 62, 96, 31.9f, 96.0f, -1.0f, -1.0f}, /* PUNCH */
     {133, 1, 87, 94, 33.2f, 94.0f, -1.0f, -1.0f}, /* PUNCH */
@@ -102,10 +102,17 @@ static const EFrame EF2[91] = {
     {1138, 326, 118, 47, 59.0f, 47.0f, -1.0f, -1.0f}, /* KO */
     {1258, 326, 126, 40, 63.0f, 40.0f, -1.0f, -1.0f}, /* KO */
     {1386, 326, 126, 40, 63.0f, 40.0f, -1.0f, -1.0f}, /* KO */
+    {1514, 326, 119, 42, 59.5f, 42.0f, -1.0f, -1.0f}, /* GETUP */
+    {1635, 326, 106, 66, 46.8f, 66.0f, -1.0f, -1.0f}, /* GETUP */
+    {1743, 326, 95, 72, 43.5f, 72.0f, -1.0f, -1.0f}, /* GETUP */
+    {1840, 326, 82, 80, 33.7f, 80.0f, -1.0f, -1.0f}, /* GETUP */
+    {1924, 326, 80, 91, 38.7f, 91.0f, -1.0f, -1.0f}, /* GETUP */
+    {1, 424, 73, 102, 36.7f, 102.0f, -1.0f, -1.0f}, /* GETUP */
+    {76, 424, 81, 96, 37.8f, 96.0f, -1.0f, -1.0f}, /* GETUP */
 };
-enum { E2_PUNCH, E2_KICK, E2_PUNCH_HEAVY, E2_UPPER, E2_AIR, E2_SWEEP, E2_CROUCH, E2_HIT_CROUCH, E2_DEF, E2_DEFEAT, E2_WIN, E2_SPECIAL, E2_HIT, E2_KO, E2_N };
-static const int E2_FIRST[E2_N] = {0, 5, 12, 19, 27, 33, 40, 44, 48, 53, 59, 67, 77, 83};
-static const int E2_COUNT[E2_N] = {5, 7, 7, 8, 6, 7, 4, 4, 5, 6, 8, 10, 6, 8};
-static const int E2_PEAK[E2_N] = {2, 3, 3, 4, 3, 4, 3, 2, 4, 5, 4, 6, 3, 4};
+enum { E2_PUNCH, E2_KICK, E2_PUNCH_HEAVY, E2_UPPER, E2_AIR, E2_SWEEP, E2_CROUCH, E2_HIT_CROUCH, E2_DEF, E2_DEFEAT, E2_WIN, E2_SPECIAL, E2_HIT, E2_KO, E2_GETUP, E2_N };
+static const int E2_FIRST[E2_N] = {0, 5, 12, 19, 27, 33, 40, 44, 48, 53, 59, 67, 77, 83, 91};
+static const int E2_COUNT[E2_N] = {5, 7, 7, 8, 6, 7, 4, 4, 5, 6, 8, 10, 6, 8, 7};
+static const int E2_PEAK[E2_N] = {2, 3, 3, 4, 3, 4, 3, 2, 4, 5, 4, 6, 3, 4, 6};
 
 #endif /* IAFIGHT_ELIRA_V2_H */

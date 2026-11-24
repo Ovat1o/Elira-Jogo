@@ -909,15 +909,11 @@ static int EliraFrameIdxV2(Fighter *a, float *yoff)
 {
     if (a->st == ST_KO) return EliraKoFrame(a, yoff); /* nocaute: cai e fica deitada */
     if (a->down)
-    { /* caida: deitada nova ate o levantar. Sem arte nova de levantar (o EA_GETUP antigo aparecia torto), os
-         ultimos 0,36 s usam so quadros novos em 6 passos iguais: deitada (KO 7), encolhe os joelhos (KO 5) e o
-         agachar ao contrario (3, 2, 1) ate a guarda em pe (CROUCH 0) */
+    { /* caida: deitada nova ate o levantar; nos ultimos 0,36 s, o levantar novo em 7 passos iguais: deitada
+         (emenda com a deitada da queda, mesmo lugar e tamanho), ergue o tronco, sentada, apoia o canhao,
+         ajoelhada, levanta e guarda */
         if (a->downT > 0.36f) return EliraKoFrame(a, yoff);
-        static const int up[6][2] = {{E2_KO, 7}, {E2_KO, 5}, {E2_CROUCH, 3}, {E2_CROUCH, 2}, {E2_CROUCH, 1}, {E2_CROUCH, 0}};
-        int i = (int)((0.36f - a->downT) / 0.36f * 6);
-        if (i < 0) i = 0;
-        if (i > 5) i = 5;
-        return E2Frame(up[i][0], up[i][1]);
+        return E2Frame(E2_GETUP, (int)((0.36f - a->downT) / 0.36f * E2_COUNT[E2_GETUP]));
     }
     if (a->st == ST_LOSE) return E2Frame(E2_DEFEAT, (int)(a->stT * 10)); /* cai e fica no ultimo quadro */
     if (a->st == ST_WIN) return E2Frame(E2_WIN, (int)(a->stT * 10));
