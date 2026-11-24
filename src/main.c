@@ -174,20 +174,19 @@ int main(int argc, char **argv)
         if (!phaseControlsCapturedInput) switch (game.screen)
         {
             case SCREEN_TITLE:
-                if (Clicked((Rectangle){86, 326, 350, 54}) ||
-                    IsKeyPressed(KEY_ENTER) || IsKeyPressed(KEY_SPACE))
+                if (Clicked((Rectangle){86, 326, 350, 54}))
                 {
                     game.screen = SCREEN_PLAYER_NAME;
                 }
-                else if (Clicked((Rectangle){86, 392, 350, 54}) || IsKeyPressed(KEY_I))
+                else if (Clicked((Rectangle){86, 392, 350, 54}))
                 {
                     InvEnter(&game);
                 }
-                else if (Clicked((Rectangle){86, 458, 350, 54}) || IsKeyPressed(KEY_F) || IafPadWantsEnter())
+                else if (Clicked((Rectangle){86, 458, 350, 54}))
                 {
                     IafEnter(&game);
                 }
-                else if (Clicked((Rectangle){86, 524, 350, 50}) || IsKeyPressed(KEY_C))
+                else if (Clicked((Rectangle){86, 524, 350, 50}))
                 {
                     game.screen = SCREEN_SETTINGS;
                 }
