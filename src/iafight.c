@@ -146,6 +146,7 @@ typedef struct { float st, ac, rc, dmg, rx, top, h, stun, push; int type; } Atk;
    Atordoamento do fraco (0,20 s) menor que preparo + recuperacao dele: jab atras de jab sem o cancelamento
    deixa o oponente livre antes do proximo acerto (sem loop). O combo pela janela segura o atordoamento (ChainStun).
    Dano do fraco (34 a 39) cerca de 25% abaixo do original: apertar so o fraco nao rende tanto quanto o forte. */
+#define IRK(v) ((v) * IAF_IARA_ESCALA) /* medida da Iara em px da escala 1 -> px da luta */
 static const Atk ATK[CH_N][AT_SPECIAL] = {
     [CH_ELIRA] = {{0}, {0.06f, 0.08f, 0.15f, 34, 112, 168, 46, 0.20f, 170, 0},
                   {0.14f, 0.12f, 0.26f, 95, 112, 200, 95, 0.45f, 300, 0}, /* chute alto (forte); alcances na ponta da arte */
@@ -171,12 +172,13 @@ static const Atk ATK[CH_N][AT_SPECIAL] = {
                  {0.05f, 0.18f, 0.10f, 26, 140, 110, 140, 0.24f, 160, 2},   /* ground slam: de cima para baixo */
                  {0.20f, 0.10f, 0.30f, 65, 160, 190, 90, 0.44f, 320, 0},    /* heavy punch */
                  {0.08f, 0.14f, 0.32f, 32, 150, 320, 300, 0.50f, 120, 0}},  /* uppercut (heavy punch subindo) */
-    [CH_IARA] = {{0}, {0.07f, 0.08f, 0.15f, 36, 105, 165, 50, 0.20f, 170, 0},  /* garra rapida: alcance nos riscos da garra */
-                 {0.15f, 0.11f, 0.28f, 96, 114, 210, 110, 0.45f, 320, 0},  /* golpe de cauda forte: arco alto */
-                 {0.09f, 0.09f, 0.21f, 44, 150, 46, 44, 0.30f, 150, 1},    /* chicote de agua rente ao chao (agachada) */
-                 {0.05f, 0.16f, 0.10f, 55, 115, 100, 100, 0.32f, 160, 2},  /* aereo: cauda chicoteando para baixo */
-                 {0.21f, 0.10f, 0.30f, 88, 150, 175, 70, 0.45f, 330, 0},   /* golpe longo: garra e mechas lancadas */
-                 {0.08f, 0.14f, 0.32f, 80, 95, 300, 270, 0.50f, 120, 0}},  /* uppercut: sobe num jato de agua */
+    /* Iara: alcance (rx), topo e altura da caixa em px da escala 1 (guarda de 210 px), vezes IAF_IARA_ESCALA */
+    [CH_IARA] = {{0}, {0.07f, 0.08f, 0.15f, 36, IRK(105), IRK(165), IRK(50), 0.20f, 170, 0},  /* garra rapida: alcance nos riscos da garra */
+                 {0.15f, 0.11f, 0.28f, 96, IRK(114), IRK(210), IRK(110), 0.45f, 320, 0},  /* golpe de cauda forte: arco alto */
+                 {0.09f, 0.09f, 0.21f, 44, IRK(150), IRK(46), IRK(44), 0.30f, 150, 1},    /* chicote de agua rente ao chao (agachada) */
+                 {0.05f, 0.16f, 0.10f, 55, IRK(115), IRK(100), IRK(100), 0.32f, 160, 2},  /* aereo: cauda chicoteando para baixo */
+                 {0.21f, 0.10f, 0.30f, 88, IRK(150), IRK(175), IRK(70), 0.45f, 330, 0},   /* golpe longo: garra e mechas lancadas */
+                 {0.08f, 0.14f, 0.32f, 80, IRK(95), IRK(300), IRK(270), 0.50f, 120, 0}},  /* uppercut: sobe num jato de agua */
 };
 /* especiais: preparo / janela ativa / recuperacao */
 static const float SP_ST[CH_N] = {0.42f, 0.08f, 0.14f, 0.22f, 0.50f}; /* Iara: canta e se transforma antes da onda */
@@ -1338,12 +1340,13 @@ static int CodexFrameIdx(Fighter *a)
 
 /* ------------------------------------------------------------------ Iara: atlas de luta (personagem de colab)
    Sereia do jogo parceiro: nao tem pernas, flutua numa poca e os chutes sao golpes de cauda. O atlas
-   (iafight_iara.h, gerado fora do repositorio a partir das tiras da Iara) ja esta na escala da tela: na luta
-   ela e desenhada em 1x; nos retratos, ampliada com filtro BILINEAR. Sem rasteira no pacote: o golpe baixo
+   (iafight_iara.h, gerado fora do repositorio a partir das tiras da Iara) e gerado na escala da luta
+   (IAF_IARA_ESCALA): desenhada em 1x com filtro POINT; o cartao COLAB usa um retrato pre-escalado. Sem rasteira no pacote: o golpe baixo
    e a pose agachada com um chicote de agua desenhado rente ao chao (IaraDrawLowWhip). */
 #include "iafight_iara.h"
 static Texture2D texIara;
-#define IR_FRONT 70.0f /* do centro (meio da poca) ate a frente das maos: onda do especial */
+#define IR_FRONT IRK(70.0f) /* do centro (meio da poca) ate a frente das maos: onda do especial */
+#define IR_DRAW (IAF_IARA_ESCALA / IR_ATLAS_ESCALA) /* 1 quando o atlas foi gerado na escala da luta (nitido) */
 #define IAF_IARA_ALT_TINT ((Color){200, 160, 255, 255}) /* espelho: agua puxada para o violeta */
 static int IRFrame(int anim, int i)
 {
@@ -1467,16 +1470,16 @@ static void IaraDrawLowWhip(Fighter *a, float jx)
     float fade = t < d->st + d->ac ? 1.0f : 1 - Clamp((t - d->st - d->ac) / d->rc, 0.0f, 1.0f);
     if (fade <= 0) return;
     Color deep = {17, 96, 106, 255}, mid = {59, 122, 129, 255}, foam = {214, 236, 238, 255};
-    float x0 = a->x + jx + a->face * 18, len = (d->rx - 18) * EaseOut(grow);
+    float x0 = a->x + jx + a->face * IRK(18), len = (d->rx - IRK(18)) * EaseOut(grow);
     const int N = 14;
-    Vector2 prev = {x0, a->y - 14};
+    Vector2 prev = {x0, a->y - IRK(14)};
     for (int i = 1; i <= N; i++)
     {
         float u = i / (float)N;
-        float h = 14 + 22 * sinf(u * PI) * (1 - u * 0.4f) + 4 * sinf(gt * 30 + u * 9); /* arco baixo que ondula */
+        float h = IRK(14 + 22 * sinf(u * PI) * (1 - u * 0.4f) + 4 * sinf(gt * 30 + u * 9)); /* arco baixo que ondula */
         Vector2 p = {x0 + a->face * len * u, a->y - h};
-        DrawLineEx(prev, p, 16 - 8 * u, Fade(deep, 0.85f * fade));
-        DrawLineEx(prev, p, 9 - 4 * u, Fade(mid, 0.9f * fade));
+        DrawLineEx(prev, p, IRK(16 - 8 * u), Fade(deep, 0.85f * fade));
+        DrawLineEx(prev, p, IRK(9 - 4 * u), Fade(mid, 0.9f * fade));
         DrawLineEx((Vector2){prev.x, prev.y - 4}, (Vector2){p.x, p.y - 4}, 2.5f, Fade(foam, 0.7f * fade * u));
         prev = p;
     }
@@ -1549,12 +1552,12 @@ static void DrawFighter(Fighter *a)
     float flash = a->flash > 0 ? Clamp(a->flash / 0.12f, 0.0f, 1.0f) * 0.8f : 0;
     float alt = IAF_GROUND_Y - a->y;
     float jx = a->hitShake > 0 ? (Rand01() - 0.5f) * 2 * IAF_HIT_SHAKE_PX : 0; /* tremor no impacto */
-    DrawShadow(a->x, (a->ch == CH_CLAUDE && texClaude.id ? 88 : (a->ch == CH_ANTI && texAnti.id ? 104 : (a->ch == CH_CODEX && texCodex.id ? 84 : (a->ch == CH_IARA && texIara.id ? 62 : 52)))) - fminf(alt, 200) * 0.12f);
+    DrawShadow(a->x, (a->ch == CH_CLAUDE && texClaude.id ? 88 : (a->ch == CH_ANTI && texAnti.id ? 104 : (a->ch == CH_CODEX && texCodex.id ? 84 : (a->ch == CH_IARA && texIara.id ? IRK(62) : 52)))) - fminf(alt, 200) * 0.12f);
     if (a->ch == CH_IARA && texIara.id && alt > 30 && a->st != ST_KO)
     { /* no ar a poca fica no chao: aneis de agua embaixo dela */
         float k = Clamp(1 - alt / 420, 0.3f, 1.0f);
-        DrawEllipseLines((int)a->x, (int)IAF_GROUND_Y, (int)(54 * k), (int)(9 * k), Fade(CHCOL[CH_IARA], 0.8f));
-        DrawEllipseLines((int)a->x, (int)IAF_GROUND_Y, (int)(34 * k), (int)(6 * k), Fade(CHCOL[CH_IARA], 0.5f));
+        DrawEllipseLines((int)a->x, (int)IAF_GROUND_Y, (int)IRK(54 * k), (int)IRK(9 * k), Fade(CHCOL[CH_IARA], 0.8f));
+        DrawEllipseLines((int)a->x, (int)IAF_GROUND_Y, (int)IRK(34 * k), (int)IRK(6 * k), Fade(CHCOL[CH_IARA], 0.5f));
     }
     if (a->inv > 0 && fmodf(a->inv, 0.1f) < 0.05f && a->st != ST_KO) return;
     if (a->st == ST_DASH)
@@ -1567,7 +1570,7 @@ static void DrawFighter(Fighter *a)
             else if (a->ch == CH_CLAUDE && texClaude.id) DrawCF(ClaudeFrameIdx(a), gx, a->y, a->face, CL_SCALE, Fade(c, al), 0);
             else if (a->ch == CH_ANTI && texAnti.id) DrawAF(AntiFrameIdx(a), gx, a->y - AntiHover(a), a->face, AG_SCALE, Fade(c, al), 0);
             else if (a->ch == CH_CODEX && texCodex.id) DrawXF(CodexFrameIdx(a), gx, a->y, a->face, XC_SCALE, Fade(c, al), 0);
-            else if (a->ch == CH_IARA && texIara.id) DrawIRF(IaraFrameIdx(a), gx, a->y, a->face, 1.0f, Fade(c, al), 0);
+            else if (a->ch == CH_IARA && texIara.id) DrawIRF(IaraFrameIdx(a), gx, a->y, a->face, IR_DRAW, Fade(c, al), 0);
         }
         for (int l = 0; l < 6; l++)
         {
@@ -1607,7 +1610,7 @@ static void DrawFighter(Fighter *a)
     else if (a->ch == CH_IARA && texIara.id)
     {
         IaraDrawLowWhip(a, jx); /* o chicote sai de tras da cauda */
-        DrawIRF(IaraFrameIdx(a), a->x + jx, a->y, a->face, 1.0f, a->alt ? IAF_IARA_ALT_TINT : WHITE, flash);
+        DrawIRF(IaraFrameIdx(a), a->x + jx, a->y, a->face, IR_DRAW, a->alt ? IAF_IARA_ALT_TINT : WHITE, flash);
     }
     else
     {
@@ -1708,13 +1711,13 @@ static Rectangle Hurt(Fighter *a)
     if (a->ch == CH_CLAUDE) { w = 174; h = a->crouch ? 120 : 153; } /* sprite reduzido (1.5x) para permitir pular por cima */
     if (a->ch == CH_ANTI) { w = 184; h = a->crouch ? 155 : 205; lift = AntiHover(a); } /* "A" de 225x192 na tela, flutuando ~16 px */
     if (a->ch == CH_CODEX) { w = 130; h = a->crouch ? 150 : 198; }  /* nuvem do sprite (~157 de largura; as bordas fofas nao contam) */
-    if (a->ch == CH_IARA) { w = 100; h = a->crouch ? 130 : 205; }   /* tronco, cauda e poca (~210 de altura com o cabelo) */
+    if (a->ch == CH_IARA) { w = IRK(100); h = IRK(a->crouch ? 130 : 205); } /* tronco, cauda e poca (~210 x IAF_IARA_ESCALA com o cabelo) */
     if (a->down || a->st == ST_KO) h = 40;
     return (Rectangle){a->x - w / 2, a->y - lift - h, w, h};
 }
 /* meia largura do corpo para nao se sobreporem: o tronco do sprite (colunas com pelo menos 35% da
    altura), sem canhao, bracos e cabelo, que podem passar na frente do oponente */
-static float BodyHalf(Fighter *a) { return a->ch == CH_CLAUDE ? 80.0f : (a->ch == CH_ANTI ? 90.0f : (a->ch == CH_CODEX ? 70.0f : 50.0f)); } /* Iara: 50, como a Elira */
+static float BodyHalf(Fighter *a) { return a->ch == CH_CLAUDE ? 80.0f : (a->ch == CH_ANTI ? 90.0f : (a->ch == CH_CODEX ? 70.0f : (a->ch == CH_IARA ? IRK(50.0f) : 50.0f))); }
 static bool Overlap(Rectangle a, Rectangle b) { return a.x < b.x + b.width && b.x < a.x + a.width && a.y < b.y + b.height && b.y < a.y + a.height; }
 static bool OnGround(Fighter *a) { return a->y >= IAF_GROUND_Y - 0.5f; }
 static void SetState(Fighter *a, FState s) { a->st = s; a->stT = 0; }
@@ -1853,7 +1856,7 @@ static void SpawnWave(Fighter *a)
     for (int i = 0; i < IAF_MAX_PROJ; i++)
         if (!proj[i].on)
         {
-            proj[i] = (Proj){true, a->x + a->face * IR_FRONT, a->y - 62, a->face * 520.0f, Idx(a), true, false, 50.0f, 0, 0, 3, true};
+            proj[i] = (Proj){true, a->x + a->face * IR_FRONT, a->y - IRK(62), a->face * 520.0f, Idx(a), true, false, 50.0f, 0, 0, 3, true};
             return;
         }
 }
@@ -2329,7 +2332,7 @@ static void UpdateProjectiles(float dt)
         if (p->x < -80 || p->x > SCREEN_WIDTH + 80) { p->on = false; continue; }
         if (p->big && (int)(p->t * 60) % 2 == 0) AddPart((Vector2){p->x - (p->vx > 0 ? 40 : -40), p->y + (Rand01() - 0.5f) * 30 + (p->wave ? 40 : 0)}, (Vector2){-p->vx * 0.2f, p->wave ? -60 : 0}, 0.35f, 3, p->wave ? (Color){214, 236, 238, 255} : C_CYAN, 1);
         Fighter *o = &fz[1 - p->owner];
-        float r = p->big ? 38 : 20;
+        float r = p->wave ? IRK(38) : (p->big ? 38 : 20); /* a onda acompanha o tamanho da Iara */
         /* choque entre projeteis */
         for (int j = 0; j < IAF_MAX_PROJ; j++)
         {
@@ -2446,7 +2449,7 @@ static void DrawParts(void)
     for (int i = 0; i < 16; i++)
         if (impacts[i].on)
         {
-            if (impacts[i].kind == 1) { DrawIRFC(IRFrame(IR_IMPACT, (int)(impacts[i].t / 0.32f * IR_COUNT[IR_IMPACT])), impacts[i].p, impacts[i].face, 1.0f, WHITE); continue; }
+            if (impacts[i].kind == 1) { DrawIRFC(IRFrame(IR_IMPACT, (int)(impacts[i].t / 0.32f * IR_COUNT[IR_IMPACT])), impacts[i].p, impacts[i].face, IR_DRAW, WHITE); continue; }
             int f = (int)(impacts[i].t / 0.32f * 4);
             DrawEFC(EAFrame(EA_IMPACT, f), impacts[i].p, impacts[i].face, impacts[i].sc * 0.4f, WHITE);
         }
@@ -2462,8 +2465,8 @@ static void DrawProjectiles(void)
         if (p->wave && texIara.id)
         { /* onda da Iara: rola em loop, com um rastro apagado */
             int f = IRLoop(IR_PROJ, p->t, 12);
-            for (int k = 2; k >= 1; k--) DrawIRFC(f, (Vector2){p->x - face * k * 30, p->y}, face, 1.0f, Fade(tint, 0.22f / k));
-            DrawIRFC(f, (Vector2){p->x, p->y}, face, 1.0f, tint);
+            for (int k = 2; k >= 1; k--) DrawIRFC(f, (Vector2){p->x - face * k * IRK(30), p->y}, face, IR_DRAW, Fade(tint, 0.22f / k));
+            DrawIRFC(f, (Vector2){p->x, p->y}, face, IR_DRAW, tint);
             continue;
         }
         if (p->big)
@@ -3233,9 +3236,11 @@ static void DrawCharacterBig(CharId ch, float x, float yFeet, int face, float sc
         return;
     }
     if (ch == CH_IARA && texIara.id)
-    { /* atlas na escala da tela, ampliado com filtro BILINEAR */
+    { /* filtro POINT: 1x nos paineis, no VS e no resultado (o atlas ja vem grande); 0,5x na previa da arena */
         int f = st == ST_WIN ? IRFrame(IR_WIN, IR_COUNT[IR_WIN] - 1) : (st == ST_KO ? IRFrame(IR_LOSE, IR_COUNT[IR_LOSE] - 1) : IRLoop(IR_IDLE, gt, 8));
-        DrawIRF(f, x, yFeet, face, fmaxf(0.6f, sc * 0.85f), g_altPal ? IAF_IARA_ALT_TINT : WHITE, 0);
+        float s = sc * 0.85f / IAF_IARA_ESCALA;
+        s = s < 0.75f ? 0.5f : fmaxf(1.0f, roundf(s * 2) / 2);
+        DrawIRF(f, x, yFeet, face, s * IR_DRAW, g_altPal ? IAF_IARA_ALT_TINT : WHITE, 0);
         return;
     }
     if (ch == CH_ANTI && texAnti.id)
@@ -3269,7 +3274,7 @@ static void DrawBackdrop(Color accent)
    com um retrato por lutador e os cursores dos jogadores. Serve ao 1 jogador e ao 1 x 1. */
 static const Color PCOL[2] = {{96, 214, 240, 255}, {230, 80, 84, 255}}; /* cursor/rotulo do 1P e do 2P */
 /* recorte do retrato (rosto e tronco) dentro do 1o quadro da parada, em pixels da arte de cada atlas */
-static const Rectangle THUMB_CUT[CH_N] = {{0, 0, 66, 66}, {0, 0, 160, 102}, {0, 0, 80, 80}, {2, 0, 86, 78}, {4, 0, 106, 106}};
+static const Rectangle THUMB_CUT[CH_N] = {{0, 0, 66, 66}, {0, 0, 160, 102}, {0, 0, 80, 80}, {2, 0, 86, 78}, {0, 0, IR_THUMB_PX, IR_THUMB_PX}};
 static void DrawThumb(CharId ch, Rectangle dst, bool alt)
 {
     Texture2D tex = texElira;
@@ -3278,7 +3283,7 @@ static void DrawThumb(CharId ch, Rectangle dst, bool alt)
     if (ch == CH_CLAUDE) { const CFrame *e = &CF[CA_FIRST[CA_IDLE]]; tex = texClaude; fr = (Rectangle){e->x, e->y, e->w, e->h}; if (alt) tint = IAF_CLAUDE_ALT_TINT; }
     else if (ch == CH_CODEX) { const XFrame *e = &XF[XA_FIRST[XA_IDLE]]; tex = texCodex; fr = (Rectangle){e->x, e->y, e->w, e->h}; if (alt) tint = IAF_CODEX_ALT_TINT; }
     else if (ch == CH_ANTI) { const AFrame *e = &AF[AA_FIRST[AA_IDLE]]; tex = texAnti; fr = (Rectangle){e->x, e->y, e->w, e->h}; if (alt) tint = IAF_ANTI_ALT_TINT; }
-    else if (ch == CH_IARA) { const IFrame *e = &IRF[IR_FIRST[IR_IDLE]]; tex = texIara; fr = (Rectangle){e->x, e->y, e->w, e->h}; if (alt) tint = IAF_IARA_ALT_TINT; }
+    else if (ch == CH_IARA) { const IFrame *e = &IRF[IR_FIRST[IR_THUMB]]; tex = texIara; /* retrato pre-escalado (1:1 no cartao) */ fr = (Rectangle){e->x, e->y, e->w, e->h}; if (alt) tint = IAF_IARA_ALT_TINT; }
     else { const EFrame *e = &EF[EAFrame(EA_IDLE, 0)]; fr = (Rectangle){e->x, e->y, e->w, e->h}; if (alt) tint = IAF_ELIRA_ALT_TINT; }
     if (!tex.id)
     { /* sem o atlas: o boneco desenhado, pequeno */
@@ -4454,9 +4459,9 @@ void IafEnter(GameState *game)
         texAnti = LoadFighterAtlasClean(IAF_ANTI_ATLAS); /* sem o arquivo, id = 0 e volta o desenho antigo */
         texCodex = LoadFighterAtlasClean(IAF_CODEX_ATLAS);
         if (FileExists(IAF_IARA_ATLAS))
-        { /* agua translucida: sem a limpeza de alfa dos outros atlas */
+        { /* agua translucida: sem a limpeza de alfa dos outros atlas; POINT: pixel da arte nitido */
             texIara = LoadTexture(IAF_IARA_ATLAS);
-            SetTextureFilter(texIara, TEXTURE_FILTER_BILINEAR);
+            SetTextureFilter(texIara, TEXTURE_FILTER_POINT);
         }
         ArenaLoadAssets();
         ArenaBakePreviews();
