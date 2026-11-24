@@ -40,7 +40,15 @@ ARQUIVOS (duracao)
   voz_round.wav          0,76 s  "Round!" robotico
   voz_lutem.wav          0,86 s  "Lutem!" robotico
   voz_vitoria.wav        1,04 s  "Vitoria!" robotico
-  musica_selecao.ogg    38,4 s   100 BPM, Am-F-C-G, calma, arpejos de servidor (loop)
+  musica_selecao.ogg    38,4 s   100 BPM, Am-F-C-G, calma, arpejos de servidor (loop). Trilha antiga do menu;
+                                 hoje so serve de fallback se musica_menu.ogg faltar.
+  musica_menu.ogg       34,3 s   TOCA NO MENU DO IA FIGHT ate a selecao de personagem/arena (loop). 112 BPM,
+                                 Dm-Bb-F-C, estilo tela de selecao de jogo de luta, animada mas nao agressiva:
+                                 bumbo pulsante, caixa com ghost notes e viradas, chimbal em semicolcheias
+                                 acentuadas, baixo ritmico, stabs e arpejos de guitarra/sinte com eco, pad
+                                 suave e lead desde o compasso 3 (contra-melodia a partir do 9). Dinamica
+                                 crescente ao longo do loop, loop circular sem clique, RMS igualado ao de
+                                 musica_luta.ogg. Gerada por sintese (numpy/scipy/soundfile), script fora do repo.
   musica_luta.ogg       64,0 s   150 BPM, Em-C-D-B, energia alta, lead na parte B (loop)
   musica_vice2026.ogg   88,0 s   so na arena POSTO VICE 2026 (loop). NAO e composicao do grupo: trecho
                                  de 0:32 a 2:00 de 'Flower In A Hurricane' (Justice, trilha de GTA VI),

@@ -277,9 +277,12 @@ static void LoadIafAudio(void)
         if (sfx[i][0].frameCount == 0) continue;
         for (int v = 1; v < IAF_SFX_VOICES; v++) sfx[i][v] = LoadSoundAlias(sfx[i][0]);
     }
-    if (FileExists(IAF_AUDIO_DIR "musica_selecao.ogg") && FileExists(IAF_AUDIO_DIR "musica_luta.ogg"))
+    if ((FileExists(IAF_AUDIO_DIR "musica_menu.ogg") || FileExists(IAF_AUDIO_DIR "musica_selecao.ogg")) &&
+        FileExists(IAF_AUDIO_DIR "musica_luta.ogg"))
     {
-        musSel = LoadMusicStream(IAF_AUDIO_DIR "musica_selecao.ogg");
+        /* trilha do menu/selecao: musica_menu.ogg, com fallback para a antiga musica_selecao.ogg */
+        musSel = LoadMusicStream(FileExists(IAF_AUDIO_DIR "musica_menu.ogg") ? IAF_AUDIO_DIR "musica_menu.ogg"
+                                                                              : IAF_AUDIO_DIR "musica_selecao.ogg");
         musFight = LoadMusicStream(IAF_AUDIO_DIR "musica_luta.ogg");
         musSel.looping = musFight.looping = true;
         musLoaded = musSel.stream.buffer != NULL && musFight.stream.buffer != NULL;
