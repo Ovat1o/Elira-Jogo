@@ -1163,9 +1163,9 @@ static int IaAtkIdx(Fighter *a, int n, int a0, int a1, float st, float ac, float
 #define IA_SP_FLASH 0.10f /* especial do Antigravity: quadro do disparo na tela (s) */
 
 /* ------------------------------------------------------------------ Antigravity: atlas de luta
-   Gerado fora do repositorio a partir do pacote de sprites (384x354 = grade nativa 128x118 em 3x).
-   O atlas guarda a grade nativa; o jogo amplia 2,5x com filtro POINT (~192 px de altura parada,
-   entre o Claude e a Elira). A flutuacao do desenho antigo continua (AntiHover). */
+   Gerado fora do repositorio (ia_novos_tool/montar.py) a partir das tiras novas do Victor. O atlas guarda
+   pixels logicos; o jogo amplia 2,5x com filtro POINT (~195 px de altura parada, como o antigo). A flutuacao
+   continua no codigo (AntiHover); o brilho embaixo das pontas ja vem no desenho. */
 #include "iafight_antigravity.h"
 static Texture2D texAnti;
 #define AG_SCALE 2.5f
@@ -1178,7 +1178,7 @@ static int AGFrame(int anim, int i)
     if (i >= n) i = n - 1;
     return AA_FIRST[anim] + i;
 }
-static int AGLoop(int anim, float t) { return AA_FIRST[anim] + ((int)(t / AA_DUR[anim]) % AA_COUNT[anim]); }
+static int AGLoop(int anim, float t, float dur) { return AA_FIRST[anim] + ((int)(t / dur) % AA_COUNT[anim]); }
 static void DrawAF(int f, float x, float yFeet, int face, float sc, Color tint, float flash)
 {
     const AFrame *e = &AF[f];
@@ -1197,63 +1197,62 @@ static void DrawAF(int f, float x, float yFeet, int face, float sc, Color tint, 
 /* flutuacao: o "A" fica um pouco acima do chao, subindo e descendo (menos caido) */
 static float AntiHover(Fighter *a)
 {
-    if (a->st == ST_KO || a->down || a->st == ST_LOSE) return 0;
+    if (a->st == ST_KO || a->down || a->st == ST_LOSE || IaLaunched(a)) return 0;
     return 16 + 5 * sinf(gt * 2.4f);
 }
-/* golpe: preparo usa [f0, a0), ativo [a0, a1], recuperacao (a1, f1] */
-static int AntiAtkFrame(Fighter *a, int anim, int f0, int a0, int a1, int f1, float st, float ac, float rc)
+static int AntiAtkFrame(Fighter *a, int anim, int a0, int a1, const Atk *d)
 {
-    float t = a->atkT;
-    int i;
-    if (ac < IAF_ACTIVE_VISUAL) { rc = fmaxf(rc - (IAF_ACTIVE_VISUAL - ac), 0.02f); ac = IAF_ACTIVE_VISUAL; }
-    if (t < st) i = f0 + (int)(t / st * (a0 - f0));
-    else if (t < st + ac) i = a0 + (int)((t - st) / ac * (a1 - a0 + 1));
-    else i = a1 + 1 + (int)((t - st - ac) / rc * (f1 - a1));
-    if (i > f1) i = f1;
-    return AGFrame(anim, i);
+    return AGFrame(anim, IaAtkIdx(a, AA_COUNT[anim], a0, a1, d->st, d->ac, d->rc));
 }
 static int AntiFrameIdx(Fighter *a)
 {
-    int nk = AA_COUNT[AA_KO];
-    if (a->st == ST_KO) return AGFrame(AA_KO, (int)(a->stT / AA_DUR[AA_KO]));
+    if (a->st == ST_KO || IaLaunched(a)) return AGFrame(AA_KO, IaFallIdx(a));
     if (a->down)
-    { /* caida; ao levantar, o nocaute tocado ao contrario */
-        if (a->downT > 0.36f) return AGFrame(AA_KO, nk - 1);
-        return AGFrame(AA_KO, 7 + (int)(a->downT / 0.36f * (nk - 8)));
+    { /* caido; o levantar ocupa os ultimos 0,36 s */
+        if (a->downT > 0.36f) return AGFrame(AA_KO, IaFallIdx(a));
+        return AGFrame(AA_GETUP, (int)((0.36f - a->downT) / 0.36f * AA_COUNT[AA_GETUP]));
     }
-    if (a->st == ST_LOSE) return AGFrame(AA_KO, nk - 1);
-    if (a->st == ST_WIN) return AGLoop(AA_VICTORY, a->stT);
-    if (a->st == ST_HIT) return AGFrame(AA_HIT, (int)(a->stT / 0.4f * AA_COUNT[AA_HIT]));
+    if (a->st == ST_LOSE) return AGFrame(AA_DEFEAT, (int)(a->stT * 10)); /* murcha e fica no ultimo */
+    if (a->st == ST_WIN) return AGFrame(AA_VICTORY, (int)(a->stT * 10));  /* gira e fica de ponta-cabeca */
+    if (a->st == ST_HIT) return AGFrame(a->hitCrouch ? AA_HIT_CROUCH : AA_HIT, IaHitIdx(a));
     if (a->st == ST_ATK)
     {
         const Atk *d = &ATK[CH_ANTI][a->atk < AT_SPECIAL ? a->atk : 0];
         switch (a->atk)
         {
-        case AT_LIGHT: return AntiAtkFrame(a, AA_JAB, 0, 6, 10, 17, d->st, d->ac, d->rc);
-        case AT_HEAVY: return AntiAtkFrame(a, AA_KICK, 0, 8, 11, 21, d->st, d->ac, d->rc);
-        case AT_FWDH: return AntiAtkFrame(a, AA_HEAVY, 0, 9, 14, 21, d->st, d->ac, d->rc);
-        case AT_UPPER: return AntiAtkFrame(a, AA_HEAVY, 4, 12, 14, 21, d->st, d->ac, d->rc); /* sem uppercut no pacote: o soco que mais sobe */
-        case AT_LOW: return AntiAtkFrame(a, AA_LOWKICK, 0, 9, 12, 19, d->st, d->ac, d->rc);
-        case AT_AIR: return AntiAtkFrame(a, AA_SLAM, 10, 14, 17, 24, d->st, d->ac, d->rc); /* pula a subida: so a queda */
+        case AT_LIGHT: return AntiAtkFrame(a, AA_JAB, 2, 2, d);     /* 5: recolhe, ESTICA a ponta, recolhe */
+        case AT_HEAVY: return AntiAtkFrame(a, AA_KICK, 2, 4, d);    /* 7: inclina, chicote alto (2-4), volta */
+        case AT_FWDH: return AntiAtkFrame(a, AA_HEAVY, 3, 4, d);    /* 7: encolhe, tomba, cabecada (3-4), volta */
+        case AT_UPPER: return AntiAtkFrame(a, AA_UPPER, 2, 5, d);   /* 8: achata, coluna esticada (2-5), desce */
+        case AT_LOW: return AntiAtkFrame(a, AA_LOWKICK, 4, 4, d);   /* 7: rola, ponta rente ao chao (4), volta */
+        case AT_AIR:
+            if (OnGround(a)) /* pisao: tocou o chao ainda no golpe -> pancada no chao com a onda de choque */
+            {
+                float g = a->groundT;
+                return AGFrame(AA_SLAM, g < 0.06f ? 4 : (g < 0.14f ? 5 : (g < 0.24f ? 6 : 7)));
+            }
+            return AntiAtkFrame(a, AA_AIR, 3, 3, d); /* 6: fecha, abre as pontas, mergulho com o cone (3) */
         case AT_SPECIAL:
-        {
-            float tot = SP_ST[CH_ANTI] + SP_AC[CH_ANTI] + SP_RC[CH_ANTI];
-            return AGFrame(AA_SPECIAL, (int)(a->atkT / tot * AA_COUNT[AA_SPECIAL]));
+        { /* 12: sobe e carrega (0-5) no preparo; o DISPARO (6) comeca junto com o poco (t = SP_ST) e fica
+             IA_SP_FLASH s; depois segura a aura, dobra puxando (9) e volta */
+            float st = SP_ST[CH_ANTI], t = a->atkT, rest = SP_AC[CH_ANTI] + SP_RC[CH_ANTI] - IA_SP_FLASH;
+            if (t < st) return AGFrame(AA_SPECIAL, (int)(t / st * 6));
+            if (t < st + IA_SP_FLASH) return AGFrame(AA_SPECIAL, 6);
+            return AGFrame(AA_SPECIAL, 7 + (int)((t - st - IA_SP_FLASH) / rest * 5));
         }
         default: break;
         }
     }
     if (a->shieldOn || a->st == ST_BLOCK)
-    { /* escudo: entra (0-2) e fica nos quadros com o escudo erguido */
-        if (a->crouch) return AGFrame(AA_CROUCH, 4);
-        if (a->shieldT < 0.1f && a->st != ST_BLOCK) return AGFrame(AA_BLOCK, (int)(a->shieldT / 0.05f));
-        return AGFrame(AA_BLOCK, 2 + ((int)(a->stT / AA_DUR[AA_BLOCK]) % 13));
+    { /* escudo: abre (1-4) e fica erguido; no bloqueio, a faisca no escudo */
+        if (a->shieldHit > 0 && !a->crouch) return AGFrame(AA_BLOCK_HIT, a->shieldHit > 0.07f ? 1 : 2);
+        return AGFrame(a->crouch ? AA_BLOCK_CROUCH : AA_BLOCK, 1 + (int)(a->shieldT / 0.04f));
     }
     if (a->st == ST_DASH) return AGFrame(AA_DASH, (int)(a->dashT / IAF_DASH_TIME * AA_COUNT[AA_DASH]));
-    if (a->st == ST_JUMP) return AGFrame(AA_JUMP, 3 + (int)((a->vy + IAF_JUMP_SPEED) / (2 * IAF_JUMP_SPEED) * 17));
-    if (a->crouch) return AGFrame(AA_CROUCH, (int)(a->stT / AA_DUR[AA_CROUCH]) < 4 ? (int)(a->stT / AA_DUR[AA_CROUCH]) : 4);
-    if (a->st == ST_WALK) return AGLoop((a->vx * a->face) < 0 ? AA_WALK_B : AA_WALK_F, a->anim);
-    return AGLoop(AA_IDLE, gt);
+    if (a->st == ST_JUMP) return AGFrame(AA_JUMP, 1 + (int)((a->vy + IAF_JUMP_SPEED) / (2 * IAF_JUMP_SPEED) * 6));
+    if (a->crouch) return AGFrame(AA_CROUCH, (int)(a->stT / 0.035f));
+    if (a->st == ST_WALK) return AGLoop((a->vx * a->face) < 0 ? AA_WALK_B : AA_WALK_F, a->anim, IA_WALK_DUR);
+    return AGLoop(AA_IDLE, gt, IA_IDLE_DUR);
 }
 
 /* ------------------------------------------------------------------ Codex: atlas de luta
@@ -2315,12 +2314,22 @@ static void DrawWell(void)
         float r = fmodf(140 - well.t * 160 + i * 28, 140);
         DrawRing(c, r, r + 2.5f, 0, 360, 48, Fade(i % 2 ? C_VIOLET : C_TEAL, k * (r / 140) * 0.8f));
     }
-    DrawCircleV(c, 46 * k, Fade((Color){40, 20, 90, 255}, 0.9f));
-    DrawCircleV(c, 34 * k, (Color){10, 6, 26, 255});
     Ring(c, 70 * k, 18 * k, gt * 2, Fade(C_TEAL, k), 3, false);
+    if (texAnti.id)
+    { /* vortice do atlas do Antigravity (8 quadros em loop), crescendo ao abrir */
+        int f = AGLoop(AA_WELL, well.t, 0.07f);
+        const AFrame *e = &AF[f];
+        float sc = AG_SCALE * fmaxf(k, 0.2f);
+        DrawAF(f, c.x - (e->w * 0.5f - e->ax) * sc, c.y - (e->h * 0.5f - e->ay) * sc, 1, sc, Fade(WHITE, fminf(1.0f, k * 1.4f)), 0);
+    }
+    else
+    {
+        DrawCircleV(c, 46 * k, Fade((Color){40, 20, 90, 255}, 0.9f));
+        DrawCircleV(c, 34 * k, (Color){10, 6, 26, 255});
+        DrawRing(c, 34 * k, 38 * k, 0, 360, 40, Fade(C_VIOLET, k));
+    }
     Ring(c, 70 * k, 18 * k, gt * 2, Fade(C_TEAL, k), 3, true);
     Ring(c, 58 * k, 14 * k, -gt * 3 + 1, Fade(C_VIOLET, k), 2.5f, true);
-    DrawRing(c, 34 * k, 38 * k, 0, 360, 40, Fade(C_VIOLET, k));
 }
 
 /* ------------------------------------------------------------------ CPU */
@@ -3053,7 +3062,7 @@ static void DrawCharacterBig(CharId ch, float x, float yFeet, int face, float sc
     }
     if (ch == CH_ANTI && texAnti.id)
     { /* mesma regra: escala em passos de 0,5 */
-        int f = st == ST_WIN ? AGLoop(AA_VICTORY, gt) : (st == ST_KO ? AGFrame(AA_KO, AA_COUNT[AA_KO] - 1) : AGLoop(AA_IDLE, gt));
+        int f = st == ST_WIN ? AGFrame(AA_VICTORY, AA_COUNT[AA_VICTORY] - 1) : (st == ST_KO ? AGFrame(AA_KO, AA_COUNT[AA_KO] - 1) : AGLoop(AA_IDLE, gt, IA_IDLE_DUR));
         float s2 = fmaxf(1.0f, roundf(AG_SCALE * sc * 0.75f * 2) / 2);
         float hov = st == ST_KO ? 0 : (16 + 5 * sinf(gt * 2.4f)) * s2 / AG_SCALE;
         DrawAF(f, x, yFeet - hov, face, s2, g_altPal ? IAF_ANTI_ALT_TINT : WHITE, 0);
