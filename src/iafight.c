@@ -3681,11 +3681,153 @@ static void DrawIafCyberCard(Rectangle r, Color accent, bool on, float tickMax)
                (Vector2){r.x + r.width - pad, r.y + r.height - pad - tickLen}, thick, tickCol);
 }
 
+/* ---- logo arcade: glifos da fonte fatiados em faixas (inclinacao + gradiente sem scissor) */
+static Color LogoMix(Color a, Color b, float t)
+{
+    if (t < 0) t = 0;
+    if (t > 1) t = 1;
+    return (Color){(unsigned char)(a.r + (b.r - a.r) * t), (unsigned char)(a.g + (b.g - a.g) * t),
+                   (unsigned char)(a.b + (b.b - a.b) * t), 255};
+}
+static float LogoAdv(const Font *f, char ch, float sc)
+{
+    int idx = GetGlyphIndex(*f, ch);
+    float adv = f->glyphs[idx].advanceX > 0 ? (float)f->glyphs[idx].advanceX : f->recs[idx].width;
+    return adv * sc + 3.0f;
+}
+static float LogoWidth(const Font *f, const char *s, float sc)
+{
+    float w = 0;
+    for (int i = 0; s[i]; i++) w += LogoAdv(f, s[i], sc);
+    return w - 3.0f;
+}
+/* mode 0 = cor chapada; mode 1 = gradiente top/mid/bot + brilho especular em 'sweep' */
+static void LogoPass(const Font *f, const char *s, float x, float y, float px, float ox, float oy,
+                     int mode, Color flat, Color top, Color mid, Color bot, float sweep)
+{
+    const float skew = 0.20f, stepDst = 4.0f;
+    float sc = px / (float)f->baseSize, pen = x;
+    for (int i = 0; s[i]; i++)
+    {
+        int idx = GetGlyphIndex(*f, s[i]);
+        Rectangle rec = f->recs[idx];
+        float gx = pen + f->glyphs[idx].offsetX * sc;
+        float gy = y + f->glyphs[idx].offsetY * sc;
+        float stepSrc = stepDst / sc;
+        for (float sy = 0; sy < rec.height; sy += stepSrc)
+        {
+            float h = fminf(stepSrc, rec.height - sy);
+            float dy = gy + sy * sc, dh = h * sc;
+            float rowMid = dy + dh * 0.5f;
+            float dx = gx + ox - (rowMid - (y + px * 0.5f)) * skew;
+            Color col = flat;
+            if (mode)
+            {
+                float t = (rowMid - (y + px * 0.18f)) / (px * 0.62f);
+                col = t < 0.5f ? LogoMix(top, mid, t * 2.0f) : LogoMix(mid, bot, (t - 0.5f) * 2.0f);
+                float lineX = sweep - (rowMid - y) * 0.55f;
+                float k = 1.0f - fabsf(dx + rec.width * sc * 0.5f - lineX) / 34.0f;
+                if (k > 0) col = LogoMix(col, C_WHITE, k * 0.9f);
+            }
+            DrawTexturePro(f->texture, (Rectangle){rec.x, rec.y + sy, rec.width, h},
+                           (Rectangle){dx, dy + oy, rec.width * sc, dh + 0.7f}, (Vector2){0, 0}, 0, col);
+        }
+        pen += LogoAdv(f, s[i], sc);
+    }
+}
+static void Tri2(Vector2 a, Vector2 b, Vector2 c, Color col)
+{
+    DrawTriangle(a, b, c, col);
+    DrawTriangle(a, c, b, col);
+}
+static void DrawIafTitleLogo(void)
+{
+    const float cx = SCREEN_WIDTH / 2.0f;
+    const float px = 84.0f, ty = 54.0f;
+    Font f = GetGameFont(px);
+    float sc = px / (float)f.baseSize;
+    float wIA = LogoWidth(&f, "IA", sc), wSp = LogoAdv(&f, ' ', sc), wFi = LogoWidth(&f, "FIGHT", sc);
+    float total = wIA + wSp + wFi;
+    float x0 = cx - total / 2.0f;
+    float xFi = x0 + wIA + wSp;
+    float pulse = 0.5f + 0.5f * sinf(gt * 3.0f);
+
+    /* aura quente + faixas de velocidade atras do titulo */
+    for (int k = 4; k >= 1; k--)
+        DrawEllipse((int)cx, 104, 330 + k * 34, 40 + k * 12, Fade((Color){255, 110, 30, 255}, 0.035f + 0.012f * pulse));
+    Vector2 s1a = {cx - 380, 124}, s1b = {cx + 330, 62}, s1c = {cx + 380, 62}, s1d = {cx - 330, 124};
+    Tri2(s1a, s1b, s1c, Fade((Color){200, 30, 40, 255}, 0.34f));
+    Tri2(s1a, s1c, s1d, Fade((Color){200, 30, 40, 255}, 0.34f));
+    DrawLineEx((Vector2){cx - 400, 138}, (Vector2){cx + 400, 70}, 2.0f, Fade(C_AMBER, 0.45f));
+    DrawLineEx((Vector2){cx - 340, 146}, (Vector2){cx + 420, 90}, 1.0f, Fade(C_CYAN, 0.45f));
+    DrawLineEx((Vector2){cx - 420, 112}, (Vector2){cx + 300, 52}, 1.0f, Fade(C_WHITE, 0.25f));
+
+    const char *segS[2] = {"IA", "FIGHT"};
+    float segX[2] = {x0, xFi};
+    Color vinho = {110, 14, 28, 255}, vinhoDk = {64, 8, 20, 255};
+
+    /* contorno de tinta ao redor da base e da extrusao */
+    for (int q = 0; q < 2; q++)
+    {
+        for (int a = 0; a < 8; a++)
+        {
+            float ang = a * 0.7853982f;
+            float ox = cosf(ang) * 3.5f, oy = sinf(ang) * 3.5f;
+            LogoPass(&f, segS[q], segX[q], ty, px, ox, oy, 0, C_INK, C_INK, C_INK, C_INK, 0);
+            LogoPass(&f, segS[q], segX[q], ty, px, ox + 10, oy + 14, 0, C_INK, C_INK, C_INK, C_INK, 0);
+        }
+        for (int a = 0; a < 4; a++)
+        {
+            float ang = a * 1.5707963f;
+            LogoPass(&f, segS[q], segX[q], ty, px, 5 + cosf(ang) * 3.5f, 7 + sinf(ang) * 3.5f, 0, C_INK, C_INK, C_INK, C_INK, 0);
+        }
+    }
+    /* extrusao 3D profunda em vinho */
+    for (int q = 0; q < 2; q++)
+        for (int k = 7; k >= 1; k--)
+            LogoPass(&f, segS[q], segX[q], ty, px, k * 1.45f, k * 2.0f, 0, k > 4 ? vinhoDk : vinho, vinho, vinho, vinho, 0);
+
+    /* preenchimento: 'IA' ciano/branco, 'FIGHT' ouro -> laranja -> fogo, com brilho varrendo */
+    float sweep = fmodf(gt * 300.0f, total + 500.0f) + x0 - 250.0f;
+    LogoPass(&f, "IA", x0, ty, px, 0, 0, 1, C_WHITE, (Color){235, 252, 255, 255}, C_CYAN, (Color){40, 110, 220, 255}, sweep);
+    LogoPass(&f, "FIGHT", xFi, ty, px, 0, 0, 1, C_WHITE, (Color){255, 232, 70, 255}, (Color){255, 140, 30, 255}, (Color){226, 44, 30, 255}, sweep);
+
+    /* faiscas / estrelas discretas */
+    for (int s = 0; s < 9; s++)
+    {
+        float ph = fmodf(gt * 0.9f + s * 0.37f, 1.0f);
+        float sx = x0 - 20 + fmodf(s * 97.0f, total + 40);
+        float sy = ty - 6 + fmodf(s * 53.0f, 110.0f);
+        float r = 7.0f * sinf(ph * 3.14159f);
+        if (r < 0.5f) continue;
+        Color sc2 = (s % 2) ? C_WHITE : C_AMBER;
+        DrawRectanglePro((Rectangle){sx, sy, r * 2.0f, 2.0f}, (Vector2){r, 1}, 0, sc2);
+        DrawRectanglePro((Rectangle){sx, sy, 2.0f, r * 2.0f}, (Vector2){1, r}, 0, sc2);
+        DrawRectanglePro((Rectangle){sx, sy, r, r}, (Vector2){r / 2, r / 2}, 45, Fade(sc2, 0.6f));
+    }
+
+    /* placa chanfrada do subtitulo (nao invade o primeiro botao, y=240) */
+    const char *sub = "RINHA DE INTELIGÊNCIAS";
+    float sw = TxtW(sub, 20) + 96.0f, sh = 30.0f, bx = cx - sw / 2, by = 178.0f, ch = 11.0f;
+    DrawRectangleGradientV((int)(bx + ch), (int)by, (int)(sw - ch * 2), (int)sh, (Color){22, 40, 66, 255}, (Color){8, 14, 30, 255});
+    Tri2((Vector2){bx, by + sh - ch}, (Vector2){bx + ch, by}, (Vector2){bx + ch, by + sh}, (Color){8, 16, 34, 255});
+    Tri2((Vector2){bx + sw, by + sh - ch}, (Vector2){bx + sw - ch, by}, (Vector2){bx + sw - ch, by + sh}, (Color){8, 16, 34, 255});
+    DrawRectangle((int)(bx + ch), (int)by, (int)(sw - ch * 2), 3, C_AMBER);
+    DrawRectangle((int)(bx + ch), (int)(by + sh - 3), (int)(sw - ch * 2), 3, C_CYAN);
+    DrawLineEx((Vector2){bx, by + sh - ch}, (Vector2){bx + ch, by}, 2.5f, C_AMBER);
+    DrawLineEx((Vector2){bx, by + sh - ch}, (Vector2){bx + ch, by + sh}, 2.5f, C_CYAN);
+    DrawLineEx((Vector2){bx + sw, by + sh - ch}, (Vector2){bx + sw - ch, by}, 2.5f, C_AMBER);
+    DrawLineEx((Vector2){bx + sw, by + sh - ch}, (Vector2){bx + sw - ch, by + sh}, 2.5f, C_CYAN);
+    DrawRectangle((int)(bx + 18), (int)(by + sh / 2 - 3), 6, 6, C_AMBER);
+    DrawRectangle((int)(bx + sw - 24), (int)(by + sh / 2 - 3), 6, 6, C_AMBER);
+    TxtC(sub, cx + 1, by + 5, 20, C_INK);
+    TxtC(sub, cx, by + 4, 20, C_CYAN);
+}
+
 static void DrawMode(void)
 {
     DrawBackdrop(modeSel < 3 ? MODE_COL[modeSel] : C_AMBER);
-    TxtO("IA FIGHT", SCREEN_WIDTH / 2.0f, 70, 96, C_WHITE, C_INK);
-    TxtC("RINHA DE INTELIGÊNCIAS", SCREEN_WIDTH / 2.0f, 176, 24, C_CYAN);
+    DrawIafTitleLogo();
 
     float pulse = 0.72f + 0.28f * sinf(gt * 3.2f);
     float slide = 3.5f + 2.8f * sinf(gt * 9.0f);
