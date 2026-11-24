@@ -2843,6 +2843,7 @@ static void BuildLadder(void)
 {
     int n = 0;
     if (playerCh == CH_ELIRA) { ladder[0] = CH_CLAUDE; ladder[1] = CH_CODEX; ladder[2] = CH_ANTI; }
+    else if (playerCh == CH_IARA) { ladder[0] = CH_CLAUDE; ladder[1] = CH_CODEX; ladder[2] = CH_ELIRA; } /* convidada: 2 IAs e a chefe */
     else
     {
         for (int c = CH_CLAUDE; c <= CH_ANTI; c++)
@@ -3295,15 +3296,48 @@ static void LadderFor(int ch, int out[3])
 {
     int n = 0;
     if (ch == CH_ELIRA) { out[0] = CH_CLAUDE; out[1] = CH_CODEX; out[2] = CH_ANTI; return; }
+    if (ch == CH_IARA) { out[0] = CH_CLAUDE; out[1] = CH_CODEX; out[2] = CH_ELIRA; return; }
     for (int c = CH_CLAUDE; c <= CH_ANTI; c++)
         if (c != ch) out[n++] = c;
     out[2] = CH_ELIRA;
 }
 static Rectangle GridCell(int i)
 {
-    const float cs = 124, gap = 16;
+    const float cs = 112, gap = 12;
     float x0 = SCREEN_WIDTH / 2.0f - cs - gap / 2;
-    return (Rectangle){x0 + (i % 2) * (cs + gap), 214 + (i / 2) * (cs + gap), cs, cs};
+    if (i == CH_IARA) return (Rectangle){x0, 176 + 2 * (cs + gap) + 14, 2 * cs + gap, 84}; /* cartao de colab, separado da grade */
+    return (Rectangle){x0 + (i % 2) * (cs + gap), 176 + (i / 2) * (cs + gap), cs, cs};
+}
+/* cursor da selecao: esquerda/direita percorre os 4 e a convidada; cima/baixo troca a linha da grade e
+   desce (ou sobe) para o cartao de colab, abaixo da grade */
+static int SelMove(int c, int dx, int dy)
+{
+    if (dx) return (c + dx + CH_N) % CH_N;
+    if (!dy) return c;
+    if (c == CH_IARA) return dy > 0 ? 0 : 2;
+    if (dy > 0) return c < 2 ? c + 2 : CH_IARA;
+    return c >= 2 ? c - 2 : CH_IARA;
+}
+/* cartao da Iara: personagem de colab (jogo parceiro), com o selo COLAB */
+static void DrawThumb(CharId ch, Rectangle dst, bool alt);
+static void DrawColabCard(bool on)
+{
+    Rectangle g = GridCell(CH_IARA);
+    Color c = CHCOL[CH_IARA], red = {156, 65, 86, 255};
+    DrawRectangleRec(g, (Color){14, 22, 34, 255});
+    DrawRectangleGradientH((int)g.x, (int)g.y, (int)g.width, (int)g.height, Fade(c, on ? 0.30f : 0.12f), Fade(c, 0));
+    DrawThumb(CH_IARA, (Rectangle){g.x + 6, g.y + 6, g.height - 12, g.height - 12}, false);
+    float tx = g.x + g.height + 2;
+    Txt("IARA", tx, g.y + 18, 24, on ? c : Fade(c, 0.85f));
+    Txt("convidada do", tx, g.y + 46, 12, C_DIM);
+    Txt("jogo parceiro", tx, g.y + 60, 12, C_DIM);
+    DrawRectangleLinesEx(g, 2, on ? c : Fade(c, 0.4f));
+    /* selo COLAB no canto */
+    float bw = TxtW("COLAB", 14) + 14;
+    Rectangle b = {g.x + g.width - bw - 6, g.y - 9, bw, 20};
+    DrawRectangleRec(b, red);
+    DrawRectangleLinesEx(b, 1, ColorLerp(red, WHITE, 0.4f));
+    TxtC("COLAB", b.x + bw / 2, b.y + 2, 14, C_WHITE);
 }
 /* escala do lutador no painel: ~1,1x o tamanho da luta, com o pixel da arte inteiro */
 static const float PANEL_SC[CH_N] = {1.1f, 1.4f, 1.67f, 1.4f, 1.4f};
@@ -3383,12 +3417,13 @@ static void DrawSelectScreen(bool vs)
         DrawRectangleRec(tg, pc);
         TxtC(tag, tg.x + tw / 2, tg.y + 3, 18, C_INK);
     }
-    float by = GridCell(CH_MAIN - 1).y + GridCell(0).height + 40;
+    DrawColabCard(cur[0] == CH_IARA || ((vs || dum) && cur[1] == CH_IARA));
+    float by = GridCell(CH_IARA).y + GridCell(CH_IARA).height + 18;
     if (tr)
     {
         TxtC("vida infinita e carga cheia", SCREEN_WIDTH / 2.0f, by, 14, C_DIM);
-        TxtC("boneco parado, defendendo ou pulando (F2 / L3)", SCREEN_WIDTH / 2.0f, by + 22, 14, C_DIM);
-        TxtC("caixas de colisão: F1 / SELECT", SCREEN_WIDTH / 2.0f, by + 44, 14, C_DIM);
+        TxtC("boneco parado, defendendo ou pulando (F2 / L3)", SCREEN_WIDTH / 2.0f, by + 20, 14, C_DIM);
+        TxtC("caixas de colisão: F1 / SELECT", SCREEN_WIDTH / 2.0f, by + 40, 14, C_DIM);
         DrawSelInfo(0, cur[0], dum ? "escolhido   ESC / B: trocar" : NULL, PCOL[0], false);
         DrawSelInfo(1, cur[1], "boneco de treino", C_GREEN, false);
         TxtC("A/D, W/S, SETAS ou CONTROLE: escolher    ENTER / A: confirmar    TAB / SELECT: controles    ESC / B: voltar", SCREEN_WIDTH / 2.0f, SCREEN_HEIGHT - 26, 14, C_DIM);
@@ -3399,8 +3434,8 @@ static void DrawSelectScreen(bool vs)
         char t[96];
         snprintf(t, sizeof t, "%s > %s > %s", NAME[lad[0]], NAME[lad[1]], NAME[lad[2]]);
         TxtC("ARCADE  -  MELHOR DE 3 ROUNDS", SCREEN_WIDTH / 2.0f, by, 14, C_DIM);
-        TxtC(t, SCREEN_WIDTH / 2.0f, by + 22, 16, Fade(C_WHITE, 0.85f));
-        if (lad[2] == CH_ELIRA) TxtC("a Elira é a chefe final", SCREEN_WIDTH / 2.0f, by + 46, 14, C_DIM);
+        TxtC(t, SCREEN_WIDTH / 2.0f, by + 20, 16, Fade(C_WHITE, 0.85f));
+        if (lad[2] == CH_ELIRA) TxtC("a Elira é a chefe final", SCREEN_WIDTH / 2.0f, by + 40, 14, C_DIM);
         DrawSelInfo(0, cur[0], NULL, C_DIM, false);
         DrawSelInfo(1, cur[1], "1º desafio do arcade", C_AMBER, false);
         TxtC("A/D, W/S, SETAS ou CONTROLE: escolher    ENTER / A: confirmar    TAB / SELECT: controles    ESC / B: voltar", SCREEN_WIDTH / 2.0f, SCREEN_HEIGHT - 26, 14, C_DIM);
@@ -3600,9 +3635,10 @@ static void UpdateArenaSelect(float dt)
 static void DrawSelect(void) { DrawSelectScreen(false); }
 static void UpdateSelect(void)
 {
-    if (NavLeftP()) sel = (sel + CH_MAIN - 1) % CH_MAIN;
-    if (NavRightP()) sel = (sel + 1) % CH_MAIN;
-    if (NavUpP() || NavDownP()) sel ^= 2; /* grade 2 x 2: troca de linha */
+    if (NavLeftP()) sel = SelMove(sel, -1, 0);
+    if (NavRightP()) sel = SelMove(sel, 1, 0);
+    if (NavUpP()) sel = SelMove(sel, 0, -1); /* grade 2 x 2 e, embaixo, o cartao de colab */
+    if (NavDownP()) sel = SelMove(sel, 0, 1);
     if (NavOkP())
     {
         if (trainMode && trainPick == 0) { playerCh = sel; trainPick = 1; sel = trainDummy; PlaySfx(SFX_OK); return; } /* agora o boneco */
@@ -4174,9 +4210,10 @@ static void UpdateSelectVs(float dt)
     {
         if (!readyP[p])
         {
-            if (PlayerNavP(p, PN_LEFT)) selP[p] = (selP[p] + CH_MAIN - 1) % CH_MAIN;
-            if (PlayerNavP(p, PN_RIGHT)) selP[p] = (selP[p] + 1) % CH_MAIN;
-            if (PlayerNavP(p, PN_UP) || PlayerNavP(p, PN_DOWN)) selP[p] ^= 2;
+            if (PlayerNavP(p, PN_LEFT)) selP[p] = SelMove(selP[p], -1, 0);
+            if (PlayerNavP(p, PN_RIGHT)) selP[p] = SelMove(selP[p], 1, 0);
+            if (PlayerNavP(p, PN_UP)) selP[p] = SelMove(selP[p], 0, -1);
+            if (PlayerNavP(p, PN_DOWN)) selP[p] = SelMove(selP[p], 0, 1);
             if (scT > 0.15f && PlayerNavP(p, PN_OK)) readyP[p] = true;
         }
         else if (PlayerNavP(p, PN_UNDO)) readyP[p] = false;
