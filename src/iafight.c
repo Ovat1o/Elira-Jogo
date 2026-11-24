@@ -955,7 +955,9 @@ static int EliraFrameIdxV2(Fighter *a, float *yoff)
         if (a->shieldHit > 0) return E2Frame(E2_DEF, 3); /* bloqueou: o escudo treme (3 <-> 4) */
         return E2Frame(E2_DEF, 1 + (int)(a->shieldT / 0.04f)); /* ergue o canhao, abre o escudo e fica no ultimo */
     }
-    if (a->st == ST_DASH || a->st == ST_JUMP) return -1;
+    if (a->st == ST_DASH) /* agacha, impulso, desliza (2) com o rastro ciano, freia e volta a guarda */
+        return E2Frame(E2_DASH, (int)(a->dashT / IAF_DASH_TIME * E2_COUNT[E2_DASH]));
+    if (a->st == ST_JUMP) return -1;
     if (a->crouch)
     { /* abaixa e fica no ultimo quadro (agachada parada) */
         int n = E2_COUNT[E2_CROUCH]; /* o quadro 0 e a guarda em pe */
