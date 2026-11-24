@@ -63,6 +63,7 @@ PROJECT_HEADERS := $(SRC_DIR)/constantes.h \
                    $(SRC_DIR)/iafight_claude.h \
                    $(SRC_DIR)/iafight_codex.h \
                    $(SRC_DIR)/iafight_antigravity.h \
+                   $(SRC_DIR)/iafight_aura67.h \
                    $(SRC_DIR)/iafight_arena.h
 
 # Arquivos de cabecalho da biblioteca Raylib presentes na pasta src/raylib/

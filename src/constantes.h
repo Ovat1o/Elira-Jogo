@@ -142,6 +142,7 @@
 #define IAF_IARA_ESCALA     1.25f    /* tamanho da Iara na luta (1 = guarda de 210 px). Caixas, alcances e a onda acompanham.
                                         Para a arte continuar nitida, gere o atlas na mesma escala: iara_tool/montar.py <worktree> <escala> */
 #endif
+#define IAF_AURA67_ATLAS    "assets/sprites/iafight/aura67_luta.png" /* atlas de luta da AURA_67 (personagem de colab), ja na escala da luta */
 #define IAF_GROUND_Y        622.0f   /* linha do chao da arena (pes dos lutadores) */
 #define IAF_WALL_L          70.0f    /* limite esquerdo da arena */
 #define IAF_WALL_R          1210.0f  /* limite direito da arena */
