@@ -126,6 +126,10 @@
 #define IAF_ARENAS_DESENHADAS 0 /* 1 = arenas desenhadas no codigo (Nucleo e Laboratorio 1990) voltam a tela de arenas */
 #endif
 #define IAF_ELIRA_ATLAS     "assets/sprites/iafight/elira_luta.png" /* atlas de luta da Elira */
+#define IAF_ELIRA_ATLAS_V2  "assets/sprites/iafight/elira_luta_v2.png" /* sprites novos da Elira (modo de teste) */
+#ifndef IAF_ELIRA_SPRITES_NOVOS
+#define IAF_ELIRA_SPRITES_NOVOS 0 /* 1 = a Elira usa os sprites novos em todos os modos (no treino, F4 alterna) */
+#endif
 #define IAF_CLAUDE_ATLAS    "assets/sprites/iafight/claude_luta.png" /* atlas de luta do Claude */
 #define IAF_CODEX_ATLAS     "assets/sprites/iafight/codex_luta.png"  /* atlas de luta do Codex */
 #define IAF_ANTI_ATLAS      "assets/sprites/iafight/antigravity_luta.png" /* atlas de luta do Antigravity */

@@ -67,34 +67,57 @@ static int EAFrame(int anim, int i)
     if (i >= n) i = n - 1;
     return EA_FIRST[anim] + i;
 }
+/* Elira: sprites NOVOS (modo de teste). Atlas elira_luta_v2.png + tabela EF2 (iafight_elira_v2.h), na mesma
+   escala logica. Os quadros novos tem indice EF2_BASE + n; o que nao tem arte nova segue no atlas atual.
+   No treino, F4 alterna; IAF_ELIRA_SPRITES_NOVOS (constantes.h) liga em todos os modos. */
+#include "iafight_elira_v2.h"
+static Texture2D texElira2;
+static bool eliraNovos = IAF_ELIRA_SPRITES_NOVOS;
+#define EF2_BASE 1000
+static bool EliraV2(void) { return eliraNovos && texElira2.id > 0; } /* sem o atlas novo, fica a atual */
+static int E2Frame(int anim, int i)
+{
+    int n = E2_COUNT[anim];
+    if (i < 0) i = 0;
+    if (i >= n) i = n - 1;
+    return EF2_BASE + E2_FIRST[anim] + i;
+}
+static const EFrame *EFGet(int f, Texture2D *tex)
+{
+    if (f >= EF2_BASE) { *tex = texElira2; return &EF2[f - EF2_BASE]; }
+    *tex = texElira;
+    return &EF[f];
+}
 /* desenha o quadro f com os pes em (x, yFeet); espelha quando face < 0 */
 static float EliraScale(float sc) { return fmaxf(0.5f, roundf(sc * IAF_ELIRA_PIX * 2) / 2); } /* pixel inteiro */
 static void DrawEF(int f, float x, float yFeet, int face, float sc, Color tint, float flash)
 {
-    const EFrame *e = &EF[f];
+    Texture2D tex;
+    const EFrame *e = EFGet(f, &tex);
     sc = EliraScale(sc);
     Rectangle src = {e->x, e->y, e->w, e->h};
     float w = e->w * sc, h = e->h * sc;
     float left = face > 0 ? x - e->ax * sc : x - (e->w - e->ax) * sc;
     if (face < 0) src.width = -src.width;
     Rectangle dst = {roundf(left), roundf(yFeet - e->ay * sc), w, h};
-    DrawTexturePro(texElira, src, dst, (Vector2){0, 0}, 0, tint);
+    DrawTexturePro(tex, src, dst, (Vector2){0, 0}, 0, tint);
     if (flash > 0)
     {
         BeginBlendMode(BLEND_ADDITIVE);
-        DrawTexturePro(texElira, src, dst, (Vector2){0, 0}, 0, Fade(WHITE, flash));
+        DrawTexturePro(tex, src, dst, (Vector2){0, 0}, 0, Fade(WHITE, flash));
         EndBlendMode();
     }
 }
 /* efeitos (projetil/impacto): ancorados no centro */
 static void DrawEFC(int f, Vector2 c, int face, float sc, Color tint)
 {
-    const EFrame *e = &EF[f];
+    Texture2D tex;
+    const EFrame *e = EFGet(f, &tex);
     sc = EliraScale(sc);
     Rectangle src = {e->x, e->y, e->w, e->h};
     float ax = face > 0 ? e->ax : e->w - e->ax;
     if (face < 0) src.width = -src.width;
-    DrawTexturePro(texElira, src, (Rectangle){c.x - ax * sc, c.y - e->ay * sc, e->w * sc, e->h * sc}, (Vector2){0, 0}, 0, tint);
+    DrawTexturePro(tex, src, (Rectangle){c.x - ax * sc, c.y - e->ay * sc, e->w * sc, e->h * sc}, (Vector2){0, 0}, 0, tint);
 }
 
 /* ------------------------------------------------------------------ personagens */
@@ -839,9 +862,9 @@ static void DrawPuppet(CharId ch, float x, float y, int face, float s, Pose p, f
 /* ------------------------------------------------------------------ Elira: escolha do quadro */
 static bool OnGround(Fighter *a);
 /* quadro de um golpe: preparo usa os quadros [0, a0), ativo usa [a0, a1], recuperacao o resto */
-static int AtkFrame(Fighter *a, int anim, int a0, int a1, float st, float ac, float rc)
+static int AtkIdx(Fighter *a, int n, int a0, int a1, float st, float ac, float rc)
 {
-    int n = EA_COUNT[anim], i;
+    int i;
     float t = a->atkT;
     if (ac < IAF_ELIRA_ACTIVE_VISUAL) { rc = fmaxf(rc - (IAF_ELIRA_ACTIVE_VISUAL - ac), 0.02f); ac = IAF_ELIRA_ACTIVE_VISUAL; } /* segura o impacto */
     if (t < st) i = a0 > 0 ? (int)(t / st * a0) : 0;
@@ -851,17 +874,67 @@ static int AtkFrame(Fighter *a, int anim, int a0, int a1, float st, float ac, fl
         int nr = n - 1 - a1;
         i = nr > 0 ? a1 + 1 + (int)((t - st - ac) / rc * nr) : a1;
     }
-    return EAFrame(anim, i);
+    return i;
 }
+static int AtkFrame(Fighter *a, int anim, int a0, int a1, float st, float ac, float rc) { return EAFrame(anim, AtkIdx(a, EA_COUNT[anim], a0, a1, st, ac, rc)); }
+static int AtkFrame2(Fighter *a, int anim, int a0, int a1, float st, float ac, float rc) { return E2Frame(anim, AtkIdx(a, E2_COUNT[anim], a0, a1, st, ac, rc)); }
 /* quadros de impacto escolhidos no pacote (o calculo automatico pega o canhao, nao o membro) */
 #define EP_PUNCH 4
 #define EP_KICK 3
 #define EP_UPPER 4 /* uppercut provisorio: inicio da vitoria, canhao subindo */
 #define EP_SHOT_LAST 11 /* ultimo quadro do tiro: sem a bala da arte (a bala e o projetil do jogo) */
 #define EP_CHARGE_TOP 8 /* disparo carregado: orbe maior na boca do canhao */
+/* sprites novos: quadro do estado, ou -1 quando a animacao nao tem arte nova (usa a atual) */
+static int EliraFrameIdxV2(Fighter *a)
+{
+    if (a->st == ST_KO || a->down) return -1;
+    if (a->st == ST_LOSE) return E2Frame(E2_DEFEAT, (int)(a->stT * 12)); /* cai e fica no ultimo quadro */
+    if (a->st == ST_WIN) return E2Frame(E2_WIN, (int)(a->stT * 12));
+    if (a->st == ST_HIT) return a->hitCrouch ? E2Frame(E2_HIT_CROUCH, a->stT < 0.12f ? 1 : 2) : -1;
+    if (a->st == ST_ATK)
+    {
+        const Atk *d = &ATK[CH_ELIRA][a->atk < AT_SPECIAL ? a->atk : 0];
+        float t = a->atkT;
+        switch (a->atk)
+        {
+        case AT_LIGHT: return AtkFrame2(a, E2_PUNCH, E2_PEAK[E2_PUNCH], E2_PEAK[E2_PUNCH], d->st, d->ac, d->rc);
+        case AT_HEAVY: return AtkFrame2(a, E2_KICK, E2_PEAK[E2_KICK], E2_PEAK[E2_KICK], d->st, d->ac, d->rc);
+        case AT_FWDH: return AtkFrame2(a, E2_PUNCH_HEAVY, E2_PEAK[E2_PUNCH_HEAVY], E2_PEAK[E2_PUNCH_HEAVY], d->st, d->ac, d->rc);
+        case AT_UPPER: return AtkFrame2(a, E2_UPPER, E2_PEAK[E2_UPPER], E2_PEAK[E2_UPPER], d->st, d->ac, d->rc);
+        case AT_LOW: return AtkFrame2(a, E2_SWEEP, E2_PEAK[E2_SWEEP], E2_PEAK[E2_SWEEP], d->st, d->ac, d->rc);
+        case AT_AIR: return AtkFrame2(a, E2_AIR, E2_PEAK[E2_AIR], E2_PEAK[E2_AIR], d->st, d->ac, d->rc);
+        case AT_SPECIAL:
+        {
+            float st = SP_ST[CH_ELIRA], rest = SP_AC[CH_ELIRA] + SP_RC[CH_ELIRA];
+            int pk = E2_PEAK[E2_SPECIAL], n = E2_COUNT[E2_SPECIAL];
+            if (t < st) return E2Frame(E2_SPECIAL, (int)(t / st * pk));
+            return E2Frame(E2_SPECIAL, pk + (int)((t - st) / rest * (n - pk)));
+        }
+        default: return -1;
+        }
+    }
+    if (a->shieldOn || a->st == ST_BLOCK)
+    {
+        if (a->crouch) return -1; /* defesa agachada: a atual */
+        if (a->shieldHit > 0) return E2Frame(E2_DEF, 3);
+        return E2Frame(E2_DEF, a->shieldT < 0.08f ? 1 : E2_COUNT[E2_DEF] - 1);
+    }
+    if (a->st == ST_DASH || a->st == ST_JUMP) return -1;
+    if (a->crouch)
+    { /* abaixa e fica no ultimo quadro (agachada parada) */
+        int n = E2_COUNT[E2_CROUCH];
+        return E2Frame(E2_CROUCH, a->stT < 0.2f ? (int)(a->stT / 0.2f * n) : n - 1);
+    }
+    return -1;
+}
 static int EliraFrameIdx(Fighter *a, float *yoff)
 {
     *yoff = 0;
+    if (EliraV2())
+    {
+        int f = EliraFrameIdxV2(a);
+        if (f >= 0) return f;
+    }
     if (a->st == ST_KO) return EAFrame(EA_KO, (int)(a->stT / 0.045f));
     if (a->down)
     { /* caida: deitada; ao fim, levantando */
@@ -2653,6 +2726,7 @@ static IafInput DummyInput(void)
 static IafInput TrainStep(void)
 {
     if (IsKeyPressed(KEY_F2) || AnyPadRawPressed(GAMEPAD_BUTTON_LEFT_THUMB)) dummyMode = (dummyMode + 1) % 3;
+    if (IsKeyPressed(KEY_F4) && texElira2.id) eliraNovos = !eliraNovos; /* modo de teste: sprites novos da Elira */
     if (IsKeyPressed(KEY_F3) || AnyPadRawPressed(GAMEPAD_BUTTON_RIGHT_THUMB))
     { /* volta os dois para o meio */
         ResetFighter(&fz[0], fz[0].ch, 420, 1);
@@ -2737,6 +2811,7 @@ static void DrawTrainHud(void)
     Txt("F2 / L3: boneco    F3 / R3: posição", r.x + 14, r.y + 36, 14, C_DIM);
     if (showBoxes) DrawBoxLegend(r.x + 14, r.y + 62);
     else Txt("F1 / SELECT: caixas de colisão", r.x + 14, r.y + 62, 14, C_DIM);
+    if (texElira2.id) TxtC(eliraNovos ? "SPRITES: NOVOS  (F4 troca)" : "SPRITES: ATUAIS  (F4 troca)", SCREEN_WIDTH / 2.0f, 642, 15, eliraNovos ? C_CYAN : C_DIM);
     TxtC("COMBO: fraco > fraco > forte, acertando", SCREEN_WIDTH / 2.0f, 664, 15, C_AMBER);
     TxtC("AGARRÃO: fraco + forte juntos, colado", SCREEN_WIDTH / 2.0f, 686, 15, C_AMBER);
 }
@@ -2884,8 +2959,8 @@ static void DrawCharacterBig(CharId ch, float x, float yFeet, int face, float sc
     {
         int f = EAFrame(EA_IDLE, (int)(gt * 9) % EA_COUNT[EA_IDLE]);
         float yo = 0;
-        if (st == ST_WIN) f = EAFrame(EA_WIN, EA_COUNT[EA_WIN] - 3 + ((int)(gt * 3) % 3));
-        if (st == ST_KO) f = EAFrame(EA_DEFEAT, (int)(gt * 12) % EA_COUNT[EA_DEFEAT]);
+        if (st == ST_WIN) f = EliraV2() ? E2Frame(E2_WIN, E2_COUNT[E2_WIN] - 3 + ((int)(gt * 3) % 3)) : EAFrame(EA_WIN, EA_COUNT[EA_WIN] - 3 + ((int)(gt * 3) % 3));
+        if (st == ST_KO) f = EliraV2() ? E2Frame(E2_DEFEAT, E2_COUNT[E2_DEFEAT] - 1) : EAFrame(EA_DEFEAT, (int)(gt * 12) % EA_COUNT[EA_DEFEAT]);
         DrawEF(f, x, yFeet + yo, face, sc, g_altPal ? IAF_ELIRA_ALT_TINT : WHITE, 0);
         return;
     }
@@ -3462,7 +3537,7 @@ static void DrawControls(void)
     }
     (void)KP2[9];
     TxtC("No 1 x 1: P1 usa o controle 1 e P2 o controle 2; sem o 2º controle, o P2 joga no teclado.", SCREEN_WIDTH / 2.0f, 586, 16, C_DIM);
-    TxtC("TREINO:  F1 / SELECT caixas de colisão    F2 / L3 boneco (parado, defende, pula)    F3 / R3 volta ao meio", SCREEN_WIDTH / 2.0f, 616, 16, C_GREEN);
+    TxtC("TREINO:  F1 / SELECT caixas de colisão    F2 / L3 boneco (parado, defende, pula)    F3 / R3 volta ao meio    F4 sprites da Elira", SCREEN_WIDTH / 2.0f, 616, 16, C_GREEN);
     TxtC("F1 / SELECT também mostra as caixas em qualquer luta.", SCREEN_WIDTH / 2.0f, 640, 14, C_DIM);
     TxtC("TAB / SELECT, ESC / B ou ENTER / A: voltar", SCREEN_WIDTH / 2.0f, SCREEN_HEIGHT - 34, 16, C_DIM);
 }
@@ -3795,6 +3870,7 @@ void IafEnter(GameState *game)
     if (!iafLoaded)
     {
         texElira = LoadFighterAtlasClean(IAF_ELIRA_ATLAS);
+        texElira2 = LoadFighterAtlasClean(IAF_ELIRA_ATLAS_V2); /* sprites novos (modo de teste); sem o arquivo, id = 0 */
         texClaude = LoadTexture(IAF_CLAUDE_ATLAS);
         SetTextureFilter(texClaude, TEXTURE_FILTER_POINT); /* pixel art: sem suavizar */
         texAnti = LoadFighterAtlasClean(IAF_ANTI_ATLAS); /* sem o arquivo, id = 0 e volta o desenho antigo */
@@ -3902,6 +3978,6 @@ bool IafPadWantsEnter(void)
 
 void IafUnload(void)
 {
-    if (iafLoaded) { UnloadTexture(texElira); if (texClaude.id) UnloadTexture(texClaude); texClaude = (Texture2D){0}; if (texAnti.id) UnloadTexture(texAnti); texAnti = (Texture2D){0}; if (texCodex.id) UnloadTexture(texCodex); texCodex = (Texture2D){0}; ArenaUnloadAssets(); UnloadIafAudio(); }
+    if (iafLoaded) { UnloadTexture(texElira); if (texElira2.id) UnloadTexture(texElira2); texElira2 = (Texture2D){0}; if (texClaude.id) UnloadTexture(texClaude); texClaude = (Texture2D){0}; if (texAnti.id) UnloadTexture(texAnti); texAnti = (Texture2D){0}; if (texCodex.id) UnloadTexture(texCodex); texCodex = (Texture2D){0}; ArenaUnloadAssets(); UnloadIafAudio(); }
     iafLoaded = false;
 }
