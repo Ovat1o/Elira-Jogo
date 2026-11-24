@@ -40,7 +40,8 @@ typedef enum GameScreen
     SCREEN_INTRO_2046,
     SCREEN_TERMINAL_2046,
     SCREEN_RESULT_2046,
-    SCREEN_INVASION     /* Modo Invasao (src/invasao.c); manter sempre por ultimo */
+    SCREEN_INVASION,    /* Modo Invasao (src/invasao.c) */
+    SCREEN_IAFIGHT      /* Modo IA FIGHT (src/iafight.c); manter os modos extras sempre por ultimo */
 } GameScreen;
 
 /* --- SALA 2048 (identificadores com sufixo 2046 por historico): subestados, arquivos e desfechos do terminal --- */
@@ -379,6 +380,9 @@ extern Texture2D g_rewardFloppyTex;
 extern Texture2D g_rewardCdTex;
 extern Texture2D g_rewardSsdTex;
 extern bool g_rewardSpritesLoaded;
+extern Texture2D g_menuCoverElira;
+extern Texture2D g_menuCoverLogo;
+extern bool g_menuCoverLoaded;
 extern Texture2D g_heartFullTex;
 extern Texture2D g_heartEmptyTex;
 extern bool g_heartTexturesLoaded;
@@ -400,6 +404,9 @@ Font GetGameFont(float pixelSize);
 void UnloadGameFonts(void);
 void DrawGameTextEx(const char *text, Vector2 position, float size, float spacing, Color color);
 Vector2 MeasureGameTextEx(const char *text, float size, float spacing);
+/* Texto da abertura em perspectiva (atlas unico, escala continua); usado tambem pelo Modo Invasao */
+void DrawCrawlTextEx(const char *text, Vector2 position, float size, float spacing, Color color);
+Vector2 MeasureCrawlTextEx(const char *text, float size, float spacing);
 void DrawGameText(const char *text, int x, int y, int size, Color color);
 int MeasureGameText(const char *text, int size);
 Vector2 GetVirtualMouse(void);
@@ -486,6 +493,8 @@ void DrawFailure(void);
 /* Recompensas Padronizadas (1990, 2008, 2026) e Vidas (Sprite Heart) */
 void LoadRewardSprites(void);
 void UnloadRewardSprites(void);
+void LoadMenuCover(void);   /* capa do menu inicial; sem ela o menu usa o visual antigo */
+void UnloadMenuCover(void);
 void LoadHeartSprites(void);
 void UnloadHeartSprites(void);
 void DrawLivesIcons(Vector2 position, int lives, float heartSize);

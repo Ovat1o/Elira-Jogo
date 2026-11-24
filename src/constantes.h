@@ -109,4 +109,87 @@
 #define ENDING_NAME_PADRAO "Final Padrão"
 #define ENDING_NAME_OTIMO  "Rota Dourada"
 
+/* ========================================================================= */
+/* MODO IA FIGHT (src/iafight.c) - LUTA 1x1 EM VISAO LATERAL                 */
+/* ========================================================================= */
+#ifndef IAF_ARENAS_DESENHADAS
+#define IAF_ARENAS_DESENHADAS 0 /* 1 = arenas desenhadas no codigo (Nucleo e Laboratorio 1990) voltam a tela de arenas */
+#endif
+#define IAF_ELIRA_ATLAS     "assets/sprites/iafight/elira_luta.png" /* atlas de luta da Elira */
+#define IAF_ELIRA_ATLAS_V2  "assets/sprites/iafight/elira_luta_v2.png" /* sprites novos da Elira (modo de teste) */
+#ifndef IAF_ELIRA_SPRITES_NOVOS
+#define IAF_ELIRA_SPRITES_NOVOS 1 /* 1 = a Elira usa os sprites novos em todos os modos (no treino, F4 alterna) */
+#endif
+#define IAF_ELIRA_SP_FLASH  0.10f    /* sprites novos: quadro do clarao do especial na tela depois do disparo (s) */
+#define IAF_ELIRA_HIT_SHORT 0.25f    /* sprites novos: dano em pe com atordoamento menor que isto pula o quadro do tranco (s) */
+#define IAF_ELIRA_KO_IMPACT 0.06f    /* sprites novos: quadro do impacto da queda no inicio do nocaute (s) */
+#define IAF_ELIRA_KO_APEX   55.0f    /* sprites novos: altura (px) em que o voo da queda usa toda a altura da grade */
+#define IAF_CLAUDE_ATLAS    "assets/sprites/iafight/claude_luta.png" /* atlas de luta do Claude */
+#define IAF_CODEX_ATLAS     "assets/sprites/iafight/codex_luta.png"  /* atlas de luta do Codex */
+#define IAF_ANTI_ATLAS      "assets/sprites/iafight/antigravity_luta.png" /* atlas de luta do Antigravity */
+#define IAF_GROUND_Y        622.0f   /* linha do chao da arena (pes dos lutadores) */
+#define IAF_WALL_L          70.0f    /* limite esquerdo da arena */
+#define IAF_WALL_R          1210.0f  /* limite direito da arena */
+#define IAF_GRAVITY         2700.0f  /* gravidade (px/s^2) */
+#define IAF_JUMP_SPEED      1080.0f  /* velocidade inicial do pulo (px/s) */
+#define IAF_HP_MAX          1000.0f  /* vida de cada lutador */
+#define IAF_METER_MAX       100.0f   /* barra CARGA cheia */
+#define IAF_SPECIAL_COST    50.0f    /* CARGA gasta por especial */
+#define IAF_AUDIO_DIR       "assets/som/iafight/" /* efeitos, vozes e musicas do modo */
+#define IAF_MUSIC_VOLUME    0.5f     /* musica do modo no volume padrao do jogo (0,45) */
+#define IAF_ARENA_MUSIC_GAIN 1.4f    /* trilha propria da arena (Posto Vice 2026) um pouco mais alta que a musica_luta */
+#define IAF_SELECT_MUSIC_GAIN 0.6f   /* musica das telas de selecao (lutador e arena) mais baixa */
+#define IAF_VOL_LVL_MAX      10      /* volume do IA FIGHT ajustavel no menu do modo: niveis 0..10 */
+#define IAF_VOL_LVL_PADRAO   5       /* nivel inicial; e o volume de sempre (nivel 10 = o dobro, ate o maximo do audio) */
+#define IAF_SFX_VOLUME      0.45f    /* efeitos e vozes no volume padrao do jogo (era 0,8: alto demais no evento) */
+#define IAF_ROUND_TIME      60.0f    /* cronometro do round (s); curto para o ritmo de evento */
+#define IAF_INTRO_ROUND     0.7f     /* abertura: "ROUND n" fica ate este instante (s) */
+#define IAF_INTRO_TOTAL     1.2f     /* abertura: "LUTEM!" ate a luta comecar (s) */
+#define IAF_SHOT_STARTUP    0.20f    /* tiro de plasma da Elira: preparo (s) */
+#define IAF_SHOT_ACTIVE     0.06f    /* disparo (s) */
+#define IAF_SHOT_RECOVERY   0.28f    /* recuperacao (s) */
+#define IAF_SHOT_COOLDOWN   0.45f    /* recarga entre tiros (s); so 1 tiro dela na tela */
+#define IAF_MAX_PROJ        12       /* projeteis simultaneos */
+#define IAF_MAX_PARTS       700      /* particulas/textos de efeito simultaneos */
+#define IAF_LUNGE_LIGHT     10.0f    /* avanco do corpo no golpe fraco (px) */
+#define IAF_LUNGE_HEAVY     18.0f    /* avanco do corpo no golpe forte (px) */
+#define IAF_LUNGE_LOW       14.0f    /* avanco do corpo na rasteira (px) */
+#define IAF_HITSTOP_LIGHT   0.05f    /* pausa de impacto: golpe fraco, baixo, aereo e tiro (s) */
+#define IAF_HITSTOP_HEAVY   0.09f    /* pausa de impacto: golpe forte (s) */
+#define IAF_HITSTOP_SPECIAL 0.14f    /* pausa de impacto: especial (s) */
+#define IAF_HIT_SHAKE_PX    3.0f     /* tremor de quem apanha durante a pausa (px) */
+#define IAF_ACTIVE_VISUAL   0.10f    /* o quadro de impacto fica pelo menos isto na tela (s) */
+#define IAF_SHOT_RECOIL     3.0f     /* recuo da Elira ao disparar o tiro de plasma (px) */
+#define IAF_MUZZLE_Y        108.0f   /* altura da boca do canhao da Elira acima dos pes (px) */
+#define IAF_MUZZLE_X        125.0f   /* boca do canhao da Elira a frente da ancora (px) */
+#define IAF_ELIRA_PIX       2.5f     /* px de tela por pixel da arte da Elira (multiplo de 0,5) */
+#define IAF_ELIRA_ACTIVE_VISUAL 0.14f /* golpes da Elira: quadro de impacto fica ao menos isto (s) */
+#define IAF_ELIRA_LUNGE_MUL 1.4f     /* a arte mexe pouco o corpo: avanco maior nos golpes dela */
+#define IAF_LUNGE_FWDH      34.0f    /* avanco do corpo no soco longo (frente + forte) (px) */
+#define IAF_UPPER_CANCEL    0.08f    /* cima e forte com ate este intervalo: o pulo vira uppercut (s) */
+#define IAF_UPPER_LAUNCH    820.0f   /* velocidade para cima de quem leva o uppercut (px/s) */
+#define IAF_DASH_TAP        0.25f    /* janela do toque duplo para frente que faz o dash (s) */
+#define IAF_DASH_TIME       0.20f    /* duracao do dash (s) */
+#define IAF_DASH_DIST       180.0f   /* distancia da investida do dash (px) */
+#define IAF_ANTI_SLAM_VY    650.0f   /* ground slam do Antigravity: velocidade minima de mergulho (px/s) */
+#define IAF_BUFFER          0.15f    /* botao apertado antes da hora fica guardado ate o lutador poder agir (s) */
+#define IAF_BUFFER_SPECIAL  0.10f    /* o especial gasta carga: guardado por menos tempo (s) */
+#define IAF_CHAIN_WINDOW    0.15f    /* combo fraco > fraco > forte: janela do cancelamento depois do acerto (s) */
+#define IAF_CHAIN_SCALE2    0.90f    /* dano do 2o golpe do combo */
+#define IAF_CHAIN_SCALE3    0.80f    /* dano do 3o golpe do combo */
+#define IAF_CHAIN_STUN_PAD  0.06f    /* combo pela janela: atordoamento minimo = preparo do golpe seguinte + isto (s) */
+/* reducao de dano em combo longo (contador de acertos seguidos do HUD): do IAF_COMBO_SCALE_FROM-esimo acerto em
+   diante cada golpe tira IAF_COMBO_SCALE_STEP a menos que o anterior, acumulando (4o 85%, 5o 72%, 6o 61%, 7o 52%,
+   8o 44%), sem passar do piso IAF_COMBO_SCALE_MIN (9o em diante 40%). Soma com IAF_CHAIN_SCALE2/3. */
+#define IAF_COMBO_SCALE_FROM 4
+#define IAF_COMBO_SCALE_STEP 0.15f
+#define IAF_COMBO_SCALE_MIN  0.40f
+#define IAF_GRAB_TOGETHER   0.05f    /* fraco e forte com ate este intervalo contam como juntos (agarrao) (s) */
+#define IAF_GRAB_RANGE      30.0f    /* alcance do agarrao alem dos corpos encostados (px) */
+#define IAF_GRAB_HOLD       0.25f    /* segura o oponente; nesse tempo ele escapa com fraco + forte (s) */
+#define IAF_GRAB_RECOVER    0.35f    /* arremesso e volta a guarda (s) */
+#define IAF_GRAB_DMG        80.0f    /* dano do arremesso */
+#define IAF_GRAB_PUSH       520.0f   /* velocidade do arremesso para tras (px/s) */
+#define IAF_GRAB_VY         600.0f   /* velocidade para cima do arremesso (px/s) */
+
 #endif /* CONSTANTES_H */

@@ -1,0 +1,69 @@
+IA FIGHT - AUDIO ORIGINAL (ELIRA)
+=================================
+
+Autoria: audio criado para o projeto ELIRA, gerado por sintese no script
+gerar_audio.py desta pasta. Nenhum som de jogo existente, banco de efeitos ou
+amostra de terceiros foi usado. Pode ser regenerado a qualquer momento e o
+resultado e sempre o mesmo (semente fixa).
+
+COMO FOI GERADO
+- Efeitos e musicas: 100% sintetizados com numpy (osciladores senoidal, dente
+  de serra, quadrada/pulso e triangular; ruido branco; envelopes ADSR e
+  exponenciais; filtros passa-baixa/passa-alta de 1 polo; saturacao (tanh);
+  reducao de bits; filtro em pente para timbre metalico).
+- Musicas: sequenciador proprio no script (bumbo, caixa, chimbal, baixo,
+  arpejos em pulso, pad e lead), com progressoes e melodia compostas no
+  codigo. O loop fecha sem estalo: a cauda que passa do fim e somada ao
+  comeco e o bloqueador de DC roda duas voltas pelo loop.
+- Vozes (voz_*.wav): o texto e falado pela voz pt-BR "Microsoft Maria" que vem
+  com o Windows (System.Speech) e depois robotizado no script (modulacao em
+  anel, filtro em pente, reducao de bits) com um acorde sintetizado por baixo.
+  Observacao para o grupo: a voz base e do sintetizador de fala do Windows; se
+  preferirem 100% sintese propria, troquem por um stinger (so o acorde).
+
+FORMATO
+- 44,1 kHz. Efeitos e vozes: WAV PCM 16 bits mono. Musicas: OGG Vorbis estereo.
+- Tudo normalizado a -1 dBFS, sem clipping e sem desvio DC (conferido).
+- Todos carregam na raylib (LoadSound / LoadMusicStream), conferido 15/15.
+
+ARQUIVOS (duracao)
+  golpe_fraco.wav        0,16 s  soco curto: baque grave + estalo + bip digital
+  golpe_forte.wav        0,36 s  impacto pesado com sub-grave e crunch de bits
+  defesa.wav             0,42 s  escudo: anel metalico + zap subindo
+  tiro.wav               0,32 s  disparo de plasma descendo com vibrato
+  especial_carga.wav     0,58 s  carga subindo com tremolo acelerando
+  especial_disparo.wav   0,56 s  feixe forte descendo + explosao
+  impacto_ko.wav         0,59 s  impacto final com glitch e cauda
+  queda.wav              0,32 s  corpo caindo no chao
+  menu_mover.wav         0,06 s  bip de cursor
+  menu_confirmar.wav     0,27 s  arpejo de confirmacao subindo
+  voz_round.wav          0,76 s  "Round!" robotico
+  voz_lutem.wav          0,86 s  "Lutem!" robotico
+  voz_vitoria.wav        1,04 s  "Vitoria!" robotico
+  musica_selecao.ogg    38,4 s   100 BPM, Am-F-C-G, calma, arpejos de servidor (loop). Trilha antiga do menu;
+                                 hoje so serve de fallback se musica_menu.ogg faltar.
+  musica_menu.ogg       34,3 s   TOCA NO MENU DO IA FIGHT ate a selecao de personagem/arena (loop). 112 BPM,
+                                 Dm-Bb-F-C, estilo tela de selecao de jogo de luta, animada mas nao agressiva:
+                                 bumbo pulsante, caixa com ghost notes e viradas, chimbal em semicolcheias
+                                 acentuadas, baixo ritmico, stabs e arpejos de guitarra/sinte com eco, pad
+                                 suave e lead desde o compasso 3 (contra-melodia a partir do 9). Dinamica
+                                 crescente ao longo do loop, loop circular sem clique, RMS igualado ao de
+                                 musica_luta.ogg. Gerada por sintese (numpy/scipy/soundfile), script fora do repo.
+  musica_luta.ogg       64,0 s   150 BPM, Em-C-D-B, energia alta, lead na parte B (loop)
+  musica_vice2026.ogg   88,0 s   so na arena POSTO VICE 2026 (loop). NAO e composicao do grupo: trecho
+                                 de 0:32 a 2:00 de 'Flower In A Hurricane' (Justice, trilha de GTA VI),
+                                 escolhido pelo Victor para o Tech Night. Direitos dos autores; trocar por
+                                 trilha propria antes de distribuir. A original do grupo (gerar_vice2026.py,
+                                 fora do repo) segue no historico do git (commit 7aef85c).
+
+COMO REGERAR
+  python -m pip install numpy soundfile
+  python gerar_audio.py            (grava nesta pasta)
+  python gerar_audio.py <pasta>    (grava em outra pasta)
+Requer Windows para as vozes (PowerShell + System.Speech).
+
+USO SUGERIDO NA RAYLIB
+  InitAudioDevice();  Sound s = LoadSound("golpe_fraco.wav");  PlaySound(s);
+  Music m = LoadMusicStream("musica_luta.ogg");  m.looping = true;
+  PlayMusicStream(m);  /* e UpdateMusicStream(m) a cada quadro */
+  Dica: SetSoundPitch(s, 0.95f..1.05f) aleatorio evita repeticao cansativa.

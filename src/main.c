@@ -3,6 +3,7 @@
 #include <string.h>
 #include "funcoes.h"
 #include "invasao.h"
+#include "iafight.h"
 
 static bool TryUseAssetBase(const char *baseDirectory)
 {
@@ -48,6 +49,8 @@ static bool ValidateRequiredAssets(void)
         "assets/sprites/cd.png",
         "assets/sprites/ssd.png",
         "assets/sprites/elira_portrait.png",
+        "assets/sprites/menu/capa_elira.png",
+        "assets/sprites/menu/capa_logo.png",
         "assets/som/ambient.wav",
         "assets/sprites/invasao/elira_sheet.png",
         "assets/sprites/invasao/elira_fx.png",
@@ -56,7 +59,17 @@ static bool ValidateRequiredAssets(void)
         "assets/sprites/invasao/boss_1990.png",
         "assets/sprites/invasao/boss_2008.png",
         "assets/sprites/invasao/boss_2026.png",
-        "assets/sprites/invasao/boss_2048.png"
+        "assets/sprites/invasao/boss_2048.png",
+        IAF_ELIRA_ATLAS,
+        IAF_ELIRA_ATLAS_V2,
+        IAF_CLAUDE_ATLAS,
+        IAF_CODEX_ATLAS,
+        IAF_ANTI_ATLAS,
+        "assets/sprites/iafight/arena_vice2026.png",
+        IAF_AUDIO_DIR "musica_menu.ogg",
+        IAF_AUDIO_DIR "musica_vice2026.ogg",
+        "assets/sprites/iafight/arena_cesar.png",
+        "assets/sprites/iafight/arena_cesar_tiradentes.png"
     };
     bool valid = true;
 
@@ -95,6 +108,7 @@ int main(int argc, char **argv)
 
     LoadEliraPortrait();
     LoadRewardSprites();
+    LoadMenuCover();
 
     EnsureAmbientMusicFile();
 
@@ -128,7 +142,7 @@ int main(int argc, char **argv)
 
         if (bgmLoaded)
         {
-            SetMusicVolume(ambientBgm, (game.musicMuted || game.screen == SCREEN_INVASION) ? 0.0f : g_musicVolume);
+            SetMusicVolume(ambientBgm, (game.musicMuted || game.screen == SCREEN_INVASION || game.screen == SCREEN_IAFIGHT) ? 0.0f : g_musicVolume);
             UpdateMusicStream(ambientBgm);
         }
 
@@ -151,7 +165,7 @@ int main(int argc, char **argv)
             game.musicMuted = !game.musicMuted;
             if (bgmLoaded)
             {
-                SetMusicVolume(ambientBgm, (game.musicMuted || game.screen == SCREEN_INVASION) ? 0.0f : g_musicVolume);
+                SetMusicVolume(ambientBgm, (game.musicMuted || game.screen == SCREEN_INVASION || game.screen == SCREEN_IAFIGHT) ? 0.0f : g_musicVolume);
             }
             SetMessage(&game, game.musicMuted ? "Musica ambiente desativada [Mudo]."
                                               : "Musica ambiente ativada.");
@@ -162,16 +176,19 @@ int main(int argc, char **argv)
         if (!phaseControlsCapturedInput) switch (game.screen)
         {
             case SCREEN_TITLE:
-                if (Clicked((Rectangle){86, 326, 350, 54}) ||
-                    IsKeyPressed(KEY_ENTER) || IsKeyPressed(KEY_SPACE))
+                if (Clicked((Rectangle){86, 326, 350, 54}))
                 {
                     game.screen = SCREEN_PLAYER_NAME;
                 }
-                else if (Clicked((Rectangle){86, 392, 350, 54}) || IsKeyPressed(KEY_I))
+                else if (Clicked((Rectangle){86, 392, 350, 54}))
                 {
                     InvEnter(&game);
                 }
-                else if (Clicked((Rectangle){86, 458, 350, 50}) || IsKeyPressed(KEY_C))
+                else if (Clicked((Rectangle){86, 458, 350, 54}))
+                {
+                    IafEnter(&game);
+                }
+                else if (Clicked((Rectangle){86, 524, 350, 50}))
                 {
                     game.screen = SCREEN_SETTINGS;
                 }
@@ -322,6 +339,9 @@ int main(int argc, char **argv)
             case SCREEN_INVASION:
                 InvUpdate(&game, delta);
                 break;
+            case SCREEN_IAFIGHT:
+                IafUpdate(&game, delta);
+                break;
             case SCREEN_FINAL_DIALOGUE:
                 UpdateFinalDialogue(&game);
                 break;
@@ -411,6 +431,9 @@ int main(int argc, char **argv)
             case SCREEN_INVASION:
                 InvDraw();
                 break;
+            case SCREEN_IAFIGHT:
+                IafDraw();
+                break;
             case SCREEN_FINAL_DIALOGUE:
                 DrawFinalDialogue(&game);
                 break;
@@ -449,7 +472,9 @@ int main(int argc, char **argv)
         UnloadTexture(g_eliraPortrait);
     }
     UnloadRewardSprites();
+    UnloadMenuCover();
     InvUnload();
+    IafUnload();
     if (bgmLoaded)
     {
         UnloadMusicStream(ambientBgm);

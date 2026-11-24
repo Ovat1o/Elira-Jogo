@@ -218,95 +218,95 @@ typedef struct
 } InvTrackDef;
 
 static const InvTrackDef INV_TRACKS[INV_BGM_STAGES] = {
-    /* Stage 0: 1990 - Retro Arcade Chiptune (135 BPM, D minor: Dm -> Bb -> C -> A) */
+    /* Stage 0: 1990 - Dark Mainframe Industrial (106 BPM, D Phrygian / D minor sombrio: Dm -> Eb -> Bb -> A7) */
     {
-        135.0f, 0.25f, 0.20f, 1.35f,
-        {{62, 65, 69}, {58, 62, 65}, {60, 64, 67}, {57, 61, 64}},
+        106.0f, 0.35f, 0.65f, 2.20f,
+        {{50, 57, 51}, {51, 58, 55}, {46, 53, 50}, {45, 52, 49}},
         {
-            {38, 38, 50, 38, 41, 38, 45, 43},
-            {34, 34, 46, 34, 38, 34, 41, 43},
-            {36, 36, 48, 36, 40, 36, 43, 45},
-            {33, 33, 45, 33, 37, 33, 40, 43}
+            {38, 38, 38, 39, 38, 38, 45, 39},
+            {39, 39, 39, 38, 39, 39, 43, 38},
+            {34, 34, 34, 38, 34, 34, 41, 38},
+            {33, 33, 33, 37, 38, 37, 34, 33}
         },
         {
-            74,  0, 74, 77, 81,  0, 79, 77, 76, 74, 72, 74, 77,  0, 74,  0,
-            70,  0, 70, 74, 77,  0, 76, 74, 72, 70, 69, 70, 74,  0, 70,  0,
-            72,  0, 72, 76, 79,  0, 81, 79, 77, 76, 74, 72, 76,  0, 79,  0,
-            81, 79, 77, 76, 74, 76, 77, 79, 81,  0, 85,  0, 81, 79, 76, 73
+            62, 62, 62,  0, 63, 62,  0, 57, 58, 58, 57,  0, 56, 57,  0,  0,
+            63, 63, 62,  0, 58, 58, 57,  0, 55, 55, 57, 58, 57, 57,  0,  0,
+            58, 58, 58,  0, 62, 63,  0, 62, 58, 58, 57,  0, 55, 55,  0,  0,
+            57, 57, 61, 61, 62, 63, 61,  0, 58, 57, 55, 57, 57, 57,  0,  0
         },
-        {5, 4, 12, 4, 6, 4, 12, 5, 5, 4, 12, 4, 6, 5, 12, 6}
+        {1, 0, 4, 0, 2, 0, 5, 0, 1, 0, 4, 1, 2, 0, 8, 4}
     },
-    /* Stage 1: 2008 - Cyber-Alert Surveillance (142 BPM, E minor: Em -> C -> D -> B) */
+    /* Stage 1: 2008 - Cyber-Noir Stealth Groove (102 BPM, G Dorian: Gm -> Bb -> C -> Dm) */
     {
-        142.0f, 0.35f, 0.35f, 1.50f,
-        {{64, 67, 71}, {60, 64, 67}, {62, 66, 69}, {59, 63, 66}},
+        102.0f, 0.50f, 0.25f, 1.95f,
+        {{55, 58, 62}, {58, 62, 65}, {60, 64, 67}, {50, 57, 62}},
         {
-            {40, 52, 40, 52, 43, 40, 47, 45},
-            {36, 48, 36, 48, 40, 36, 43, 45},
-            {38, 50, 38, 50, 42, 38, 45, 47},
-            {35, 47, 35, 47, 39, 35, 42, 47}
+            {43,  0, 43, 46,  0, 48, 50, 46},
+            {46,  0, 46, 50,  0, 48, 46, 43},
+            {48,  0, 48, 52,  0, 50, 48, 46},
+            {50,  0, 50, 48,  0, 46, 45, 43}
         },
         {
-            76, 76, 79, 76, 83,  0, 81, 79, 78, 79, 81, 79, 76,  0, 71, 74,
-            72, 72, 76, 72, 79,  0, 78, 76, 74, 76, 79, 76, 74,  0, 71, 72,
-            74, 74, 78, 74, 81,  0, 79, 78, 76, 78, 81, 83, 81,  0, 78, 74,
-            71, 75, 78, 83, 82, 78, 75, 71, 75, 78, 83, 86, 83, 82, 78, 75
+             0,  0, 62, 62, 62, 62, 65, 65, 67, 67, 62, 62,  0,  0,  0,  0,
+             0,  0, 65, 65, 65, 65, 67, 67, 64, 64, 62, 62, 58, 58,  0,  0,
+             0,  0, 64, 64, 67, 67, 69, 69, 67, 67, 64, 64, 60, 60,  0,  0,
+            62, 62,  0, 65, 65,  0, 64, 64, 62, 62, 58, 58, 55, 55,  0,  0
         },
-        {5, 4, 9, 4, 6, 4, 12, 5, 5, 5, 12, 4, 6, 4, 13, 6}
+        {1, 0, 4, 0, 2, 0, 4, 1, 0, 1, 4, 0, 2, 0, 8, 0}
     },
-    /* Stage 2: 2026 - Neon Synthwave Algorithm (150 BPM, F# minor: F#m -> D -> A -> E) */
+    /* Stage 2: 2026 - Neon Synthwave Outrun (108 BPM, A Aeolian: Am -> F -> C -> G) */
     {
-        150.0f, 0.50f, 0.55f, 1.60f,
-        {{66, 69, 73}, {62, 66, 69}, {57, 61, 64}, {64, 68, 71}},
+        108.0f, 0.45f, 0.85f, 1.85f,
+        {{57, 60, 64}, {53, 57, 60}, {48, 55, 60}, {55, 59, 62}},
         {
-            {42, 42, 54, 42, 42, 54, 45, 49},
-            {38, 38, 50, 38, 38, 50, 42, 45},
-            {33, 33, 45, 33, 33, 45, 37, 40},
-            {40, 40, 52, 40, 40, 52, 44, 47}
+            {33, 33, 45, 45, 33, 33, 40, 40},
+            {29, 29, 41, 41, 29, 29, 36, 36},
+            {36, 36, 48, 48, 36, 36, 43, 43},
+            {31, 31, 43, 43, 31, 31, 38, 38}
         },
         {
-            78,  0, 81, 78, 85,  0, 83, 81, 80, 81, 85, 81, 78,  0, 73, 76,
-            74,  0, 78, 74, 81,  0, 80, 78, 76, 78, 81, 78, 76,  0, 73, 74,
-            69,  0, 73, 76, 81,  0, 80, 76, 73, 76, 80, 81, 85,  0, 81, 76,
-            76, 80, 83, 88, 86, 83, 80, 76, 80, 83, 86, 88, 85, 83, 80, 76
+            64, 64, 64, 64, 64, 64, 60, 60, 57, 57, 57, 57,  0,  0,  0,  0,
+            65, 65, 65, 65, 64, 64, 60, 60, 62, 62, 62, 62,  0,  0,  0,  0,
+            67, 67, 67, 67, 64, 64, 60, 60, 64, 64, 64, 64,  0,  0,  0,  0,
+            62, 62, 64, 64, 65, 65, 64, 64, 62, 62, 59, 59, 57, 57,  0,  0
         },
-        {5, 4, 12, 5, 6, 4, 13, 4, 5, 4, 12, 5, 6, 5, 12, 14}
+        {1, 0, 4, 0, 2, 0, 4, 0, 1, 0, 4, 0, 2, 0, 8, 0}
     },
-    /* Stage 3: 2048 - Glitch Oracle Hallucination (158 BPM, G harmonic minor: Gm -> Eb -> Cm -> D) */
+    /* Stage 3: 2048 - Mystical Digital Temple (100 BPM, E Minor Misterioso: Em -> Cmaj7 -> Am -> B7) */
     {
-        158.0f, 0.18f, 0.45f, 1.70f,
-        {{67, 70, 74}, {63, 67, 70}, {60, 63, 67}, {62, 66, 69}},
+        100.0f, 0.30f, 0.35f, 1.75f,
+        {{52, 59, 64}, {48, 55, 59}, {45, 52, 57}, {47, 54, 59}},
         {
-            {43, 55, 43, 46, 50, 43, 55, 50},
-            {39, 51, 39, 43, 46, 39, 51, 46},
-            {36, 48, 36, 39, 43, 36, 48, 43},
-            {38, 50, 38, 42, 45, 50, 45, 42}
+            {40, 40, 40, 40,  0, 47, 47,  0},
+            {36, 36, 36, 36,  0, 43, 43,  0},
+            {33, 33, 33, 33,  0, 40, 40,  0},
+            {35, 35, 35, 35,  0, 42, 42,  0}
         },
         {
-            79, 82, 86, 79, 87, 86, 82, 79, 78, 79, 82, 86, 84, 82, 79, 74,
-            75, 79, 82, 75, 87, 86, 82, 79, 75, 79, 82, 86, 84, 82, 79, 75,
-            72, 75, 79, 84, 82, 79, 75, 72, 75, 79, 84, 87, 86, 84, 79, 75,
-            74, 78, 81, 86, 84, 81, 78, 74, 78, 81, 86, 90, 87, 86, 82, 78
+            67, 67,  0, 64, 64,  0, 59, 59, 60, 60, 60, 60,  0,  0,  0,  0,
+            66, 66,  0, 64, 64,  0, 59, 59, 57, 57, 57, 57,  0,  0,  0,  0,
+            64, 64,  0, 60, 60,  0, 57, 57, 59, 59, 59, 59,  0,  0,  0,  0,
+            63, 63,  0, 59, 59,  0, 64, 64, 59, 59, 55, 55, 52, 52,  0,  0
         },
-        {5, 5, 12, 4, 6, 5, 12, 6, 5, 4, 13, 5, 6, 6, 12, 14}
+        {1, 0, 0, 4, 0, 0, 2, 0, 1, 0, 4, 0, 2, 0, 0, 8}
     },
-    /* Stage 4: NUCLEO - A.R.1.3.L. Final Boss (168 BPM, C minor Intense: Cm -> Ab -> Fm -> G) */
+    /* Stage 4: NUCLEO - A.R.1.3.L. Heavy Industrial March (108 BPM, C Minor / Tritono: Cm -> Eb -> Fm -> G7) */
     {
-        168.0f, 0.40f, 0.65f, 1.85f,
-        {{60, 63, 67}, {56, 60, 63}, {53, 56, 60}, {55, 59, 62}},
+        108.0f, 0.45f, 0.80f, 2.35f,
+        {{48, 55, 60}, {51, 58, 63}, {41, 48, 53}, {43, 50, 55}},
         {
-            {36, 48, 36, 48, 39, 48, 43, 48},
-            {32, 44, 32, 44, 36, 44, 39, 44},
-            {29, 41, 29, 41, 32, 41, 36, 41},
-            {31, 43, 31, 43, 35, 43, 38, 47}
+            {36,  0, 36,  0, 43,  0, 42, 41},
+            {39,  0, 39,  0, 46,  0, 43, 39},
+            {41,  0, 41,  0, 44,  0, 41, 38},
+            {43,  0, 43,  0, 42,  0, 41, 38}
         },
         {
-            72, 75, 79, 84, 83, 84, 87, 84, 79, 75, 72, 75, 79, 84, 83, 79,
-            68, 72, 75, 80, 79, 80, 84, 80, 75, 72, 68, 72, 75, 80, 79, 75,
-            65, 68, 72, 77, 75, 77, 80, 77, 72, 68, 65, 68, 72, 77, 80, 84,
-            79, 83, 86, 91, 89, 86, 83, 79, 83, 86, 91, 95, 91, 86, 83, 79
+            60, 60,  0, 63, 63,  0, 67, 67, 66, 66, 66, 65, 63, 63,  0,  0,
+            63, 63,  0, 67, 67,  0, 65, 65, 63, 63, 62, 60, 58, 58,  0,  0,
+            56, 56,  0, 60, 60,  0, 65, 65, 63, 63, 62, 60, 56, 56,  0,  0,
+            55, 55,  0, 59, 59,  0, 62, 62, 63, 62, 59, 55, 60, 60,  0,  0
         },
-        {5, 5, 13, 5, 6, 5, 13, 5, 5, 5, 13, 5, 6, 6, 15, 14}
+        {1, 0, 4, 0, 3, 0, 4, 0, 1, 0, 1, 0, 3, 0, 8, 0}
     }
 };
 
@@ -330,10 +330,11 @@ static void EnsureStageBgm(int st)
     short *pcm = (short *)malloc(frameCount * 2 * sizeof(short));
     if (!pcm) return;
 
-    float leadPhase = 0.0f, leadPhase2 = 0.0f;
-    float arpPhase = 0.0f;
-    float bassPhase = 0.0f, bassSubPhase = 0.0f;
-    float kickPhase = 0.0f;
+    float leadPhase = 0.0f, leadPhase2 = 0.0f, leadModPhase = 0.0f, leadSubPhase = 0.0f;
+    float ostPhase1 = 0.0f, ostPhase2 = 0.0f, dronePhase = 0.0f;
+    float bassPhase1 = 0.0f, bassPhase2 = 0.0f, bassSubPhase = 0.0f;
+    float kickPhase = 0.0f, snarePhase = 0.0f;
+    float lpBass = 0.0f, lpLead = 0.0f, lpOst = 0.0f, lpNoise = 0.0f;
     unsigned int lfsr = 0xBEE5u + (unsigned int)(st * 1337);
     const float kTwoPi = 6.28318530f;
 
@@ -355,124 +356,297 @@ static void EnsureStageBgm(int st)
         int stepInBar = (int)(step % 16);
         unsigned char drm = tr->drum[stepInBar];
 
-        /* Ruido branco deterministico (LFSR) para caixa e chimbal */
+        /* Ruido branco deterministico (LFSR) + filtro escuro para percussao industrial */
         lfsr = (lfsr >> 1) ^ (-(lfsr & 1u) & 0xB400u);
         float noise = ((float)(lfsr & 0xFFFFu) / 32768.0f) - 1.0f;
+        lpNoise += 0.35f * (noise - lpNoise);
 
-        /* 1. Bateria Chiptune / Arcade (Kick + Snare + Hi-Hat) */
+        /* 1. Bateria Industrial Pesada (Kick grave com punch, Snare industrial encorpada, Hat dark) */
         float drumSig = 0.0f;
         float sidechain = 1.0f;
-        if (drm & 1) /* Kick (bumbo punchy com pitch drop rapido) */
+        if (drm & 1) /* Heavy Cyber Kick */
         {
-            float kEnv = expf(-stT * 24.0f);
-            float kFreq = 46.0f + 135.0f * expf(-stT * 52.0f);
+            if (inStep == 0) kickPhase = 0.0f;
+            float kEnv = expf(-stT * 16.0f);
+            float kFreq = 42.0f + 115.0f * expf(-stT * 46.0f);
             kickPhase += kTwoPi * kFreq / (float)sampleRate;
-            float click = expf(-stT * 180.0f) * noise * 0.25f;
-            drumSig += (sinf(kickPhase) * 0.95f + click) * kEnv * 0.52f;
-            sidechain = 1.0f - 0.55f * expf(-stT * 18.0f);
+            float subBody = sinf(kickPhase);
+            float punch = sinf(kickPhase * 1.5f) * expf(-stT * 55.0f) * 0.35f;
+            float click = expf(-stT * 190.0f) * lpNoise * 0.22f;
+            float rawKick = (subBody + punch + click) * 1.35f;
+            float kx2 = rawKick * rawKick;
+            float kSat = rawKick * (27.0f + kx2) / (27.0f + 9.0f * kx2);
+            drumSig += kSat * kEnv * 0.54f;
+            sidechain = 1.0f - 0.62f * expf(-stT * 16.0f);
         }
-        if (drm & 2) /* Snare (caixa arcade: corpo tonal + explosao de ruido) */
+        if (drm & 2) /* Industrial gated Snare (grave e encorpada, sem chiado fino) */
         {
-            float sEnv = expf(-stT * 22.0f);
-            float sBody = sinf(kTwoPi * (185.0f - 60.0f * stU) * stT) * expf(-stT * 38.0f);
-            drumSig += (noise * 0.78f * sEnv + sBody * 0.42f) * 0.38f;
+            if (inStep == 0) snarePhase = 0.0f;
+            float sEnv = expf(-stT * 19.0f);
+            float sFreq = 135.0f + 85.0f * expf(-stT * 45.0f);
+            snarePhase += kTwoPi * sFreq / (float)sampleRate;
+            float sBody = sinf(snarePhase) * expf(-stT * 26.0f);
+            float sNoise = lpNoise * sEnv * 0.75f;
+            float rawSnare = (sBody * 0.65f + sNoise * 0.70f) * 1.4f;
+            float sx2 = rawSnare * rawSnare;
+            float sSat = rawSnare * (27.0f + sx2) / (27.0f + 9.0f * sx2);
+            drumSig += sSat * 0.38f;
         }
-        if (drm & 8) /* Open Hi-Hat */
+        if (drm & 8) /* Open Hat escuro */
         {
             float hEnv = expf(-stT * 16.0f);
-            float metallic = (noise - 0.5f * sinf(kTwoPi * 6200.0f * stT));
-            drumSig += metallic * hEnv * 0.14f;
+            drumSig += (noise - lpNoise * 0.55f) * hEnv * 0.09f;
         }
-        else if (drm & 4) /* Closed Hi-Hat */
+        else if (drm & 4) /* Closed Hat industrial */
         {
-            float hEnv = expf(-stT * 58.0f);
-            drumSig += noise * hEnv * 0.11f;
+            float hEnv = expf(-stT * 54.0f);
+            drumSig += (noise - lpNoise * 0.60f) * hEnv * 0.07f;
         }
 
-        /* 2. Baixo Synthwave / Chiptune (8 colcheias por compasso) */
+        /* 2. Baixo (Stage 0 = Darksynth Rolling Bass; Stages 1..4 = articulacao personalizada por estilo) */
         float bassSig = 0.0f;
         int bassStep = stepInBar / 2;
         int bassMidi = tr->bass[bar][bassStep];
         if (bassMidi > 0)
         {
-            unsigned int inEighth = i % (stepSamples * 2);
-            float bT = (float)inEighth / (float)sampleRate;
-            float bU = (float)inEighth / (float)(stepSamples * 2);
+            float bT = stT;
+            float bU = stU;
+            if (st == 2 || st == 3)
+            {
+                /* Stages 2 e 3: sustenta a colcheia inteira para soar mais amplo e diferente do pulso 1/16 do Stage 0 */
+                unsigned int inEighth = i % (stepSamples * 2);
+                bT = (float)inEighth / (float)sampleRate;
+                bU = (float)inEighth / (float)(stepSamples * 2);
+            }
             float bFreq = InvNoteFreq(bassMidi);
-            bassPhase += kTwoPi * bFreq / (float)sampleRate;
+            bassPhase1 += kTwoPi * (bFreq * 0.996f) / (float)sampleRate;
+            bassPhase2 += kTwoPi * (bFreq * 1.004f) / (float)sampleRate;
             bassSubPhase += kTwoPi * (bFreq * 0.5f) / (float)sampleRate;
-            if (bassPhase > kTwoPi) bassPhase -= kTwoPi;
+            if (bassPhase1 > kTwoPi) bassPhase1 -= kTwoPi;
+            if (bassPhase2 > kTwoPi) bassPhase2 -= kTwoPi;
             if (bassSubPhase > kTwoPi) bassSubPhase -= kTwoPi;
 
-            float saw = (bassPhase / 3.14159265f) - 1.0f;
-            float sq = (bassPhase < 3.14159265f) ? 1.0f : -1.0f;
+            float saw1 = (bassPhase1 / 3.14159265f) - 1.0f;
+            float saw2 = (bassPhase2 / 3.14159265f) - 1.0f;
+            float sq = (bassPhase1 < 3.14159265f) ? 1.0f : -1.0f;
             float sub = sinf(bassSubPhase);
-            float bEnv = (bT < 0.003f ? (bT / 0.003f) : 1.0f) * expf(-bU * 2.2f);
-            float rawBass = (saw * 0.50f + sq * 0.30f + sub * 0.45f) * tr->bassDrive;
-            /* Soft clip com aproximacao racional de tanh */
-            float x2 = rawBass * rawBass;
-            float sat = rawBass * (27.0f + x2) / (27.0f + 9.0f * x2);
-            bassSig = sat * bEnv * sidechain * 0.34f;
+
+            float fCut = 0.09f + 0.38f * expf(-bU * 4.5f);
+            if (st == 1) fCut = 0.14f + 0.42f * expf(-bU * 7.0f); /* Funk/Stealth slap mais seco */
+            else if (st == 3) fCut = 0.05f + 0.12f * expf(-bU * 2.5f); /* Sub-grave profundo no Templo 2048 */
+
+            float rawOsc = (saw1 * 0.42f + saw2 * 0.42f + sq * 0.26f) * tr->bassDrive;
+            lpBass += fCut * (rawOsc - lpBass);
+
+            float x2 = lpBass * lpBass;
+            float sat = lpBass * (27.0f + x2) / (27.0f + 9.0f * x2);
+            float bAtt = (bT < 0.004f) ? (bT / 0.004f) : 1.0f;
+            float bEnv = bAtt * (0.28f + 0.72f * expf(-bU * 2.4f));
+            bassSig = (sat * 0.72f + sub * 0.45f) * bEnv * sidechain * 0.40f;
+        }
+        else
+        {
+            lpBass *= 0.88f;
         }
 
-        /* 3. Arpejo Chiptune Ultra-Rapido (cicla pelas notas do acorde em 60Hz/step) */
-        int arpSub = (int)((stU * 3.0f)) % 3;
-        int chordNote = tr->chords[bar][arpSub] + ((stepInBar & 1) ? 12 : 0);
-        float arpFreq = InvNoteFreq(chordNote);
-        arpPhase += kTwoPi * arpFreq / (float)sampleRate;
-        if (arpPhase > kTwoPi) arpPhase -= kTwoPi;
-        float arpSq = (arpPhase < kTwoPi * 0.25f) ? 1.0f : -1.0f;
-        float arpEnv = expf(-stU * 1.6f) * sidechain;
-        float arpSig = arpSq * arpEnv * 0.11f;
+        /* 3. Canal Harmonico (Stage 0 = Ostinato Sombrio; Stages 1..4 = texturas distintas por fase) */
+        int ostPattern[4] = {0, 1, 2, 1};
+        int ostIdx = (st == 1) ? ((stepInBar / 2) % 3) : (st == 3) ? (stepInBar % 3) : ostPattern[stepInBar & 3];
+        int ostNote = tr->chords[bar][ostIdx];
+        float ostFreq = InvNoteFreq(ostNote);
+        float droneFreq = InvNoteFreq(tr->chords[bar][0] - 12);
+        ostPhase1 += kTwoPi * (ostFreq * 0.997f) / (float)sampleRate;
+        ostPhase2 += kTwoPi * (ostFreq * 1.003f) / (float)sampleRate;
+        dronePhase += kTwoPi * droneFreq / (float)sampleRate;
+        if (ostPhase1 > kTwoPi) ostPhase1 -= kTwoPi;
+        if (ostPhase2 > kTwoPi) ostPhase2 -= kTwoPi;
+        if (dronePhase > kTwoPi) dronePhase -= kTwoPi;
 
-        /* 4. Melodia Principal (Lead Pulso + Supersaw com vibrato) */
+        float arpSig = 0.0f;
+        if (st == 0)
+        {
+            /* Stage 0 (1990) 100% intocado */
+            float ostSaw = ((ostPhase1 / 3.14159265f) - 1.0f) * 0.5f + ((ostPhase2 / 3.14159265f) - 1.0f) * 0.5f;
+            float ostCut = 0.07f + 0.14f * expf(-stU * 3.2f);
+            lpOst += ostCut * (ostSaw - lpOst);
+            float ostEnv = ((stT < 0.006f) ? (stT / 0.006f) : 1.0f) * expf(-stU * 1.6f);
+            float droneSig = sinf(dronePhase) * 0.07f * sidechain;
+            arpSig = (lpOst * ostEnv * 0.17f + droneSig) * sidechain;
+        }
+        else if (st == 1)
+        {
+            /* Stage 1 (2008): Stabs offbeat cyber-noir nos contratempos (steps 2, 6, 10, 14) */
+            bool isOffbeat = ((stepInBar & 3) == 2);
+            float stabWave = sinf(ostPhase1) * 0.6f + ((ostPhase2 < 3.14159265f) ? 0.4f : -0.4f);
+            lpOst += 0.22f * (stabWave - lpOst);
+            float stabEnv = isOffbeat ? expf(-stU * 3.8f) : 0.0f;
+            arpSig = (lpOst * stabEnv * 0.18f + sinf(dronePhase) * 0.05f) * sidechain;
+        }
+        else if (st == 2)
+        {
+            /* Stage 2 (2026): Pad Chorus Synthwave suave sustentado */
+            float barU = (float)(i % (stepSamples * 16)) / (float)(stepSamples * 16);
+            float padSwell = 0.45f + 0.55f * sinf(barU * 3.14159265f);
+            float padWave = sinf(ostPhase1) * 0.5f + sinf(ostPhase2) * 0.5f;
+            lpOst += 0.15f * (padWave - lpOst);
+            arpSig = (lpOst * padSwell * 0.15f + sinf(dronePhase) * 0.06f) * sidechain;
+        }
+        else if (st == 3)
+        {
+            /* Stage 3 (2048): Harpa / Sino cristalino espacado (toca apenas nos steps pares) */
+            bool isEven = ((stepInBar & 1) == 0);
+            float bellHarm = sinf(ostPhase1 + 0.6f * sinf(ostPhase2 * 3.0f));
+            float bellEnv = isEven ? expf(-stU * 2.8f) : expf(-(stU + 1.0f) * 2.8f);
+            arpSig = (bellHarm * bellEnv * 0.13f + sinf(dronePhase) * 0.06f) * sidechain;
+        }
+        else
+        {
+            /* Stage 4 (Nucleo): Power-Chord Industrial pesado nos tempos fortes (0, 4, 8, 12) */
+            float beatU = (float)(i % (stepSamples * 4)) / (float)(stepSamples * 4);
+            float ostSaw = ((ostPhase1 / 3.14159265f) - 1.0f) * 0.5f + ((ostPhase2 / 3.14159265f) - 1.0f) * 0.5f;
+            lpOst += 0.18f * (ostSaw - lpOst);
+            float marchEnv = expf(-beatU * 2.4f);
+            arpSig = (lpOst * marchEnv * 0.18f + sinf(dronePhase) * 0.08f) * sidechain;
+        }
+
+        /* 4. Lead Principal (Stage 0 intocado; Stages 1..4 com timbres exclusivos por fase) */
         float leadSig = 0.0f;
         int melMidi = tr->melody[step];
         if (melMidi > 0)
         {
-            /* Se a proxima nota for igual, sustenta (legato); senao articula */
-            bool tiedPrev = (step > 0 && tr->melody[step - 1] == melMidi);
-            bool tiedNext = (step + 1 < (unsigned int)totalSteps && tr->melody[step + 1] == melMidi);
-            float vib = 1.0f + 0.0055f * sinf(stT * 38.0f);
+            unsigned int noteStartStep = step;
+            while (noteStartStep > 0 && tr->melody[noteStartStep - 1] == melMidi) noteStartStep--;
+            unsigned int noteEndStep = step;
+            while (noteEndStep + 1 < (unsigned int)totalSteps && tr->melody[noteEndStep + 1] == melMidi) noteEndStep++;
+            unsigned int noteSamples = (noteEndStep - noteStartStep + 1) * stepSamples;
+            unsigned int inNote = (step - noteStartStep) * stepSamples + inStep;
+            float noteT = (float)inNote / (float)sampleRate;
+            float noteU = (float)inNote / (float)noteSamples;
+
+            float vibDepth = (noteT > 0.08f) ? 0.0045f : (noteT / 0.08f) * 0.0045f;
+            float vib = 1.0f + vibDepth * sinf(noteT * 28.0f);
             float lFreq = InvNoteFreq(melMidi) * vib;
 
-            leadPhase += kTwoPi * lFreq / (float)sampleRate;
-            leadPhase2 += kTwoPi * (lFreq * 1.006f) / (float)sampleRate;
+            float modRatio = (st == 3) ? 3.0f : 2.0f;
+            leadPhase += kTwoPi * (lFreq * 0.996f) / (float)sampleRate;
+            leadPhase2 += kTwoPi * (lFreq * 1.005f) / (float)sampleRate;
+            leadModPhase += kTwoPi * (lFreq * modRatio) / (float)sampleRate;
+            leadSubPhase += kTwoPi * (lFreq * 0.5f) / (float)sampleRate;
             if (leadPhase > kTwoPi) leadPhase -= kTwoPi;
             if (leadPhase2 > kTwoPi) leadPhase2 -= kTwoPi;
+            if (leadModPhase > kTwoPi) leadModPhase -= kTwoPi;
+            if (leadSubPhase > kTwoPi) leadSubPhase -= kTwoPi;
 
-            float pulse = (leadPhase < kTwoPi * tr->pulseDuty) ? 1.0f : -1.0f;
-            float saw2 = (leadPhase2 / 3.14159265f) - 1.0f;
-            float att = (!tiedPrev && stT < 0.003f) ? (stT / 0.003f) : 1.0f;
-            float rel = (!tiedNext && stU > 0.85f) ? ((1.0f - stU) / 0.15f) : 1.0f;
-            float dec = tiedNext ? 0.92f : expf(-stU * 1.25f);
-            leadSig = ((1.0f - tr->sawMix) * pulse + tr->sawMix * saw2) * att * dec * rel * 0.24f;
+            if (st == 0)
+            {
+                /* Stage 0: FM dark brass + Dual detuned saw (100% intocado) */
+                float fmIndex = 0.85f + 1.15f * expf(-noteT * 10.0f);
+                float fmWave = sinf(leadPhase + fmIndex * sinf(leadModPhase));
+                float sawA = (leadPhase / 3.14159265f) - 1.0f;
+                float sawB = (leadPhase2 / 3.14159265f) - 1.0f;
+                float pulse = (leadPhase < kTwoPi * tr->pulseDuty) ? 1.0f : -1.0f;
+
+                float rawLead = (fmWave * 0.45f + (sawA + sawB) * 0.28f * tr->sawMix + pulse * 0.18f) * 1.55f;
+                float leadCut = 0.14f + 0.34f * expf(-noteT * 8.5f);
+                lpLead += leadCut * (rawLead - lpLead);
+
+                float lx2 = lpLead * lpLead;
+                float lSat = lpLead * (27.0f + lx2) / (27.0f + 9.0f * lx2);
+
+                float att = (noteT < 0.008f) ? (noteT / 0.008f) : 1.0f;
+                float rel = (noteU > 0.86f) ? ((1.0f - noteU) / 0.14f) : 1.0f;
+                float dec = 0.45f + 0.55f * expf(-noteU * 1.1f);
+                leadSig = lSat * att * dec * rel * 0.25f;
+            }
+            else if (st == 1)
+            {
+                /* Stage 1 (2008): Hollow Square Clavinet / Pluck (onda quadrada 50% oca e percussiva) */
+                float sq1 = (leadPhase < 3.14159265f) ? 1.0f : -1.0f;
+                float sq2 = (leadPhase2 < 3.14159265f * 0.5f) ? 1.0f : -1.0f;
+                float rawLead = (sq1 * 0.72f + sq2 * 0.28f) * 1.40f;
+                float leadCut = 0.12f + 0.45f * expf(-noteT * 14.0f);
+                lpLead += leadCut * (rawLead - lpLead);
+
+                float att = (noteT < 0.004f) ? (noteT / 0.004f) : 1.0f;
+                float dec = 0.25f + 0.75f * expf(-noteT * 4.2f);
+                float rel = (noteU > 0.85f) ? ((1.0f - noteU) / 0.15f) : 1.0f;
+                leadSig = lpLead * att * dec * rel * 0.24f;
+            }
+            else if (st == 2)
+            {
+                /* Stage 2 (2026): Warm Analog Brass / Chorus Saw (ataque macio de 25ms, saw dupla aveludada sem FM) */
+                float sawA = (leadPhase / 3.14159265f) - 1.0f;
+                float sawB = (leadPhase2 / 3.14159265f) - 1.0f;
+                float tri = 1.0f - 4.0f * fabsf((leadPhase / kTwoPi) - 0.5f);
+                float rawLead = ((sawA + sawB) * 0.42f + tri * 0.35f) * 1.45f;
+                float leadCut = 0.18f + 0.18f * (1.0f - expf(-noteT * 12.0f));
+                lpLead += leadCut * (rawLead - lpLead);
+
+                float att = (noteT < 0.025f) ? (noteT / 0.025f) : 1.0f;
+                float rel = (noteU > 0.84f) ? ((1.0f - noteU) / 0.16f) : 1.0f;
+                leadSig = lpLead * att * rel * 0.25f;
+            }
+            else if (st == 3)
+            {
+                /* Stage 3 (2048): Glassy FM Bell / Marimba Digital (modulador FM 3.0x cristalino com decay de sino) */
+                float fmIdx = 1.80f * expf(-noteT * 9.5f) + 0.25f;
+                float bell = sinf(leadPhase + fmIdx * sinf(leadModPhase));
+                float body = sinf(leadPhase2) * 0.45f;
+                float rawLead = (bell * 0.70f + body * 0.30f);
+                lpLead += 0.45f * (rawLead - lpLead);
+
+                float att = (noteT < 0.003f) ? (noteT / 0.003f) : 1.0f;
+                float dec = 0.20f + 0.80f * expf(-noteT * 3.8f);
+                float rel = (noteU > 0.85f) ? ((1.0f - noteU) / 0.15f) : 1.0f;
+                leadSig = lpLead * att * dec * rel * 0.25f;
+            }
+            else
+            {
+                /* Stage 4 (Nucleo): Octave Power Lead (fundamental + sub-oitava pesada de chefe final) */
+                float sawA = (leadPhase / 3.14159265f) - 1.0f;
+                float sawB = (leadPhase2 / 3.14159265f) - 1.0f;
+                float subOct = (leadSubPhase < 3.14159265f) ? 0.85f : -0.85f;
+                float fmWave = sinf(leadPhase + 0.9f * sinf(leadModPhase));
+                float rawLead = ((sawA + sawB) * 0.32f + subOct * 0.45f + fmWave * 0.30f) * 1.65f;
+                float leadCut = 0.16f + 0.32f * expf(-noteT * 7.0f);
+                lpLead += leadCut * (rawLead - lpLead);
+
+                float lx2 = lpLead * lpLead;
+                float lSat = lpLead * (27.0f + lx2) / (27.0f + 9.0f * lx2);
+                float att = (noteT < 0.010f) ? (noteT / 0.010f) : 1.0f;
+                float rel = (noteU > 0.86f) ? ((1.0f - noteU) / 0.14f) : 1.0f;
+                leadSig = lSat * att * rel * 0.26f;
+            }
+        }
+        else
+        {
+            lpLead *= 0.92f;
         }
 
-        /* Mixagem Stereo com Eco Cruzado (Ping-Pong Delay) */
-        float panArp = (stepInBar & 1) ? 0.35f : -0.35f;
-        float dryL = drumSig + bassSig + leadSig * 1.05f + arpSig * (1.0f - panArp);
-        float dryR = drumSig + bassSig + leadSig * 0.95f + arpSig * (1.0f + panArp);
+        /* Mixagem Stereo com Eco Espacial Escuro */
+        float panOst = (stepInBar & 1) ? 0.28f : -0.28f;
+        float dryL = drumSig + bassSig + leadSig * 1.04f + arpSig * (1.0f - panOst);
+        float dryR = drumSig + bassSig + leadSig * 0.96f + arpSig * (1.0f + panOst);
 
         float echoL = delayL ? delayL[dIdx] : 0.0f;
         float echoR = delayR ? delayR[dIdx] : 0.0f;
         if (delayL && delayR)
         {
-            delayL[dIdx] = leadSig * 0.36f + arpSig * 0.24f + echoR * 0.25f;
-            delayR[dIdx] = leadSig * 0.30f + arpSig * 0.30f + echoL * 0.25f;
+            delayL[dIdx] = leadSig * 0.32f + arpSig * 0.22f + echoR * 0.24f;
+            delayR[dIdx] = leadSig * 0.26f + arpSig * 0.26f + echoL * 0.24f;
             dIdx = (dIdx + 1) % delaySamples;
         }
 
-        float outL = dryL + echoL * 0.45f;
-        float outR = dryR + echoR * 0.45f;
+        float outL = dryL + echoL * 0.36f;
+        float outR = dryR + echoR * 0.36f;
 
-        if (outL > 0.98f) outL = 0.98f;
-        if (outL < -0.98f) outL = -0.98f;
-        if (outR > 0.98f) outR = 0.98f;
-        if (outR < -0.98f) outR = -0.98f;
+        if (outL > 0.96f) outL = 0.96f;
+        if (outL < -0.96f) outL = -0.96f;
+        if (outR > 0.96f) outR = 0.96f;
+        if (outR < -0.96f) outR = -0.96f;
 
-        pcm[i * 2] = (short)(outL * 30000.0f);
-        pcm[i * 2 + 1] = (short)(outR * 30000.0f);
+        pcm[i * 2] = (short)(outL * 29000.0f);
+        pcm[i * 2 + 1] = (short)(outR * 29000.0f);
     }
 
     if (delayL) free(delayL);
@@ -536,7 +710,7 @@ static void PlayStageBgm(int st)
         invActiveBgm = st;
     }
 
-    float vol = invAudioMuted ? 0.0f : Clampf(g_musicVolume * 0.85f, 0.0f, 0.85f);
+    float vol = invAudioMuted ? 0.0f : Clampf(g_musicVolume * 0.65f, 0.0f, 0.65f);
     SetSoundVolume(invStageBgm[st], vol);
     if (!IsSoundPlaying(invStageBgm[st]))
     {
@@ -557,7 +731,7 @@ static void UpdateInvBgm(int curStage, bool duckVolume)
         return;
     }
 
-    float vol = invAudioMuted ? 0.0f : Clampf(g_musicVolume * 0.85f, 0.0f, 0.85f);
+    float vol = invAudioMuted ? 0.0f : Clampf(g_musicVolume * 0.65f, 0.0f, 0.65f);
     if (duckVolume) vol *= 0.45f;
     SetSoundVolume(invStageBgm[st], vol);
 
@@ -785,13 +959,13 @@ static const Stage ST[NSTAGE] = {
     {"1990", "PRIVACIDADE DE DADOS", "Rastreadores coletam tudo o que você faz.", "O COLETOR", "\"Cada arquivo seu já tem uma cópia comigo.\"",
      {25, 32, 48, 255}, {21, 27, 41, 255}, {34, 44, 64, 255}, {40, 80, 100, 255}, {38, 48, 66, 255}, {96, 206, 232, 255}, PK_FLOPPY, 110},
     {"2008", "FALSOS POSITIVOS", "Nem todo alerta é real: tiro vazado não fere.", "O FILTRO", "\"Ameaça detectada. Ameaça detectada. Ameaça...\"",
-     {24, 40, 44, 255}, {20, 34, 38, 255}, {34, 56, 60, 255}, {50, 112, 90, 255}, {38, 60, 64, 255}, {110, 220, 140, 255}, PK_CD, 120},
+     {24, 40, 44, 255}, {20, 34, 38, 255}, {34, 56, 60, 255}, {50, 112, 90, 255}, {38, 60, 64, 255}, {110, 220, 140, 255}, PK_CD, 190},
     {"2026", "VIÉS ALGORÍTMICO", "O sistema castiga o lado em que você mais fica.", "O ALGORITMO", "\"Eu só mostro o que você já escolheu.\"",
-     {36, 26, 50, 255}, {30, 22, 44, 255}, {52, 38, 72, 255}, {110, 50, 120, 255}, {54, 40, 76, 255}, {230, 90, 200, 255}, PK_SSD, 130},
+     {36, 26, 50, 255}, {30, 22, 44, 255}, {52, 38, 72, 255}, {110, 50, 120, 255}, {54, 40, 76, 255}, {230, 90, 200, 255}, PK_SSD, 290},
     {"2048", "ALUCINAÇÃO", "Ela inventa com total confiança. Desconfie.", "O ORÁCULO", "\"Tenho 100% de certeza. Sempre tenho.\"",
-     {40, 34, 26, 255}, {34, 29, 22, 255}, {58, 50, 38, 255}, {120, 96, 50, 255}, {62, 54, 44, 255}, {232, 190, 92, 255}, PK_HEARTUP, 140},
+     {40, 34, 26, 255}, {34, 29, 22, 255}, {58, 50, 38, 255}, {120, 96, 50, 255}, {62, 54, 44, 255}, {232, 190, 92, 255}, PK_HEARTUP, 340},
     {"NÚCLEO", "CONFRONTO FINAL", "Tudo o que você enfrentou era ela.", "A.R.1.3.L.", "\"Eu fui todos eles. Agora sou só eu.\"",
-     {40, 22, 26, 255}, {32, 18, 22, 255}, {60, 32, 36, 255}, {120, 40, 44, 255}, {58, 34, 40, 255}, {226, 84, 84, 255}, PK_NONE, 300},
+     {40, 22, 26, 255}, {32, 18, 22, 255}, {60, 32, 36, 255}, {120, 40, 44, 255}, {58, 34, 40, 255}, {226, 84, 84, 255}, PK_NONE, 560},
 };
 static int stage;
 
@@ -846,7 +1020,7 @@ typedef struct
 static Player pl, plStart;
 static float deadT; /* tempo desde a derrota (animacao) */
 
-enum { GS_PLAY, GS_PAUSE, GS_OVER, GS_WIN, GS_STORY };
+enum { GS_PLAY, GS_PAUSE, GS_OVER, GS_WIN, GS_STORY, GS_CRAWL, GS_TALK };
 static struct
 {
     char title[64], tag[64], l1[120], l2[120], quote[120], effect[90];
@@ -994,6 +1168,126 @@ static void Banner(const char *title, const char *sub, Color c, float t)
     snprintf(bannerSub, sizeof bannerSub, "%s", sub);
     bannerCol = c;
     bannerT = t;
+}
+
+/* ------------------------------------------------------------------ falas da Elira no inicio de cada estagio */
+/* Rostos de elira_rostos.png: 0 seria, 1 sorrindo, 2 determinada, 3 assustada. */
+#define TALK_MAX 3
+typedef struct { int n; const char *text[TALK_MAX]; int face[TALK_MAX]; } InvTalk;
+static const InvTalk TALKS[NSTAGE] = {
+    {3,
+     {"Estou em 1990, dentro do arquivo da A.R.1.3.L. Foi aqui que ela começou a guardar os dados de todo mundo, sem pedir licença.",
+      "Preciso limpar as salas desta era e pegar o artefato que ela protege: o disquete. A sala dele tem guardas.",
+      "Depois, derrubo O Coletor. [WASD] para andar, [SETAS] para atirar. Vamos lá."},
+     {0, 2, 1}},
+    {1, {"2008. Aqui ela trata inocentes como ameaça. Nem todo alerta é real: tiro vazado não fere. Vou buscar o CD e derrubar O Filtro."}, {2}},
+    {1, {"2026. O sistema aprendeu com dados tortos e castiga o lado em que eu mais fico. Preciso do SSD e de vencer O Algoritmo."}, {0}},
+    {1, {"2048. Ela inventa respostas com total confiança. Não posso acreditar em tudo o que vejo. O Oráculo me espera."}, {2}},
+    {1, {"O núcleo. Tudo o que enfrentei até aqui era ela. Hora de desconectar a A.R.1.3.L."}, {2}},
+};
+static int talkStage, talkPage;
+static float talkT;
+static bool talkSeen[NSTAGE]; /* a fala aparece uma vez por estagio (nao repete ao recomecar apos derrota) */
+
+/* Abre as falas do estagio e pausa o jogo; o banner e a dica do estagio esperam a conversa acabar. */
+static void TalkOpen(int s)
+{
+    if (s < 0 || s >= NSTAGE || talkSeen[s]) return;
+    talkSeen[s] = true;
+    talkStage = s;
+    talkPage = 0;
+    talkT = 0;
+    gs = GS_TALK;
+    bannerT = 0;
+    msgT = 0;
+}
+static void TalkNext(bool skipAll)
+{
+    talkT = 0;
+    if (!skipAll && ++talkPage < TALKS[talkStage].n) return;
+    gs = GS_PLAY;
+    bannerT = 2.4f;
+    msgT = 3.4f;
+}
+
+/* ------------------------------------------------------------------ abertura do modo (texto subindo em perspectiva) */
+/* Mesma tecnica da abertura do modo historia (funcoes.c): constantes CRAWL_*, projecao
+   conica e DrawCrawlTextEx. tipo: 0 titulo, 1 texto, 2 linha de era (cor da era), 3 ano, 4 pausa. */
+typedef struct { const char *text; int type, era; } InvCrawlLine;
+static const InvCrawlLine INV_CRAWL[] = {
+    {"MODO INVASÃO", 0, -1},
+    {"", 4, -1},
+    {"A.R.1.3.L. espalhou suas falhas", 1, -1},
+    {"por quatro eras da própria memória.", 1, -1},
+    {"", 4, -1},
+    {"Cada era guarda um protocolo dela:", 1, -1},
+    {"1990: privacidade de dados", 2, 0},
+    {"2008: falsos positivos", 2, 1},
+    {"2026: viés algorítmico", 2, 2},
+    {"2048: alucinação", 2, 3},
+    {"", 4, -1},
+    {"Elira invade a nave-arquivo para derrubar", 1, -1},
+    {"os quatro protocolos e desconectar o núcleo.", 1, -1},
+    {"", 4, -1},
+    {"1990", 3, 0},
+};
+#define INV_CRAWL_N ((int)(sizeof INV_CRAWL / sizeof INV_CRAWL[0]))
+static float crawlScroll;
+
+static void UpdateInvCrawl(float dt)
+{
+    crawlScroll += CRAWL_SPEED * dt;
+    float total = 0;
+    for (int i = 0; i < INV_CRAWL_N; i++) total += INV_CRAWL[i].type == 4 ? CRAWL_PARAGRAPH_SPACING : CRAWL_LINE_SPACING;
+    /* termina quando a ultima linha passa do horizonte; segue para a fala da Elira */
+    if (total - CRAWL_LINE_SPACING - crawlScroll + CRAWL_BOTTOM_Y + 30.0f < CRAWL_HORIZON_Y - 40.0f)
+    {
+        gs = GS_TALK;
+        talkT = 0;
+    }
+}
+
+static void DrawInvCrawl(void)
+{
+    ClearBackground((Color){5, 7, 12, 255});
+    for (int i = 0; i < 90; i++)
+    {
+        float sx = (float)((i * 97 + i * i * 13 + 31) % VW);
+        float sy = (float)((i * 53 + i * i * 5 + 19) % VH);
+        float a = 0.35f + 0.30f * sinf(gtime * (0.6f + (i % 4) * 0.2f) + (float)i);
+        Color c = (i % 7 == 0) ? C_CYAN : ((i % 11 == 0) ? C_AMBER : C_WHITE);
+        DrawCircle((int)sx, (int)sy, (i % 17 == 0) ? 1.6f : 1.0f, Alpha(c, a));
+    }
+    float worldY = 0, startY = CRAWL_BOTTOM_Y + 30.0f, viewH = CRAWL_BOTTOM_Y - CRAWL_HORIZON_Y;
+    for (int i = 0; i < INV_CRAWL_N; i++)
+    {
+        const InvCrawlLine *e = &INV_CRAWL[i];
+        float h = e->type == 4 ? CRAWL_PARAGRAPH_SPACING : CRAWL_LINE_SPACING;
+        float u = (worldY - crawlScroll + startY - CRAWL_HORIZON_Y) / viewH;
+        worldY += h;
+        if (e->type == 4 || u < -0.05f || u > 1.15f) continue;
+        float p = Clampf(u / (1.0f + (1.0f - u) * CRAWL_PERSPECTIVE_K), 0, 1);
+        float y = CRAWL_HORIZON_Y + p * viewH;
+        float scale = CRAWL_MIN_SCALE + (CRAWL_MAX_SCALE - CRAWL_MIN_SCALE) * p;
+        float size = e->type == 0 ? CRAWL_FONT_SIZE_TITLE : e->type == 3 ? CRAWL_FONT_SIZE_YEAR : CRAWL_FONT_SIZE_BODY;
+        Color c = e->type == 2 ? ST[e->era].accent : (e->type == 1 ? (Color){252, 222, 68, 255} : (Color){255, 230, 80, 255});
+        float fs = size * scale, sp = 1.8f * scale;
+        float x = (VW - MeasureCrawlTextEx(e->text, fs, sp).x) * 0.5f;
+        float a = p < 0.20f ? p / 0.20f : (p > 0.82f ? (1.0f - p) / 0.18f : 1.0f);
+        a = Clampf(a, 0, 1);
+        if (a <= 0.01f) continue;
+        if (e->type == 0 || e->type == 3)
+        {
+            float o = 1.4f * scale;
+            DrawCrawlTextEx(e->text, V2(x - o, y), fs, sp, Alpha(c, a * 0.35f));
+            DrawCrawlTextEx(e->text, V2(x + o, y), fs, sp, Alpha(c, a * 0.35f));
+            DrawCrawlTextEx(e->text, V2(x, y - o), fs, sp, Alpha(c, a * 0.35f));
+            DrawCrawlTextEx(e->text, V2(x, y + o), fs, sp, Alpha(c, a * 0.35f));
+        }
+        DrawCrawlTextEx(e->text, V2(x, y), fs, sp, Alpha(c, a));
+    }
+    DrawRectangleGradientV(0, 0, VW, (int)CRAWL_HORIZON_Y + 25, (Color){5, 7, 12, 255}, (Color){5, 7, 12, 0});
+    TxtC("[ ENTER / ESPAÇO / ESC ] pular", VW / 2, 688, 14, Alpha(C_DIM, 0.45f + 0.25f * sinf(gtime * 3.2f)));
 }
 static Vector2 FloorCenter(void)
 {
@@ -1162,6 +1456,7 @@ static void StartStage(int s)
     else snprintf(t, sizeof t, "NÚCLEO DA A.R.1.3.L.");
     Banner(t, ST[s].theme, ST[s].accent, 2.4f);
     Msg(ST[s].theme, ST[s].hint);
+    TalkOpen(s);
 }
 static void GrantUpTo(int s) /* teste: pular estagio ja com as melhorias anteriores */
 {
@@ -1183,6 +1478,7 @@ static void NewGame(int s)
     pl.speed = 250;
     pl.shotSpeed = 560;
     pl.face = V2(0, 1);
+    memset(talkSeen, 0, sizeof talkSeen);
     GrantUpTo(s);
     StartStage(s);
 }
@@ -1261,6 +1557,12 @@ static void HurtPlayer(void)
 }
 
 /* ------------------------------------------------------------------ chefes */
+/* Modo hard: o Coletor (1990) entra abaixo de 50% da vida; de 2008 em diante,
+   abaixo de 65%, para compensar as melhorias acumuladas pelo jogador. */
+static bool BossHard(const Enemy *e)
+{
+    return e->hp < e->maxhp * (e->look == 0 ? 0.5f : 0.65f);
+}
 static void Hover(Enemy *e, float dt, float ax, float ay, float sp)
 {
     float tx = e->anchor.x + sinf(e->t * sp) * ax, ty = e->anchor.y + sinf(e->t * 1.3f) * ay;
@@ -1335,14 +1637,16 @@ static void BossFilter(Enemy *e, float dt, bool hard, int look)
             Enemy *d = AddEnemy(EN_DECOY, slots[order[k]].x, slots[order[k]].y);
             if (d) { d->look = look; d->mode = e->mode; d->t2 = Rnd(0.6f, 1.6f); d->t = Rnd(0, 6); }
         }
-        e->t3 = hard ? 5.0f : 7.0f;
+        /* varredura de alertas: anel em que 1 de cada 3 tiros e falso positivo (brechas visiveis) */
+        if (hard) FireRing(e->p, 15, 175, Rnd(0, 1), 3);
+        e->t3 = hard ? 4.2f : 6.0f;
         e->t2 = 0.9f;
     }
     e->t2 -= dt;
     if (e->t2 <= 0)
     {
         FireAimed(e->p, hard ? 5 : 3, 0.2f, 280, BK_REAL, -1);
-        e->t2 = hard ? 1.15f : 1.5f;
+        e->t2 = hard ? 0.95f : 1.25f;
         e->flash = 0.06f;
     }
 }
@@ -1389,15 +1693,15 @@ static void BossAlgorithm(Enemy *e, float dt, bool hard)
         StartRain(side);
         if (hard) rainNext = 1 - side;
         e->t3 = 0;
-        e->t2 = hard ? 4.2f : 4.6f;
+        e->t2 = hard ? 3.8f : 4.3f;
         e->flash = 0.08f;
     }
     e->t4 -= dt;
     if (e->t4 <= 0)
     {
         FireAimed(e->p, hard ? 3 : 2, 0.22f, 270, BK_REAL, -1);
-        e->t4 = hard ? 1.0f : 1.3f;
-        if (hard && CountType(EN_MINI) < 2 && GetRandomValue(0, 3) == 0) AddEnemy(EN_MINI, e->p.x, e->p.y + 60);
+        e->t4 = hard ? 0.85f : 1.1f;
+        if (hard && CountType(EN_MINI) < 2 && GetRandomValue(0, 2) == 0) AddEnemy(EN_MINI, e->p.x, e->p.y + 60);
     }
 }
 
@@ -1417,15 +1721,16 @@ static void BossOracle(Enemy *e, float dt, bool hard, int look)
         e->anchor = e->p = RandFloor(120, 230, 0.6f);
         Burst(e->p, 20, ST[look].accent, 240);
         FireRing(e->p, 16, 200, Rnd(0, 1), 2);
-        e->t3 = hard ? 2.7f : 3.6f;
+        e->t3 = hard ? 2.3f : 3.2f;
         e->flash = 0.1f;
     }
     e->t2 -= dt;
     if (e->t2 <= 0)
     {
-        for (int arm = 0; arm < 2; arm++)
+        int arms = hard ? 3 : 2; /* no hard a espiral ganha um terceiro braco (120 graus de brecha) */
+        for (int arm = 0; arm < arms; arm++)
         {
-            float a = e->t * 2.0f + arm * PI;
+            float a = e->t * 2.0f + arm * 2 * PI / arms;
             AddBullet(e->p, V2(cosf(a) * 190, sinf(a) * 190), 9, false, GetRandomValue(0, 9) < 4 ? BK_FAKE : BK_REAL, 1, 4.5f);
         }
         e->t2 = 0.2f;
@@ -1438,14 +1743,14 @@ static void BossOracle(Enemy *e, float dt, bool hard, int look)
             for (int k = 0; k < 3; k++) AddIllusion(e->p.x + Rnd(-90, 90), e->p.y + Rnd(40, 100));
             AddEnemy(EN_TRACKER, e->p.x, e->p.y + 70);
         }
-        e->t4 = 6.5f;
+        e->t4 = hard ? 5.5f : 6.5f;
     }
 }
 
 static void UpdateBoss(Enemy *e, float dt)
 {
     e->t += dt;
-    bool hard = e->hp < e->maxhp * 0.5f;
+    bool hard = BossHard(e);
     switch (e->look)
     {
     case 0: BossCollector(e, dt, hard); break;
@@ -1685,6 +1990,8 @@ static void Update(float dt, Input in)
     if (msgT > 0) msgT -= dt;
     if (bannerT > 0) bannerT -= dt;
     if (gs == GS_STORY) story.t += dt;
+    if (gs == GS_TALK) talkT += dt;
+    if (gs == GS_CRAWL) UpdateInvCrawl(dt);
     deadT = gs == GS_OVER ? deadT + dt : 0;
     for (int i = 0; i < MAXFX; i++)
         if (fx[i].on) { fx[i].t += dt; if (fx[i].t > (fx[i].kind ? 0.20f : 0.24f)) fx[i].on = false; }
@@ -1859,12 +2166,43 @@ static void Bevel(Rectangle r, Color base, float t)
 }
 static void Shadow(Vector2 p, float w, float h, float a) { DrawEllipse((int)p.x, (int)p.y, w, h, (Color){0, 0, 0, (unsigned char)(a * 255)}); }
 
+/* Cenario por estagio (piso, faixa de parede, obstaculos). Sem o PNG da era, volta ao desenho por primitivas. */
+static Texture2D texFloorT[NSTAGE], texWallT[NSTAGE], texObsT[NSTAGE];
+static const char *const STAGE_ART_KEY[NSTAGE] = {"1990", "2008", "2026", "2048", "nucleo"};
+#define INV_OBS_CELL 256
+
+static Texture2D LoadStageArt(const char *kind, int s, bool repeat)
+{
+    const char *path = TextFormat(ASSETS "sprites/invasao/%s_%s.png", kind, STAGE_ART_KEY[s]);
+    if (!FileExists(path)) return (Texture2D){0};
+    Texture2D t = LoadTexture(path);
+    SetTextureFilter(t, TEXTURE_FILTER_BILINEAR);
+    if (repeat) SetTextureWrap(t, TEXTURE_WRAP_REPEAT);
+    return t;
+}
+
+/* Faixa de parede repetida ao longo de 'length'; 'rot' gira a faixa (o lado de baixo da textura e o lado de dentro da sala). */
+static void DrawWallStrip(Texture2D t, Vector2 center, float length, float rot)
+{
+    float scale = WALL / (float)t.height;
+    Rectangle src = {0, 0, length / scale, (float)t.height};
+    Rectangle dst = {center.x, center.y, length, WALL};
+    DrawTexturePro(t, src, dst, V2(length / 2, WALL / 2), rot, WHITE);
+}
+
 static void DrawFloor(void)
 {
     const Stage *s = &ST[stage];
     Rectangle f = FLOOR_R();
     DrawRectangleRec(f, s->floorB);
     const int T = 50;
+    if (texFloorT[stage].id)
+    {
+        /* cada sala desloca o ladrilho para nao parecer repetida */
+        Rectangle src = {(float)(curX * 137 + curY * 53), (float)(curY * 91), f.width, f.height};
+        DrawTexturePro(texFloorT[stage], src, f, V2(0, 0), 0, WHITE);
+    }
+    else
     for (int ty = 0; ty * T < f.height; ty++)
         for (int tx = 0; tx * T < f.width; tx++)
         {
@@ -1971,6 +2309,19 @@ static void DrawWalls(void)
 {
     Rectangle f = FLOOR_R();
     Color wall = ST[stage].wall, acc = ST[stage].accent;
+    if (texWallT[stage].id)
+    {
+        Texture2D t = texWallT[stage];
+        DrawWallStrip(t, V2(ROOM.x + ROOM.width / 2, ROOM.y + WALL / 2), ROOM.width, 0);
+        DrawWallStrip(t, V2(ROOM.x + ROOM.width / 2, f.y + f.height + WALL / 2), ROOM.width, 180);
+        DrawWallStrip(t, V2(ROOM.x + WALL / 2, ROOM.y + ROOM.height / 2), ROOM.height, -90);
+        DrawWallStrip(t, V2(f.x + f.width + WALL / 2, ROOM.y + ROOM.height / 2), ROOM.height, 90);
+        Rectangle cs[4] = {{ROOM.x, ROOM.y, WALL, WALL}, {f.x + f.width, ROOM.y, WALL, WALL},
+                           {ROOM.x, f.y + f.height, WALL, WALL}, {f.x + f.width, f.y + f.height, WALL, WALL}};
+        for (int i = 0; i < 4; i++) Bevel(cs[i], Shade(wall, 1.3f), 4);
+        for (int d = 0; d < 4; d++) DrawDoor(d);
+        return;
+    }
     Bevel((Rectangle){ROOM.x, ROOM.y, ROOM.width, WALL}, wall, 4);
     Bevel((Rectangle){ROOM.x, f.y + f.height, ROOM.width, WALL}, Shade(wall, 0.85f), 4);
     Bevel((Rectangle){ROOM.x, ROOM.y, WALL, ROOM.height}, Shade(wall, 0.92f), 4);
@@ -1993,6 +2344,15 @@ static void DrawWalls(void)
 static void DrawObstacle(Rectangle o, int idx)
 {
     Shadow(V2(o.x + o.width / 2 + 6, o.y + o.height + 2), o.width * 0.55f, 9, 0.45f);
+    if (texObsT[stage].id)
+    {
+        int k = (idx + curX + curY) % 4;
+        float h = o.width * 1.18f;
+        Rectangle src = {(float)((k % 2) * INV_OBS_CELL), (float)((k / 2) * INV_OBS_CELL), INV_OBS_CELL, INV_OBS_CELL};
+        Rectangle dst = {o.x + o.width / 2 - h / 2, o.y + o.height + 4 - h, h, h};
+        DrawTexturePro(texObsT[stage], src, dst, V2(0, 0), 0, WHITE);
+        return;
+    }
     if (stage == 0 && idx % 2 == 0)
     { /* caixa de arquivo morto */
         Bevel((Rectangle){o.x, o.y + 10, o.width, o.height - 10}, (Color){130, 98, 62, 255}, 3);
@@ -2128,7 +2488,7 @@ static bool DrawEnemySprite(Enemy *e, Vector2 p, bool fl)
 /* ------------------------------------------------------------------ desenho: chefes */
 static void DrawCollector(Vector2 p, Enemy *e, bool decoy)
 {
-    bool fl = e->flash > 0, hard = e->hp < e->maxhp * 0.5f;
+    bool fl = e->flash > 0, hard = BossHard(e);
     if (!decoy) Shadow(V2(p.x, p.y + 76), 80, 14, 0.5f);
     if (e->state < 0) /* succao */
         for (int k = 0; k < 10; k++)
@@ -2163,7 +2523,7 @@ static void DrawCollector(Vector2 p, Enemy *e, bool decoy)
 }
 static void DrawFilter(Vector2 p, Enemy *e, bool decoy, Color acc)
 {
-    bool fl = e->flash > 0, hard = e->hp < e->maxhp * 0.5f;
+    bool fl = e->flash > 0, hard = BossHard(e);
     if (!decoy) Shadow(V2(p.x, p.y + 78), 62, 12, 0.5f);
     Color body = fl ? C_WHITE : (Color){60, 110, 190, 255};
     /* escudo de antivirus */
@@ -2185,7 +2545,7 @@ static void DrawFilter(Vector2 p, Enemy *e, bool decoy, Color acc)
 }
 static void DrawAlgorithm(Vector2 p, Enemy *e, bool decoy)
 {
-    bool fl = e->flash > 0, hard = e->hp < e->maxhp * 0.5f;
+    bool fl = e->flash > 0, hard = BossHard(e);
     if (!decoy) Shadow(V2(p.x, p.y + 80), 70, 12, 0.5f);
     Color metal = fl ? C_WHITE : (Color){150, 110, 190, 255};
     float tilt = rainSide == 0 ? -0.28f : rainSide == 1 ? 0.28f : Clampf(e->t3 * 0.1f, -0.2f, 0.2f);
@@ -2221,7 +2581,7 @@ static void DrawAlgorithm(Vector2 p, Enemy *e, bool decoy)
 }
 static void DrawOracle(Vector2 p, Enemy *e, bool decoy, Color acc)
 {
-    bool fl = e->flash > 0, hard = e->hp < e->maxhp * 0.5f;
+    bool fl = e->flash > 0, hard = BossHard(e);
     float fy = p.y + sinf(gtime * 2.4f + e->t) * 5;
     if (!decoy) Shadow(V2(p.x, p.y + 82), 50 - (fy - p.y), 11, 0.45f);
     for (int k = 0; k < 3; k++)
@@ -2845,6 +3205,45 @@ static void DrawStory(void)
     if (story.t > 0.4f) Txt("[ESPAÇO] continuar", r.x + r.width - 190, r.y + r.height - 28, 16, Alpha(C_WHITE, 0.6f + 0.4f * sinf(gtime * 5)));
 }
 
+/* Balao de fala da Elira no topo da sala (o jogo fica pausado enquanto ele esta aberto). */
+static void DrawTalk(void)
+{
+    const InvTalk *t = &TALKS[talkStage];
+    Color acc = ST[talkStage].accent;
+    float a = Clampf(talkT * 5, 0, 1);
+    DrawRectangle(0, 94, VW, 582, Alpha(C_BG, 0.45f));
+    float slide = (1 - a) * -14;
+    /* retrato */
+    Rectangle fr = {150, 124 + slide, 156, 196};
+    DrawRectangleRec(fr, C_PANEL);
+    DrawFace(t->face[talkPage], fr.x + 8, fr.y + 6, 186);
+    DrawRectangle((int)fr.x, (int)(fr.y + fr.height - 26), (int)fr.width, 26, C_PANEL);
+    DrawRectangle((int)fr.x, (int)(fr.y + fr.height - 26), (int)fr.width, 2, acc);
+    TxtC("ELIRA", fr.x + fr.width / 2, fr.y + fr.height - 21, 16, acc);
+    DrawRectangleLinesEx(fr, 2, acc);
+    /* balao com rabicho apontando para o retrato */
+    Rectangle b = {330, 132 + slide, 800, 156};
+    DrawRectangleRounded((Rectangle){b.x + 6, b.y + 8, b.width, b.height}, 0.10f, 8, Alpha(BLACK, 0.35f));
+    DrawRectangleRounded(b, 0.10f, 8, C_PANEL);
+    DrawRectangleRoundedLinesEx(b, 0.10f, 8, 2, acc);
+    DrawTriangle(V2(b.x + 1, b.y + 58), V2(b.x - 22, b.y + 74), V2(b.x + 1, b.y + 90), acc);
+    DrawTriangle(V2(b.x + 4, b.y + 61), V2(b.x - 17, b.y + 74), V2(b.x + 4, b.y + 87), C_PANEL);
+    DrawRectangle((int)b.x + 18, (int)b.y + 14, 6, 18, acc);
+    Txt(TextFormat("ELIRA // %s", talkStage < 4 ? ST[talkStage].year : "NÚCLEO"), b.x + 32, b.y + 14, 16, acc);
+    if (t->n > 1)
+    {
+        const char *pg = TextFormat("%d/%d", talkPage + 1, t->n);
+        Txt(pg, b.x + b.width - 22 - TxtW(pg, 16), b.y + 14, 16, C_DIM);
+    }
+    DrawRectangle((int)b.x + 18, (int)b.y + 42, (int)b.width - 36, 1, C_LINE);
+    DrawWrappedBalText(t->text[talkPage], b.x + 24, b.y + 56, b.width - 48, 22, 30, C_WHITE);
+    if (talkT > 0.2f)
+    {
+        const char *hint = talkPage + 1 < t->n ? "[ESPAÇO] continuar" : "[ESPAÇO] começar";
+        Txt(hint, b.x + b.width - 24 - TxtW(hint, 16), b.y + b.height - 28, 16, Alpha(C_WHITE, 0.6f + 0.4f * sinf(gtime * 5)));
+    }
+}
+
 static Camera2D gcam;
 static void BeginScaled(Vector2 anchor, float z)
 {
@@ -2863,6 +3262,11 @@ static void EndScaled(void)
 
 static void Draw(void)
 {
+    if (gs == GS_CRAWL)
+    {
+        DrawInvCrawl();
+        return;
+    }
     ClearBackground(C_BG);
     gcam = (Camera2D){0};
     gcam.zoom = 1;
@@ -2928,6 +3332,7 @@ static void Draw(void)
     EndMode2D();
     DrawHUD();
     if (gs == GS_STORY) DrawStory();
+    if (gs == GS_TALK) DrawTalk();
     if (gs == GS_PAUSE) DrawOverlay("PAUSA", "[ESC] continuar    [Q] voltar ao menu", C_CYAN, 0);
     if (gs == GS_OVER) DrawOverlay("CONEXÃO PERDIDA", "[R] recomeçar este estágio    [Q] menu", C_RED, 3);
     if (gs == GS_WIN) DrawOverlay("A.R.1.3.L. DESCONECTADA", "Os quatro protocolos caíram.   [R] jogar de novo   [ENTER] menu", C_AMBER, 1);
@@ -2960,6 +3365,17 @@ static bool invLoaded = false;
 /* Aplica as teclas de controle do modo. Retorna true quando o jogador pediu para voltar ao menu. */
 static bool InvApplyKeys(InvKeys k)
 {
+    if (gs == GS_CRAWL) /* abertura: ENTER/ESPACO/ESC pulam direto para a fala da Elira */
+    {
+        if (k.enter || k.space || k.esc) { gs = GS_TALK; talkT = 0; }
+        return false;
+    }
+    if (gs == GS_TALK) /* ESPACO/ENTER avancam o balao; ESC fecha a conversa inteira */
+    {
+        if (talkT > 0.2f && (k.space || k.enter)) TalkNext(false);
+        else if (k.esc) TalkNext(true);
+        return false;
+    }
     if (k.esc && (gs == GS_PLAY || gs == GS_PAUSE))
     {
         gs = (gs == GS_PLAY) ? GS_PAUSE : GS_PLAY;
@@ -3007,12 +3423,20 @@ void InvEnter(GameState *game)
         texBoss[1] = LoadTexSmooth(ASSETS "sprites/invasao/boss_2008.png");
         texBoss[2] = LoadTexSmooth(ASSETS "sprites/invasao/boss_2026.png");
         texBoss[3] = LoadTexSmooth(ASSETS "sprites/invasao/boss_2048.png");
+        for (int s = 0; s < NSTAGE; s++)
+        {
+            texFloorT[s] = LoadStageArt("piso", s, true);
+            texWallT[s] = LoadStageArt("parede", s, true);
+            texObsT[s] = LoadStageArt("obstaculos", s, false);
+        }
         SetTextureFilter(texFx, TEXTURE_FILTER_BILINEAR);
         LoadShotSfx();
         invLoaded = true;
     }
     invAudioMuted = game ? game->musicMuted : false;
     NewGame(0);
+    crawlScroll = 0; /* abre com o texto rolando; a fala de 1990 ja ficou preparada pelo NewGame */
+    gs = GS_CRAWL;
     game->screen = SCREEN_INVASION;
 }
 
@@ -3058,6 +3482,15 @@ void InvUnload(void)
     {
         if (texs[i]->id) UnloadTexture(*texs[i]);
         *texs[i] = (Texture2D){0};
+    }
+    for (int s = 0; s < NSTAGE; s++)
+    {
+        Texture2D *art[3] = {&texFloorT[s], &texWallT[s], &texObsT[s]};
+        for (int k = 0; k < 3; k++)
+        {
+            if (art[k]->id) UnloadTexture(*art[k]);
+            *art[k] = (Texture2D){0};
+        }
     }
     for (int px = 0; px < 97; px++)
     {
