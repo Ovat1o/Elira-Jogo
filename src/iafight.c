@@ -1713,6 +1713,13 @@ static float roundTimer = IAF_ROUND_TIME, rsT = 0;
 static RState rstate = RS_INTRO;
 static float scT = 0;
 static bool lastWon = false, paused = false;
+static int pauseSel = 0;
+static void DrawIafCyberCard(Rectangle r, Color accent, bool on, float tickMax);
+
+static Rectangle IafPauseBtn(int idx)
+{
+    return (Rectangle){430.0f, 250.0f + idx * 68.0f, 420.0f, 54.0f};
+}
 static int roundWinner = -1;
 
 typedef struct { float t, hold; int mode; bool reacted, low; IafInput once; float skill; bool chainTried, techTried; } Ai;
@@ -3093,13 +3100,76 @@ static void EndRound(int winner)
     if (winner >= 0) wins[winner]++;
     rsT = 0;
 }
-static void UpdateFight(float dt)
+static void UpdateFight(GameState *game, float dt)
 {
-    if (PauseP()) paused = !paused;
-    if (IsKeyPressed(KEY_ESCAPE) && !paused) paused = true; /* ESC pausa; na pausa, ESC ou B voltam a selecao */
-    else if (paused && (IsKeyPressed(KEY_ESCAPE) || AnyPadPressed(VB_BACK))) { paused = false; readyP[0] = readyP[1] = false; trainPick = 0; iafScreen = SC_SELECT; scT = 0; return; }
+    if (!paused)
+    {
+        if (PauseP() || IsKeyPressed(KEY_ESCAPE))
+        {
+            paused = true;
+            pauseSel = 0;
+            PlaySfx(SFX_OK);
+            return;
+        }
+    }
+    else
+    {
+        if (PauseP() || NavBackP())
+        {
+            paused = false;
+            PlaySfx(SFX_OK);
+            return;
+        }
+        int prevSel = pauseSel;
+        if (NavUpP()) pauseSel = (pauseSel + 3) % 4;
+        if (NavDownP()) pauseSel = (pauseSel + 1) % 4;
+
+        Vector2 vm = GetVirtualMouse();
+        bool mouseClick = false;
+        for (int i = 0; i < 4; i++)
+        {
+            if (CheckCollisionPointRec(vm, IafPauseBtn(i)))
+            {
+                pauseSel = i;
+                if (IsMouseButtonPressed(MOUSE_BUTTON_LEFT)) mouseClick = true;
+            }
+        }
+        if (pauseSel != prevSel) PlaySfx(SFX_MOVE);
+
+        bool confirm = (IsKeyPressed(KEY_ENTER) && !AltDown()) || IsKeyPressed(KEY_SPACE) ||
+                       IsKeyPressed(KEY_J) || AnyPadPressed(VB_JUMP) || mouseClick;
+        if (confirm)
+        {
+            PlaySfx(SFX_OK);
+            if (pauseSel == 0)
+            {
+                paused = false;
+            }
+            else if (pauseSel == 1)
+            {
+                paused = false;
+                readyP[0] = readyP[1] = false;
+                trainPick = 0;
+                iafScreen = SC_SELECT;
+                scT = 0;
+            }
+            else if (pauseSel == 2)
+            {
+                paused = false;
+                UpdateIafMusic(-1);
+                if (game) game->screen = SCREEN_TITLE;
+            }
+            else if (pauseSel == 3)
+            {
+                paused = false;
+                UpdateIafMusic(-1);
+                if (game) game->exitRequested = true;
+            }
+            return;
+        }
+        return;
+    }
     if (IsKeyPressed(KEY_F1) || AnyPadPressed(VB_SELECT)) showBoxes = !showBoxes; /* caixas de colisao (depuracao) */
-    if (paused) return;
     if (shake > 0) shake -= dt;
     rsT += dt;
     IafInput none = {0};
@@ -3193,9 +3263,50 @@ static void DrawFightOverlay(void)
     }
     if (paused)
     {
-        DrawRectangle(0, 0, SCREEN_WIDTH, SCREEN_HEIGHT, Fade(C_INK, 0.6f));
-        TxtO("PAUSA", SCREEN_WIDTH / 2.0f, 300, 64, C_WHITE, C_INK);
-        TxtC("P / START: continuar      ESC / B: voltar à seleção", SCREEN_WIDTH / 2.0f, 380, 20, C_DIM);
+        DrawRectangle(0, 0, SCREEN_WIDTH, SCREEN_HEIGHT, Fade(C_INK, 0.76f));
+
+        Rectangle panel = {370.0f, 118.0f, 540.0f, 480.0f};
+        DrawRectangleRounded(panel, 0.05f, 10, (Color){10, 15, 30, 248});
+        DrawRectangleRoundedLinesEx(panel, 0.05f, 10, 2.0f, C_CYAN);
+
+        float pad = 9.0f, tLen = 20.0f;
+        DrawLineEx((Vector2){panel.x + pad, panel.y + pad}, (Vector2){panel.x + pad + tLen, panel.y + pad}, 2.4f, C_AMBER);
+        DrawLineEx((Vector2){panel.x + pad, panel.y + pad}, (Vector2){panel.x + pad, panel.y + pad + tLen}, 2.4f, C_AMBER);
+        DrawLineEx((Vector2){panel.x + panel.width - pad, panel.y + pad}, (Vector2){panel.x + panel.width - pad - tLen, panel.y + pad}, 2.4f, C_AMBER);
+        DrawLineEx((Vector2){panel.x + panel.width - pad, panel.y + pad}, (Vector2){panel.x + panel.width - pad, panel.y + pad + tLen}, 2.4f, C_AMBER);
+        DrawLineEx((Vector2){panel.x + pad, panel.y + panel.height - pad}, (Vector2){panel.x + pad + tLen, panel.y + panel.height - pad}, 2.4f, C_AMBER);
+        DrawLineEx((Vector2){panel.x + pad, panel.y + panel.height - pad}, (Vector2){panel.x + pad, panel.y + panel.height - pad - tLen}, 2.4f, C_AMBER);
+        DrawLineEx((Vector2){panel.x + panel.width - pad, panel.y + panel.height - pad}, (Vector2){panel.x + panel.width - pad - tLen, panel.y + panel.height - pad}, 2.4f, C_AMBER);
+        DrawLineEx((Vector2){panel.x + panel.width - pad, panel.y + panel.height - pad}, (Vector2){panel.x + panel.width - pad, panel.y + panel.height - pad - tLen}, 2.4f, C_AMBER);
+
+        TxtO("PAUSA", SCREEN_WIDTH / 2.0f, 142.0f, 40, C_WHITE, C_INK);
+        TxtC("Escolha como deseja continuar", SCREEN_WIDTH / 2.0f, 194.0f, 16, C_DIM);
+        DrawLine((int)(panel.x + 36), 226, (int)(panel.x + panel.width - 36), 226, Fade(C_CYAN, 0.35f));
+
+        static const char *labels[4] = {"CONTINUAR", "VOLTAR À SELEÇÃO", "VOLTAR AO MENU INICIAL", "FECHAR O JOGO"};
+        const Color cols[4] = {C_CYAN, C_GREEN, C_AMBER, C_RED};
+        for (int i = 0; i < 4; i++)
+        {
+            Rectangle r = IafPauseBtn(i);
+            bool on = (pauseSel == i);
+            DrawIafCyberCard(r, cols[i], on, 14.0f);
+            if (on)
+            {
+                float nudge = sinf(gt * 7.0f) * 3.0f;
+                Txt(">>", r.x + 22.0f + nudge, r.y + r.height * 0.5f - 9.0f, 18, C_AMBER);
+                Txt("<", r.x + r.width - 28.0f - nudge, r.y + r.height * 0.5f - 9.0f, 18, cols[i]);
+            }
+            else
+            {
+                DrawRectangle((int)(r.x + r.width - 20.0f), (int)(r.y + r.height * 0.5f - 3.0f), 6, 6, Fade(cols[i], 0.42f));
+            }
+            float cy = r.y + r.height * 0.5f - 10.0f;
+            TxtC(labels[i], SCREEN_WIDTH / 2.0f + 1.5f, cy + 1.5f, 20, Fade(C_INK, 0.78f));
+            TxtC(labels[i], SCREEN_WIDTH / 2.0f, cy, 20, on ? C_WHITE : Fade(C_WHITE, 0.80f));
+        }
+
+        TxtC("W/S, SETAS ou CONTROLE: escolher   ENTER / A: confirmar   ESC / B / START: continuar",
+             SCREEN_WIDTH / 2.0f, panel.y + panel.height - 34.0f, 12, C_DIM);
     }
 }
 static void DrawFight(void)
@@ -4534,7 +4645,7 @@ void IafUpdate(GameState *game, float dt)
         if (NavOkP() || scT > 2.6f) { StartMatch(); iafScreen = SC_FIGHT; scT = 0; }
         else if (NavBackP()) OpenArenaSelect();
         break;
-    case SC_FIGHT: UpdateFight(dt); break;
+    case SC_FIGHT: UpdateFight(game, dt); break;
     case SC_RESULT:
         if (versusMode) { UpdateResultVs(); break; }
         if (scT > 0.6f && NavOkP())

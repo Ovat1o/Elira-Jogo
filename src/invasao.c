@@ -3260,6 +3260,126 @@ static void EndScaled(void)
     BeginMode2D(gcam);
 }
 
+static int invPauseSel = 0;
+
+static Rectangle InvPauseBtn(int idx)
+{
+    return (Rectangle){440.0f, 294.0f + idx * 72.0f, 400.0f, 56.0f};
+}
+
+static void DrawInvCyberButton(Rectangle r, const char *label, Color accent, bool on)
+{
+    float t = (float)GetTime();
+    float pulse = 0.72f + 0.28f * sinf(t * 3.2f);
+    int bx = (int)r.x, by = (int)r.y, bw = (int)r.width, bh = (int)r.height;
+
+    if (on)
+    {
+        DrawRectangleRounded((Rectangle){r.x - 9, r.y - 6, r.width + 18, r.height + 12},
+                             0.20f, 8, Fade(accent, 0.14f + 0.05f * sinf(t * 4.5f)));
+        DrawRectangleRounded((Rectangle){r.x - 4, r.y - 3, r.width + 8, r.height + 6},
+                             0.16f, 8, Fade(accent, 0.28f));
+    }
+    else
+    {
+        DrawRectangleRounded((Rectangle){r.x + 4, r.y + 5, r.width, r.height},
+                             0.14f, 8, Fade(BLACK, 0.55f));
+    }
+
+    DrawRectangleRounded(r, 0.14f, 8, (Color){8, 13, 26, 246});
+    DrawRectangleGradientH(bx + 3, by + 2, bw - 6, bh - 4,
+                           on ? Fade(accent, 0.40f) : Fade(accent, 0.16f),
+                           on ? Fade(accent, 0.08f) : Fade((Color){14, 18, 36, 255}, 0.05f));
+    DrawRectangle(bx + 6, by + 3, bw - 12, (bh - 6) / 2, Fade(WHITE, on ? 0.055f : 0.022f));
+
+    if (on)
+    {
+        float sweepW = 72.0f;
+        float barX = r.x + fmodf(t * 360.0f, r.width + sweepW * 2.0f) - sweepW;
+        float clipStart = fmaxf(r.x + 8.0f, barX);
+        float clipEnd = fminf(r.x + r.width - 8.0f, barX + sweepW);
+        if (clipEnd > clipStart)
+        {
+            DrawRectangleGradientH((int)clipStart, by + 3, (int)(clipEnd - clipStart), bh - 6,
+                                   Fade(WHITE, 0.0f), Fade(WHITE, 0.17f));
+        }
+    }
+
+    int stripeW = on ? 8 : 5;
+    DrawRectangle(bx + 4, by + 6, stripeW + 6, bh - 12, Fade(accent, on ? 0.36f : 0.16f));
+    DrawRectangle(bx + 4, by + 6, stripeW, bh - 12, on ? WHITE : accent);
+    if (on) DrawRectangle(bx + 5, by + 8, stripeW - 2, bh - 16, accent);
+
+    DrawRectangleRoundedLinesEx(r, 0.14f, 8, on ? 2.4f : 1.5f,
+                                on ? WHITE : Fade(accent, 0.62f * pulse + 0.18f));
+    DrawLine(bx + 22, by + 4, bx + bw - 24, by + 4, Fade(accent, on ? 0.55f : 0.22f));
+    DrawLine(bx + 22, by + bh - 5, bx + bw - 24, by + bh - 5, Fade(accent, on ? 0.55f : 0.22f));
+
+    float tickLen = on ? 14.0f : 9.0f;
+    float pad = 2.0f;
+    float thick = on ? 2.4f : 1.8f;
+    Color tickCol = on ? C_AMBER : accent;
+    DrawLineEx((Vector2){r.x + pad, r.y + pad}, (Vector2){r.x + pad + tickLen, r.y + pad}, thick, tickCol);
+    DrawLineEx((Vector2){r.x + pad, r.y + pad}, (Vector2){r.x + pad, r.y + pad + tickLen}, thick, tickCol);
+    DrawLineEx((Vector2){r.x + r.width - pad, r.y + pad}, (Vector2){r.x + r.width - pad - tickLen, r.y + pad}, thick, tickCol);
+    DrawLineEx((Vector2){r.x + r.width - pad, r.y + pad}, (Vector2){r.x + r.width - pad, r.y + pad + tickLen}, thick, tickCol);
+    DrawLineEx((Vector2){r.x + pad, r.y + r.height - pad}, (Vector2){r.x + pad + tickLen, r.y + r.height - pad}, thick, tickCol);
+    DrawLineEx((Vector2){r.x + pad, r.y + r.height - pad}, (Vector2){r.x + pad, r.y + r.height - pad - tickLen}, thick, tickCol);
+    DrawLineEx((Vector2){r.x + r.width - pad, r.y + r.height - pad}, (Vector2){r.x + r.width - pad - tickLen, r.y + r.height - pad}, thick, tickCol);
+    DrawLineEx((Vector2){r.x + r.width - pad, r.y + r.height - pad}, (Vector2){r.x + r.width - pad, r.y + r.height - pad - tickLen}, thick, tickCol);
+
+    if (on)
+    {
+        float nudge = sinf(t * 7.0f) * 3.0f;
+        Txt(">>", r.x + 22.0f + nudge, r.y + r.height * 0.5f - 10.0f, 18, C_AMBER);
+        Txt("<", r.x + r.width - 28.0f - nudge, r.y + r.height * 0.5f - 10.0f, 18, accent);
+    }
+    else
+    {
+        DrawRectangle((int)(r.x + r.width - 20.0f), (int)(r.y + r.height * 0.5f - 3.0f), 6, 6, Fade(accent, 0.42f));
+    }
+
+    int fs = 20;
+    float tw = TxtW(label, fs);
+    float tx = r.x + (r.width - tw) * 0.5f;
+    float ty = r.y + (r.height - fs) * 0.5f;
+    Txt(label, tx + 2.0f, ty + 2.0f, fs, Fade(BLACK, 0.72f));
+    Txt(label, tx, ty, fs, on ? WHITE : Fade(WHITE, 0.85f));
+}
+
+static void DrawInvPauseMenu(void)
+{
+    DrawRectangle(0, 0, VW, VH, Fade(C_BG, 0.78f));
+
+    Rectangle panel = {390.0f, 152.0f, 500.0f, 412.0f};
+    DrawRectangleRounded(panel, 0.05f, 10, (Color){10, 15, 30, 248});
+    DrawRectangleRoundedLinesEx(panel, 0.05f, 10, 2.0f, C_CYAN);
+
+    float pad = 9.0f, tLen = 20.0f;
+    DrawLineEx((Vector2){panel.x + pad, panel.y + pad}, (Vector2){panel.x + pad + tLen, panel.y + pad}, 2.4f, C_AMBER);
+    DrawLineEx((Vector2){panel.x + pad, panel.y + pad}, (Vector2){panel.x + pad, panel.y + pad + tLen}, 2.4f, C_AMBER);
+    DrawLineEx((Vector2){panel.x + panel.width - pad, panel.y + pad}, (Vector2){panel.x + panel.width - pad - tLen, panel.y + pad}, 2.4f, C_AMBER);
+    DrawLineEx((Vector2){panel.x + panel.width - pad, panel.y + pad}, (Vector2){panel.x + panel.width - pad, panel.y + pad + tLen}, 2.4f, C_AMBER);
+    DrawLineEx((Vector2){panel.x + pad, panel.y + panel.height - pad}, (Vector2){panel.x + pad + tLen, panel.y + panel.height - pad}, 2.4f, C_AMBER);
+    DrawLineEx((Vector2){panel.x + pad, panel.y + panel.height - pad}, (Vector2){panel.x + pad, panel.y + panel.height - pad - tLen}, 2.4f, C_AMBER);
+    DrawLineEx((Vector2){panel.x + panel.width - pad, panel.y + panel.height - pad}, (Vector2){panel.x + panel.width - pad - tLen, panel.y + panel.height - pad}, 2.4f, C_AMBER);
+    DrawLineEx((Vector2){panel.x + panel.width - pad, panel.y + panel.height - pad}, (Vector2){panel.x + panel.width - pad, panel.y + panel.height - pad - tLen}, 2.4f, C_AMBER);
+
+    TxtC("MENU DE PAUSA", VW * 0.5f, 186.0f, 34, WHITE);
+    TxtC("Escolha como deseja continuar", VW * 0.5f, 232.0f, 16, C_DIM);
+    DrawLine((int)(panel.x + 36), 266, (int)(panel.x + panel.width - 36), 266, Fade(C_CYAN, 0.35f));
+
+    static const char *labels[3] = {"CONTINUAR", "VOLTAR AO MENU INICIAL", "FECHAR O JOGO"};
+    const Color cols[3] = {C_CYAN, C_AMBER, C_RED};
+    for (int i = 0; i < 3; i++)
+    {
+        DrawInvCyberButton(InvPauseBtn(i), labels[i], cols[i], invPauseSel == i);
+    }
+
+    TxtC("W/S ou SETAS: escolher    ENTER / CLIQUE: confirmar    ESC: continuar",
+         VW * 0.5f, panel.y + panel.height - 32.0f, 13, C_DIM);
+}
+
 static void Draw(void)
 {
     if (gs == GS_CRAWL)
@@ -3333,7 +3453,7 @@ static void Draw(void)
     DrawHUD();
     if (gs == GS_STORY) DrawStory();
     if (gs == GS_TALK) DrawTalk();
-    if (gs == GS_PAUSE) DrawOverlay("PAUSA", "[ESC] continuar    [Q] voltar ao menu", C_CYAN, 0);
+    if (gs == GS_PAUSE) DrawInvPauseMenu();
     if (gs == GS_OVER) DrawOverlay("CONEXÃO PERDIDA", "[R] recomeçar este estágio    [Q] menu", C_RED, 3);
     if (gs == GS_WIN) DrawOverlay("A.R.1.3.L. DESCONECTADA", "Os quatro protocolos caíram.   [R] jogar de novo   [ENTER] menu", C_AMBER, 1);
 }
@@ -3379,6 +3499,7 @@ static bool InvApplyKeys(InvKeys k)
     if (k.esc && (gs == GS_PLAY || gs == GS_PAUSE))
     {
         gs = (gs == GS_PLAY) ? GS_PAUSE : GS_PLAY;
+        if (gs == GS_PAUSE) invPauseSel = 0;
         return false;
     }
     if (gs == GS_PAUSE && k.q) return true;
@@ -3457,6 +3578,28 @@ void InvUpdate(GameState *game, float dt)
     {
         InvLeave(game);
         return;
+    }
+    if (gs == GS_PAUSE)
+    {
+        if (IsKeyPressed(KEY_W) || IsKeyPressed(KEY_UP)) invPauseSel = (invPauseSel + 2) % 3;
+        if (IsKeyPressed(KEY_S) || IsKeyPressed(KEY_DOWN)) invPauseSel = (invPauseSel + 1) % 3;
+
+        Vector2 vm = GetVirtualMouse();
+        bool mouseClick = false;
+        for (int i = 0; i < 3; i++)
+        {
+            if (CheckCollisionPointRec(vm, InvPauseBtn(i)))
+            {
+                invPauseSel = i;
+                if (IsMouseButtonPressed(MOUSE_BUTTON_LEFT)) mouseClick = true;
+            }
+        }
+        if (mouseClick || k.enter || k.space)
+        {
+            if (invPauseSel == 0) gs = GS_PLAY;
+            else if (invPauseSel == 1) { InvLeave(game); return; }
+            else if (invPauseSel == 2) { StopInvBgm(); if (game) game->exitRequested = true; return; }
+        }
     }
     UpdateInvBgm(stage, gs == GS_PAUSE || gs == GS_OVER || gs == GS_WIN);
     Update(fminf(dt, 1.0f / 30), gs == GS_PLAY ? ReadInput() : (Input){0});
