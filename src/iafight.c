@@ -1434,7 +1434,12 @@ static int IaraFrameIdx(Fighter *a)
         const Atk *d = &ATK[CH_IARA][a->atk < AT_SPECIAL ? a->atk : 0];
         switch (a->atk)
         {
-        case AT_LIGHT: return IaraAtkFrame(a, IR_JAB, 2, 2, d->st, d->ac, d->rc);    /* 5: guarda, ombro, GARRA, recolhe */
+        case AT_LIGHT:
+        { /* 5: guarda, ombro, GARRA (com os riscos), recolhe, guarda. O quadro do ombro (1), com o braco atras da
+             cabeca e o corpo inclinado para tras, parece um tranco de dano: o preparo fica na guarda (0) */
+            int f = IaraAtkFrame(a, IR_JAB, 2, 2, d->st, d->ac, d->rc);
+            return f == IRFrame(IR_JAB, 1) ? IRFrame(IR_JAB, 0) : f;
+        }
         case AT_HEAVY: return IaraAtkFrame(a, IR_TAIL, 3, 4, d->st, d->ac, d->rc);   /* 7: cauda para tras, chicote alto (3-4) */
         case AT_FWDH: return IaraAtkFrame(a, IR_LONG, 3, 4, d->st, d->ac, d->rc);    /* 7: recua, mechas lancadas (3-4) */
         case AT_UPPER: return IaraAtkFrame(a, IR_UPPER, 3, 5, d->st, d->ac, d->rc);  /* 8: afunda, jato, garra no alto (3-5) */
