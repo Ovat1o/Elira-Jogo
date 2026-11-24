@@ -121,23 +121,25 @@ static void DrawEFC(int f, Vector2 c, int face, float sc, Color tint)
 }
 
 /* ------------------------------------------------------------------ personagens */
-typedef enum { CH_ELIRA, CH_CLAUDE, CH_CODEX, CH_ANTI, CH_IARA, CH_AURA, CH_N } CharId;
-#define CH_MAIN 4 /* os 4 lutadores da grade; a Iara e a AURA_67 (convidadas de colab, jogos parceiros) tem cartao COLAB */
-static const char *NAME[CH_N] = {"ELIRA", "CLAUDE", "CODEX", "ANTIGRAVITY", "IARA", "AURA_67"};
-static const char *SPNAME[CH_N] = {"RAJADA TEMPORAL", "PRISMA REFLETOR", "DEPLOY FORÇADO", "POÇO GRAVITACIONAL", "CANTO DO RIO", "FALHA CRÍTICA"};
+typedef enum { CH_ELIRA, CH_CLAUDE, CH_CODEX, CH_ANTI, CH_IARA, CH_AURA, CH_LIA, CH_N } CharId;
+#define CH_MAIN 4 /* os 4 lutadores da grade; a Iara, a AURA_67 e a LIA (convidadas de colab, jogos parceiros) tem cartao COLAB */
+static const char *NAME[CH_N] = {"ELIRA", "CLAUDE", "CODEX", "ANTIGRAVITY", "IARA", "AURA_67", "LIA"};
+static const char *SPNAME[CH_N] = {"RAJADA TEMPORAL", "PRISMA REFLETOR", "DEPLOY FORÇADO", "POÇO GRAVITACIONAL", "CANTO DO RIO", "FALHA CRÍTICA", "PAPO ENCANTADO"};
 static const char *SPDESC[CH_N] = {"Carrega o canhão e dispara um núcleo de plasma que atravessa e acerta 3 vezes.",
                                    "Escudo de raciocínio: reflete projéteis e responde golpes com um feixe de luz.",
                                    "Avança compilando: prende o oponente numa sequência de 4 golpes e um final.",
                                    "Abre um poço que puxa e ergue o oponente, depois o derruba no chão.",
                                    "Canta, vira a forma monstruosa e solta uma onda que avança e acerta 3 vezes.",
-                                   "Some em glitch, reaparece colada no oponente e o rasga com garras e uma mordida."};
+                                   "Some em glitch, reaparece colada no oponente e o rasga com garras e uma mordida.",
+                                   "Discursa no celular flip: o balão encanta o oponente e ela finaliza com o fichário."};
 static const char *WINQ[CH_N] = {"\"A história não se reescreve sozinha. Eu reescrevo.\"",
                                  "\"Considerei todas as hipóteses. Esta era a melhor.\"",
                                  "\"Build concluída. Zero erros, zero avisos.\"",
                                  "\"Aqui em cima, quem decide a queda sou eu.\"",
                                  "\"O rio sempre leva de volta o que é dele.\"",
-                                 "\"Erro fatal. Pressione qualquer tecla para chorar.\""};
-static const Color CHCOL[CH_N] = {{96, 214, 240, 255}, {222, 116, 76, 255}, {70, 255, 150, 255}, {150, 120, 255, 255}, {64, 178, 168, 255}, {255, 42, 75, 255}};
+                                 "\"Erro fatal. Pressione qualquer tecla para chorar.\"",
+                                 "\"Nem precisei terminar o discurso.\""};
+static const Color CHCOL[CH_N] = {{96, 214, 240, 255}, {222, 116, 76, 255}, {70, 255, 150, 255}, {150, 120, 255, 255}, {64, 178, 168, 255}, {255, 42, 75, 255}, {255, 63, 164, 255}};
 
 typedef enum { ST_IDLE, ST_WALK, ST_JUMP, ST_CROUCH, ST_BLOCK, ST_ATK, ST_HIT, ST_KO, ST_WIN, ST_LOSE, ST_DASH } FState;
 /* AT_FWDH = frente + forte (soco longo, mais lento); AT_UPPER = cima + forte (uppercut anti-aereo) */
@@ -188,11 +190,18 @@ static const Atk ATK[CH_N][AT_SPECIAL] = {
                  {0.05f, 0.16f, 0.10f, 55, 88, 212, 110, 0.32f, 160, 2},    /* aereo: cabecada mergulhando */
                  {0.22f, 0.10f, 0.30f, 88, 262, 138, 72, 0.45f, 330, 0},    /* golpe longo: o braco solta em corrente (ate 270) */
                  {0.08f, 0.14f, 0.32f, 80, 90, 330, 300, 0.50f, 120, 0}},   /* uppercut: garras subindo em arco */
+    /* LIA: alcances medidos no atlas (px da luta, guarda de 214 px): ponta do fichario / do tenis / do fio do fone */
+    [CH_LIA] = {{0}, {0.07f, 0.08f, 0.15f, 36, 195, 215, 85, 0.20f, 165, 0},  /* fichariada: o fichario girando na altura do rosto */
+                {0.15f, 0.10f, 0.28f, 98, 132, 185, 90, 0.45f, 320, 0},    /* chute alto e reto com o tenis */
+                {0.09f, 0.09f, 0.21f, 44, 205, 45, 45, 0.30f, 150, 1},     /* rasteira: o tenis varrendo o chao */
+                {0.06f, 0.16f, 0.10f, 52, 150, 110, 100, 0.32f, 160, 2},   /* aereo: o CD lancado em diagonal para baixo */
+                {0.22f, 0.10f, 0.30f, 80, 355, 180, 55, 0.45f, 330, 0},    /* golpe longo: o fio do fone estalando como chicote */
+                {0.08f, 0.14f, 0.32f, 80, 105, 340, 300, 0.50f, 120, 0}},  /* uppercut: o fichario de baixo para cima */
 };
 /* especiais: preparo / janela ativa / recuperacao */
-static const float SP_ST[CH_N] = {0.42f, 0.08f, 0.14f, 0.22f, 0.50f, 0.34f}; /* Iara: canta e se transforma antes da onda; AURA_67: some em glitch */
-static const float SP_AC[CH_N] = {0.05f, 0.40f, 0.40f, 0.05f, 0.05f, 0.62f}; /* AURA_67: a sequencia de garras e a mordida */
-static const float SP_RC[CH_N] = {0.40f, 0.50f, 0.34f, 0.45f, 0.40f, 0.26f};
+static const float SP_ST[CH_N] = {0.42f, 0.08f, 0.14f, 0.22f, 0.50f, 0.34f, 0.45f}; /* Iara: canta e se transforma antes da onda; AURA_67: some em glitch; LIA: abre o celular */
+static const float SP_AC[CH_N] = {0.05f, 0.40f, 0.40f, 0.05f, 0.05f, 0.62f, 0.10f}; /* AURA_67: a sequencia de garras e a mordida; LIA: o balao sai */
+static const float SP_RC[CH_N] = {0.40f, 0.50f, 0.34f, 0.45f, 0.40f, 0.26f, 0.45f};
 
 typedef struct
 {
@@ -230,6 +239,8 @@ typedef struct
     float cancelT;    /* > 0: o golpe acertou e pode ser cancelado no proximo do combo */
     bool grabbed;     /* preso num agarrao do oponente */
     float groundT;    /* tempo no chao desde o ultimo pouso (0 no ar): quadros da queda */
+    float charmT;     /* > 0: ENCANTADO pelo Papo Encantado da LIA (parado, sem agir) */
+    bool charmPend;   /* LIA: o balao encantou o oponente, falta a finalizacao */
 } Fighter;
 
 /* leftP/rightP: tocou na direcao agora (toque duplo = dash); dashP: botao de dash (LB / L1);
@@ -237,7 +248,7 @@ typedef struct
 typedef struct { bool left, right, up, down, upP, lightP, heavyP, specialP, leftP, rightP, dashP, grabP; } IafInput;
 
 /* projeteis */
-typedef struct { bool on; float x, y, vx; int owner; bool reflected; float dmg, t, hitCd; int hits; bool wave; } Proj; /* nucleo da Rajada Temporal; wave: onda da Iara */
+typedef struct { bool on; float x, y, vx; int owner; bool reflected; float dmg, t, hitCd; int hits; bool wave; bool charm; } Proj; /* nucleo da Rajada Temporal; wave: onda da Iara; charm: balao da LIA */
 static Proj proj[IAF_MAX_PROJ];
 /* poco gravitacional */
 typedef struct { bool on; float x, y, t, life; int owner; bool caught, resisted; } Well;
@@ -460,6 +471,7 @@ static const Dims DIMS[CH_N] = {
     {55, 54, 70, 40, 38, 22, 16, 23, 13},
     {50, 50, 70, 40, 40, 24, 18, 21, 15}, /* iara (nao usado: so sem o atlas) */
     {50, 50, 70, 40, 40, 24, 18, 21, 15}, /* aura_67 (nao usado: so sem o atlas) */
+    {50, 50, 70, 40, 40, 24, 18, 21, 15}, /* lia (nao usado: so sem o atlas) */
 };
 typedef struct
 {
@@ -1683,6 +1695,136 @@ static int AuraFrameIdx(Fighter *a)
     return AULoop(AU_IDLE, gt, 8);
 }
 
+/* ------------------------------------------------------------------ LIA: atlas de luta (personagem de colab)
+   Garota Y2K do jogo parceiro: luta com o fichario rosa, o chute de tenis, o fio do fone do MP3 e o CD. O atlas
+   (iafight_lia.h, gerado fora do repositorio a partir das tiras da LIA) ja vem na escala da luta: desenho em 1x,
+   filtro POINT. Sem defesa agachada no pacote: agachada, ela usa o quadro do uppercut atras do fichario.
+   PAPO ENCANTADO: carga, discurso e balao (projetil); se o balao acerta, o oponente fica ENCANTADO (parado) e ela
+   faz sozinha a finalizacao (fichariada giratoria), com a->caught = modo finalizacao. */
+#include "iafight_lia.h"
+static Texture2D texLia;
+#define IAF_LIA_ALT_TINT ((Color){170, 215, 255, 255}) /* espelho: rosa puxado para o azul */
+#define LI_CHARM_T 2.0f   /* tempo encantado (s) */
+#define LI_FINAL_T 0.90f  /* duracao da finalizacao (s) */
+#define LI_FINAL_HIT 0.58f /* quando a fichariada giratoria acerta (quadro 5) */
+static int LIFrame(int anim, int i)
+{
+    int n = LI_COUNT[anim];
+    if (i < 0) i = 0;
+    if (i >= n) i = n - 1;
+    return LI_FIRST[anim] + i;
+}
+static int LILoop(int anim, float t, float fps) { return LI_FIRST[anim] + ((int)(t * fps) % LI_COUNT[anim]); }
+static void DrawLF(int f, float x, float yFeet, int face, float sc, Color tint, float flash)
+{
+    const LFrame *e = &LIF[f];
+    Rectangle src = {e->x, e->y, e->w, e->h};
+    float left = face > 0 ? x - e->ax * sc : x - (e->w - e->ax) * sc;
+    if (face < 0) src.width = -src.width;
+    Rectangle dst = {roundf(left), roundf(yFeet - e->ay * sc), e->w * sc, e->h * sc};
+    DrawTexturePro(texLia, src, dst, (Vector2){0, 0}, 0, tint);
+    if (flash > 0)
+    {
+        BeginBlendMode(BLEND_ADDITIVE);
+        DrawTexturePro(texLia, src, dst, (Vector2){0, 0}, 0, Fade(WHITE, flash));
+        EndBlendMode();
+    }
+}
+/* efeitos (balao e encantado): ancorados no centro */
+static void DrawLFC(int f, Vector2 c, int face, float sc, Color tint)
+{
+    const LFrame *e = &LIF[f];
+    Rectangle src = {e->x, e->y, e->w, e->h};
+    float ax = face > 0 ? e->ax : e->w - e->ax;
+    if (face < 0) src.width = -src.width;
+    DrawTexturePro(texLia, src, (Rectangle){roundf(c.x - ax * sc), roundf(c.y - e->ay * sc), e->w * sc, e->h * sc}, (Vector2){0, 0}, 0, tint);
+}
+/* golpe: preparo usa os quadros [0, a0), ativo [a0, a1], recuperacao o resto */
+static int LiaAtkFrame(Fighter *a, int anim, int a0, int a1, float st, float ac, float rc)
+{
+    int n = LI_COUNT[anim], i;
+    float t = a->atkT;
+    if (ac < IAF_ACTIVE_VISUAL) { rc = fmaxf(rc - (IAF_ACTIVE_VISUAL - ac), 0.02f); ac = IAF_ACTIVE_VISUAL; }
+    if (t < st) i = (int)(t / st * a0);
+    else if (t < st + ac) i = a0 + (int)((t - st) / ac * (a1 - a0 + 1));
+    else i = a1 + 1 + (int)((t - st - ac) / rc * (n - 1 - a1));
+    return LIFrame(anim, i);
+}
+/* Papo Encantado: carga (abre o celular, 0-7) no preparo; o discurso (0-7) no resto, com o balao saindo no inicio.
+   Finalizacao (caught): fecha o celular (0-1), avanca girando o fichario (2-4), acerta (5) e volta (6-7) */
+static int LiaSpecialFrame(Fighter *a)
+{
+    float t = a->atkT, st = SP_ST[CH_LIA], rest = SP_AC[CH_LIA] + SP_RC[CH_LIA];
+    if (a->caught) return LIFrame(LI_FINAL, (int)(t / LI_FINAL_T * LI_COUNT[LI_FINAL]));
+    if (t < st) return LIFrame(LI_CHARGE, (int)(t / st * LI_COUNT[LI_CHARGE]));
+    return LIFrame(LI_SPEECH, (int)((t - st) / rest * LI_COUNT[LI_SPEECH]));
+}
+/* queda presa a fisica: tranco (0), lancada (1-2), cai de costas (3-4), quica (5) e deitada (6-7) */
+static int LiaKoFrame(Fighter *a)
+{
+    if (!a->down && a->st == ST_KO && a->stT < 0.06f) return LIFrame(LI_KO, 0);
+    if (!OnGround(a)) return LIFrame(LI_KO, a->vy < 0 ? 1 : 2);
+    float g = a->groundT;
+    return LIFrame(LI_KO, g < 0.08f ? 3 : (g < 0.16f ? 4 : (g < 0.24f ? 5 : (g < 0.32f ? 6 : 7))));
+}
+static int LiaFrameIdx(Fighter *a)
+{
+    if (a->st == ST_KO) return LiaKoFrame(a);
+    if (a->down)
+    { /* caida; no fim se levanta (apoia os cotovelos, senta, pega o fichario, levanta) */
+        if (a->downT > 0.36f) return LiaKoFrame(a);
+        return LIFrame(LI_GETUP, (int)((1 - a->downT / 0.36f) * LI_COUNT[LI_GETUP]));
+    }
+    if (a->st == ST_LOSE) return LIFrame(LI_LOSE, (int)(a->stT * 8)); /* ajoelhada abracando o fichario e fica */
+    if (a->st == ST_WIN) return LILoop(LI_WIN, a->stT, 8);            /* selfie em loop */
+    if (a->st == ST_HIT)
+    {
+        if ((!OnGround(a) || a->vy < 0) && !a->grabbed) return LIFrame(LI_KO, a->vy < 0 ? 1 : 2); /* lancada */
+        float tot = a->stT + fmaxf(a->stun, 0), p = tot > 0 ? a->stT / tot : 1;
+        if (a->hitCrouch) return LIFrame(LI_HIT_CROUCH, p < 0.25f ? 1 : (p < 0.75f ? 2 : 3));
+        return LIFrame(LI_HIT, p < 0.2f ? 1 : (p < 0.5f ? 2 : (p < 0.8f ? 3 : 4))); /* jogada para tras, desliza, volta brava */
+    }
+    if (a->st == ST_ATK)
+    {
+        const Atk *d = &ATK[CH_LIA][a->atk < AT_SPECIAL ? a->atk : 0];
+        switch (a->atk)
+        {
+        case AT_LIGHT: return LiaAtkFrame(a, LI_JAB, 2, 3, d->st, d->ac, d->rc);   /* 6: puxa o fichario, FICHARIADA (2-3), volta */
+        case AT_HEAVY: return LiaAtkFrame(a, LI_KICK, 2, 3, d->st, d->ac, d->rc);  /* 7: gira o quadril, CHUTE alto (2-3) */
+        case AT_FWDH: return LiaAtkFrame(a, LI_LONG, 4, 4, d->st, d->ac, d->rc);   /* 8: tira o MP3, ESTALA o fio (4), enrola */
+        case AT_UPPER: return LiaAtkFrame(a, LI_UPPER, 3, 5, d->st, d->ac, d->rc); /* 8: agacha, fichario de baixo para cima (3-5) */
+        case AT_LOW: return LiaAtkFrame(a, LI_LOW, 3, 4, d->st, d->ac, d->rc);     /* 7: abaixa, RASTEIRA com o tenis (3-4) */
+        case AT_AIR: return LiaAtkFrame(a, LI_AIR, 3, 4, d->st, d->ac, d->rc);     /* 6: puxa o CD e lanca em diagonal (3-4) */
+        case AT_SPECIAL: return LiaSpecialFrame(a);
+        default: break;
+        }
+    }
+    if (a->shieldOn || a->st == ST_BLOCK)
+    { /* ergue o fichario como escudo (0-2) e segura (3); agachada: atras do fichario (uppercut #1, sem arte propria) */
+        if (a->crouch) return LIFrame(LI_BLOCK_CROUCH, 0);
+        return LIFrame(LI_BLOCK, a->shieldHit > 0 ? 3 : (int)(a->shieldT / 0.05f));
+    }
+    if (a->st == ST_DASH) return LIFrame(LI_DASH, (int)(a->dashT / IAF_DASH_TIME * LI_COUNT[LI_DASH]));
+    if (a->st == ST_JUMP)
+    { /* salta com o punho erguido (1-2), encolhe no alto (3-4), desce (5-6) */
+        if (a->stT < 0.06f && a->vy < 0) return LIFrame(LI_JUMP, 1);
+        float k = Clamp((a->vy + IAF_JUMP_SPEED) / (2 * IAF_JUMP_SPEED), 0.0f, 1.0f);
+        return LIFrame(LI_JUMP, 2 + (int)(k * 4.99f));
+    }
+    if (a->crouch) return LIFrame(LI_CROUCH, (int)(a->stT / 0.04f));
+    if (a->st == ST_WALK) return LILoop((a->vx * a->face) < 0 ? LI_WALK_B : LI_WALK_F, a->anim, 12);
+    return LILoop(LI_IDLE, gt, 8);
+}
+/* coracoes girando sobre a cabeca de quem esta encantado (logo acima da caixa do corpo) */
+static Rectangle Hurt(Fighter *a);
+static void DrawCharm(Fighter *a)
+{
+    if (a->charmT <= 0 || !texLia.id) return;
+    float k = Clamp(a->charmT / 0.25f, 0.0f, 1.0f);
+    Rectangle h = Hurt(a);
+    DrawLFC(LILoop(LI_CHARM, gt, 12), (Vector2){a->x, h.y - 18 + 4 * sinf(gt * 5)}, 1, 1.0f, Fade(WHITE, k));
+}
+
 /* ------------------------------------------------------------------ desenho de um lutador */
 /* rastro do golpe: arco translucido na cor do lutador, varrendo o caminho do membro que golpeia
    (angulos em graus a partir da frente; positivo = para baixo) */
@@ -1747,7 +1889,7 @@ static void DrawFighter(Fighter *a)
     float flash = a->flash > 0 ? Clamp(a->flash / 0.12f, 0.0f, 1.0f) * 0.8f : 0;
     float alt = IAF_GROUND_Y - a->y;
     float jx = a->hitShake > 0 ? (Rand01() - 0.5f) * 2 * IAF_HIT_SHAKE_PX : 0; /* tremor no impacto */
-    DrawShadow(a->x, (a->ch == CH_CLAUDE && texClaude.id ? 100 : (a->ch == CH_ANTI && texAnti.id ? 84 : (a->ch == CH_CODEX && texCodex.id ? 84 : (a->ch == CH_IARA && texIara.id ? IRK(62) : (a->ch == CH_AURA && texAura.id ? 66 : 52))))) - fminf(alt, 200) * 0.12f);
+    DrawShadow(a->x, (a->ch == CH_CLAUDE && texClaude.id ? 100 : (a->ch == CH_ANTI && texAnti.id ? 84 : (a->ch == CH_CODEX && texCodex.id ? 84 : (a->ch == CH_IARA && texIara.id ? IRK(62) : (a->ch == CH_AURA && texAura.id ? 66 : (a->ch == CH_LIA && texLia.id ? 58 : 52)))))) - fminf(alt, 200) * 0.12f);
     if (a->ch == CH_IARA && texIara.id && alt > 30 && a->st != ST_KO)
     { /* no ar a poca fica no chao: aneis de agua embaixo dela */
         float k = Clamp(1 - alt / 420, 0.3f, 1.0f);
@@ -1767,6 +1909,7 @@ static void DrawFighter(Fighter *a)
             else if (a->ch == CH_CODEX && texCodex.id) DrawXF(CodexFrameIdx(a), gx, a->y, a->face, XC_SCALE, Fade(c, al), 0);
             else if (a->ch == CH_IARA && texIara.id) DrawIRF(IaraFrameIdx(a), gx, a->y, a->face, IR_DRAW, Fade(c, al), 0);
             else if (a->ch == CH_AURA && texAura.id) DrawUF(AuraFrameIdx(a), gx, a->y, a->face, 1.0f, Fade(c, al), 0);
+            else if (a->ch == CH_LIA && texLia.id) DrawLF(LiaFrameIdx(a), gx, a->y, a->face, 1.0f, Fade(c, al), 0);
         }
         for (int l = 0; l < 6; l++)
         {
@@ -1809,6 +1952,11 @@ static void DrawFighter(Fighter *a)
         DrawIRF(IaraFrameIdx(a), a->x + jx, a->y, a->face, IR_DRAW, a->alt ? IAF_IARA_ALT_TINT : WHITE, flash);
     }
     else if (a->ch == CH_AURA && texAura.id) DrawUF(AuraFrameIdx(a), a->x + jx, a->y, a->face, 1.0f, a->alt ? IAF_AURA_ALT_TINT : WHITE, flash);
+    else if (a->ch == CH_LIA && texLia.id)
+    {
+        float bx = (a->st == ST_BLOCK && a->shieldHit > 0) ? (Rand01() - 0.5f) * 8 * Clamp(a->shieldHit / 0.15f, 0.0f, 1.0f) : 0; /* o fichario treme ao defender */
+        DrawLF(LiaFrameIdx(a), a->x + jx + bx, a->y, a->face, 1.0f, a->alt ? IAF_LIA_ALT_TINT : WHITE, flash);
+    }
     else
     {
         Pose p = PoseFor(a);
@@ -1816,9 +1964,9 @@ static void DrawFighter(Fighter *a)
         DrawPuppet(a->ch, a->x + jx, a->y, a->face, 1.0f, p, flash, a->vx);
         g_altPal = false;
     }
-    if (!(a->ch == CH_CLAUDE && texClaude.id) && !(a->ch == CH_ANTI && texAnti.id) && !(a->ch == CH_IARA && texIara.id) && !(a->ch == CH_AURA && texAura.id)) DrawAttackTrail(a, jx); /* os golpes do Antigravity, da Iara e da AURA_67 ja trazem o rastro no desenho */
+    if (!(a->ch == CH_CLAUDE && texClaude.id) && !(a->ch == CH_ANTI && texAnti.id) && !(a->ch == CH_IARA && texIara.id) && !(a->ch == CH_AURA && texAura.id) && !(a->ch == CH_LIA && texLia.id)) DrawAttackTrail(a, jx); /* os golpes do Antigravity, da Iara, da AURA_67 e da LIA ja trazem o rastro no desenho */
     /* defesa das IAs: placa hexagonal na frente (a Elira e o Antigravity tem quadros proprios) */
-    if (a->st == ST_BLOCK && a->ch != CH_ELIRA && !(a->ch == CH_CLAUDE && texClaude.id) && !(a->ch == CH_ANTI && texAnti.id) && !(a->ch == CH_IARA && texIara.id) && !(a->ch == CH_AURA && texAura.id)) /* a Iara ergue a parede de agua; a AURA_67 cruza os ossos */
+    if (a->st == ST_BLOCK && a->ch != CH_ELIRA && !(a->ch == CH_CLAUDE && texClaude.id) && !(a->ch == CH_ANTI && texAnti.id) && !(a->ch == CH_IARA && texIara.id) && !(a->ch == CH_AURA && texAura.id) && !(a->ch == CH_LIA && texLia.id)) /* a Iara ergue a parede de agua; a AURA_67 cruza os ossos; a LIA ergue o fichario */
     {
         Color c = FCol(a);
         float cy = a->crouch ? a->y - 60 : a->y - 120, cx = a->x + a->face * 52;
@@ -1909,6 +2057,7 @@ static bool showBoxes = false;      /* F1 / SELECT na luta (em qualquer modo): c
 
 static float AtkTotal(Fighter *a)
 {
+    if (a->atk == AT_SPECIAL && a->ch == CH_LIA && a->caught) return LI_FINAL_T; /* finalizacao do Papo Encantado */
     if (a->atk == AT_SPECIAL) return SP_ST[a->ch] + SP_AC[a->ch] + SP_RC[a->ch];
     if (a->atk == AT_GRAB) return IAF_GRAB_HOLD + IAF_GRAB_RECOVER;
     const Atk *d = &ATK[a->ch][a->atk];
@@ -1922,13 +2071,14 @@ static Rectangle Hurt(Fighter *a)
     if (a->ch == CH_ANTI) { w = 148; h = a->crouch ? 124 : 164; lift = AntiHover(a); } /* "A" em escala 2x (~180x164 na tela), flutuando ~13 px */
     if (a->ch == CH_CODEX) { w = 130; h = a->crouch ? 150 : 198; }  /* nuvem do sprite (~157 de largura; as bordas fofas nao contam) */
     if (a->ch == CH_IARA) { w = IRK(100); h = IRK(a->crouch ? 130 : 205); } /* tronco, cauda e poca (~210 x IAF_IARA_ESCALA com o cabelo) */
+    if (a->ch == CH_LIA) { w = 90; h = a->crouch ? 150 : 215; } /* corpo sem o cabelo solto atras (guarda de 214) */
     if (a->ch == CH_AURA) { w = 96; h = a->crouch ? 146 : 214; } /* caveira (~110 de largura) e os bracos embaixo, do topo (228) ao chao */
     if (a->down || a->st == ST_KO) h = 40;
     return (Rectangle){a->x - w / 2, a->y - lift - h, w, h};
 }
 /* meia largura do corpo para nao se sobreporem: o tronco do sprite (colunas com pelo menos 35% da
    altura), sem canhao, bracos e cabelo, que podem passar na frente do oponente */
-static float BodyHalf(Fighter *a) { return a->ch == CH_CLAUDE ? 90.0f : (a->ch == CH_ANTI ? 72.0f : (a->ch == CH_CODEX ? 70.0f : (a->ch == CH_IARA ? IRK(50.0f) : (a->ch == CH_AURA ? 54.0f : 50.0f)))); }
+static float BodyHalf(Fighter *a) { return a->ch == CH_CLAUDE ? 90.0f : (a->ch == CH_ANTI ? 72.0f : (a->ch == CH_CODEX ? 70.0f : (a->ch == CH_IARA ? IRK(50.0f) : (a->ch == CH_AURA ? 54.0f : (a->ch == CH_LIA ? 48.0f : 50.0f))))); }
 static bool Overlap(Rectangle a, Rectangle b) { return a.x < b.x + b.width && b.x < a.x + a.width && a.y < b.y + b.height && b.y < a.y + a.height; }
 static bool OnGround(Fighter *a) { return a->y >= IAF_GROUND_Y - 0.5f; }
 static void SetState(Fighter *a, FState s) { a->st = s; a->stT = 0; }
@@ -2049,6 +2199,8 @@ static void ApplyHit(Fighter *att, Fighter *def, float dmg, float stun, float pu
     PlaySfx(HitstopFor(att) >= IAF_HITSTOP_HEAVY ? SFX_HEAVY : SFX_LIGHT);
     def->hitShake = hitstop;
     shake = fmaxf(shake, dmg / 600.0f);
+    def->charmT = 0;        /* golpe que entra desfaz o encanto */
+    def->charmPend = false; /* a LIA apanhando perde a finalizacao do Papo Encantado */
     if (def->hp <= 0) KO(def, dir);
 }
 
@@ -2058,7 +2210,7 @@ static void SpawnProj(Fighter *a)
     for (int i = 0; i < IAF_MAX_PROJ; i++)
         if (!proj[i].on)
         {
-            proj[i] = (Proj){true, a->x + a->face * (IAF_MUZZLE_X + 25), a->y - IAF_MUZZLE_Y, a->face * 560.0f, Idx(a), false, 55.0f, 0, 0, 3, false};
+            proj[i] = (Proj){true, a->x + a->face * (IAF_MUZZLE_X + 25), a->y - IAF_MUZZLE_Y, a->face * 560.0f, Idx(a), false, 55.0f, 0, 0, 3, false, false};
             return;
         }
 }
@@ -2068,11 +2220,21 @@ static void SpawnWave(Fighter *a)
     for (int i = 0; i < IAF_MAX_PROJ; i++)
         if (!proj[i].on)
         {
-            proj[i] = (Proj){true, a->x + a->face * IR_FRONT, a->y - IRK(62), a->face * 520.0f, Idx(a), false, 50.0f, 0, 0, 3, true};
+            proj[i] = (Proj){true, a->x + a->face * IR_FRONT, a->y - IRK(62), a->face * 520.0f, Idx(a), false, 50.0f, 0, 0, 3, true, false};
             return;
         }
 }
 #define AU_SP_REACH 620.0f /* distancia maxima do salto da Falha Critica (px) */
+/* Papo Encantado: balao de fala que voa reto na altura do peito; 1 acerto que encanta (ver UpdateProjectiles) */
+static void SpawnBalloon(Fighter *a)
+{
+    for (int i = 0; i < IAF_MAX_PROJ; i++)
+        if (!proj[i].on)
+        {
+            proj[i] = (Proj){true, a->x + a->face * 70, a->y - 150, a->face * 430.0f, Idx(a), false, 20.0f, 0, 0, 1, false, true};
+            return;
+        }
+}
 static void UpdateSpecial(Fighter *a, Fighter *o, float dt)
 {
     float t = a->atkT, st = SP_ST[a->ch], ac = SP_AC[a->ch];
@@ -2186,6 +2348,37 @@ static void UpdateSpecial(Fighter *a, Fighter *o, float dt)
             if (h == 0 && wasGuard) { a->atkT = st + ac; break; } /* defendeu a 1a garra: a sequencia para */
             if (o->st == ST_HIT && h < 3) o->stun = fmaxf(o->stun, 0.25f);
             AddImpactClaw(at, a->face);
+        }
+        break;
+    case CH_LIA:
+        if (!a->caught)
+        { /* discurso: abre o celular (carga) e o balao sai no inicio da fala */
+            if (t < st && t > st * 0.5f && (int)(t * 60) % 4 == 0)
+                AddPart((Vector2){a->x + (Rand01() - 0.5f) * 80, a->y - 20 - Rand01() * 150}, (Vector2){(Rand01() - 0.5f) * 40, -90}, 0.45f, 3, Rand01() < 0.6f ? CHCOL[CH_LIA] : C_WHITE, 1);
+            if (t >= st && !a->spawned)
+            {
+                a->spawned = true;
+                SpawnBalloon(a);
+                PlaySfx(SFX_SP_FIRE);
+                AddText((Vector2){a->x, a->y - 270}, "PAPO ENCANTADO!", CHCOL[CH_LIA], 22);
+            }
+        }
+        else
+        { /* finalizacao: fecha o celular, avanca girando o fichario ate o oponente e acerta a fichariada giratoria */
+            float gap = BodyHalf(a) + BodyHalf(o) + 26, d = (o->x - a->x) * a->face - gap;
+            if (t > 0.15f && t < LI_FINAL_HIT) a->vx = d > 0 ? a->face * fminf(1700.0f, d / fmaxf(LI_FINAL_HIT - t, 0.05f)) : 0;
+            else a->vx = 0;
+            if (t >= LI_FINAL_HIT && !a->spawned)
+            {
+                a->spawned = true;
+                if (d < 90 && fabsf(o->y - a->y) < 160 && !o->down && o->st != ST_KO)
+                {
+                    bool charmed = o->charmT > 0;
+                    AddText((Vector2){o->x, o->y - 270}, "FICHARIADA!", CHCOL[CH_LIA], 26);
+                    ApplyHit(a, o, 92, 0.6f, 460, 0, (Vector2){o->x - a->face * 20, o->y - 150}, charmed, true);
+                    HitSparks((Vector2){o->x - a->face * 20, o->y - 150}, CHCOL[CH_LIA], 24, 520);
+                }
+            }
         }
         break;
     case CH_ANTI:
@@ -2325,6 +2518,15 @@ static void UpdateFighter(Fighter *a, Fighter *o, IafInput in, float dt)
     if (a->comboT > 0) a->comboT -= dt; else a->combo = 0;
     if (a->shieldHit > 0) a->shieldHit -= dt;
     a->meter = fminf(IAF_METER_MAX, a->meter + dt * 1.2f);
+    if (a->charmT > 0) { a->charmT -= dt; in = (IafInput){0}; } /* ENCANTADO: parado, sem agir */
+    if (a->charmPend && o->charmT <= 0) a->charmPend = false;  /* o encanto passou sem a finalizacao */
+    if (a->ch == CH_LIA && a->charmPend && OnGround(a) && (a->st == ST_IDLE || a->st == ST_WALK || a->st == ST_CROUCH || a->st == ST_BLOCK))
+    { /* Papo Encantado: livre, ela finaliza sozinha */
+        a->charmPend = false; a->crouch = false;
+        a->face = o->x > a->x ? 1 : -1;
+        StartAtk(a, AT_SPECIAL);
+        a->caught = true;
+    }
     bool ground = OnGround(a);
     int toward = o->x > a->x ? 1 : -1;
     bool canAct = a->st == ST_IDLE || a->st == ST_WALK || a->st == ST_CROUCH || (a->st == ST_BLOCK && a->stun <= 0);
@@ -2556,7 +2758,7 @@ static void UpdateProjectiles(float dt)
         p->x += p->vx * dt;
         if (p->hitCd > 0) p->hitCd -= dt;
         if (p->x < -80 || p->x > SCREEN_WIDTH + 80) { p->on = false; continue; }
-        if ((int)(p->t * 60) % 2 == 0) AddPart((Vector2){p->x - (p->vx > 0 ? 40 : -40), p->y + (Rand01() - 0.5f) * 30 + (p->wave ? 40 : 0)}, (Vector2){-p->vx * 0.2f, p->wave ? -60 : 0}, 0.35f, 3, p->wave ? (Color){214, 236, 238, 255} : C_CYAN, 1);
+        if ((int)(p->t * 60) % 2 == 0) AddPart((Vector2){p->x - (p->vx > 0 ? 40 : -40), p->y + (Rand01() - 0.5f) * 30 + (p->wave ? 40 : 0)}, (Vector2){-p->vx * 0.2f, p->wave ? -60 : 0}, 0.35f, 3, p->wave ? (Color){214, 236, 238, 255} : (p->charm ? CHCOL[CH_LIA] : C_CYAN), 1);
         Fighter *o = &fz[1 - p->owner];
         float r = p->wave ? IRK(38) : 38; /* a onda acompanha o tamanho da Iara */
         /* choque entre projeteis */
@@ -2588,14 +2790,22 @@ static void UpdateProjectiles(float dt)
             }
             Fighter *a = &fz[p->owner];
             g_projHit = true;
-            ApplyHit(a, o, p->dmg, 0.35f, 120, 0, (Vector2){p->x, p->y}, false, false);
+            ApplyHit(a, o, p->dmg, p->charm ? 0.2f : 0.35f, p->charm ? 40 : 120, 0, (Vector2){p->x, p->y}, false, false);
             g_projHit = false;
+            if (p->charm && !p->reflected && o->st == ST_HIT && o->hp > 0)
+            { /* Papo Encantado: o balao entrou (nao foi defendido nem refletido): encanta e a LIA vai finalizar */
+                o->charmT = LI_CHARM_T;
+                a->charmPend = true;
+                AddText((Vector2){o->x, o->y - 260}, "ENCANTO!", CHCOL[CH_LIA], 24);
+                HitSparks((Vector2){p->x, p->y}, CHCOL[CH_LIA], 18, 320);
+            }
             p->hits--;
             p->hitCd = 0.16f;
             if (p->hits <= 0)
             {
                 p->on = false;
                 if (p->wave && texIara.id) AddImpactWave((Vector2){p->x, p->y}, p->vx > 0 ? 1 : -1);
+                else if (p->charm) HitSparks((Vector2){p->x, p->y}, CHCOL[CH_LIA], 12, 260); /* o balao estoura em coracoes */
                 else AddImpact((Vector2){p->x, p->y}, 3.4f, p->vx > 0 ? 1 : -1);
             }
         }
@@ -2687,6 +2897,11 @@ static void DrawProjectiles(void)
         if (!p->on) continue;
         int face = p->vx > 0 ? 1 : -1;
         Color tint = p->reflected ? (Color){255, 210, 140, 255} : WHITE;
+        if (p->charm && texLia.id)
+        { /* balao de fala da LIA: balanca em loop */
+            DrawLFC(LILoop(LI_BALLOON, p->t, 10), (Vector2){p->x, p->y + 5 * sinf(p->t * 9)}, face, 1.0f, tint);
+            continue;
+        }
         if (p->wave && texIara.id)
         { /* onda da Iara: rola em loop, com um rastro apagado */
             int f = IRLoop(IR_PROJ, p->t, 12);
@@ -2791,12 +3006,13 @@ static IafInput CpuInput(int me, float dt)
         s->mode = AI_IDLE;
         s->t = 0.15f + Rand01() * 0.25f;
         bool sp = a->meter >= IAF_SPECIAL_COST;
-        bool prism = (a->ch == CH_ELIRA || a->ch == CH_IARA) && o->ch == CH_CLAUDE && o->meter >= IAF_SPECIAL_COST; /* a rajada e a onda voltariam refletidas */
+        bool prism = (a->ch == CH_ELIRA || a->ch == CH_IARA || a->ch == CH_LIA) && o->ch == CH_CLAUDE && o->meter >= IAF_SPECIAL_COST; /* a rajada e a onda voltariam refletidas */
         if (dist > 420)
         {
             if (sp && a->ch == CH_ELIRA && !prism && r < 0.7f) s->once.specialP = true;
             else if (sp && a->ch == CH_IARA && !prism && r < 0.6f) s->once.specialP = true; /* onda de longe */
             else if (sp && a->ch == CH_AURA && r < 0.45f && dist < AU_SP_REACH) s->once.specialP = true; /* some e reaparece colada */
+            else if (sp && a->ch == CH_LIA && !prism && r < 0.55f) s->once.specialP = true; /* balao de longe */
             else if (sp && a->ch == CH_ANTI && r < 0.35f && dist < 560) s->once.specialP = true;
             else if (sp && a->ch == CH_CODEX && r < 0.3f && dist < 560) s->once.specialP = true;
             else { s->mode = AI_FWD; s->t = 0.3f + Rand01() * 0.4f; if (Rand01() < 0.3f) s->once.dashP = true; }
@@ -2810,6 +3026,7 @@ static IafInput CpuInput(int me, float dt)
             else if (sp && a->ch == CH_CODEX && r < 0.85f) s->once.specialP = true;
             else if (sp && a->ch == CH_IARA && !prism && r < 0.8f) s->once.specialP = true;
             else if (sp && a->ch == CH_AURA && r < 0.8f) s->once.specialP = true;
+            else if (sp && a->ch == CH_LIA && !prism && r < 0.8f) s->once.specialP = true;
             else if (r < 0.9f) { s->mode = AI_BACK; s->t = 0.25f; }
         }
         else
@@ -2843,7 +3060,7 @@ static IafInput CpuInput(int me, float dt)
     if (s->once.grabP) in.grabP = true;
     if (s->once.upP) { in.upP = true; in.up = true; }
     memset(&s->once, 0, sizeof(s->once));
-    if ((a->ch == CH_ELIRA || a->ch == CH_IARA) && o->ch == CH_CLAUDE && o->st == ST_ATK && o->atk == AT_SPECIAL)
+    if ((a->ch == CH_ELIRA || a->ch == CH_IARA || a->ch == CH_LIA) && o->ch == CH_CLAUDE && o->st == ST_ATK && o->atk == AT_SPECIAL)
     { /* prisma de pe: golpe, rajada ou onda so voltam como feixe/reflexo; ela espera defendendo e, colada, agarra */
         in.lightP = in.heavyP = in.specialP = in.upP = in.dashP = false;
         in.left = o->x > a->x; in.right = !in.left; in.up = false;
@@ -3075,6 +3292,7 @@ static void BuildLadder(void)
     if (playerCh == CH_ELIRA) { ladder[0] = CH_CLAUDE; ladder[1] = CH_CODEX; ladder[2] = CH_ANTI; }
     else if (playerCh == CH_IARA) { ladder[0] = CH_CLAUDE; ladder[1] = CH_CODEX; ladder[2] = CH_ELIRA; } /* convidada: 2 IAs e a chefe */
     else if (playerCh == CH_AURA) { ladder[0] = CH_ANTI; ladder[1] = CH_IARA; ladder[2] = CH_ELIRA; } /* convidada: a outra colab no meio e a chefe */
+    else if (playerCh == CH_LIA) { ladder[0] = CH_CODEX; ladder[1] = CH_AURA; ladder[2] = CH_ELIRA; } /* convidada: uma IA, a outra colab e a chefe */
     else
     {
         for (int c = CH_CLAUDE; c <= CH_ANTI; c++)
@@ -3530,6 +3748,7 @@ static void DrawFight(void)
     else if (fz[1].shieldOn || fz[1].st == ST_BLOCK) first = 0;
     DrawFighter(&fz[first]);
     DrawFighter(&fz[1 - first]);
+    DrawCharm(&fz[0]); DrawCharm(&fz[1]);
     DrawStageFront();
     DrawProjectiles();
     DrawCodexBoom();
@@ -3582,6 +3801,14 @@ static void DrawCharacterBig(CharId ch, float x, float yFeet, int face, float sc
         DrawUF(f, x, yFeet, face, s, g_altPal ? IAF_AURA_ALT_TINT : WHITE, 0);
         return;
     }
+    if (ch == CH_LIA && texLia.id)
+    { /* mesma regra: o atlas ja vem na escala da luta; 1x nos paineis, 0,5x na previa da arena */
+        int f = st == ST_WIN ? LILoop(LI_WIN, gt, 8) : (st == ST_KO ? LIFrame(LI_LOSE, LI_COUNT[LI_LOSE] - 1) : LILoop(LI_IDLE, gt, 8));
+        float s = sc * 0.85f;
+        s = s < 0.75f ? 0.5f : fmaxf(1.0f, roundf(s * 2) / 2);
+        DrawLF(f, x, yFeet, face, s, g_altPal ? IAF_LIA_ALT_TINT : WHITE, 0);
+        return;
+    }
     if (ch == CH_ANTI && texAnti.id)
     { /* mesma regra: escala em passos de 0,5 */
         int f = st == ST_WIN ? AGFrame(AA_VICTORY, AA_COUNT[AA_VICTORY] - 1) : (st == ST_KO ? AGFrame(AA_KO, AA_COUNT[AA_KO] - 1) : AGLoop(AA_IDLE, gt, IA_IDLE_DUR));
@@ -3610,7 +3837,7 @@ static void DrawBackdrop(Color accent)
 
 /* ------------------------------------------------------------------ selecao de lutador
    Paineis grandes do 1P (esquerda) e do 2P/CPU (direita) com o lutador animado em palco sci-fi;
-   no centro, a grade 2x4 (8 slots: 6 lutadores desbloqueados + 2 slots bloqueados 'EM BREVE'). */
+   no centro, a grade 2x4 (8 slots: 7 lutadores desbloqueados + 1 slot bloqueado 'EM BREVE'). */
 #define SEL_GRID_SLOTS 8
 static const Color PCOL[2] = {{96, 214, 240, 255}, {230, 80, 84, 255}}; /* cursor/rotulo do 1P e do 2P */
 /* recorte completo de cada lutador no 1o quadro da parada (fminf limita ao tamanho real do quadro) */
@@ -3620,7 +3847,8 @@ static const Rectangle THUMB_CUT[CH_N] = {
     {0, 0, 999, 999},                  /* CODEX: nuvem + luvas inteiras */
     {0, 0, 999, 999},                  /* ANTIGRAVITY: arco completo sem cortes */
     {0, 0, IR_THUMB_PX, IR_THUMB_PX},  /* IARA: retrato 72x72 pre-escalado */
-    {0, 0, 999, 999}                   /* AURA_67: guarda inteira pre-escalada (AU_THUMB) */
+    {0, 0, 999, 999},                  /* AURA_67: guarda inteira pre-escalada (AU_THUMB) */
+    {0, 0, 999, 999}                   /* LIA: guarda inteira pre-escalada (LI_THUMB) */
 };
 static Color LogoMix(Color a, Color b, float t);
 static float LogoAdv(const Font *f, char ch, float sc);
@@ -3640,6 +3868,7 @@ static void DrawThumb(CharId ch, Rectangle dst, bool alt)
     else if (ch == CH_ANTI) { const AFrame *e = &AF[AA_FIRST[AA_IDLE] + 3]; tex = texAnti; fr = (Rectangle){e->x, e->y, e->w, e->h}; if (alt) tint = IAF_ANTI_ALT_TINT; }
     else if (ch == CH_IARA) { const IFrame *e = &IRF[IR_FIRST[IR_THUMB]]; tex = texIara; fr = (Rectangle){e->x, e->y, e->w, e->h}; if (alt) tint = IAF_IARA_ALT_TINT; }
     else if (ch == CH_AURA) { const UFrame *e = &AUF[AU_FIRST[AU_THUMB]]; tex = texAura; fr = (Rectangle){e->x, e->y, e->w, e->h}; if (alt) tint = IAF_AURA_ALT_TINT; }
+    else if (ch == CH_LIA) { const LFrame *e = &LIF[LI_FIRST[LI_THUMB]]; tex = texLia; fr = (Rectangle){e->x, e->y, e->w, e->h}; if (alt) tint = IAF_LIA_ALT_TINT; }
     else { const EFrame *e = &EF[EAFrame(EA_IDLE, 0)]; fr = (Rectangle){e->x, e->y, e->w, e->h}; if (alt) tint = IAF_ELIRA_ALT_TINT; }
     if (!tex.id)
     { /* sem o atlas: o boneco desenhado, pequeno */
@@ -3662,6 +3891,7 @@ static void LadderFor(int ch, int out[3])
     if (ch == CH_ELIRA) { out[0] = CH_CLAUDE; out[1] = CH_CODEX; out[2] = CH_ANTI; return; }
     if (ch == CH_IARA) { out[0] = CH_CLAUDE; out[1] = CH_CODEX; out[2] = CH_ELIRA; return; }
     if (ch == CH_AURA) { out[0] = CH_ANTI; out[1] = CH_IARA; out[2] = CH_ELIRA; return; }
+    if (ch == CH_LIA) { out[0] = CH_CODEX; out[1] = CH_AURA; out[2] = CH_ELIRA; return; }
     for (int c = CH_CLAUDE; c <= CH_ANTI; c++)
         if (c != ch) out[n++] = c;
     out[2] = CH_ELIRA;
@@ -3674,7 +3904,7 @@ static Rectangle GridCell(int i)
     float y0 = 120.0f;
     return (Rectangle){x0 + (i % 2) * (cs + gap), y0 + (i / 2) * (cs + gap), cs, cs};
 }
-/* navegacao 2x4 pelos 6 lutadores desbloqueados (slots 0..5: 3 linhas de 2), pulando os 2 bloqueados (6..7):
+/* navegacao 2x4 pelos lutadores desbloqueados (slots 0..CH_N-1, linhas de 2), pulando os bloqueados:
    na vertical anda na mesma coluna e da a volta */
 static int SelMove(int c, int dx, int dy)
 {
@@ -3787,7 +4017,7 @@ static void DrawIafSelectLogo(void)
 }
 
 /* escala do lutador no painel: ~1,15x o tamanho da luta, com o pixel da arte inteiro */
-static const float PANEL_SC[CH_N] = {1.15f, 1.45f, 1.68f, 1.45f, 1.42f, 1.42f};
+static const float PANEL_SC[CH_N] = {1.15f, 1.45f, 1.68f, 1.45f, 1.42f, 1.42f, 1.15f};
 /* palco sci-fi de preview do lutador selecionado (1P a esquerda, 2P/CPU/BONECO a direita) */
 static void DrawSelPanel(int side, int ch, const char *tag, Color tagCol, bool alt, bool ready)
 {
@@ -3932,7 +4162,7 @@ static void DrawSelectGridSlot(int i, bool on)
 
     if (locked)
     {
-        /* Slot bloqueado (7 e 8): fundo escuro, trama diagonal sutil, cadeado e 'EM BREVE' */
+        /* Slot bloqueado (8): fundo escuro, trama diagonal sutil, cadeado e 'EM BREVE' */
         DrawRectangleRounded(g, 0.10f, 6, (Color){10, 13, 24, 245});
         for (int k = 10; k < gw + gh; k += 14)
         {
@@ -3986,7 +4216,7 @@ static void DrawSelectGridSlot(int i, bool on)
     DrawLineEx((Vector2){g.x + g.width - pd, g.y + g.height - pd}, (Vector2){g.x + g.width - pd, g.y + g.height - pd - tk}, th, tc);
 
     /* Etiqueta chanfrada estilizada COLAB no canto superior esquerdo das convidadas (sem cobrir o rosto) */
-    if (i == CH_IARA || i == CH_AURA)
+    if (i == CH_IARA || i == CH_AURA || i == CH_LIA)
     {
         float bx = g.x + 2.0f, by = g.y + 2.0f;
         float bw = 46.0f, bh = 14.0f, cut = 7.0f;
@@ -4022,7 +4252,7 @@ static void DrawSelectScreen(bool vs)
     else if (tr) DrawSelPanel(1, cur[1], "BONECO", C_GREEN, false, false);
     else DrawSelPanel(1, cur[1], "CPU", C_AMBER, false, false);
 
-    /* 3. Grade central 2x4 (8 quadrados: 6 lutadores + 2 bloqueados) */
+    /* 3. Grade central 2x4 (8 quadrados: 7 lutadores + 1 bloqueado) */
     for (int i = 0; i < SEL_GRID_SLOTS; i++)
     {
         bool on = (i < CH_N) && (cur[0] == i || ((vs || dum) && cur[1] == i));
@@ -5199,6 +5429,11 @@ void IafEnter(GameState *game)
             texAura = LoadTexture(IAF_AURA67_ATLAS);
             SetTextureFilter(texAura, TEXTURE_FILTER_POINT);
         }
+        if (FileExists(IAF_LIA_ATLAS))
+        { /* POINT: pixel da arte nitido */
+            texLia = LoadTexture(IAF_LIA_ATLAS);
+            SetTextureFilter(texLia, TEXTURE_FILTER_POINT);
+        }
         ArenaLoadAssets();
         ArenaBakePreviews();
         LoadIafAudio();
@@ -5302,6 +5537,6 @@ bool IafPadWantsEnter(void)
 
 void IafUnload(void)
 {
-    if (iafLoaded) { UnloadTexture(texElira); if (texElira2.id) UnloadTexture(texElira2); texElira2 = (Texture2D){0}; if (texClaude.id) UnloadTexture(texClaude); texClaude = (Texture2D){0}; if (texAnti.id) UnloadTexture(texAnti); texAnti = (Texture2D){0}; if (texCodex.id) UnloadTexture(texCodex); texCodex = (Texture2D){0}; if (texIara.id) UnloadTexture(texIara); texIara = (Texture2D){0}; if (texAura.id) UnloadTexture(texAura); texAura = (Texture2D){0}; ArenaUnloadAssets(); UnloadIafAudio(); }
+    if (iafLoaded) { UnloadTexture(texElira); if (texElira2.id) UnloadTexture(texElira2); texElira2 = (Texture2D){0}; if (texClaude.id) UnloadTexture(texClaude); texClaude = (Texture2D){0}; if (texAnti.id) UnloadTexture(texAnti); texAnti = (Texture2D){0}; if (texCodex.id) UnloadTexture(texCodex); texCodex = (Texture2D){0}; if (texIara.id) UnloadTexture(texIara); texIara = (Texture2D){0}; if (texAura.id) UnloadTexture(texAura); texAura = (Texture2D){0}; if (texLia.id) UnloadTexture(texLia); texLia = (Texture2D){0}; ArenaUnloadAssets(); UnloadIafAudio(); }
     iafLoaded = false;
 }
