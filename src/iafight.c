@@ -166,12 +166,12 @@ static const Atk ATK[CH_N][AT_SPECIAL] = {
                   {0.06f, 0.15f, 0.10f, 60, 106, 136, 128, 0.34f, 170, 2},  /* aereo: martelada com as duas luvas */
                   {0.22f, 0.10f, 0.32f, 105, 335, 128, 58, 0.48f, 330, 0},  /* soco longo elastico */
                   {0.09f, 0.13f, 0.34f, 80, 84, 348, 318, 0.50f, 120, 0}},  /* uppercut */
-    [CH_ANTI] = {{0}, {0.07f, 0.08f, 0.14f, 36, 158, 175, 80, 0.20f, 160, 0}, /* alcances na ponta do golpe do sprite (2,5x) */
-                 {0.16f, 0.10f, 0.28f, 92, 160, 200, 110, 0.44f, 300, 0},  /* chute */
-                 {0.09f, 0.09f, 0.20f, 45, 152, 60, 56, 0.30f, 150, 1},     /* low kick */
-                 {0.05f, 0.18f, 0.10f, 26, 140, 110, 140, 0.24f, 160, 2},   /* ground slam: de cima para baixo */
-                 {0.20f, 0.10f, 0.30f, 65, 160, 190, 90, 0.44f, 320, 0},    /* heavy punch */
-                 {0.08f, 0.14f, 0.32f, 32, 150, 320, 300, 0.50f, 120, 0}},  /* uppercut (heavy punch subindo) */
+    [CH_ANTI] = {{0}, {0.07f, 0.08f, 0.14f, 36, 126, 140, 64, 0.20f, 160, 0}, /* alcances na ponta do golpe do sprite (2x) */
+                 {0.16f, 0.10f, 0.28f, 92, 128, 160, 88, 0.44f, 300, 0},   /* chute */
+                 {0.09f, 0.09f, 0.20f, 45, 122, 48, 45, 0.30f, 150, 1},    /* low kick */
+                 {0.05f, 0.18f, 0.10f, 26, 112, 88, 112, 0.24f, 160, 2},   /* ground slam: de cima para baixo */
+                 {0.20f, 0.10f, 0.30f, 65, 128, 152, 72, 0.44f, 320, 0},   /* heavy punch */
+                 {0.08f, 0.14f, 0.32f, 32, 120, 256, 240, 0.50f, 120, 0}}, /* uppercut (heavy punch subindo) */
     /* Iara: alcance (rx), topo e altura da caixa em px da escala 1 (guarda de 210 px), vezes IAF_IARA_ESCALA */
     [CH_IARA] = {{0}, {0.07f, 0.08f, 0.15f, 36, IRK(103), IRK(162), IRK(49), 0.20f, 170, 0},  /* garra rapida: alcance nos riscos da garra */
                  {0.15f, 0.11f, 0.28f, 96, IRK(109), IRK(200), IRK(105), 0.45f, 320, 0},  /* golpe de cauda forte: arco alto */
@@ -871,7 +871,7 @@ static Pose PoseFor(Fighter *a)
 
 static void DrawPuppet(CharId ch, float x, float y, int face, float s, Pose p, float flash, float vx)
 {
-    if (ch == CH_ANTI && p.lean > -80) y -= (16 + 5 * sinf(gt * 2.4f)) * s; /* flutua */
+    if (ch == CH_ANTI && p.lean > -80) y -= (13 + 4 * sinf(gt * 2.4f)) * s; /* flutua */
     Skel k = BuildSkel(ch, x, y, face, s, p);
     if (ch == CH_CLAUDE) DrawClaude(&k, p, gt, flash, vx);
     else if (ch == CH_CODEX) DrawCodex(&k, p, gt, flash, vx);
@@ -1180,11 +1180,11 @@ static int IaAtkIdx(Fighter *a, int n, int a0, int a1, float st, float ac, float
 
 /* ------------------------------------------------------------------ Antigravity: atlas de luta
    Gerado fora do repositorio (ia_novos_tool/montar.py) a partir das tiras novas do Victor. O atlas guarda
-   pixels logicos; o jogo amplia 2,5x com filtro POINT (~195 px de altura parada, como o antigo). A flutuacao
-   continua no codigo (AntiHover); o brilho embaixo das pontas ja vem no desenho. */
+   pixels logicos; o jogo amplia 2x com filtro POINT (~196 px de altura parada, proporcional a Elira/Claude/Codex).
+   A flutuacao continua no codigo (AntiHover); o brilho embaixo das pontas ja vem no desenho. */
 #include "iafight_antigravity.h"
 static Texture2D texAnti;
-#define AG_SCALE 2.5f
+#define AG_SCALE 2.0f
 /* equilibrio do Antigravity (simulacao CPU x CPU contra Elira e Claude) */
 #define AG_WELL_SLAM_DMG 110.0f /* queda no fim do poco gravitacional */
 static int AGFrame(int anim, int i)
@@ -1214,7 +1214,7 @@ static void DrawAF(int f, float x, float yFeet, int face, float sc, Color tint, 
 static float AntiHover(Fighter *a)
 {
     if (a->st == ST_KO || a->down || a->st == ST_LOSE || IaLaunched(a)) return 0;
-    return 16 + 5 * sinf(gt * 2.4f);
+    return 13 + 4 * sinf(gt * 2.4f);
 }
 static int AntiAtkFrame(Fighter *a, int anim, int a0, int a1, const Atk *d)
 {
@@ -1587,7 +1587,7 @@ static void DrawFighter(Fighter *a)
     float flash = a->flash > 0 ? Clamp(a->flash / 0.12f, 0.0f, 1.0f) * 0.8f : 0;
     float alt = IAF_GROUND_Y - a->y;
     float jx = a->hitShake > 0 ? (Rand01() - 0.5f) * 2 * IAF_HIT_SHAKE_PX : 0; /* tremor no impacto */
-    DrawShadow(a->x, (a->ch == CH_CLAUDE && texClaude.id ? 88 : (a->ch == CH_ANTI && texAnti.id ? 104 : (a->ch == CH_CODEX && texCodex.id ? 84 : (a->ch == CH_IARA && texIara.id ? IRK(62) : 52)))) - fminf(alt, 200) * 0.12f);
+    DrawShadow(a->x, (a->ch == CH_CLAUDE && texClaude.id ? 88 : (a->ch == CH_ANTI && texAnti.id ? 84 : (a->ch == CH_CODEX && texCodex.id ? 84 : (a->ch == CH_IARA && texIara.id ? IRK(62) : 52)))) - fminf(alt, 200) * 0.12f);
     if (a->ch == CH_IARA && texIara.id && alt > 30 && a->st != ST_KO)
     { /* no ar a poca fica no chao: aneis de agua embaixo dela */
         float k = Clamp(1 - alt / 420, 0.3f, 1.0f);
@@ -1750,7 +1750,7 @@ static Rectangle Hurt(Fighter *a)
     float w = a->ch == CH_CODEX ? 84 : (a->ch == CH_ELIRA ? 96 : 70), h = a->crouch ? (a->ch == CH_ELIRA ? 132 : 128) : (a->ch == CH_ELIRA ? 214 : 200);
     float lift = 0; /* a caixa sobe junto com o desenho que flutua */
     if (a->ch == CH_CLAUDE) { w = 174; h = a->crouch ? 120 : 153; } /* sprite reduzido (1.5x) para permitir pular por cima */
-    if (a->ch == CH_ANTI) { w = 184; h = a->crouch ? 155 : 205; lift = AntiHover(a); } /* "A" de 225x192 na tela, flutuando ~16 px */
+    if (a->ch == CH_ANTI) { w = 148; h = a->crouch ? 124 : 164; lift = AntiHover(a); } /* "A" em escala 2x (~180x164 na tela), flutuando ~13 px */
     if (a->ch == CH_CODEX) { w = 130; h = a->crouch ? 150 : 198; }  /* nuvem do sprite (~157 de largura; as bordas fofas nao contam) */
     if (a->ch == CH_IARA) { w = IRK(100); h = IRK(a->crouch ? 130 : 205); } /* tronco, cauda e poca (~210 x IAF_IARA_ESCALA com o cabelo) */
     if (a->down || a->st == ST_KO) h = 40;
@@ -1758,7 +1758,7 @@ static Rectangle Hurt(Fighter *a)
 }
 /* meia largura do corpo para nao se sobreporem: o tronco do sprite (colunas com pelo menos 35% da
    altura), sem canhao, bracos e cabelo, que podem passar na frente do oponente */
-static float BodyHalf(Fighter *a) { return a->ch == CH_CLAUDE ? 80.0f : (a->ch == CH_ANTI ? 90.0f : (a->ch == CH_CODEX ? 70.0f : (a->ch == CH_IARA ? IRK(50.0f) : 50.0f))); }
+static float BodyHalf(Fighter *a) { return a->ch == CH_CLAUDE ? 80.0f : (a->ch == CH_ANTI ? 72.0f : (a->ch == CH_CODEX ? 70.0f : (a->ch == CH_IARA ? IRK(50.0f) : 50.0f))); }
 static bool Overlap(Rectangle a, Rectangle b) { return a.x < b.x + b.width && b.x < a.x + a.width && a.y < b.y + b.height && b.y < a.y + a.height; }
 static bool OnGround(Fighter *a) { return a->y >= IAF_GROUND_Y - 0.5f; }
 static void SetState(Fighter *a, FState s) { a->st = s; a->stT = 0; }
@@ -3372,7 +3372,7 @@ static void DrawCharacterBig(CharId ch, float x, float yFeet, int face, float sc
     { /* mesma regra: escala em passos de 0,5 */
         int f = st == ST_WIN ? AGFrame(AA_VICTORY, AA_COUNT[AA_VICTORY] - 1) : (st == ST_KO ? AGFrame(AA_KO, AA_COUNT[AA_KO] - 1) : AGLoop(AA_IDLE, gt, IA_IDLE_DUR));
         float s2 = fmaxf(1.0f, roundf(AG_SCALE * sc * 0.75f * 2) / 2);
-        float hov = st == ST_KO ? 0 : (16 + 5 * sinf(gt * 2.4f)) * s2 / AG_SCALE;
+        float hov = st == ST_KO ? 0 : (13 + 4 * sinf(gt * 2.4f)) * s2 / AG_SCALE;
         DrawAF(f, x, yFeet - hov, face, s2, g_altPal ? IAF_ANTI_ALT_TINT : WHITE, 0);
         return;
     }
