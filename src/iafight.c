@@ -4132,27 +4132,53 @@ static void Tri2(Vector2 a, Vector2 b, Vector2 c, Color col)
 static void DrawIafTitleLogo(void)
 {
     const float cx = SCREEN_WIDTH / 2.0f;
-    const float px = 84.0f, ty = 54.0f;
+    const float px = 124.0f, ty = 56.0f;
     Font f = GetGameFont(px);
     float sc = px / (float)f.baseSize;
-    float wIA = LogoWidth(&f, "IA", sc), wSp = LogoAdv(&f, ' ', sc), wFi = LogoWidth(&f, "FIGHT", sc);
-    float total = wIA + wSp + wFi;
+    const char *part0 = "RINHA DE";
+    const char *part1 = "IAs";
+    float w0 = LogoWidth(&f, part0, sc), wSp = LogoAdv(&f, ' ', sc), w1 = LogoWidth(&f, part1, sc);
+    float total = w0 + wSp + w1;
     float x0 = cx - total / 2.0f;
-    float xFi = x0 + wIA + wSp;
+    float x1 = x0 + w0 + wSp;
     float pulse = 0.5f + 0.5f * sinf(gt * 3.0f);
 
-    /* aura quente + faixas de velocidade atras do titulo */
+    /* aura quente + faixas de velocidade + linguas de fogo atras do titulo */
     for (int k = 4; k >= 1; k--)
-        DrawEllipse((int)cx, 104, 330 + k * 34, 40 + k * 12, Fade((Color){255, 110, 30, 255}, 0.035f + 0.012f * pulse));
-    Vector2 s1a = {cx - 380, 124}, s1b = {cx + 330, 62}, s1c = {cx + 380, 62}, s1d = {cx - 330, 124};
-    Tri2(s1a, s1b, s1c, Fade((Color){200, 30, 40, 255}, 0.34f));
-    Tri2(s1a, s1c, s1d, Fade((Color){200, 30, 40, 255}, 0.34f));
-    DrawLineEx((Vector2){cx - 400, 138}, (Vector2){cx + 400, 70}, 2.0f, Fade(C_AMBER, 0.45f));
-    DrawLineEx((Vector2){cx - 340, 146}, (Vector2){cx + 420, 90}, 1.0f, Fade(C_CYAN, 0.45f));
-    DrawLineEx((Vector2){cx - 420, 112}, (Vector2){cx + 300, 52}, 1.0f, Fade(C_WHITE, 0.25f));
+        DrawEllipse((int)cx, 122, 480 + k * 42, 54 + k * 14, Fade((Color){255, 90, 22, 255}, 0.045f + 0.015f * pulse));
+    Vector2 s1a = {cx - 520, 158}, s1b = {cx + 465, 70}, s1c = {cx + 530, 70}, s1d = {cx - 455, 158};
+    Tri2(s1a, s1b, s1c, Fade((Color){210, 28, 32, 255}, 0.36f));
+    Tri2(s1a, s1c, s1d, Fade((Color){210, 28, 32, 255}, 0.36f));
+    DrawLineEx((Vector2){cx - 540, 174}, (Vector2){cx + 540, 82}, 2.2f, Fade(C_AMBER, 0.45f));
+    DrawLineEx((Vector2){cx - 475, 184}, (Vector2){cx + 560, 106}, 1.4f, Fade((Color){255, 65, 30, 255}, 0.50f));
+    DrawLineEx((Vector2){cx - 560, 138}, (Vector2){cx + 430, 58}, 1.2f, Fade((Color){255, 220, 120, 255}, 0.28f));
 
-    const char *segS[2] = {"IA", "FIGHT"};
-    float segX[2] = {x0, xFi};
+    /* chamas animadas subindo por tras do logo */
+    for (int fl = 0; fl < 18; fl++)
+    {
+        float u = (fl + 0.5f) / 18.0f;
+        float fx = x0 - 18.0f + u * (total + 36.0f);
+        float wv1 = sinf(gt * (5.2f + (fl % 4) * 1.1f) + fl * 1.7f);
+        float wv2 = cosf(gt * (7.4f + (fl % 3) * 1.3f) + fl * 2.3f);
+        float edge = 1.0f - fabsf(u - 0.5f) * 0.7f;
+        float fh = (66.0f + 34.0f * (0.5f + 0.5f * wv1)) * edge;
+        float fw = (28.0f + 10.0f * (0.5f + 0.5f * wv2));
+        float baseY = ty + 114.0f;
+        float sway = wv2 * 14.0f;
+
+        /* camada externa: vermelho-fogo */
+        Tri2((Vector2){fx - fw, baseY}, (Vector2){fx + fw, baseY},
+             (Vector2){fx + sway, baseY - fh - 38.0f}, Fade((Color){230, 32, 18, 255}, 0.36f));
+        /* camada media: laranja vivo */
+        Tri2((Vector2){fx - fw * 0.68f, baseY}, (Vector2){fx + fw * 0.68f, baseY},
+             (Vector2){fx + sway * 0.75f, baseY - fh * 0.78f - 24.0f}, Fade((Color){255, 128, 24, 255}, 0.42f));
+        /* nucleo: amarelo incandescente */
+        Tri2((Vector2){fx - fw * 0.36f, baseY}, (Vector2){fx + fw * 0.36f, baseY},
+             (Vector2){fx + sway * 0.45f, baseY - fh * 0.50f - 10.0f}, Fade((Color){255, 232, 110, 255}, 0.45f));
+    }
+
+    const char *segS[2] = {part0, part1};
+    float segX[2] = {x0, x1};
     Color vinho = {110, 14, 28, 255}, vinhoDk = {64, 8, 20, 255};
 
     /* contorno de tinta ao redor da base e da extrusao */
@@ -4161,56 +4187,57 @@ static void DrawIafTitleLogo(void)
         for (int a = 0; a < 8; a++)
         {
             float ang = a * 0.7853982f;
-            float ox = cosf(ang) * 3.5f, oy = sinf(ang) * 3.5f;
+            float ox = cosf(ang) * 4.6f, oy = sinf(ang) * 4.6f;
             LogoPass(&f, segS[q], segX[q], ty, px, ox, oy, 0, C_INK, C_INK, C_INK, C_INK, 0);
-            LogoPass(&f, segS[q], segX[q], ty, px, ox + 10, oy + 14, 0, C_INK, C_INK, C_INK, C_INK, 0);
+            LogoPass(&f, segS[q], segX[q], ty, px, ox + 13.5f, oy + 18.0f, 0, C_INK, C_INK, C_INK, C_INK, 0);
         }
         for (int a = 0; a < 4; a++)
         {
             float ang = a * 1.5707963f;
-            LogoPass(&f, segS[q], segX[q], ty, px, 5 + cosf(ang) * 3.5f, 7 + sinf(ang) * 3.5f, 0, C_INK, C_INK, C_INK, C_INK, 0);
+            LogoPass(&f, segS[q], segX[q], ty, px, 6.8f + cosf(ang) * 4.6f, 9.0f + sinf(ang) * 4.6f, 0, C_INK, C_INK, C_INK, C_INK, 0);
         }
     }
     /* extrusao 3D profunda em vinho */
     for (int q = 0; q < 2; q++)
         for (int k = 7; k >= 1; k--)
-            LogoPass(&f, segS[q], segX[q], ty, px, k * 1.45f, k * 2.0f, 0, k > 4 ? vinhoDk : vinho, vinho, vinho, vinho, 0);
+            LogoPass(&f, segS[q], segX[q], ty, px, k * 1.9f, k * 2.55f, 0, k > 4 ? vinhoDk : vinho, vinho, vinho, vinho, 0);
 
-    /* preenchimento: 'IA' ciano/branco, 'FIGHT' ouro -> laranja -> fogo, com brilho varrendo */
-    float sweep = fmodf(gt * 300.0f, total + 500.0f) + x0 - 250.0f;
-    LogoPass(&f, "IA", x0, ty, px, 0, 0, 1, C_WHITE, (Color){235, 252, 255, 255}, C_CYAN, (Color){40, 110, 220, 255}, sweep);
-    LogoPass(&f, "FIGHT", xFi, ty, px, 0, 0, 1, C_WHITE, (Color){255, 232, 70, 255}, (Color){255, 140, 30, 255}, (Color){226, 44, 30, 255}, sweep);
+    /* preenchimento: 'RINHA DE' ouro -> laranja -> fogo, 'IAs' vermelho incandescente -> carmesim, com brilho varrendo */
+    float sweep = fmodf(gt * 340.0f, total + 560.0f) + x0 - 280.0f;
+    LogoPass(&f, part0, x0, ty, px, 0, 0, 1, C_WHITE, (Color){255, 232, 70, 255}, (Color){255, 140, 30, 255}, (Color){226, 44, 30, 255}, sweep);
+    LogoPass(&f, part1, x1, ty, px, 0, 0, 1, C_WHITE, (Color){255, 128, 86, 255}, (Color){238, 38, 34, 255}, (Color){155, 12, 22, 255}, sweep);
 
-    /* faiscas / estrelas discretas */
-    for (int s = 0; s < 9; s++)
+    /* brasas incandescentes subindo ao redor e na frente do titulo */
+    for (int s = 0; s < 28; s++)
     {
-        float ph = fmodf(gt * 0.9f + s * 0.37f, 1.0f);
-        float sx = x0 - 20 + fmodf(s * 97.0f, total + 40);
-        float sy = ty - 6 + fmodf(s * 53.0f, 110.0f);
-        float r = 7.0f * sinf(ph * 3.14159f);
-        if (r < 0.5f) continue;
-        Color sc2 = (s % 2) ? C_WHITE : C_AMBER;
-        DrawRectanglePro((Rectangle){sx, sy, r * 2.0f, 2.0f}, (Vector2){r, 1}, 0, sc2);
-        DrawRectanglePro((Rectangle){sx, sy, 2.0f, r * 2.0f}, (Vector2){1, r}, 0, sc2);
-        DrawRectanglePro((Rectangle){sx, sy, r, r}, (Vector2){r / 2, r / 2}, 45, Fade(sc2, 0.6f));
+        float spd = 0.34f + (s % 5) * 0.09f;
+        float ph = fmodf(gt * spd + s * 0.217f, 1.0f);
+        float baseX = x0 - 40.0f + fmodf(s * 97.3f, total + 80.0f);
+        float drift = sinf(gt * (2.6f + (s % 4) * 0.7f) + s * 1.9f) * (12.0f + (s % 3) * 6.0f);
+        float ex = baseX + drift + ph * 18.0f;
+        float ey = (ty + 148.0f) - ph * 158.0f;
+        float fade = sinf(ph * 3.14159f);
+        if (fade < 0.05f) continue;
+        float sz = (2.4f + (s % 4) * 1.1f) * (0.6f + 0.5f * fade);
+        Color ember = (s % 3 == 0) ? (Color){255, 238, 120, 255}
+                    : ((s % 3 == 1) ? (Color){255, 130, 32, 255}
+                                    : (Color){245, 52, 26, 255});
+        /* rastro quente inclinado da brasa */
+        DrawLineEx((Vector2){ex - 4.0f, ey + 8.0f + sz}, (Vector2){ex, ey}, sz * 0.75f, Fade(ember, fade * 0.42f));
+        /* halo da brasa */
+        DrawCircleV((Vector2){ex, ey}, sz * 1.7f, Fade((Color){255, 90, 20, 255}, fade * 0.28f));
+        /* nucleo brilhante */
+        DrawRectanglePro((Rectangle){ex, ey, sz * 1.6f, sz * 1.1f}, (Vector2){sz * 0.8f, sz * 0.55f}, -28.0f, Fade(ember, fade * 0.95f));
     }
+}
 
-    /* placa chanfrada do subtitulo (nao invade o primeiro botao, y=240) */
-    const char *sub = "RINHA DE INTELIGÊNCIAS";
-    float sw = TxtW(sub, 20) + 96.0f, sh = 30.0f, bx = cx - sw / 2, by = 178.0f, ch = 11.0f;
-    DrawRectangleGradientV((int)(bx + ch), (int)by, (int)(sw - ch * 2), (int)sh, (Color){22, 40, 66, 255}, (Color){8, 14, 30, 255});
-    Tri2((Vector2){bx, by + sh - ch}, (Vector2){bx + ch, by}, (Vector2){bx + ch, by + sh}, (Color){8, 16, 34, 255});
-    Tri2((Vector2){bx + sw, by + sh - ch}, (Vector2){bx + sw - ch, by}, (Vector2){bx + sw - ch, by + sh}, (Color){8, 16, 34, 255});
-    DrawRectangle((int)(bx + ch), (int)by, (int)(sw - ch * 2), 3, C_AMBER);
-    DrawRectangle((int)(bx + ch), (int)(by + sh - 3), (int)(sw - ch * 2), 3, C_CYAN);
-    DrawLineEx((Vector2){bx, by + sh - ch}, (Vector2){bx + ch, by}, 2.5f, C_AMBER);
-    DrawLineEx((Vector2){bx, by + sh - ch}, (Vector2){bx + ch, by + sh}, 2.5f, C_CYAN);
-    DrawLineEx((Vector2){bx + sw, by + sh - ch}, (Vector2){bx + sw - ch, by}, 2.5f, C_AMBER);
-    DrawLineEx((Vector2){bx + sw, by + sh - ch}, (Vector2){bx + sw - ch, by + sh}, 2.5f, C_CYAN);
-    DrawRectangle((int)(bx + 18), (int)(by + sh / 2 - 3), 6, 6, C_AMBER);
-    DrawRectangle((int)(bx + sw - 24), (int)(by + sh / 2 - 3), 6, 6, C_AMBER);
-    TxtC(sub, cx + 1, by + 5, 20, C_INK);
-    TxtC(sub, cx, by + 4, 20, C_CYAN);
+static Rectangle ModeBtnRect(int i)
+{
+    return (Rectangle){SCREEN_WIDTH / 2.0f - 250.0f, 240.0f + i * 94.0f, 500.0f, 76.0f};
+}
+static Rectangle ModeVolRect(int k)
+{
+    return (Rectangle){SCREEN_WIDTH / 2.0f - 250.0f + k * 258.0f, 540.0f, 242.0f, 46.0f};
 }
 
 static void DrawMode(void)
@@ -4219,70 +4246,70 @@ static void DrawMode(void)
     DrawIafTitleLogo();
 
     float pulse = 0.72f + 0.28f * sinf(gt * 3.2f);
-    float slide = 3.5f + 2.8f * sinf(gt * 9.0f);
+    float slide = 3.0f + 2.4f * sinf(gt * 9.0f);
 
     for (int i = 0; i < 3; i++)
     {
-        Rectangle r = {SCREEN_WIDTH / 2.0f - 300, 240.0f + i * 124, 600, 104};
+        Rectangle r = ModeBtnRect(i);
         bool on = i == modeSel;
         Color c = MODE_COL[i];
 
-        DrawIafCyberCard(r, c, on, 18.0f);
+        DrawIafCyberCard(r, c, on, 14.0f);
 
         /* Divisoria interna sutil entre titulo e subtitulo */
-        DrawLine((int)r.x + 36, (int)r.y + 62, (int)(r.x + r.width - 36), (int)r.y + 62,
+        DrawLine((int)r.x + 28, (int)r.y + 45, (int)(r.x + r.width - 28), (int)r.y + 45,
                  Fade(c, on ? 0.35f : 0.14f));
 
         /* Chevrons animados (focado) ou marcador geometrico (repouso) */
         if (on)
         {
-            Txt(">>", r.x + 24 + slide, r.y + 21, 26, C_AMBER);
-            Txt("<", r.x + r.width - 38 - slide * 0.6f, r.y + 21, 26, Fade(c, 0.95f));
+            Txt(">>", r.x + 20 + slide, r.y + 14, 21, C_AMBER);
+            Txt("<", r.x + r.width - 32 - slide * 0.6f, r.y + 14, 21, Fade(c, 0.95f));
         }
         else
         {
-            DrawRectangle((int)(r.x + r.width - 22), (int)(r.y + 31), 6, 6, Fade(c, 0.55f * pulse));
+            DrawRectangle((int)(r.x + r.width - 20), (int)(r.y + 21), 5, 5, Fade(c, 0.55f * pulse));
         }
 
         /* Titulo com sombra profunda e halo luminoso */
         float cx = r.x + r.width / 2.0f + (on ? 2.0f : 0.0f);
-        TxtC(MODE_TXT[i], cx + 2, r.y + 18, 38, Fade(C_INK, 0.90f));
+        TxtC(MODE_TXT[i], cx + 2, r.y + 12, 28, Fade(C_INK, 0.90f));
         if (on)
         {
-            TxtC(MODE_TXT[i], cx - 1, r.y + 16, 38, Fade(c, 0.42f));
-            TxtC(MODE_TXT[i], cx + 1, r.y + 16, 38, Fade(c, 0.42f));
+            TxtC(MODE_TXT[i], cx - 1, r.y + 10, 28, Fade(c, 0.42f));
+            TxtC(MODE_TXT[i], cx + 1, r.y + 10, 28, Fade(c, 0.42f));
         }
-        TxtC(MODE_TXT[i], cx, r.y + 16, 38, on ? C_WHITE : (Color){210, 230, 242, 235});
+        TxtC(MODE_TXT[i], cx, r.y + 10, 28, on ? C_WHITE : (Color){210, 230, 242, 235});
 
         /* Subtitulo com sombra para legibilidade nitida */
-        TxtC(MODE_SUB[i], r.x + r.width / 2.0f + 1, r.y + 72, 16, Fade(C_INK, 0.85f));
-        TxtC(MODE_SUB[i], r.x + r.width / 2.0f, r.y + 71, 16,
+        TxtC(MODE_SUB[i], r.x + r.width / 2.0f + 1, r.y + 53, 14, Fade(C_INK, 0.85f));
+        TxtC(MODE_SUB[i], r.x + r.width / 2.0f, r.y + 52, 14,
              on ? c : (Color){185, 200, 220, 210});
     }
 
     for (int k = 0; k < 2; k++)
     { /* volume do modo: 3 = musica, 4 = efeitos; A/D ou setas ajustam */
-        Rectangle r = {SCREEN_WIDTH / 2.0f - 300 + k * 310, 612, 290, 54};
+        Rectangle r = ModeVolRect(k);
         bool on = modeSel == 3 + k;
         int lvl = k == 0 ? iafMusLvl : iafSfxLvl;
         const char *vLabel = (k == 0) ? "MÚSICA" : "EFEITOS";
 
-        DrawIafCyberCard(r, C_AMBER, on, 13.0f);
+        DrawIafCyberCard(r, C_AMBER, on, 11.0f);
 
         if (on)
         {
-            Txt(">>", r.x + 15 + slide * 0.45f, r.y + 18, 16, C_AMBER);
+            Txt(">>", r.x + 12 + slide * 0.35f, r.y + 15, 14, C_AMBER);
         }
 
-        float lblX = r.x + (on ? 38.0f : 20.0f);
-        Txt(vLabel, lblX + 1, r.y + 18, 19, Fade(C_INK, 0.85f));
-        Txt(vLabel, lblX, r.y + 17, 19, on ? C_WHITE : (Color){210, 225, 238, 225});
+        float lblX = r.x + (on ? 31.0f : 16.0f);
+        Txt(vLabel, lblX + 1, r.y + 16, 16, Fade(C_INK, 0.85f));
+        Txt(vLabel, lblX, r.y + 15, 16, on ? C_WHITE : (Color){210, 225, 238, 225});
 
-        Txt("<", r.x + 120, r.y + 15, 22, (on && lvl > 0) ? C_WHITE : (lvl > 0 ? Fade(C_AMBER, 0.75f) : Fade(C_DIM, 0.45f)));
+        Txt("<", r.x + 98, r.y + 13, 19, (on && lvl > 0) ? C_WHITE : (lvl > 0 ? Fade(C_AMBER, 0.75f) : Fade(C_DIM, 0.45f)));
         for (int b = 0; b < IAF_VOL_LVL_MAX; b++)
         {
-            float h = 10 + b * 2.2f;
-            Rectangle bar = {r.x + 138 + b * 12, r.y + 40 - h, 8, h};
+            float h = 8.0f + b * 1.8f;
+            Rectangle bar = {r.x + 114.0f + b * 10.0f, r.y + 35.0f - h, 7.0f, h};
             bool lit = (b < lvl);
             Color barCol = lit ? (on ? C_AMBER : Fade(C_AMBER, 0.65f)) : Fade(C_DIM, 0.28f);
             DrawRectangleRec(bar, barCol);
@@ -4291,15 +4318,58 @@ static void DrawMode(void)
                 DrawRectangleLines((int)bar.x, (int)bar.y, (int)bar.width, (int)bar.height, Fade(C_WHITE, 0.40f));
             }
         }
-        Txt(">", r.x + 263, r.y + 15, 22, (on && lvl < IAF_VOL_LVL_MAX) ? C_WHITE : (lvl < IAF_VOL_LVL_MAX ? Fade(C_AMBER, 0.75f) : Fade(C_DIM, 0.45f)));
+        Txt(">", r.x + 218, r.y + 13, 19, (on && lvl < IAF_VOL_LVL_MAX) ? C_WHITE : (lvl < IAF_VOL_LVL_MAX ? Fade(C_AMBER, 0.75f) : Fade(C_DIM, 0.45f)));
     }
     TxtC("W/S ou SETAS: escolher    A/D: volume    ENTER / A: confirmar    TAB / SELECT: controles    ESC / B: voltar ao menu", SCREEN_WIDTH / 2.0f, SCREEN_HEIGHT - 30, 16, C_DIM);
 }
 static void UpdateMode(void)
 {
+    Vector2 vm = GetVirtualMouse();
+    bool mouseMoved = (vm.x != arMouseLast.x || vm.y != arMouseLast.y);
+    arMouseLast = vm;
+    bool mouseClick = (scT > 0.15f && IsMouseButtonPressed(MOUSE_BUTTON_LEFT));
+    bool mouseConfirm = false;
+
+    for (int i = 0; i < 3; i++)
+    {
+        if (CheckCollisionPointRec(vm, ModeBtnRect(i)))
+        {
+            if (mouseMoved && modeSel != i) { modeSel = i; PlaySfx(SFX_MOVE); }
+            if (mouseClick) { modeSel = i; mouseConfirm = true; }
+        }
+    }
+    for (int k = 0; k < 2; k++)
+    {
+        Rectangle r = ModeVolRect(k);
+        if (CheckCollisionPointRec(vm, r))
+        {
+            if (mouseMoved && modeSel != 3 + k) { modeSel = 3 + k; PlaySfx(SFX_MOVE); }
+            if (mouseClick)
+            {
+                modeSel = 3 + k;
+                int *lvl = (k == 0) ? &iafMusLvl : &iafSfxLvl;
+                int nv = *lvl;
+                Rectangle decRec = {r.x + 92.0f, r.y + 6.0f, 20.0f, 34.0f};
+                Rectangle incRec = {r.x + 214.0f, r.y + 6.0f, 22.0f, 34.0f};
+                if (CheckCollisionPointRec(vm, decRec)) nv = (int)Clamp((float)(*lvl - 1), 0.0f, (float)IAF_VOL_LVL_MAX);
+                else if (CheckCollisionPointRec(vm, incRec)) nv = (int)Clamp((float)(*lvl + 1), 0.0f, (float)IAF_VOL_LVL_MAX);
+                else
+                {
+                    for (int b = 0; b < IAF_VOL_LVL_MAX; b++)
+                    {
+                        Rectangle barHit = {r.x + 112.0f + b * 10.0f, r.y + 6.0f, 10.0f, 34.0f};
+                        if (CheckCollisionPointRec(vm, barHit)) { nv = b + 1; break; }
+                    }
+                }
+                if (nv != *lvl) { *lvl = nv; PlaySfx(SFX_MOVE); }
+                return;
+            }
+        }
+    }
+
     if (NavUpP()) modeSel = (modeSel + 4) % 5;
     if (NavDownP()) modeSel = (modeSel + 1) % 5;
-    if (modeSel >= 3)
+    if (modeSel >= 3 && !mouseConfirm)
     { /* faixa de volume: esquerda/direita mudam o nivel; o efeito de menu toca no volume novo */
         int *lvl = modeSel == 3 ? &iafMusLvl : &iafSfxLvl;
         int d = (NavRightP() ? 1 : 0) - (NavLeftP() ? 1 : 0);
@@ -4309,7 +4379,7 @@ static void UpdateMode(void)
     }
     if (NavLeftP()) modeSel = (modeSel + 2) % 3;
     if (NavRightP()) modeSel = (modeSel + 1) % 3;
-    if (scT > 0.15f && NavOkP())
+    if ((scT > 0.15f && NavOkP()) || mouseConfirm)
     {
         versusMode = modeSel == 1;
         trainMode = modeSel == 2;
