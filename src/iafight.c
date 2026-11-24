@@ -136,7 +136,7 @@ static const Color CHCOL[CH_N] = {{96, 214, 240, 255}, {222, 116, 76, 255}, {70,
 
 typedef enum { ST_IDLE, ST_WALK, ST_JUMP, ST_CROUCH, ST_BLOCK, ST_ATK, ST_HIT, ST_KO, ST_WIN, ST_LOSE, ST_DASH } FState;
 /* AT_FWDH = frente + forte (soco longo, mais lento); AT_UPPER = cima + forte (uppercut anti-aereo) */
-typedef enum { AT_NONE, AT_LIGHT, AT_HEAVY, AT_LOW, AT_AIR, AT_FWDH, AT_UPPER, AT_SPECIAL, AT_SHOT, AT_GRAB } AtkKind; /* AT_GRAB = agarrao */
+typedef enum { AT_NONE, AT_LIGHT, AT_HEAVY, AT_LOW, AT_AIR, AT_FWDH, AT_UPPER, AT_SPECIAL, AT_GRAB } AtkKind; /* AT_GRAB = agarrao */
 typedef struct { float st, ac, rc, dmg, rx, top, h, stun, push; int type; } Atk; /* type: 0 meio, 1 baixo, 2 alto */
 /* por lutador: -, fraco, forte, rasteira, aereo, soco longo (frente + forte), uppercut (cima + forte).
    O uppercut tem caixa alta (top grande): pega quem esta pulando por cima.
@@ -201,7 +201,6 @@ typedef struct
     bool shieldOn;    /* em defesa (segurando para tras com ameaca perto) */
     float shieldT;    /* tempo desde que abriu a defesa */
     float shieldHit;  /* > 0: acabou de bloquear (quadro 3 + tremor) */
-    float shotCd;     /* recarga do tiro de plasma */
     float hitShake;   /* > 0: tremendo por ter levado/defendido um golpe */
     bool alt;         /* cor alternativa (1 x 1 com o mesmo lutador dos dois lados) */
     int juggle;       /* golpes levados no ar nesta queda (limite evita malabarismo infinito) */
@@ -215,10 +214,10 @@ typedef struct
 
 /* leftP/rightP: tocou na direcao agora (toque duplo = dash); dashP: botao de dash (LB / L1);
    grabP: agarrao (LT / L2, ou fraco + forte juntos, detectado em BufferInput) */
-typedef struct { bool left, right, up, down, upP, lightP, heavyP, specialP, shotP, leftP, rightP, dashP, grabP; } IafInput;
+typedef struct { bool left, right, up, down, upP, lightP, heavyP, specialP, leftP, rightP, dashP, grabP; } IafInput;
 
 /* projeteis */
-typedef struct { bool on; float x, y, vx; int owner; bool big, reflected; float dmg, t, hitCd; int hits; } Proj;
+typedef struct { bool on; float x, y, vx; int owner; bool reflected; float dmg, t, hitCd; int hits; } Proj; /* nucleo da Rajada Temporal */
 static Proj proj[IAF_MAX_PROJ];
 /* poco gravitacional */
 typedef struct { bool on; float x, y, t, life; int owner; bool caught, resisted; } Well;
@@ -237,8 +236,8 @@ static float hitstop = 0, shake = 0;
    Volume segue o do jogo: no padrao (g_musicVolume = 0,45) a musica fica em IAF_MUSIC_VOLUME e os
    efeitos em IAF_SFX_VOLUME; o mudo do jogo (tecla M) silencia tudo. Sem dispositivo de audio ou sem
    os arquivos, o modo continua funcionando em silencio. */
-enum { SFX_LIGHT, SFX_HEAVY, SFX_BLOCK, SFX_SHOT, SFX_SP_CHARGE, SFX_SP_FIRE, SFX_KO, SFX_FALL, SFX_MOVE, SFX_OK, SFX_DASH, SFX_DENY, VOX_ROUND, VOX_LUTEM, VOX_WIN, SFX_N };
-static const char *SFX_FILE[SFX_N] = {"golpe_fraco.wav", "golpe_forte.wav", "defesa.wav", "tiro.wav", "especial_carga.wav",
+enum { SFX_LIGHT, SFX_HEAVY, SFX_BLOCK, SFX_SP_CHARGE, SFX_SP_FIRE, SFX_KO, SFX_FALL, SFX_MOVE, SFX_OK, SFX_DASH, SFX_DENY, VOX_ROUND, VOX_LUTEM, VOX_WIN, SFX_N };
+static const char *SFX_FILE[SFX_N] = {"golpe_fraco.wav", "golpe_forte.wav", "defesa.wav", "especial_carga.wav",
                                       "especial_disparo.wav", "impacto_ko.wav", "queda.wav", "menu_mover.wav", "menu_confirmar.wav",
                                       "menu_mover.wav" /* dash: o bip do menu bem mais grave vira um whoosh */,
                                       "defesa.wav" /* negado (arena travada): o som da defesa bem grave */,
@@ -346,7 +345,7 @@ static void UnloadIafAudio(void)
 /* buffer de entrada: cada botao apertado fica guardado por IAF_BUFFER s (o especial por IAF_BUFFER_SPECIAL)
    e entra no 1o quadro em que o lutador pode usa-lo: fim da recuperacao, aterrissagem, levantar, fim da
    defesa ou da pausa de impacto. Vale para teclado, controle e CPU (BufferInput, chamado pela SimStep). */
-enum { BB_UP, BB_LIGHT, BB_HEAVY, BB_SPECIAL, BB_SHOT, BB_DASH, BB_GRAB, BB_N };
+enum { BB_UP, BB_LIGHT, BB_HEAVY, BB_SPECIAL, BB_DASH, BB_GRAB, BB_N };
 static float bufT[2][BB_N];
 static float pressAge[2][2] = {{9, 9}, {9, 9}}; /* tempo desde o ultimo fraco / forte (agarrao = os dois juntos) */
 
@@ -743,7 +742,6 @@ static float AtkExt(Fighter *a, float *windOut)
 {
     float st, ac, rc;
     if (a->atk == AT_SPECIAL) { st = SP_ST[a->ch]; ac = SP_AC[a->ch]; rc = SP_RC[a->ch]; }
-    else if (a->atk == AT_SHOT) { st = IAF_SHOT_STARTUP; ac = IAF_SHOT_ACTIVE; rc = IAF_SHOT_RECOVERY; }
     else { const Atk *d = &ATK[a->ch][a->atk]; st = d->st; ac = d->ac; rc = d->rc; }
     if (ac < IAF_ACTIVE_VISUAL) { rc = fmaxf(rc - (IAF_ACTIVE_VISUAL - ac), 0.02f); ac = IAF_ACTIVE_VISUAL; } /* segura o impacto */
     float t = a->atkT;
@@ -883,7 +881,6 @@ static int AtkFrame2(Fighter *a, int anim, int a0, int a1, float st, float ac, f
 #define EP_PUNCH 4
 #define EP_KICK 3
 #define EP_UPPER 4 /* uppercut provisorio: inicio da vitoria, canhao subindo */
-#define EP_SHOT_LAST 11 /* ultimo quadro do tiro: sem a bala da arte (a bala e o projetil do jogo) */
 #define EP_CHARGE_TOP 8 /* disparo carregado: orbe maior na boca do canhao */
 /* queda nova (E2_KO), presa a fisica: impacto (0) no acerto; no ar, pes saindo (1) subindo, voo inclinado (2) no
    alto, quase horizontal (3) descendo; no chao, bate de costas (4) no instante do pouso, quica (5), deitada (6) e
@@ -909,15 +906,11 @@ static int EliraFrameIdxV2(Fighter *a, float *yoff)
 {
     if (a->st == ST_KO) return EliraKoFrame(a, yoff); /* nocaute: cai e fica deitada */
     if (a->down)
-    { /* caida: deitada nova ate o levantar. Sem arte nova de levantar (o EA_GETUP antigo aparecia torto), os
-         ultimos 0,36 s usam so quadros novos em 6 passos iguais: deitada (KO 7), encolhe os joelhos (KO 5) e o
-         agachar ao contrario (3, 2, 1) ate a guarda em pe (CROUCH 0) */
+    { /* caida: deitada nova ate o levantar; nos ultimos 0,36 s, o levantar novo em 7 passos iguais: deitada
+         (emenda com a deitada da queda, mesmo lugar e tamanho), ergue o tronco, sentada, apoia o canhao,
+         ajoelhada, levanta e guarda */
         if (a->downT > 0.36f) return EliraKoFrame(a, yoff);
-        static const int up[6][2] = {{E2_KO, 7}, {E2_KO, 5}, {E2_CROUCH, 3}, {E2_CROUCH, 2}, {E2_CROUCH, 1}, {E2_CROUCH, 0}};
-        int i = (int)((0.36f - a->downT) / 0.36f * 6);
-        if (i < 0) i = 0;
-        if (i > 5) i = 5;
-        return E2Frame(up[i][0], up[i][1]);
+        return E2Frame(E2_GETUP, (int)((0.36f - a->downT) / 0.36f * E2_COUNT[E2_GETUP]));
     }
     if (a->st == ST_LOSE) return E2Frame(E2_DEFEAT, (int)(a->stT * 10)); /* cai e fica no ultimo quadro */
     if (a->st == ST_WIN) return E2Frame(E2_WIN, (int)(a->stT * 10));
@@ -962,7 +955,9 @@ static int EliraFrameIdxV2(Fighter *a, float *yoff)
         if (a->shieldHit > 0) return E2Frame(E2_DEF, 3); /* bloqueou: o escudo treme (3 <-> 4) */
         return E2Frame(E2_DEF, 1 + (int)(a->shieldT / 0.04f)); /* ergue o canhao, abre o escudo e fica no ultimo */
     }
-    if (a->st == ST_DASH || a->st == ST_JUMP) return -1;
+    if (a->st == ST_DASH) /* agacha, impulso, desliza (2) com o rastro ciano, freia e volta a guarda */
+        return E2Frame(E2_DASH, (int)(a->dashT / IAF_DASH_TIME * E2_COUNT[E2_DASH]));
+    if (a->st == ST_JUMP) return -1;
     if (a->crouch)
     { /* abaixa e fica no ultimo quadro (agachada parada) */
         int n = E2_COUNT[E2_CROUCH]; /* o quadro 0 e a guarda em pe */
@@ -1009,10 +1004,6 @@ static int EliraFrameIdx(Fighter *a, float *yoff)
         }
         case AT_LOW: return AtkFrame(a, EA_SWEEP, 2, 2, d->st, d->ac, d->rc); /* provisorio: ficha antiga */
         case AT_AIR: return AtkFrame(a, EA_KICK, EP_KICK, EP_KICK + 1, d->st, d->ac, d->rc); /* chute do pacote no ar */
-        case AT_SHOT:
-            if (t < IAF_SHOT_STARTUP) return EAFrame(EA_SHOT, EP_SHOT_LAST);                   /* mira */
-            if (t < IAF_SHOT_STARTUP + 0.09f) return EAFrame(EA_SHOT, t < IAF_SHOT_STARTUP + 0.045f ? 0 : 1); /* clarao */
-            return EAFrame(EA_SHOT, EP_SHOT_LAST);
         case AT_SPECIAL:
         { /* Rajada Temporal: o orbe cresce na boca do canhao durante a carga; no disparo sai o nucleo do jogo */
             float st = SP_ST[CH_ELIRA];
@@ -1537,7 +1528,7 @@ static float scT = 0;
 static bool lastWon = false, paused = false;
 static int roundWinner = -1;
 
-typedef struct { float t, hold; int mode; bool reacted, low; IafInput once; float skill, shotCd; bool chainTried, techTried; } Ai;
+typedef struct { float t, hold; int mode; bool reacted, low; IafInput once; float skill; bool chainTried, techTried; } Ai;
 enum { AI_IDLE, AI_FWD, AI_BACK, AI_BLOCK, AI_JUMPIN };
 static Ai ai[2];
 static bool cpu[2] = {false, true};
@@ -1555,7 +1546,6 @@ static bool showBoxes = false;      /* F1 / SELECT na luta (em qualquer modo): c
 static float AtkTotal(Fighter *a)
 {
     if (a->atk == AT_SPECIAL) return SP_ST[a->ch] + SP_AC[a->ch] + SP_RC[a->ch];
-    if (a->atk == AT_SHOT) return IAF_SHOT_STARTUP + IAF_SHOT_ACTIVE + IAF_SHOT_RECOVERY;
     if (a->atk == AT_GRAB) return IAF_GRAB_HOLD + IAF_GRAB_RECOVER;
     const Atk *d = &ATK[a->ch][a->atk];
     return d->st + d->ac + d->rc;
@@ -1612,11 +1602,11 @@ static bool PrismActive(Fighter *d)
     return d->atkT >= SP_ST[CH_CLAUDE] * 0.5f && d->atkT < SP_ST[CH_CLAUDE] + SP_AC[CH_CLAUDE];
 }
 static void ApplyHit(Fighter *att, Fighter *def, float dmg, float stun, float push, int type, Vector2 at, bool unblockable, bool launch);
-static int g_projHit = 0; /* 1 = acerto de tiro, 2 = acerto do nucleo da rajada (durante ApplyHit) */
+static bool g_projHit = false; /* acerto do nucleo da rajada (durante ApplyHit) */
 /* pausa de impacto (congela os dois lutadores) conforme o tipo de golpe */
 static float HitstopFor(Fighter *att)
 {
-    if (g_projHit) return g_projHit == 2 ? IAF_HITSTOP_SPECIAL : IAF_HITSTOP_LIGHT;
+    if (g_projHit) return IAF_HITSTOP_SPECIAL;
     if (att->st != ST_ATK) return IAF_HITSTOP_LIGHT;
     if (att->atk == AT_HEAVY || att->atk == AT_FWDH || att->atk == AT_UPPER || att->atk == AT_GRAB) return IAF_HITSTOP_HEAVY;
     if (att->atk == AT_SPECIAL) return IAF_HITSTOP_SPECIAL;
@@ -1697,20 +1687,14 @@ static void ApplyHit(Fighter *att, Fighter *def, float dmg, float stun, float pu
 }
 
 /* ------------------------------------------------------------------ especiais */
-static void SpawnProj(Fighter *a, bool big)
+static void SpawnProj(Fighter *a)
 {
     for (int i = 0; i < IAF_MAX_PROJ; i++)
         if (!proj[i].on)
         {
-            proj[i] = (Proj){true, a->x + a->face * (big ? IAF_MUZZLE_X + 25 : IAF_MUZZLE_X), a->y - IAF_MUZZLE_Y, a->face * (big ? 560.0f : 720.0f), Idx(a), big, false, big ? 55.0f : 70.0f, 0, 0, big ? 3 : 1};
+            proj[i] = (Proj){true, a->x + a->face * (IAF_MUZZLE_X + 25), a->y - IAF_MUZZLE_Y, a->face * 560.0f, Idx(a), false, 55.0f, 0, 0, 3};
             return;
         }
-}
-static bool EliraShotOnScreen(Fighter *a)
-{ /* so 1 tiro de plasma dela na tela por vez */
-    for (int i = 0; i < IAF_MAX_PROJ; i++)
-        if (proj[i].on && !proj[i].big && proj[i].owner == Idx(a) && !proj[i].reflected) return true;
-    return false;
 }
 static void UpdateSpecial(Fighter *a, Fighter *o, float dt)
 {
@@ -1718,7 +1702,7 @@ static void UpdateSpecial(Fighter *a, Fighter *o, float dt)
     switch (a->ch)
     {
     case CH_ELIRA:
-        if (t >= st && !a->spawned) { a->spawned = true; SpawnProj(a, true); PlaySfx(SFX_SP_FIRE); MuzzleFlash((Vector2){a->x + a->face * IAF_MUZZLE_X, a->y - IAF_MUZZLE_Y}, 44); a->vx = -a->face * 120; AddText((Vector2){a->x, a->y - 240}, "RAJADA TEMPORAL!", C_CYAN, 22); }
+        if (t >= st && !a->spawned) { a->spawned = true; SpawnProj(a); PlaySfx(SFX_SP_FIRE); MuzzleFlash((Vector2){a->x + a->face * IAF_MUZZLE_X, a->y - IAF_MUZZLE_Y}, 44); a->vx = -a->face * 120; AddText((Vector2){a->x, a->y - 240}, "RAJADA TEMPORAL!", C_CYAN, 22); }
         break;
     case CH_CLAUDE:
         if (t >= st + ac && !a->spawned && !a->countered)
@@ -1919,7 +1903,6 @@ static void UpdateFighter(Fighter *a, Fighter *o, IafInput in, float dt)
     if (a->inv > 0) a->inv -= dt;
     if (a->beamT > 0) a->beamT -= dt;
     if (a->comboT > 0) a->comboT -= dt; else a->combo = 0;
-    if (a->shotCd > 0) a->shotCd -= dt;
     if (a->shieldHit > 0) a->shieldHit -= dt;
     a->meter = fminf(IAF_METER_MAX, a->meter + dt * 1.2f);
     bool ground = OnGround(a);
@@ -2005,18 +1988,6 @@ static void UpdateFighter(Fighter *a, Fighter *o, IafInput in, float dt)
         }
         if (a->atk == AT_SPECIAL) UpdateSpecial(a, o, dt);
         else if (a->atk == AT_GRAB) UpdateGrab(a, o);
-        else if (a->atk == AT_SHOT)
-        {
-            if (a->atkT >= IAF_SHOT_STARTUP && !a->spawned)
-            {
-                a->spawned = true;
-                SpawnProj(a, false);
-                PlaySfx(SFX_SHOT);
-                a->shotCd = IAF_SHOT_COOLDOWN;
-                MuzzleFlash((Vector2){a->x + a->face * IAF_MUZZLE_X, a->y - IAF_MUZZLE_Y}, 26);
-                a->x -= a->face * IAF_SHOT_RECOIL; /* recuo do disparo */
-            }
-        }
         else
         {
             const Atk *d = &ATK[a->ch][a->atk];
@@ -2070,7 +2041,6 @@ static void UpdateFighter(Fighter *a, Fighter *o, IafInput in, float dt)
         a->crouch = ground && in.down;
         if (in.grabP && CanGrab(a, o)) { StartGrab(a, o); break; } /* fora de alcance, sai o golpe fraco */
         if (in.specialP && a->meter >= IAF_SPECIAL_COST && !(a->ch == CH_ANTI && well.on)) { a->meter -= IAF_SPECIAL_COST; a->crouch = false; StartAtk(a, AT_SPECIAL); PlaySfx(SFX_SP_CHARGE); break; }
-        if (in.shotP && a->ch == CH_ELIRA && a->shotCd <= 0 && !EliraShotOnScreen(a)) { a->crouch = false; StartAtk(a, AT_SHOT); break; }
         if (in.lightP) { StartAtk(a, a->crouch ? AT_LOW : AT_LIGHT); break; }
         if (in.heavyP)
         { /* agachado: rasteira; cima: uppercut; frente: soco longo; parado: forte */
@@ -2166,9 +2136,9 @@ static void UpdateProjectiles(float dt)
         p->x += p->vx * dt;
         if (p->hitCd > 0) p->hitCd -= dt;
         if (p->x < -80 || p->x > SCREEN_WIDTH + 80) { p->on = false; continue; }
-        if (p->big && (int)(p->t * 60) % 2 == 0) AddPart((Vector2){p->x - (p->vx > 0 ? 40 : -40), p->y + (Rand01() - 0.5f) * 30}, (Vector2){-p->vx * 0.2f, 0}, 0.35f, 3, C_CYAN, 1);
+        if ((int)(p->t * 60) % 2 == 0) AddPart((Vector2){p->x - (p->vx > 0 ? 40 : -40), p->y + (Rand01() - 0.5f) * 30}, (Vector2){-p->vx * 0.2f, 0}, 0.35f, 3, C_CYAN, 1);
         Fighter *o = &fz[1 - p->owner];
-        float r = p->big ? 38 : 20;
+        float r = 38;
         /* choque entre projeteis */
         for (int j = 0; j < IAF_MAX_PROJ; j++)
         {
@@ -2177,9 +2147,7 @@ static void UpdateProjectiles(float dt)
             if (fabsf(q->x - p->x) < 40 && fabsf(q->y - p->y) < 40)
             {
                 AddImpact((Vector2){(p->x + q->x) / 2, p->y}, 2.2f, 1);
-                if (p->big && !q->big) q->on = false;
-                else if (q->big && !p->big) p->on = false;
-                else { p->on = false; q->on = false; }
+                p->on = false; q->on = false;
             }
         }
         if (!p->on) continue;
@@ -2199,12 +2167,12 @@ static void UpdateProjectiles(float dt)
                 continue;
             }
             Fighter *a = &fz[p->owner];
-            g_projHit = p->big ? 2 : 1;
-            ApplyHit(a, o, p->dmg, p->big ? 0.35f : 0.4f, p->big ? 120 : 220, 0, (Vector2){p->x, p->y}, false, false);
-            g_projHit = 0;
+            g_projHit = true;
+            ApplyHit(a, o, p->dmg, 0.35f, 120, 0, (Vector2){p->x, p->y}, false, false);
+            g_projHit = false;
             p->hits--;
             p->hitCd = 0.16f;
-            if (p->hits <= 0) { p->on = false; AddImpact((Vector2){p->x, p->y}, p->big ? 3.4f : 2.0f, p->vx > 0 ? 1 : -1); }
+            if (p->hits <= 0) { p->on = false; AddImpact((Vector2){p->x, p->y}, 3.4f, p->vx > 0 ? 1 : -1); }
         }
     }
 }
@@ -2292,7 +2260,6 @@ static void DrawProjectiles(void)
         if (!p->on) continue;
         int face = p->vx > 0 ? 1 : -1;
         Color tint = p->reflected ? (Color){255, 210, 140, 255} : WHITE;
-        if (p->big)
         {
             for (int k = 3; k >= 1; k--) DrawEFC(EAFrame(EA_PROJ, 3), (Vector2){p->x - face * k * 26, p->y}, face, 1.2f - k * 0.12f, Fade(tint, 0.25f));
             DrawEFC(EAFrame(EA_PROJ, 2 + ((int)(p->t * 12) % 2)), (Vector2){p->x, p->y}, face, 1.3f, tint);
@@ -2305,8 +2272,6 @@ static void DrawProjectiles(void)
             }
             DrawRing((Vector2){p->x, p->y}, 42, 44, 0, 360, 40, Fade(C_CYAN, 0.5f));
         }
-        else
-            DrawEFC(EAFrame(EA_PROJ, p->t < 0.035f ? 0 : (p->t < 0.07f ? 1 : 2 + ((int)(p->t * 12) % 2))), (Vector2){p->x, p->y}, face, 0.8f, tint);
     }
 }
 static void DrawWell(void)
@@ -2353,7 +2318,6 @@ static IafInput CpuInput(int me, float dt)
     float dx = o->x - a->x, dist = fabsf(dx);
     int tw = dx > 0 ? 1 : -1;
     s->t -= dt;
-    if (s->shotCd > 0) s->shotCd -= dt;
     bool threat = o->st == ST_ATK && dist < 240 && o->atkT < AtkTotal(o) * 0.6f;
     if (a->cancelT > 0 && !s->chainTried)
     { /* fraco acertou: as vezes segue o combo */
@@ -2393,11 +2357,10 @@ static IafInput CpuInput(int me, float dt)
         s->mode = AI_IDLE;
         s->t = 0.15f + Rand01() * 0.25f;
         bool sp = a->meter >= IAF_SPECIAL_COST;
-        bool prism = a->ch == CH_ELIRA && o->ch == CH_CLAUDE && o->meter >= IAF_SPECIAL_COST; /* tiro e rajada voltariam refletidos */
+        bool prism = a->ch == CH_ELIRA && o->ch == CH_CLAUDE && o->meter >= IAF_SPECIAL_COST; /* a rajada voltaria refletida */
         if (dist > 420)
         {
-            if (a->ch == CH_ELIRA && !prism && s->shotCd <= 0 && r < 0.5f) { s->once.shotP = true; s->shotCd = 1.3f; }
-            else if (sp && a->ch == CH_ELIRA && !prism && r < 0.7f) s->once.specialP = true;
+            if (sp && a->ch == CH_ELIRA && !prism && r < 0.7f) s->once.specialP = true;
             else if (sp && a->ch == CH_ANTI && r < 0.35f && dist < 560) s->once.specialP = true;
             else if (sp && a->ch == CH_CODEX && r < 0.3f && dist < 560) s->once.specialP = true;
             else { s->mode = AI_FWD; s->t = 0.3f + Rand01() * 0.4f; if (Rand01() < 0.3f) s->once.dashP = true; }
@@ -2407,7 +2370,6 @@ static IafInput CpuInput(int me, float dt)
             if (r < 0.12f && dist < ATK[a->ch][AT_FWDH].rx + BodyHalf(o) + 30) { s->mode = AI_FWD; s->t = 0.12f; s->once.heavyP = true; } /* soco longo */
             else if (r < 0.45f) { s->mode = AI_FWD; s->t = 0.2f + Rand01() * 0.3f; }
             else if (r < 0.6f) { s->mode = AI_JUMPIN; s->once.upP = true; s->t = 0.7f; }
-            else if (a->ch == CH_ELIRA && !prism && s->shotCd <= 0 && r < 0.8f) { s->once.shotP = true; s->shotCd = 1.3f; }
             else if (sp && a->ch == CH_ANTI && r < 0.85f) s->once.specialP = true;
             else if (sp && a->ch == CH_CODEX && r < 0.85f) s->once.specialP = true;
             else if (r < 0.9f) { s->mode = AI_BACK; s->t = 0.25f; }
@@ -2439,14 +2401,13 @@ static IafInput CpuInput(int me, float dt)
     if (s->once.heavyP) in.heavyP = true;
     if (s->once.up) in.up = true; /* cima segurado sem pular (uppercut) */
     if (s->once.dashP) in.dashP = true;
-    if (s->once.shotP) in.shotP = true;
     if (s->once.specialP) in.specialP = true;
     if (s->once.grabP) in.grabP = true;
     if (s->once.upP) { in.upP = true; in.up = true; }
     memset(&s->once, 0, sizeof(s->once));
     if (a->ch == CH_ELIRA && o->ch == CH_CLAUDE && o->st == ST_ATK && o->atk == AT_SPECIAL)
-    { /* prisma de pe: golpe ou tiro so voltam como feixe/reflexo; ela espera defendendo e, colada, agarra */
-        in.lightP = in.heavyP = in.shotP = in.specialP = in.upP = in.dashP = false;
+    { /* prisma de pe: golpe ou rajada so voltam como feixe/reflexo; ela espera defendendo e, colada, agarra */
+        in.lightP = in.heavyP = in.specialP = in.upP = in.dashP = false;
         in.left = o->x > a->x; in.right = !in.left; in.up = false;
         if (fabsf(o->x - a->x) <= BodyHalf(a) + BodyHalf(o) + IAF_GRAB_RANGE) in.grabP = true; /* o agarrao passa pelo prisma */
     }
@@ -2455,11 +2416,11 @@ static IafInput CpuInput(int me, float dt)
 /* ------------------------------------------------------------------ controles: teclado + ate 2 gamepads
    Gamepad (Xbox ou PlayStation, pelo mapeamento padrao da raylib): analogico esquerdo ou direcional
    movem; face esquerda (X / quadrado) = golpe fraco; face de cima (Y / triangulo) = golpe forte;
-   face direita (B / circulo) = tiro da Elira; face de baixo (A / X) = pular; ombro ou gatilho
+   face direita (B / circulo) = voltar nos menus (sem uso na luta); face de baixo (A / X) = pular; ombro ou gatilho
    direito = especial; START = pausa. O teclado continua valendo em paralelo. */
 #define IAF_PADS 2
 typedef struct { bool on; float ax, ay, rt, lt; bool b[32]; } PadRaw;
-enum { VB_LEFT, VB_RIGHT, VB_UP, VB_DOWN, VB_LIGHT, VB_HEAVY, VB_SHOT, VB_JUMP, VB_SPECIAL, VB_START, VB_SELECT, VB_DASH, VB_GRAB, VB_N };
+enum { VB_LEFT, VB_RIGHT, VB_UP, VB_DOWN, VB_LIGHT, VB_HEAVY, VB_BACK, VB_JUMP, VB_SPECIAL, VB_START, VB_SELECT, VB_DASH, VB_GRAB, VB_N };
 static PadRaw padNow[IAF_PADS], padPrev[IAF_PADS];
 static bool padKnown[IAF_PADS];
 static float padToastT = 0;
@@ -2491,7 +2452,7 @@ static void PadVB(const PadRaw *r, bool v[VB_N])
     v[VB_DOWN] = r->b[GAMEPAD_BUTTON_LEFT_FACE_DOWN] || r->ay > 0.55f;
     v[VB_LIGHT] = r->b[GAMEPAD_BUTTON_RIGHT_FACE_LEFT];
     v[VB_HEAVY] = r->b[GAMEPAD_BUTTON_RIGHT_FACE_UP];
-    v[VB_SHOT] = r->b[GAMEPAD_BUTTON_RIGHT_FACE_RIGHT];
+    v[VB_BACK] = r->b[GAMEPAD_BUTTON_RIGHT_FACE_RIGHT];
     v[VB_JUMP] = r->b[GAMEPAD_BUTTON_RIGHT_FACE_DOWN];
     v[VB_SPECIAL] = r->b[GAMEPAD_BUTTON_RIGHT_TRIGGER_1] || r->b[GAMEPAD_BUTTON_RIGHT_TRIGGER_2] || r->rt > 0.5f;
     v[VB_START] = r->b[GAMEPAD_BUTTON_MIDDLE_RIGHT];
@@ -2563,7 +2524,6 @@ static IafInput ReadPlayer(KbSet kb, int pad)
         in.lightP = IsKeyPressed(KEY_J);
         in.heavyP = IsKeyPressed(KEY_K);
         in.specialP = IsKeyPressed(KEY_L);
-        in.shotP = IsKeyPressed(KEY_I);
         in.leftP = IsKeyPressed(KEY_A);
         in.rightP = IsKeyPressed(KEY_D);
     }
@@ -2582,14 +2542,12 @@ static IafInput ReadPlayer(KbSet kb, int pad)
         in.lightP = in.lightP || IsKeyPressed(KEY_Z);
         in.heavyP = in.heavyP || IsKeyPressed(KEY_X);
         in.specialP = in.specialP || IsKeyPressed(KEY_C);
-        in.shotP = in.shotP || IsKeyPressed(KEY_V);
     }
     if (kb == KB_P2)
-    { /* teclado numerico: 1 fraco, 2 forte, 3 especial, 4 tiro */
+    { /* teclado numerico: 1 fraco, 2 forte, 3 especial */
         in.lightP = IsKeyPressed(KEY_KP_1);
         in.heavyP = IsKeyPressed(KEY_KP_2);
         in.specialP = IsKeyPressed(KEY_KP_3);
-        in.shotP = IsKeyPressed(KEY_KP_4);
     }
     for (int i = 0; i < IAF_PADS; i++)
     {
@@ -2601,7 +2559,6 @@ static IafInput ReadPlayer(KbSet kb, int pad)
         in.upP = in.upP || PadPressed(i, VB_UP) || PadPressed(i, VB_JUMP);
         in.lightP = in.lightP || PadPressed(i, VB_LIGHT);
         in.heavyP = in.heavyP || PadPressed(i, VB_HEAVY);
-        in.shotP = in.shotP || PadPressed(i, VB_SHOT);
         in.specialP = in.specialP || PadPressed(i, VB_SPECIAL);
         in.leftP = in.leftP || PadPressed(i, VB_LEFT);
         in.rightP = in.rightP || PadPressed(i, VB_RIGHT);
@@ -2621,7 +2578,7 @@ static bool AltDown(void) { return IsKeyDown(KEY_LEFT_ALT) || IsKeyDown(KEY_RIGH
 static bool NavLeftP(void) { return IsKeyPressed(KEY_A) || IsKeyPressed(KEY_LEFT) || AnyPadPressed(VB_LEFT); }
 static bool NavRightP(void) { return IsKeyPressed(KEY_D) || IsKeyPressed(KEY_RIGHT) || AnyPadPressed(VB_RIGHT); }
 static bool NavOkP(void) { return (IsKeyPressed(KEY_ENTER) && !AltDown()) || IsKeyPressed(KEY_SPACE) || IsKeyPressed(KEY_J) || AnyPadPressed(VB_JUMP) || AnyPadPressed(VB_START); }
-static bool NavBackP(void) { return IsKeyPressed(KEY_ESCAPE) || AnyPadPressed(VB_SHOT); }
+static bool NavBackP(void) { return IsKeyPressed(KEY_ESCAPE) || AnyPadPressed(VB_BACK); }
 static bool PauseP(void) { return IsKeyPressed(KEY_P) || AnyPadPressed(VB_START); }
 static bool NavUpP(void) { return IsKeyPressed(KEY_W) || IsKeyPressed(KEY_UP) || AnyPadPressed(VB_UP); }
 static bool NavDownP(void) { return IsKeyPressed(KEY_S) || IsKeyPressed(KEY_DOWN) || AnyPadPressed(VB_DOWN); }
@@ -2641,8 +2598,8 @@ static bool PlayerNavP(int p, int what)
         if (p == 0) return IsKeyPressed(KEY_J) || IsKeyPressed(KEY_SPACE) || PadPressed(0, VB_JUMP) || PadPressed(0, VB_START);
         return IsKeyPressed(KEY_KP_1) || IsKeyPressed(KEY_KP_ENTER) || IsKeyPressed(KEY_ENTER) || PadPressed(1, VB_JUMP) || PadPressed(1, VB_START);
     default:
-        if (p == 0) return IsKeyPressed(KEY_K) || PadPressed(0, VB_SHOT);
-        return IsKeyPressed(KEY_KP_2) || PadPressed(1, VB_SHOT);
+        if (p == 0) return IsKeyPressed(KEY_K) || PadPressed(0, VB_BACK);
+        return IsKeyPressed(KEY_KP_2) || PadPressed(1, VB_BACK);
     }
 }
 
@@ -2742,7 +2699,6 @@ static bool *BufBtn(IafInput *in, int b)
     case BB_LIGHT: return &in->lightP;
     case BB_HEAVY: return &in->heavyP;
     case BB_SPECIAL: return &in->specialP;
-    case BB_SHOT: return &in->shotP;
     case BB_DASH: return &in->dashP;
     default: return &in->grabP;
     }
@@ -2799,7 +2755,7 @@ static IafInput DummyInput(void)
     Fighter *a = &fz[1], *o = &fz[0];
     IafInput in = {0};
     if (dummyMode == 1)
-    { /* defende sempre: segura para tras quando vem golpe, tiro ou poco; agacha contra a rasteira */
+    { /* defende sempre: segura para tras quando vem golpe, rajada ou poco; agacha contra a rasteira */
         bool threat = (o->st == ST_ATK && fabsf(o->x - a->x) < 360) || ProjThreat(1) || (well.on && well.owner == 0);
         if (threat)
         {
@@ -2913,7 +2869,7 @@ static void UpdateFight(float dt)
 {
     if (PauseP()) paused = !paused;
     if (IsKeyPressed(KEY_ESCAPE) && !paused) paused = true; /* ESC pausa; na pausa, ESC ou B voltam a selecao */
-    else if (paused && (IsKeyPressed(KEY_ESCAPE) || AnyPadPressed(VB_SHOT))) { paused = false; readyP[0] = readyP[1] = false; trainPick = 0; iafScreen = SC_SELECT; scT = 0; return; }
+    else if (paused && (IsKeyPressed(KEY_ESCAPE) || AnyPadPressed(VB_BACK))) { paused = false; readyP[0] = readyP[1] = false; trainPick = 0; iafScreen = SC_SELECT; scT = 0; return; }
     if (IsKeyPressed(KEY_F1) || AnyPadPressed(VB_SELECT)) showBoxes = !showBoxes; /* caixas de colisao (depuracao) */
     if (paused) return;
     if (shake > 0) shake -= dt;
@@ -3563,7 +3519,7 @@ static void DrawControls(void)
     static const char *XB[4] = {"Y", "X", "B", "A"};
     static const Color FC[4] = {{250, 210, 80, 255}, {80, 150, 255, 255}, {240, 90, 90, 255}, {110, 220, 120, 255}};
     static const int PS[4] = {1, 0, 2, 3};
-    static const char *ACTS[4] = {"CHUTE  (golpe forte)", "SOCO  (golpe fraco)", "TIRO  (só a Elira)", "PULAR  /  confirmar"};
+    static const char *ACTS[4] = {"CHUTE  (golpe forte)", "SOCO  (golpe fraco)", "VOLTAR  (nos menus)", "PULAR  /  confirmar"};
     Vector2 fp[4] = {{fc.x, fc.y - 26}, {fc.x - 26, fc.y}, {fc.x + 26, fc.y}, {fc.x, fc.y + 26}};
     for (int i = 0; i < 4; i++) DrawCircleV(fp[i], 13, FC[i]);
     /* legenda */
@@ -3602,12 +3558,12 @@ static void DrawControls(void)
     DrawRectangleRounded(kp, 0.06f, 6, (Color){12, 14, 30, 235});
     DrawRectangleRoundedLinesEx(kp, 0.06f, 6, 2, Fade(C_CYAN, 0.6f));
     Txt("TECLADO", kp.x + 20, kp.y + 14, 22, C_CYAN);
-    static const char *ACT[10] = {"Mover", "Pular", "Agachar", "Soco (fraco)", "Chute (forte)", "Dash", "Especial", "Tiro (Elira)", "Agarrão", "Pausa"};
-    static const char *K1[10] = {"A / D  ou  SETAS", "W  ou  SETA CIMA", "S  ou  SETA BAIXO", "J  ou  Z", "K  ou  X", "2x para frente (D D)", "L  ou  C", "I  ou  V", "J + K  ou  Z + X", "P  ou  ESC"};
-    static const char *KP1[10] = {"A / D", "W", "S", "J", "K", "D D", "L", "I", "J + K", "P"};
-    static const char *KP2[10] = {"SETAS", "SETA CIMA", "SETA BAIXO", "1 (num.)", "2 (num.)", "SETA 2x", "3 (num.)", "4 (num.)", "1 + 2 (num.)", "P"};
+    static const char *ACT[9] = {"Mover", "Pular", "Agachar", "Soco (fraco)", "Chute (forte)", "Dash", "Especial", "Agarrão", "Pausa"};
+    static const char *K1[9] = {"A / D  ou  SETAS", "W  ou  SETA CIMA", "S  ou  SETA BAIXO", "J  ou  Z", "K  ou  X", "2x para frente (D D)", "L  ou  C", "J + K  ou  Z + X", "P  ou  ESC"};
+    static const char *KP1[9] = {"A / D", "W", "S", "J", "K", "D D", "L", "J + K", "P"};
+    static const char *KP2[9] = {"SETAS", "SETA CIMA", "SETA BAIXO", "1 (num.)", "2 (num.)", "SETA 2x", "3 (num.)", "1 + 2 (num.)", "P"};
     Txt("1 JOGADOR x CPU", kp.x + 20, kp.y + 50, 16, C_AMBER);
-    for (int i = 0; i < 10; i++)
+    for (int i = 0; i < 9; i++)
     {
         float y = kp.y + 74 + i * 19;
         Txt(ACT[i], kp.x + 20, y, 15, ACT[i][0] == 'D' ? C_CYAN : C_DIM);
@@ -3617,14 +3573,14 @@ static void DrawControls(void)
     Txt("1 x 1", kp.x + 20, y0, 16, C_AMBER);
     Txt("P1", kp.x + 170, y0, 16, C_CYAN);
     Txt("P2", kp.x + 300, y0, 16, C_RED);
-    for (int i = 0; i < 9; i++)
+    for (int i = 0; i < 8; i++)
     {
         float y = y0 + 22 + i * 18;
         Txt(ACT[i], kp.x + 20, y, 15, ACT[i][0] == 'D' ? C_CYAN : C_DIM);
         Txt(KP1[i], kp.x + 170, y, 15, C_WHITE);
         Txt(KP2[i], kp.x + 300, y, 15, C_WHITE);
     }
-    (void)KP2[9];
+    (void)KP2[8];
     TxtC("No 1 x 1: P1 usa o controle 1 e P2 o controle 2; sem o 2º controle, o P2 joga no teclado.", SCREEN_WIDTH / 2.0f, 586, 16, C_DIM);
     TxtC("TREINO:  F1 / SELECT caixas de colisão    F2 / L3 boneco (parado, defende, pula)    F3 / R3 volta ao meio    F4 sprites da Elira", SCREEN_WIDTH / 2.0f, 616, 16, C_GREEN);
     TxtC("F1 / SELECT também mostra as caixas em qualquer luta.", SCREEN_WIDTH / 2.0f, 640, 14, C_DIM);
@@ -3993,7 +3949,7 @@ static void UpdateMode(void)
 static void DrawSelectVs(void) { DrawSelectScreen(true); }
 static void UpdateSelectVs(float dt)
 {
-    if (IsKeyPressed(KEY_ESCAPE) || (!readyP[0] && PadPressed(0, VB_SHOT)) || (!readyP[1] && PadPressed(1, VB_SHOT)))
+    if (IsKeyPressed(KEY_ESCAPE) || (!readyP[0] && PadPressed(0, VB_BACK)) || (!readyP[1] && PadPressed(1, VB_BACK)))
     {
         iafScreen = SC_MODE;
         scT = 0;
