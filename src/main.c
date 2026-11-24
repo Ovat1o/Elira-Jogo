@@ -61,6 +61,7 @@ static bool ValidateRequiredAssets(void)
         "assets/sprites/invasao/boss_2026.png",
         "assets/sprites/invasao/boss_2048.png",
         IAF_ELIRA_ATLAS,
+        IAF_ELIRA_ATLAS_V2,
         IAF_CLAUDE_ATLAS,
         IAF_CODEX_ATLAS,
         IAF_ANTI_ATLAS,
