@@ -3902,7 +3902,9 @@ static void DrawJournalBookShell(const GameState *game)
     bool hoverClose = CheckCollisionPointRec(mouse, close);
     DrawRectangleRounded(close, 0.25f, 6, hoverClose ? (Color){195, 170, 140, 255} : (Color){226, 216, 196, 255});
     DrawRectangleRoundedLinesEx(close, 0.25f, 6, 1, (Color){145, 115, 85, 255});
-    DrawGameText(ScreenWantsTextInput(game) ? "Fechar [ESC]" : "Fechar [ESC/D]", (int)close.x + 24, (int)close.y + 9, 15, INK_COLOR);
+    const char *closeLabel = ScreenWantsTextInput(game) ? "Fechar" : "Fechar [D]";
+    int closeW = MeasureGameText(closeLabel, 15);
+    DrawGameText(closeLabel, (int)(close.x + (close.width - closeW) / 2.0f), (int)close.y + 9, 15, INK_COLOR);
 }
 
 static void DrawJournalRoomPages(const GameState *game, int room)
@@ -6153,7 +6155,7 @@ void DrawDocumentViewer2008(const GameState *game)
     }
 
     Rectangle btnClose = {panel.x + panel.width - 216, panel.y + panel.height - 54, 190, 42};
-    DrawCorpButton2008(btnClose, "< FECHAR [ESC]", (Color){42, 102, 168, 255}, true);
+    DrawCorpButton2008(btnClose, "< FECHAR", (Color){42, 102, 168, 255}, true);
 }
 
 void UpdateDocumentViewer2008(GameState *game)
@@ -7510,6 +7512,12 @@ void DrawPuzzle2008(const GameState *game)
     DrawCircle((int)osHeader.x + 20, (int)osHeader.y + 17, 4.0f, (Color){34, 82, 142, 255});
     DrawGameText("SISTEMA NACIONAL DE VIGILÂNCIA BIOMÉTRICA // NÓ 2008", (int)osHeader.x + 36, (int)osHeader.y + 9, 15, RAYWHITE);
 
+    /* Indicador de vidas do operador na barra superior do terminal */
+    Rectangle livesPill = {osHeader.x + osHeader.width - 186, osHeader.y + 4, 94, 26};
+    DrawRectangleRounded(livesPill, 0.35f, 4, Fade((Color){14, 34, 62, 255}, 0.65f));
+    DrawRectangleRoundedLinesEx(livesPill, 0.35f, 4, 1.0f, Fade(RAYWHITE, 0.35f));
+    DrawLivesIcons((Vector2){livesPill.x + 11, livesPill.y + 3}, game->lives, 20.0f);
+
     /* Botoes classicos de janela */
     for (int wb = 0; wb < 3; wb++)
     {
@@ -7560,7 +7568,7 @@ void DrawPuzzle2008(const GameState *game)
         DrawGameText("2. CONFIGURAÇÃO [BLOQUEADA]", (int)tab1.x + 24, (int)tab1.y + 12, 15, (Color){88, 98, 112, 255});
     }
 
-    DrawCorpButton2008(btnClose, "< VOLTAR À SALA [ESC]", (Color){196, 54, 46, 255}, true);
+    DrawCorpButton2008(btnClose, "< VOLTAR À SALA", (Color){196, 54, 46, 255}, true);
 
     if (game->terminal2008ActiveTab == 0)
     {
@@ -8042,25 +8050,36 @@ void UpdatePuzzle2008(GameState *game)
                     game->puzzle2008Contested = true;
                     snprintf(game->puzzle2008Feedback, sizeof(game->puzzle2008Feedback), "FALSO POSITIVO COMPROVADO! A catraca e o CFTV provam presença na empresa às 14:30.");
                 }
-                else if (game->puzzle2008Selected[0] && game->puzzle2008Selected[1])
-                {
-                    snprintf(game->puzzle2008Feedback, sizeof(game->puzzle2008Feedback), "A foto borrada e o panfleto citam o alvo, mas não provam onde ele estava às 14:30.");
-                }
-                else if (game->puzzle2008Selected[0] && game->puzzle2008Selected[2])
-                {
-                    snprintf(game->puzzle2008Feedback, sizeof(game->puzzle2008Feedback), "O registro de ponto indica entrada, mas falta prova visual de permanência às 14:30.");
-                }
-                else if (game->puzzle2008Selected[0] && game->puzzle2008Selected[3])
-                {
-                    snprintf(game->puzzle2008Feedback, sizeof(game->puzzle2008Feedback), "A câmera interna mostra presença, mas precisa do registro formal de entrada.");
-                }
-                else if (game->puzzle2008Selected[1] && (game->puzzle2008Selected[2] || game->puzzle2008Selected[3]))
-                {
-                    snprintf(game->puzzle2008Feedback, sizeof(game->puzzle2008Feedback), "O panfleto indica ativismo matutino (10h-13h), mas não comprova o álibi às 14:30.");
-                }
                 else
                 {
-                    snprintf(game->puzzle2008Feedback, sizeof(game->puzzle2008Feedback), "Evidências insuficientes para comprovar o falso positivo. Tente outra combinação.");
+                    game->lives--;
+                    if (game->lives <= 0)
+                    {
+                        game->lives = 0;
+                        game->screen = SCREEN_FAILURE;
+                        return;
+                    }
+
+                    if (game->puzzle2008Selected[0] && game->puzzle2008Selected[1])
+                    {
+                        snprintf(game->puzzle2008Feedback, sizeof(game->puzzle2008Feedback), "(-1 VIDA) A foto borrada e o panfleto citam o alvo, mas não provam onde ele estava às 14:30.");
+                    }
+                    else if (game->puzzle2008Selected[0] && game->puzzle2008Selected[2])
+                    {
+                        snprintf(game->puzzle2008Feedback, sizeof(game->puzzle2008Feedback), "(-1 VIDA) O registro de ponto indica entrada, mas falta prova visual de permanência às 14:30.");
+                    }
+                    else if (game->puzzle2008Selected[0] && game->puzzle2008Selected[3])
+                    {
+                        snprintf(game->puzzle2008Feedback, sizeof(game->puzzle2008Feedback), "(-1 VIDA) A câmera interna mostra presença, mas precisa do registro formal de entrada.");
+                    }
+                    else if (game->puzzle2008Selected[1] && (game->puzzle2008Selected[2] || game->puzzle2008Selected[3]))
+                    {
+                        snprintf(game->puzzle2008Feedback, sizeof(game->puzzle2008Feedback), "(-1 VIDA) O panfleto indica ativismo matutino (10h-13h), mas não comprova o álibi às 14:30.");
+                    }
+                    else
+                    {
+                        snprintf(game->puzzle2008Feedback, sizeof(game->puzzle2008Feedback), "(-1 VIDA) Evidências insuficientes para comprovar o falso positivo. Tente outra combinação.");
+                    }
                 }
             }
         }
@@ -8875,7 +8894,7 @@ static void R26DrawSourcesModal(void)
         R26Wrap(SOURCES_2026[i].fact, (int)card.x + 16, divY + 16, 17, (int)card.width - 32, INK_COLOR);
     }
 
-    DrawButton(R26_MODAL_CLOSE, "FECHAR [ESC]", CYAN_COLOR);
+    DrawButton(R26_MODAL_CLOSE, "FECHAR", CYAN_COLOR);
 }
 
 static void R26DrawGuideModal(void)
@@ -8905,7 +8924,7 @@ static void R26DrawGuideModal(void)
         R26Wrap(bodies[i], (int)row.x + 20, (int)row.y + 42, 15, (int)row.width - 40, LIGHTGRAY);
     }
 
-    DrawButton(R26_MODAL_CLOSE, "FECHAR [ESC]", GOLD_COLOR);
+    DrawButton(R26_MODAL_CLOSE, "FECHAR", GOLD_COLOR);
 }
 
 static void R26DrawFeedModal(const GameState *game)
@@ -8975,7 +8994,7 @@ static void R26DrawFeedModal(const GameState *game)
     DrawButton(R26_FEED_CONFIRM,
                game->feed2026Cleared ? "CURADORIA CONCLUÍDA" : "CONFIRMAR CURADORIA",
                game->feed2026Cleared ? R26_OK_COLOR : (allMarked ? GOLD_COLOR : GRAY));
-    DrawButton(R26_FEED_CLOSE, "FECHAR [ESC]", PANEL_LIGHT);
+    DrawButton(R26_FEED_CLOSE, "FECHAR", PANEL_LIGHT);
 }
 
 static int R26FeedbackCardHeight(const char *body, float w)
