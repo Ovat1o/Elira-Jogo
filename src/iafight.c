@@ -5165,8 +5165,11 @@ static void IafDrawResult(bool final)
     /* palco do vencedor */
     DrawEllipse(SCREEN_WIDTH / 2 - 180, 560, 170, 26, Fade(CHCOL[w], 0.25f));
     DrawEllipseLines(SCREEN_WIDTH / 2 - 180, 560, 175, 28, CHCOL[w]);
+    g_altPal = (!lastWon && me == op);
     DrawCharacterBig(w, SCREEN_WIDTH / 2.0f - 180, 560, 1, 1.5f, ST_WIN);
+    g_altPal = (lastWon && me == op);
     DrawCharacterBig(l, SCREEN_WIDTH / 2.0f + 260, 600, -1, 0.9f, ST_KO);
+    g_altPal = false;
     const char *title = final ? "RINHA CONQUISTADA!" : (lastWon ? "VITÓRIA!" : "DERROTA");
     TxtO(title, SCREEN_WIDTH / 2.0f, 40, 80, lastWon ? CHCOL[me] : C_RED, C_INK);
     char b[96];
