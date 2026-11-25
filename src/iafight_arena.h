@@ -42,7 +42,7 @@ static bool arKoSeen = false;
 
    ARENAS DESENHADAS NO CODIGO (Nucleo e Laboratorio 1990): o codigo continua aqui embaixo, mas elas
    ficam fora da selecao. Para religar, defina IAF_ARENAS_DESENHADAS 1 em constantes.h. */
-enum { AR_NUCLEO, AR_LAB1990, AR_PNG };                                   /* como a arena e desenhada */
+enum { AR_NUCLEO, AR_LAB1990, AR_PNG, AR_RANDOM };                        /* como a arena e desenhada */
 enum { AL_FUNDO, AL_MEIO, AL_PLATEIA, AL_PLATEIA2, AL_CHAO, AL_FRENTE, AL_N }; /* camadas do guia */
 typedef struct { const char *name, *tag; const char *file[AL_N]; int kind; const char *music; } ArenaDef;
 #define AR_DIR "assets/sprites/iafight/"
@@ -50,16 +50,14 @@ typedef struct { const char *name, *tag; const char *file[AL_N]; int kind; const
                        AR_DIR "arena_" n "_plateia_2.png", AR_DIR "arena_" n "_chao.png", AR_DIR "arena_" n "_frente.png"}
 #define AR_IMAGEM(f) {AR_DIR f, NULL, NULL, NULL, NULL, NULL}
 #define AR_EM_BREVE {"EM CONSTRUÇÃO", "uma arena nova está sendo desenhada", {NULL}, AR_PNG, NULL}
-/* PENDENTE (quando as outras arenas chegarem): cartao ALEATORIA ("?") no fim da fileira. Ideia: uma linha
-   com kind AR_RANDOM; em ArenaConfirm, guardar arPick = -1; em ArenaSortear, se arPick < 0, sortear entre as
-   linhas destravadas (ArenaLocked falso). Na miniatura, um "?" sobre o chiado. */
+#define AR_ALEATORIA {"ALEATÓRIA", "sorteia um cenário aleatório para a partida", {NULL}, AR_RANDOM, NULL}
 static const ArenaDef ARENAS[] = {
     {"POSTO VICE 2026", "posto de gasolina ao entardecer, em 2026", AR_IMAGEM("arena_vice2026.png"), AR_PNG, "musica_vice2026.ogg"},
     {"CESAR SCHOOL (BRUM)", "prédio Brum da faculdade no Bairro do Recife", AR_IMAGEM("arena_cesar.png"), AR_PNG, NULL}, /* sem trilha propria: toca a musica_luta */
-    {"CESAR SCHOOL (TIRADENTES)", "prédio Tiradentes da faculdade no Bairro do Recife", AR_IMAGEM("arena_cesar_tiradentes.png"), AR_PNG, NULL},
+    {"CESAR SCHOOL (TIRADENTES)", "prédio Tiradentes da faculdade no Bairro do Recife", AR_IMAGEM("arena_cesar_tiradentes.png"), AR_PNG, "musica_tiradentes.ogg"},
     {"Dengfeng (China)", "Centro de treinamento kung fu shaolin", AR_IMAGEM("arena_china.png"), AR_PNG, "musica_china.ogg"},
-    {"MARCO ZERO", "", AR_IMAGEM("arena_marco_zero.png"), AR_PNG, NULL},
-    AR_EM_BREVE,
+    {"MARCO ZERO", "", AR_IMAGEM("arena_marco_zero.png"), AR_PNG, "musica_marco_zero.mp3"},
+    AR_ALEATORIA,
 #if IAF_ARENAS_DESENHADAS
     {"ARENA DO NÚCLEO", "sala de servidores do núcleo", {NULL}, AR_NUCLEO, NULL},
     {"LABORATÓRIO 1990", "fitas magnéticas e terminais verdes", {NULL}, AR_LAB1990, NULL},
@@ -75,16 +73,35 @@ static int arArena = AR_PNG;      /* como a arena da luta e desenhada (ARENAS[ar
 #define AR_LINE_COL (arArena == AR_LAB1990 ? C_AMBER : C_CYAN) /* cor das linhas do piso */
 
 static bool ArenaLocked(int i) { return ARENAS[i].kind == AR_PNG && arTex[i][AL_FUNDO].id == 0; }
+static bool ArenaPlayable(int i) { return i >= 0 && i < AR_DEFS && ARENAS[i].kind != AR_RANDOM && !ArenaLocked(i); }
 /* trilha propria da arena da luta (UpdateIafMusic) ou NULL para a musica_luta */
-static const char *ArenaMusicFile(void) { return arCur >= 0 && arCur < AR_DEFS && !ArenaLocked(arCur) ? ARENAS[arCur].music : NULL; }
-/* arena da luta = a escolhida na tela de arenas (chamada em StartMatch) */
+static const char *ArenaMusicFile(void) { return ArenaPlayable(arCur) ? ARENAS[arCur].music : NULL; }
+static void ArenaResetReact(void)
+{
+    arHype = 0;
+    arKoT = 0;
+    arKoSeen = false;
+    arPrevHp[0] = arPrevHp[1] = IAF_HP_MAX;
+}
+/* arena da luta = a escolhida na tela de arenas, ou sorteada quando AR_RANDOM (chamada em StartMatch) */
 static void ArenaSortear(void)
 {
-    if (arPick < 0 || arPick >= AR_DEFS || ArenaLocked(arPick))
-        for (arPick = 0; arPick < AR_DEFS - 1 && ArenaLocked(arPick); arPick++) { }
-    arCur = arPick;
+    if (arPick >= 0 && arPick < AR_DEFS && ARENAS[arPick].kind == AR_RANDOM)
+    {
+        int cand[AR_DEFS], n = 0;
+        for (int i = 0; i < AR_DEFS; i++)
+            if (ArenaPlayable(i)) cand[n++] = i;
+        arCur = n > 0 ? cand[GetRandomValue(0, n - 1)] : 0;
+    }
+    else
+    {
+        if (!ArenaPlayable(arPick))
+            for (arPick = 0; arPick < AR_DEFS - 1 && !ArenaPlayable(arPick); arPick++) { }
+        arCur = arPick;
+    }
     arArena = ARENAS[arCur].kind;
-    if (arArena == AR_PNG && ArenaLocked(arCur)) arArena = AR_NUCLEO; /* nenhuma arena PNG no disco: volta a desenhada */
+    if ((arArena == AR_PNG && ArenaLocked(arCur)) || arArena == AR_RANDOM) arArena = AR_NUCLEO; /* nenhuma arena PNG no disco: volta a desenhada */
+    ArenaResetReact();
 }
 static void ArenaLoadAssets(void)
 {
@@ -566,7 +583,7 @@ static void ArenaBakePreviews(void)
     int keepKind = arArena, keepCur = arCur;
     for (int i = 0; i < AR_DEFS; i++)
     {
-        if (ARENAS[i].kind == AR_PNG || arPrevRT[i].id) continue;
+        if (ARENAS[i].kind == AR_PNG || ARENAS[i].kind == AR_RANDOM || arPrevRT[i].id) continue;
         arPrevRT[i] = LoadRenderTexture(SCREEN_WIDTH / 2, SCREEN_HEIGHT / 2);
         arArena = ARENAS[i].kind; arCur = i;
         Camera2D cam = {0};
