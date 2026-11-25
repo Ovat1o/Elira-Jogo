@@ -155,7 +155,7 @@ typedef struct { float st, ac, rc, dmg, rx, top, h, stun, push; int type; } Atk;
 #define IRK(v) ((v) * IAF_IARA_ESCALA) /* medida da Iara em px da escala 1 -> px da luta */
 static const Atk ATK[CH_N][AT_SPECIAL] = {
     [CH_ELIRA] = {{0}, {0.06f, 0.08f, 0.15f, 34, 112, 168, 46, 0.20f, 170, 0},
-                  {0.14f, 0.12f, 0.26f, 95, 112, 200, 95, 0.45f, 300, 0}, /* chute alto (forte); alcances na ponta da arte */
+                  {0.14f, 0.12f, 0.26f, 95, 140, 228, 120, 0.45f, 300, 0}, /* chute alto giratorio (HD): pe e arco ciano ate 140 px, de 108 a 228 px de altura */
                   {0.08f, 0.09f, 0.20f, 42, 150, 46, 44, 0.30f, 150, 1},
                   {0.05f, 0.16f, 0.10f, 48, 185, 62, 66, 0.32f, 160, 2}, /* aereo (chute pulando HD): pe esticado dos quadros 4-5 ate 185 px a frente, rente a linha dos pes */
                   {0.20f, 0.10f, 0.30f, 90, 128, 168, 50, 0.45f, 330, 0},  /* soco longo */
@@ -201,8 +201,8 @@ static const Atk ATK[CH_N][AT_SPECIAL] = {
                 {0.08f, 0.14f, 0.32f, 80, 90, 335, 290, 0.50f, 120, 0}},   /* uppercut: o fichario de baixo para cima */
 };
 /* especiais: preparo / janela ativa / recuperacao */
-static const float SP_ST[CH_N] = {0.42f, 0.08f, 0.14f, 0.22f, 0.50f, 0.34f, 0.45f}; /* Iara: canta e se transforma antes da onda; AURA_67: some em glitch; LIA: abre o celular */
-static const float SP_AC[CH_N] = {0.05f, 0.40f, 0.40f, 0.05f, 0.05f, 0.62f, 0.10f}; /* AURA_67: a sequencia de garras e a mordida; LIA: o balao sai */
+static const float SP_ST[CH_N] = {0.55f, 0.08f, 0.14f, 0.22f, 0.50f, 0.34f, 0.45f}; /* Elira: carga do raio, visivel; Iara: canta e se transforma antes da onda; AURA_67: some em glitch; LIA: abre o celular */
+static const float SP_AC[CH_N] = {0.50f, 0.40f, 0.40f, 0.05f, 0.05f, 0.62f, 0.10f}; /* Elira: o raio na tela; AURA_67: a sequencia de garras e a mordida; LIA: o balao sai */
 static const float SP_RC[CH_N] = {0.40f, 0.50f, 0.34f, 0.45f, 0.40f, 0.26f, 0.45f};
 
 typedef struct
@@ -413,6 +413,11 @@ static void AddImpactWave(Vector2 p, int face)
 {
     for (int i = 0; i < 16; i++)
         if (!impacts[i].on) { impacts[i] = (Impact){true, p, 0, 1.0f, face, 1}; return; }
+}
+static void AddImpactBeam(Vector2 p, int face) /* impacto do raio da Elira (especial_impacto) */
+{
+    for (int i = 0; i < 16; i++)
+        if (!impacts[i].on) { impacts[i] = (Impact){true, p, 0, 1.0f, face, 4}; return; }
 }
 static void AddImpactClaw(Vector2 p, int face) /* X de garras da Falha Critica (AURA_67) */
 {
@@ -987,13 +992,12 @@ static int EliraFrameIdxV2(Fighter *a, float *yoff)
         case AT_LOW: return AtkFrame2(a, E2_SWEEP, 3, 4, d->st, d->ac, d->rc);          /* 7: perna estica (3-4) e recolhe */
         case AT_AIR: return AtkFrame2(a, E2_AIR, 3, 4, d->st, d->ac, d->rc);            /* 6 (HD): encolhida, prepara (1-2), VOADORA com o pe esticado (3-4), encolhe */
         case AT_SPECIAL:
-        { /* 10: guarda, firma, segura, carga (3-5) no preparo; o quadro do DISPARO (6) comeca junto com o
-             nucleo do jogo (SpawnProj em t = SP_ST) e fica IAF_ELIRA_SP_FLASH s; depois recuo, volta e guarda */
-            float st = SP_ST[CH_ELIRA], rest = SP_AC[CH_ELIRA] + SP_RC[CH_ELIRA] - IAF_ELIRA_SP_FLASH;
-            int pk = E2_PEAK[E2_SPECIAL], n = E2_COUNT[E2_SPECIAL];
-            if (t < st) return E2Frame(E2_SPECIAL, (int)(t / st * pk));
-            if (t < st + IAF_ELIRA_SP_FLASH) return E2Frame(E2_SPECIAL, pk);
-            return E2Frame(E2_SPECIAL, pk + 1 + (int)((t - st - IAF_ELIRA_SP_FLASH) / rest * (n - pk - 1)));
+        { /* 10 (HD): guarda, estica o canhao, CARGA (0-4) no preparo; DISPARO (5-7, o canhao treme segurando o
+             raio) enquanto o raio esta na tela; fumaca (8) e guarda (9) na recuperacao */
+            float st = SP_ST[CH_ELIRA], ac = SP_AC[CH_ELIRA], rc = SP_RC[CH_ELIRA];
+            if (t < st) return E2Frame(E2_SPECIAL, (int)(t / st * 5));
+            if (t < st + ac) return E2Frame(E2_SPECIAL, 5 + ((int)((t - st) / 0.06f) % 3));
+            return E2Frame(E2_SPECIAL, (t - st - ac) < rc * 0.55f ? 8 : 9);
         }
         default: return -1;
         }
@@ -2208,14 +2212,100 @@ static void ApplyHit(Fighter *att, Fighter *def, float dmg, float stun, float pu
 }
 
 /* ------------------------------------------------------------------ especiais */
-static void SpawnProj(Fighter *a)
+/* RAJADA TEMPORAL (raio): na janela ativa sai da boca do canhao um raio grosso e reto ate a borda da arena, no lado
+   para onde a Elira olha. Acerta quem estiver na linha a cada EL_BEAM_TICK (EL_BEAM_HITS acertos de EL_BEAM_DMG;
+   com o desconto de combo, o total fica abaixo dos 3 x 55 da rajada antiga); defendido, cada acerto tira 12%.
+   O prisma do Claude ANULA o raio: o feixe para no prisma e nao acerta. Projeteis inimigos na linha se desfazem. */
+#define EL_BEAM_TICK 0.10f
+#define EL_BEAM_HITS 5
+#define EL_BEAM_DMG 27.0f
+#define EL_BEAM_MX 140.0f   /* boca do raio: px a frente dos pes (quadros 6-8 do especial) */
+#define EL_BEAM_MY 137.0f   /* boca do raio: px acima dos pes */
+#define EL_BEAM_H 114.0f    /* grossura do raio (da cabeca a cintura) */
+typedef struct { bool on; float x0, x1, y, t; int face, hits; bool blocked; } Beam;
+static Beam beam[2];
+static void UpdateBeam(Fighter *a, Fighter *o, float dt)
 {
+    Beam *b = &beam[Idx(a)];
+    float st = SP_ST[CH_ELIRA], t = a->atkT - st;
+    b->on = true; b->face = a->face; b->t = t;
+    b->x0 = a->x + a->face * EL_BEAM_MX;
+    b->y = a->y - EL_BEAM_MY;
+    b->x1 = a->face > 0 ? IAF_WALL_R + 60 : IAF_WALL_L - 60;
+    b->blocked = false;
+    Rectangle ho = Hurt(o);
+    bool inLine = (o->x - a->x) * a->face > 0 && ho.y < b->y + EL_BEAM_H / 2 && ho.y + ho.height > b->y - EL_BEAM_H / 2;
+    if (inLine && PrismActive(o) && (a->x - o->x) * o->face > 0)
+    { /* prisma: o raio para nele, sem acertar */
+        b->x1 = o->x - a->face * (BodyHalf(o) + 10);
+        b->blocked = true;
+        if ((int)(t * 60) % 3 == 0) HitSparks((Vector2){b->x1, b->y}, C_AMBER, 4, 260);
+    }
+    /* projeteis inimigos na linha se desfazem */
     for (int i = 0; i < IAF_MAX_PROJ; i++)
-        if (!proj[i].on)
-        {
-            proj[i] = (Proj){true, a->x + a->face * (IAF_MUZZLE_X + 25), a->y - IAF_MUZZLE_Y, a->face * 560.0f, Idx(a), false, 55.0f, 0, 0, 3, false, false};
-            return;
+    {
+        Proj *p = &proj[i];
+        if (!p->on || p->owner == Idx(a)) continue;
+        if ((p->x - b->x0) * a->face > 0 && (b->x1 - p->x) * a->face > 0 && fabsf(p->y - b->y) < EL_BEAM_H / 2 + 30)
+        { p->on = false; AddImpact((Vector2){p->x, p->y}, 2.2f, a->face); }
+    }
+    if (b->blocked || b->hits >= EL_BEAM_HITS || t < b->hits * EL_BEAM_TICK) return;
+    b->hits++;
+    if (!inLine || o->st == ST_KO || o->down) return;
+    bool last = b->hits == EL_BEAM_HITS;
+    Vector2 at = {o->x - a->face * (ho.width * 0.5f - 10), b->y};
+    float hs = hitstop;
+    ApplyHit(a, o, EL_BEAM_DMG, last ? 0.45f : 0.24f, last ? 320 : 30, 0, at, false, false);
+    hitstop = fmaxf(hs, fminf(hitstop, 0.05f)); /* pausa curta por acerto: o raio nao trava a luta */
+    AddImpactBeam(at, a->face);
+    (void)dt;
+}
+/* meio do raio: a textura do meio repetida de x0 a x1, rolando para a frente */
+static void DrawBeamStrip(float x0, float x1, float y, int face, float scroll, Color tint)
+{
+    const EFrame *e = &EF2[E2_FIRST[E2_BEAM_MID]];
+    float tw = e->w, th = e->h, len = fabsf(x1 - x0);
+    float off = fmodf(scroll, tw);
+    float d = 0;
+    while (d < len)
+    { /* pedaco que comeca em u (coluna da textura) */
+        float u = fmodf(off + d, tw), w = fminf(tw - u, len - d);
+        Rectangle src = {e->x + u, e->y, w, th};
+        float sx = face > 0 ? x0 + d : x0 - d - w;
+        if (face < 0) { src.x = e->x + tw - u - w; src.width = -w; }
+        DrawTexturePro(texElira2, src, (Rectangle){roundf(sx), roundf(y - th / 2), w, th}, (Vector2){0, 0}, 0, tint);
+        d += w;
+    }
+}
+static void DrawBeams(void)
+{
+    for (int k = 0; k < 2; k++)
+    {
+        Beam *b = &beam[k];
+        Fighter *f = &fz[k]; /* interrompida (apanhou, fim do round): o raio some */
+        if (b->on && !(f->ch == CH_ELIRA && f->st == ST_ATK && f->atk == AT_SPECIAL && f->atkT >= SP_ST[CH_ELIRA] && f->atkT < SP_ST[CH_ELIRA] + SP_AC[CH_ELIRA])) b->on = false;
+        if (!b->on) continue;
+        if (!texElira2.id)
+        { /* sem o atlas novo: um feixe desenhado */
+            DrawRectangleRec((Rectangle){fminf(b->x0, b->x1), b->y - EL_BEAM_H / 2, fabsf(b->x1 - b->x0), EL_BEAM_H}, Fade(C_CYAN, 0.7f));
+            continue;
         }
+        float a = Clamp(b->t / 0.05f, 0.0f, 1.0f) * Clamp((SP_AC[CH_ELIRA] - b->t) / 0.08f, 0.0f, 1.0f);
+        Color tint = Fade(WHITE, a);
+        const EFrame *ef = &EF2[E2_FIRST[E2_BEAM_END] + ((int)(b->t * 14) % E2_COUNT[E2_BEAM_END])];
+        float endBody = ef->w * 0.66f; /* a estrela da ponta fica a ~2/3 do quadro */
+        float xe = b->x1 - b->face * endBody; /* comeco do quadro da ponta */
+        if (b->blocked) xe = b->x1; /* parado no prisma: so o meio, ate o prisma */
+        if ((xe - b->x0) * b->face > 0) DrawBeamStrip(b->x0 - b->face * 6, xe + b->face * 2, b->y, b->face, b->t * 900, tint);
+        if (!b->blocked)
+        {
+            Rectangle src = {ef->x, ef->y, ef->w, ef->h};
+            float left = b->face > 0 ? xe : xe - ef->w;
+            if (b->face < 0) src.width = -src.width;
+            DrawTexturePro(texElira2, src, (Rectangle){roundf(left), roundf(b->y - ef->ay), ef->w, ef->h}, (Vector2){0, 0}, 0, tint);
+        }
+        if (showBoxes) DrawRectangleLinesEx((Rectangle){fminf(b->x0, b->x1), b->y - EL_BEAM_H / 2, fabsf(b->x1 - b->x0), EL_BEAM_H}, 2, RED);
+    }
 }
 /* Canto do Rio: onda que rola rente ao chao, mais lenta que o nucleo da Elira; atravessa e acerta 3 vezes */
 static void SpawnWave(Fighter *a)
@@ -2244,7 +2334,15 @@ static void UpdateSpecial(Fighter *a, Fighter *o, float dt)
     switch (a->ch)
     {
     case CH_ELIRA:
-        if (t >= st && !a->spawned) { a->spawned = true; SpawnProj(a); PlaySfx(SFX_SP_FIRE); MuzzleFlash((Vector2){a->x + a->face * IAF_MUZZLE_X, a->y - IAF_MUZZLE_Y}, 44); a->vx = -a->face * 120; AddText((Vector2){a->x, a->y - 240}, "RAJADA TEMPORAL!", C_CYAN, 22); }
+        if (t < st && t > st * 0.4f && (int)(t * 60) % 3 == 0) /* carga: particulas sugadas para a ponta do canhao */
+        {
+            Vector2 m = {a->x + a->face * EL_BEAM_MX, a->y - EL_BEAM_MY};
+            float an = Rand01() * 6.283f, r = 50 + Rand01() * 40;
+            AddPart((Vector2){m.x + cosf(an) * r, m.y + sinf(an) * r}, (Vector2){-cosf(an) * r * 3, -sinf(an) * r * 3}, 0.3f, 2 + Rand01() * 2, Rand01() < 0.7f ? C_CYAN : C_WHITE, 1);
+        }
+        if (t >= st && !a->spawned) { a->spawned = true; beam[Idx(a)].hits = 0; PlaySfx(SFX_SP_FIRE); MuzzleFlash((Vector2){a->x + a->face * EL_BEAM_MX, a->y - EL_BEAM_MY}, 60); a->vx = -a->face * 60; AddText((Vector2){a->x, a->y - 260}, "RAJADA TEMPORAL!", C_CYAN, 22); }
+        if (t >= st && t < st + ac) UpdateBeam(a, o, dt);
+        else beam[Idx(a)].on = false;
         break;
     case CH_CLAUDE:
         if (t >= st + ac && !a->spawned && !a->countered)
@@ -2887,6 +2985,7 @@ static void DrawParts(void)
         if (impacts[i].on)
         {
             if (impacts[i].kind == 1) { DrawIRFC(IRFrame(IR_IMPACT, (int)(impacts[i].t / 0.32f * IR_COUNT[IR_IMPACT])), impacts[i].p, impacts[i].face, IR_DRAW, WHITE); continue; }
+            if (impacts[i].kind == 4) { if (texElira2.id) DrawEFC(E2Frame(E2_BEAM_HIT, (int)(impacts[i].t / 0.32f * E2_COUNT[E2_BEAM_HIT])), impacts[i].p, impacts[i].face, 1.0f, WHITE); continue; }
             if (impacts[i].kind == 2) { DrawUFC(AUFrame(AU_IMPACT, (int)(impacts[i].t / 0.32f * AU_COUNT[AU_IMPACT])), impacts[i].p, impacts[i].face, 1.0f, WHITE); continue; }
             int f = (int)(impacts[i].t / 0.32f * 4);
             DrawEFC(EAFrame(EA_IMPACT, f), impacts[i].p, impacts[i].face, impacts[i].sc * 0.4f, WHITE);
@@ -3754,6 +3853,7 @@ static void DrawFight(void)
     DrawCharm(&fz[0]); DrawCharm(&fz[1]);
     DrawStageFront();
     DrawProjectiles();
+    DrawBeams();
     DrawCodexBoom();
     DrawParts();
     if (showBoxes) DrawBoxes();
