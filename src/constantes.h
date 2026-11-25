@@ -133,7 +133,7 @@
 #define IAF_ELIRA_SP_FLASH  0.10f    /* sprites novos: quadro do clarao do especial na tela depois do disparo (s) */
 #define IAF_ELIRA_HIT_SHORT 0.25f    /* sprites novos: dano em pe com atordoamento menor que isto pula o quadro do tranco (s) */
 #define IAF_ELIRA_KO_IMPACT 0.06f    /* sprites novos: quadro do impacto da queda no inicio do nocaute (s) */
-#define IAF_ELIRA_KO_APEX   55.0f    /* sprites novos: altura (px) em que o voo da queda usa toda a altura da grade */
+#define IAF_ELIRA_KO_APEX   49.0f    /* sprites novos: altura (px) em que o voo da queda usa toda a altura da grade */
 #define IAF_CLAUDE_ATLAS    "assets/sprites/iafight/claude_luta.png" /* atlas de luta do Claude */
 #define IAF_CODEX_ATLAS     "assets/sprites/iafight/codex_luta.png"  /* atlas de luta do Codex */
 #define IAF_ANTI_ATLAS      "assets/sprites/iafight/antigravity_luta.png" /* atlas de luta do Antigravity */
@@ -144,6 +144,7 @@
 #endif
 #define IAF_AURA67_ATLAS    "assets/sprites/iafight/aura67_luta.png" /* atlas de luta da AURA_67 (personagem de colab), ja na escala da luta */
 #define IAF_LIA_ATLAS       "assets/sprites/iafight/lia_luta.png" /* atlas de luta da LIA (personagem de colab), ja na escala da luta */
+#define IAF_DEEPSEEK_ATLAS  "assets/sprites/iafight/deepseek_luta.png" /* atlas de luta do DEEPSEEK (baleia mestre de kung fu), ja na escala da luta */
 #define IAF_GROUND_Y        622.0f   /* linha do chao da arena (pes dos lutadores) */
 #define IAF_WALL_L          70.0f    /* limite esquerdo da arena */
 #define IAF_WALL_R          1210.0f  /* limite direito da arena */
@@ -175,6 +176,8 @@
 #define IAF_MUZZLE_Y        108.0f   /* altura da boca do canhao da Elira acima dos pes (px) */
 #define IAF_MUZZLE_X        125.0f   /* boca do canhao da Elira a frente da ancora (px) */
 #define IAF_ELIRA_PIX       2.5f     /* px de tela por pixel da arte da Elira (multiplo de 0,5) */
+#define IAF_ELIRA_ESCALA    0.8917f  /* tamanho da Elira na luta: guarda de 214 px, como a LIA. Os quadros HD ja vem nessa
+                                        altura do atlas; os antigos (defesa, vitoria, defesa agachada) sao reduzidos por isto */
 #define IAF_ELIRA_ACTIVE_VISUAL 0.14f /* golpes da Elira: quadro de impacto fica ao menos isto (s) */
 #define IAF_ELIRA_LUNGE_MUL 1.4f     /* a arte mexe pouco o corpo: avanco maior nos golpes dela */
 #define IAF_LUNGE_FWDH      34.0f    /* avanco do corpo no soco longo (frente + forte) (px) */
