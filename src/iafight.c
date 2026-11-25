@@ -3997,6 +3997,7 @@ static void UpdateFight(GameState *game, float dt)
         {
             lastWon = wins[0] >= 2;
             if (versusMode || lastWon) PlaySfx(VOX_WIN);
+            resSel = 0;
             iafScreen = (lastWon && ladderPos == 2) ? SC_FINAL : SC_RESULT;
             scT = 0;
         }
@@ -4221,7 +4222,7 @@ static const Rectangle THUMB_CUT[CH_N] = {
     {0, 0, 999, 999}                   /* DEEPSEEK: guarda inteira pre-escalada (DS_THUMB) */
 };
 static Color LogoMix(Color a, Color b, float t);
-static float LogoAdv(const Font *f, char ch, float sc);
+static float LogoAdv(const Font *f, int cp, float sc);
 static float LogoWidth(const Font *f, const char *s, float sc);
 static void LogoPass(const Font *f, const char *s, float x, float y, float px, float ox, float oy,
                      int mode, Color flat, Color top, Color mid, Color bot, float sweep);
@@ -4290,7 +4291,25 @@ static void BuildLadderWithFirst(int p1, int firstOp)
     ladder[2] = pick2;
     ladderPos = 0;
 }
-/* grade 2 colunas x 4 linhas (7 lutadores + 1 'EM BREVE') + slot 'ALEATÓRIO' logo abaixo */
+/* grade 2 colunas x 4 linhas (8 lutadores) + slot 'ALEATÓRIO' logo abaixo.
+   Ordem visual na grade (DEEPSEEK no 5o quadrado, logo apos os 4 principais e antes das 3 convidadas COLAB):
+   [0] ELIRA        [1] CLAUDE
+   [2] CODEX        [3] ANTIGRAVITY
+   [4] DEEPSEEK     [5] IARA (COLAB)
+   [6] AURA_67      [7] LIA  (COLAB) */
+static const int SLOT_CHAR[SEL_GRID_SLOTS] = {
+    CH_ELIRA, CH_CLAUDE,
+    CH_CODEX, CH_ANTI,
+    CH_DEEP,  CH_IARA,
+    CH_AURA,  CH_LIA
+};
+static int CharToSlot(int ch)
+{
+    if (ch == SEL_RANDOM) return SEL_RANDOM;
+    for (int s = 0; s < SEL_GRID_SLOTS; s++)
+        if (SLOT_CHAR[s] == ch) return s;
+    return 0;
+}
 static Rectangle GridCell(int i)
 {
     const float cs = 100.0f, gap = 10.0f;
@@ -4304,40 +4323,40 @@ static Rectangle RandomSlotRect(void)
     float x0 = SCREEN_WIDTH / 2.0f - cs - gap * 0.5f;
     return (Rectangle){x0, 564.0f, cs * 2.0f + gap, 60.0f};
 }
-static Rectangle SlotRect(int i)
+static Rectangle SlotRect(int ch)
 {
-    return (i == SEL_RANDOM) ? RandomSlotRect() : GridCell(i);
+    return (ch == SEL_RANDOM) ? RandomSlotRect() : GridCell(CharToSlot(ch));
 }
-/* navegacao pelos lutadores desbloqueados (0..CH_N-1) e pelo botao ALEATÓRIO (SEL_RANDOM) */
+/* navegacao 2x4 pela ordem visual dos slots (SLOT_CHAR) e pelo botao ALEATÓRIO (SEL_RANDOM) */
 static int SelMove(int c, int dx, int dy)
 {
-    int total = CH_N + 1;
-    int curIdx = (c == SEL_RANDOM) ? CH_N : ((c >= 0 && c < CH_N) ? c : 0);
+    int total = SEL_GRID_SLOTS + 1;
+    int curSlot = (c == SEL_RANDOM) ? SEL_GRID_SLOTS : CharToSlot(c);
     if (dx)
     {
-        int nx = (curIdx + (dx > 0 ? 1 : -1) + total) % total;
-        return nx == CH_N ? SEL_RANDOM : nx;
+        int nx = (curSlot + (dx > 0 ? 1 : -1) + total) % total;
+        return nx == SEL_GRID_SLOTS ? SEL_RANDOM : SLOT_CHAR[nx];
     }
-    if (!dy) return curIdx == CH_N ? SEL_RANDOM : curIdx;
-    if (c == SEL_RANDOM) return dy > 0 ? 0 : (CH_N - 1);
-    int col = curIdx % 2, row = curIdx / 2;
+    if (!dy) return curSlot == SEL_GRID_SLOTS ? SEL_RANDOM : SLOT_CHAR[curSlot];
+    if (c == SEL_RANDOM) return dy > 0 ? SLOT_CHAR[0] : SLOT_CHAR[SEL_GRID_SLOTS - 1];
+    int col = curSlot % 2, row = curSlot / 2;
     if (dy > 0)
     {
         int next = (row + 1) * 2 + col;
-        return next < CH_N ? next : SEL_RANDOM;
+        return next < SEL_GRID_SLOTS ? SLOT_CHAR[next] : SEL_RANDOM;
     }
-    return row > 0 ? (row - 1) * 2 + col : SEL_RANDOM;
+    return row > 0 ? SLOT_CHAR[(row - 1) * 2 + col] : SEL_RANDOM;
 }
 
-/* Titulo 'SELECIONE SUA IA' no mesmo estilo de fogo de DrawIafTitleLogo */
+/* Titulo 'SELECIONE SEU LUTADOR' no mesmo estilo de fogo de DrawIafTitleLogo */
 static void DrawIafSelectLogo(void)
 {
     const float cx = SCREEN_WIDTH / 2.0f;
-    const float px = 76.0f, ty = 14.0f;
+    const float px = 64.0f, ty = 18.0f;
     Font f = GetGameFont(px);
     float sc = px / (float)f.baseSize;
-    const char *part0 = "SELECIONE SUA";
-    const char *part1 = "IA";
+    const char *part0 = "SELECIONE SEU";
+    const char *part1 = "LUTADOR";
     float w0 = LogoWidth(&f, part0, sc), wSp = LogoAdv(&f, ' ', sc), w1 = LogoWidth(&f, part1, sc);
     float total = w0 + wSp + w1;
     float x0 = cx - total / 2.0f;
@@ -4346,32 +4365,32 @@ static void DrawIafSelectLogo(void)
 
     /* aura quente + faixas diagonais de velocidade atras do titulo */
     for (int k = 3; k >= 1; k--)
-        DrawEllipse((int)cx, 54, 420 + k * 34, 30 + k * 8, Fade((Color){255, 90, 22, 255}, 0.042f + 0.014f * pulse));
-    Vector2 s1a = {cx - 460, 84}, s1b = {cx + 420, 22}, s1c = {cx + 475, 22}, s1d = {cx - 405, 84};
+        DrawEllipse((int)cx, 52, 460 + k * 34, 28 + k * 8, Fade((Color){255, 90, 22, 255}, 0.042f + 0.014f * pulse));
+    Vector2 s1a = {cx - 500, 82}, s1b = {cx + 460, 22}, s1c = {cx + 515, 22}, s1d = {cx - 445, 82};
     Tri2(s1a, s1b, s1c, Fade((Color){210, 28, 32, 255}, 0.34f));
     Tri2(s1a, s1c, s1d, Fade((Color){210, 28, 32, 255}, 0.34f));
-    DrawLineEx((Vector2){cx - 480, 92}, (Vector2){cx + 480, 28}, 2.0f, Fade(C_AMBER, 0.44f));
-    DrawLineEx((Vector2){cx - 420, 98}, (Vector2){cx + 500, 44}, 1.3f, Fade((Color){255, 65, 30, 255}, 0.48f));
+    DrawLineEx((Vector2){cx - 520, 90}, (Vector2){cx + 520, 28}, 2.0f, Fade(C_AMBER, 0.44f));
+    DrawLineEx((Vector2){cx - 460, 96}, (Vector2){cx + 535, 44}, 1.3f, Fade((Color){255, 65, 30, 255}, 0.48f));
 
     /* chamas animadas em 3 camadas subindo por tras do titulo */
-    for (int fl = 0; fl < 18; fl++)
+    for (int fl = 0; fl < 20; fl++)
     {
-        float u = (fl + 0.5f) / 18.0f;
+        float u = (fl + 0.5f) / 20.0f;
         float fx = x0 - 14.0f + u * (total + 28.0f);
         float wv1 = sinf(gt * (5.2f + (fl % 4) * 1.1f) + fl * 1.7f);
         float wv2 = cosf(gt * (7.4f + (fl % 3) * 1.3f) + fl * 2.3f);
         float edge = 1.0f - fabsf(u - 0.5f) * 0.65f;
-        float fh = (38.0f + 20.0f * (0.5f + 0.5f * wv1)) * edge;
-        float fw = (18.0f + 7.0f * (0.5f + 0.5f * wv2));
-        float baseY = ty + 72.0f;
-        float sway = wv2 * 9.0f;
+        float fh = (34.0f + 18.0f * (0.5f + 0.5f * wv1)) * edge;
+        float fw = (17.0f + 6.5f * (0.5f + 0.5f * wv2));
+        float baseY = ty + 62.0f;
+        float sway = wv2 * 8.0f;
 
         Tri2((Vector2){fx - fw, baseY}, (Vector2){fx + fw, baseY},
-             (Vector2){fx + sway, baseY - fh - 22.0f}, Fade((Color){230, 32, 18, 255}, 0.36f));
+             (Vector2){fx + sway, baseY - fh - 20.0f}, Fade((Color){230, 32, 18, 255}, 0.36f));
         Tri2((Vector2){fx - fw * 0.68f, baseY}, (Vector2){fx + fw * 0.68f, baseY},
-             (Vector2){fx + sway * 0.75f, baseY - fh * 0.78f - 14.0f}, Fade((Color){255, 128, 24, 255}, 0.42f));
+             (Vector2){fx + sway * 0.75f, baseY - fh * 0.78f - 12.0f}, Fade((Color){255, 128, 24, 255}, 0.42f));
         Tri2((Vector2){fx - fw * 0.36f, baseY}, (Vector2){fx + fw * 0.36f, baseY},
-             (Vector2){fx + sway * 0.45f, baseY - fh * 0.50f - 6.0f}, Fade((Color){255, 232, 110, 255}, 0.45f));
+             (Vector2){fx + sway * 0.45f, baseY - fh * 0.50f - 5.0f}, Fade((Color){255, 232, 110, 255}, 0.45f));
     }
 
     const char *segS[2] = {part0, part1};
@@ -4384,35 +4403,35 @@ static void DrawIafSelectLogo(void)
         for (int a = 0; a < 8; a++)
         {
             float ang = a * 0.7853982f;
-            float ox = cosf(ang) * 3.4f, oy = sinf(ang) * 3.4f;
+            float ox = cosf(ang) * 3.0f, oy = sinf(ang) * 3.0f;
             LogoPass(&f, segS[q], segX[q], ty, px, ox, oy, 0, C_INK, C_INK, C_INK, C_INK, 0);
-            LogoPass(&f, segS[q], segX[q], ty, px, ox + 9.0f, oy + 12.0f, 0, C_INK, C_INK, C_INK, C_INK, 0);
+            LogoPass(&f, segS[q], segX[q], ty, px, ox + 7.8f, oy + 10.2f, 0, C_INK, C_INK, C_INK, C_INK, 0);
         }
         for (int a = 0; a < 4; a++)
         {
             float ang = a * 1.5707963f;
-            LogoPass(&f, segS[q], segX[q], ty, px, 4.5f + cosf(ang) * 3.4f, 6.0f + sinf(ang) * 3.4f, 0, C_INK, C_INK, C_INK, C_INK, 0);
+            LogoPass(&f, segS[q], segX[q], ty, px, 3.9f + cosf(ang) * 3.0f, 5.1f + sinf(ang) * 3.0f, 0, C_INK, C_INK, C_INK, C_INK, 0);
         }
     }
     /* extrusao 3D em vinho */
     for (int q = 0; q < 2; q++)
         for (int k = 6; k >= 1; k--)
-            LogoPass(&f, segS[q], segX[q], ty, px, k * 1.45f, k * 1.9f, 0, k > 3 ? vinhoDk : vinho, vinho, vinho, vinho, 0);
+            LogoPass(&f, segS[q], segX[q], ty, px, k * 1.25f, k * 1.65f, 0, k > 3 ? vinhoDk : vinho, vinho, vinho, vinho, 0);
 
-    /* preenchimento: 'SELECIONE SUA' ouro -> laranja -> fogo, 'IA' vermelho incandescente -> carmesim */
-    float sweep = fmodf(gt * 320.0f, total + 440.0f) + x0 - 220.0f;
+    /* preenchimento: 'SELECIONE SEU' ouro -> laranja -> fogo, 'LUTADOR' vermelho incandescente -> carmesim */
+    float sweep = fmodf(gt * 340.0f, total + 480.0f) + x0 - 240.0f;
     LogoPass(&f, part0, x0, ty, px, 0, 0, 1, C_WHITE, (Color){255, 232, 70, 255}, (Color){255, 140, 30, 255}, (Color){226, 44, 30, 255}, sweep);
     LogoPass(&f, part1, x1, ty, px, 0, 0, 1, C_WHITE, (Color){255, 128, 86, 255}, (Color){238, 38, 34, 255}, (Color){155, 12, 22, 255}, sweep);
 
     /* brasas incandescentes subindo ao redor do titulo */
-    for (int s = 0; s < 18; s++)
+    for (int s = 0; s < 20; s++)
     {
         float spd = 0.36f + (s % 5) * 0.09f;
         float ph = fmodf(gt * spd + s * 0.217f, 1.0f);
-        float baseX = x0 - 24.0f + fmodf(s * 83.7f, total + 48.0f);
+        float baseX = x0 - 24.0f + fmodf(s * 97.3f, total + 48.0f);
         float drift = sinf(gt * (2.6f + (s % 4) * 0.7f) + s * 1.9f) * (8.0f + (s % 3) * 4.0f);
         float ex = baseX + drift + ph * 12.0f;
-        float ey = (ty + 66.0f) - ph * 72.0f;
+        float ey = (ty + 62.0f) - ph * 68.0f;
         float fade = sinf(ph * 3.14159f);
         if (fade < 0.05f) continue;
         float sz = (1.8f + (s % 3) * 0.85f) * (0.6f + 0.5f * fade);
@@ -4573,10 +4592,11 @@ static void DrawSelPanel(int side, int ch, const char *tag, Color tagCol, bool a
     }
 }
 
-static void DrawSelectGridSlot(int i, bool on)
+static void DrawSelectGridSlot(int slotIdx, bool on)
 {
-    Rectangle g = GridCell(i);
-    bool locked = (i >= CH_N);
+    Rectangle g = GridCell(slotIdx);
+    int ch = (slotIdx >= 0 && slotIdx < SEL_GRID_SLOTS) ? SLOT_CHAR[slotIdx] : -1;
+    bool locked = (ch < 0 || ch >= CH_N);
     float pulse = 0.72f + 0.28f * sinf(gt * 3.5f);
     int gx = (int)g.x, gy = (int)g.y, gw = (int)g.width, gh = (int)g.height;
 
@@ -4610,7 +4630,7 @@ static void DrawSelectGridSlot(int i, bool on)
         return;
     }
 
-    Color c = CHCOL[i];
+    Color c = CHCOL[ch];
     DrawRectangleRounded(g, 0.10f, 6, (Color){14, 19, 38, 248});
     DrawRectangleGradientV(gx + 2, gy + 2, gw - 4, gh - 4,
                            Fade(c, on ? 0.16f : 0.05f), Fade(c, on ? 0.44f : 0.20f));
@@ -4618,11 +4638,11 @@ static void DrawSelectGridSlot(int i, bool on)
     DrawRectangle(gx + 5, gy + 3, gw - 10, 14, Fade(C_WHITE, on ? 0.07f : 0.025f));
 
     /* Retrato bem enquadrado com respiro acima da faixa do nome */
-    DrawThumb((CharId)i, (Rectangle){g.x + 6.0f, g.y + 5.0f, g.width - 12.0f, g.height - 27.0f}, false);
+    DrawThumb((CharId)ch, (Rectangle){g.x + 6.0f, g.y + 5.0f, g.width - 12.0f, g.height - 27.0f}, false);
 
     /* Faixa inferior com o nome curto do lutador */
     DrawRectangle(gx + 2, gy + gh - 20, gw - 4, 18, Fade((Color){6, 9, 18, 255}, 0.82f));
-    const char *shortName = (i == CH_ANTI) ? "ANTIGRAV." : NAME[i];
+    const char *shortName = (ch == CH_ANTI) ? "ANTIGRAV." : NAME[ch];
     TxtC(shortName, g.x + g.width * 0.5f, g.y + g.height - 18.0f, 13, on ? C_WHITE : Fade(c, 0.90f));
 
     /* Moldura e cantoneiras sci-fi nos 4 cantos */
@@ -4639,7 +4659,7 @@ static void DrawSelectGridSlot(int i, bool on)
     DrawLineEx((Vector2){g.x + g.width - pd, g.y + g.height - pd}, (Vector2){g.x + g.width - pd, g.y + g.height - pd - tk}, th, tc);
 
     /* Etiqueta chanfrada estilizada COLAB no canto superior esquerdo das convidadas (sem cobrir o rosto) */
-    if (i == CH_IARA || i == CH_AURA || i == CH_LIA)
+    if (ch == CH_IARA || ch == CH_AURA || ch == CH_LIA)
     {
         float bx = g.x + 2.0f, by = g.y + 2.0f;
         float bw = 46.0f, bh = 14.0f, cut = 7.0f;
@@ -4737,7 +4757,8 @@ static void DrawSelectScreen(bool vs)
     int numCursors = (vs || p2Step == 1 || soloReadyT > 0) ? 2 : 1;
     for (int i = 0; i < SEL_GRID_SLOTS; i++)
     {
-        bool on = (i < CH_N) && (cur[0] == i || (numCursors == 2 && cur[1] == i));
+        int ch = SLOT_CHAR[i];
+        bool on = (ch >= 0 && ch < CH_N) && (cur[0] == ch || (numCursors == 2 && cur[1] == ch));
         DrawSelectGridSlot(i, on);
     }
     DrawRandomSlot(cur[0] == SEL_RANDOM || (numCursors == 2 && cur[1] == SEL_RANDOM));
@@ -5060,10 +5081,11 @@ static void UpdateSelect(float dt)
     {
         if (CheckCollisionPointRec(m, GridCell(i)))
         {
-            if (i < CH_N)
+            int ch = SLOT_CHAR[i];
+            if (ch >= 0 && ch < CH_N)
             {
-                if (moved && sel != i) { sel = i; PlaySfx(SFX_MOVE); }
-                if (scT > 0.15f && IsMouseButtonPressed(MOUSE_BUTTON_LEFT)) { sel = i; ok = true; }
+                if (moved && sel != ch) { sel = ch; PlaySfx(SFX_MOVE); }
+                if (scT > 0.15f && IsMouseButtonPressed(MOUSE_BUTTON_LEFT)) { sel = ch; ok = true; }
             }
             else if (scT > 0.15f && IsMouseButtonPressed(MOUSE_BUTTON_LEFT))
             {
@@ -5157,37 +5179,467 @@ static void DrawVersus(void)
     TxtC(an, SCREEN_WIDTH / 2.0f, 84, 18, C_WHITE);
     TxtC("ENTER / A: lutar    ESC / B: trocar a arena", SCREEN_WIDTH / 2.0f, SCREEN_HEIGHT - 30, 16, C_DIM);
 }
+/* ------------------------------------------------------------------ telas de resultado (SC_RESULT e SC_FINAL) */
+/* Titulo arcade 3D com chamas/brasas (vitoria/campeao/1x1) ou visual dramatico vermelho/vinho (derrota) */
+static void DrawIafResultTitleLogo(const char *part0, const char *part1, float px, float ty,
+                                   bool defeatTheme, Color p0Top, Color p0Mid, Color p0Bot)
+{
+    const float cx = SCREEN_WIDTH / 2.0f;
+    Font f = GetGameFont(px);
+    float sc = px / (float)f.baseSize;
+    bool hasP1 = (part1 != NULL && part1[0] != '\0');
+    float w0 = LogoWidth(&f, part0, sc);
+    float wSp = hasP1 ? LogoAdv(&f, ' ', sc) : 0.0f;
+    float w1 = hasP1 ? LogoWidth(&f, part1, sc) : 0.0f;
+    float total = w0 + wSp + w1;
+    float x0 = cx - total * 0.5f;
+    float x1 = x0 + w0 + wSp;
+    float pulse = 0.5f + 0.5f * sinf(gt * 3.2f);
+    float kScale = px / 84.0f;
+
+    /* 1. Aura + faixas diagonais de velocidade atras do titulo */
+    Color auraCol = defeatTheme ? (Color){185, 16, 32, 255} : (Color){255, 92, 22, 255};
+    for (int k = 4; k >= 1; k--)
+    {
+        DrawEllipse((int)cx, (int)(ty + px * 0.54f),
+                    (int)(total * 0.56f + k * 34.0f), (int)(px * 0.42f + k * 9.0f),
+                    Fade(auraCol, (defeatTheme ? 0.055f : 0.045f) + 0.015f * pulse));
+    }
+    float slW = total * 0.62f + 90.0f;
+    float slY0 = ty + px * 0.96f, slY1 = ty + px * 0.14f;
+    Color slashCol = defeatTheme ? (Color){130, 12, 26, 255} : (Color){210, 28, 32, 255};
+    Tri2((Vector2){cx - slW, slY0}, (Vector2){cx + slW - 48.0f, slY1}, (Vector2){cx + slW, slY1}, Fade(slashCol, 0.36f));
+    Tri2((Vector2){cx - slW, slY0}, (Vector2){cx + slW, slY1}, (Vector2){cx - slW + 48.0f, slY0}, Fade(slashCol, 0.36f));
+    DrawLineEx((Vector2){cx - slW - 20.0f, slY0 + 10.0f}, (Vector2){cx + slW + 20.0f, slY1 + 8.0f},
+               2.0f, Fade(defeatTheme ? C_RED : C_AMBER, 0.45f));
+    DrawLineEx((Vector2){cx - slW + 30.0f, slY0 + 16.0f}, (Vector2){cx + slW + 35.0f, slY1 + 22.0f},
+               1.3f, Fade(defeatTheme ? (Color){190, 30, 50, 255} : (Color){255, 65, 30, 255}, 0.48f));
+
+    /* 2. Chamas animadas em 3 camadas subindo por tras do logo */
+    int nFlames = 16;
+    for (int fl = 0; fl < nFlames; fl++)
+    {
+        float u = (fl + 0.5f) / (float)nFlames;
+        float fx = x0 - 12.0f + u * (total + 24.0f);
+        float wv1 = sinf(gt * (defeatTheme ? (3.2f + (fl % 4) * 0.7f) : (5.2f + (fl % 4) * 1.1f)) + fl * 1.7f);
+        float wv2 = cosf(gt * (defeatTheme ? (4.4f + (fl % 3) * 0.8f) : (7.4f + (fl % 3) * 1.3f)) + fl * 2.3f);
+        float edge = 1.0f - fabsf(u - 0.5f) * 0.65f;
+        float fh = (42.0f + 22.0f * (0.5f + 0.5f * wv1)) * edge * kScale;
+        float fw = (18.0f + 7.0f * (0.5f + 0.5f * wv2)) * kScale;
+        float baseY = ty + px * 0.92f;
+        float sway = wv2 * 9.0f * kScale;
+
+        Color cOut = defeatTheme ? (Color){115, 10, 24, 255} : (Color){230, 32, 18, 255};
+        Color cMid = defeatTheme ? (Color){190, 22, 38, 255} : (Color){255, 128, 24, 255};
+        Color cIn  = defeatTheme ? (Color){255, 80, 88, 255} : (Color){255, 232, 110, 255};
+
+        Tri2((Vector2){fx - fw, baseY}, (Vector2){fx + fw, baseY},
+             (Vector2){fx + sway, baseY - fh - 22.0f * kScale}, Fade(cOut, 0.35f));
+        Tri2((Vector2){fx - fw * 0.68f, baseY}, (Vector2){fx + fw * 0.68f, baseY},
+             (Vector2){fx + sway * 0.75f, baseY - fh * 0.78f - 14.0f * kScale}, Fade(cMid, 0.40f));
+        Tri2((Vector2){fx - fw * 0.36f, baseY}, (Vector2){fx + fw * 0.36f, baseY},
+             (Vector2){fx + sway * 0.45f, baseY - fh * 0.50f - 6.0f * kScale}, Fade(cIn, 0.44f));
+    }
+
+    const char *segS[2] = {part0, part1};
+    float segX[2] = {x0, x1};
+    int nSeg = hasP1 ? 2 : 1;
+    Color vinho = defeatTheme ? (Color){54, 6, 16, 255} : (Color){110, 14, 28, 255};
+    Color vinhoDk = defeatTheme ? (Color){26, 3, 9, 255} : (Color){64, 8, 20, 255};
+    float outR = 3.4f * kScale;
+    float extX = 1.4f * kScale, extY = 1.85f * kScale;
+
+    /* 3. Contorno C_INK + Extrusao 3D em vinho */
+    for (int q = 0; q < nSeg; q++)
+    {
+        for (int a = 0; a < 8; a++)
+        {
+            float ang = a * 0.7853982f;
+            float ox = cosf(ang) * outR, oy = sinf(ang) * outR;
+            LogoPass(&f, segS[q], segX[q], ty, px, ox, oy, 0, C_INK, C_INK, C_INK, C_INK, 0);
+            LogoPass(&f, segS[q], segX[q], ty, px, ox + 7.0f * extX, oy + 7.0f * extY, 0, C_INK, C_INK, C_INK, C_INK, 0);
+        }
+        for (int a = 0; a < 4; a++)
+        {
+            float ang = a * 1.5707963f;
+            LogoPass(&f, segS[q], segX[q], ty, px, 3.5f * extX + cosf(ang) * outR, 3.5f * extY + sinf(ang) * outR, 0, C_INK, C_INK, C_INK, C_INK, 0);
+        }
+    }
+    for (int q = 0; q < nSeg; q++)
+        for (int k = 7; k >= 1; k--)
+            LogoPass(&f, segS[q], segX[q], ty, px, k * extX, k * extY, 0, k > 4 ? vinhoDk : vinho, vinho, vinho, vinho, 0);
+
+    /* 4. Preenchimento em gradiente + brilho especular varrendo o logo */
+    float sweep = fmodf(gt * 320.0f, total + 500.0f) + x0 - 250.0f;
+    LogoPass(&f, part0, x0, ty, px, 0, 0, 1, C_WHITE, p0Top, p0Mid, p0Bot, sweep);
+    if (hasP1)
+    {
+        Color p1Top = defeatTheme ? (Color){255, 150, 150, 255} : (Color){255, 232, 70, 255};
+        Color p1Mid = defeatTheme ? (Color){220, 38, 48, 255}   : (Color){255, 140, 30, 255};
+        Color p1Bot = defeatTheme ? (Color){125, 10, 24, 255}   : (Color){226, 44, 30, 255};
+        LogoPass(&f, part1, x1, ty, px, 0, 0, 1, C_WHITE, p1Top, p1Mid, p1Bot, sweep);
+    }
+
+    /* 5. Brasas incandescentes subindo ao redor do titulo */
+    for (int s = 0; s < 22; s++)
+    {
+        float spd = (defeatTheme ? 0.24f : 0.35f) + (s % 5) * 0.08f;
+        float ph = fmodf(gt * spd + s * 0.217f, 1.0f);
+        float baseX = x0 - 28.0f + fmodf(s * 97.3f, total + 56.0f);
+        float drift = sinf(gt * (2.5f + (s % 4) * 0.6f) + s * 1.9f) * (10.0f + (s % 3) * 4.0f);
+        float ex = baseX + drift + ph * 14.0f;
+        float ey = (ty + px * 1.05f) - ph * (px * 1.15f);
+        float fade = sinf(ph * 3.14159f);
+        if (fade < 0.05f) continue;
+        float sz = (2.0f + (s % 4) * 0.9f) * (0.6f + 0.5f * fade) * kScale;
+        Color ember = defeatTheme
+                    ? ((s % 2 == 0) ? (Color){255, 90, 96, 255} : (Color){210, 26, 42, 255})
+                    : ((s % 3 == 0) ? (Color){255, 238, 120, 255}
+                                    : ((s % 3 == 1) ? (Color){255, 130, 32, 255} : (Color){245, 52, 26, 255}));
+        DrawLineEx((Vector2){ex - 3.0f, ey + 7.0f + sz}, (Vector2){ex, ey}, sz * 0.72f, Fade(ember, fade * 0.42f));
+        DrawCircleV((Vector2){ex, ey}, sz * 1.65f, Fade(auraCol, fade * 0.26f));
+        DrawRectanglePro((Rectangle){ex, ey, sz * 1.55f, sz * 1.05f}, (Vector2){sz * 0.77f, sz * 0.52f}, -28.0f, Fade(ember, fade * 0.95f));
+    }
+}
+
+/* Palco/pedestal holografico a esquerda para exibir o vencedor (e o derrotado ao fundo), preservando g_altPal */
+static void DrawResultStage(CharId winCh, bool winAlt, const char *winTag, Color winTagCol,
+                            CharId loseCh, bool loseAlt, bool showLoser, bool playerLost, bool grandFinal)
+{
+    Rectangle stage = {40.0f, 132.0f, 680.0f, 536.0f};
+    Color wCol = winAlt ? AltCol(CHCOL[winCh]) : CHCOL[winCh];
+    Color themeCol = playerLost ? C_RED : (grandFinal ? C_AMBER : wCol);
+    float pulse = 0.72f + 0.28f * sinf(gt * 3.4f);
+    int bx = (int)stage.x, by = (int)stage.y, bw = (int)stage.width, bh = (int)stage.height;
+
+    /* 1. Sombra + Base limpa do palco com foco nos personagens */
+    DrawRectangleRounded((Rectangle){stage.x + 5, stage.y + 6, stage.width, stage.height}, 0.04f, 8, Fade(C_INK, 0.60f));
+    DrawRectangleRounded(stage, 0.04f, 8, (Color){8, 12, 26, 246});
+    DrawRectangleGradientV(bx + 4, by + 4, bw - 8, bh / 3, Fade(themeCol, 0.12f), Fade(themeCol, 0.0f));
+    DrawRectangleGradientV(bx + 4, by + bh / 3, bw - 8, (bh * 2) / 3 - 4, Fade(wCol, 0.0f), Fade(wCol, 0.30f));
+
+    float mainX = showLoser ? (stage.x + 246.0f) : (stage.x + stage.width * 0.5f);
+    float mainY = stage.y + stage.height - 54.0f;
+    float koX   = stage.x + 528.0f;
+    float koY   = stage.y + stage.height - 42.0f;
+
+    /* Cone de holofote suave iluminando o vencedor */
+    Tri2((Vector2){mainX - 58.0f, stage.y + 68.0f}, (Vector2){mainX + 58.0f, stage.y + 68.0f},
+         (Vector2){mainX - 180.0f, mainY}, Fade(themeCol, 0.06f));
+    Tri2((Vector2){mainX + 58.0f, stage.y + 68.0f}, (Vector2){mainX + 180.0f, mainY},
+         (Vector2){mainX - 180.0f, mainY}, Fade(themeCol, 0.06f));
+
+    DrawRing((Vector2){mainX, stage.y + 300.0f}, 126.0f, 128.0f, gt * 18.0f, gt * 18.0f + 220.0f, 36, Fade(wCol, 0.12f));
+
+    /* Barra lateral luminosa fina */
+    DrawRectangle(bx + 4, by + 12, 6, bh - 24, themeCol);
+
+    /* 2. Cabecalho minimalista no topo do palco */
+    float tagW = fmaxf(72.0f, TxtW(winTag, 22) + 24.0f);
+    Rectangle tagBox = {stage.x + 26.0f, stage.y + 20.0f, tagW, 30.0f};
+    DrawRectangleRounded(tagBox, 0.25f, 6, winTagCol);
+    TxtC(winTag, tagBox.x + tagBox.width * 0.5f, tagBox.y + 4.0f, 22, C_INK);
+
+    float nameX = tagBox.x + tagBox.width + 16.0f;
+    Txt(NAME[winCh], nameX + 2, stage.y + 19.0f, 34, C_INK);
+    Txt(NAME[winCh], nameX, stage.y + 17.0f, 34, C_WHITE);
+    DrawLine((int)(stage.x + 26), (int)(stage.y + 62), (int)(stage.x + stage.width - 26),
+             (int)(stage.y + 62), Fade(themeCol, 0.28f));
+
+    /* 3. Oponente derrotado ao fundo (ST_KO) */
+    if (showLoser)
+    {
+        Color lCol = loseAlt ? AltCol(CHCOL[loseCh]) : CHCOL[loseCh];
+        DrawEllipse((int)koX, (int)koY + 3, 96, 12, Fade(C_INK, 0.60f));
+        DrawEllipseLines((int)koX, (int)koY + 2, 98, 13, Fade(lCol, 0.30f));
+        g_altPal = loseAlt;
+        DrawCharacterBig(loseCh, koX, koY, -1, 0.94f, ST_KO);
+        g_altPal = false;
+    }
+
+    /* 4. Pedestal holografico limpo sob os pes do vencedor */
+    DrawEllipse((int)mainX, (int)mainY + 5, 174, 23, Fade(C_INK, 0.70f));
+    DrawEllipse((int)mainX, (int)mainY + 2, 158, 18, Fade(wCol, 0.20f + 0.06f * pulse));
+    DrawEllipseLines((int)mainX, (int)mainY + 2, 162, 19, Fade(wCol, 0.85f));
+    DrawEllipseLines((int)mainX, (int)mainY + 2, 126, 14, Fade(themeCol, 0.55f));
+
+    /* 5. Vencedor em pose de vitoria (ST_WIN) com maior destaque, preservando g_altPal */
+    g_altPal = winAlt;
+    DrawCharacterBig(winCh, mainX, mainY, 1, 1.60f, ST_WIN);
+    g_altPal = false;
+
+    /* 6. Moldura limpa + cantoneiras */
+    DrawRectangleRoundedLinesEx(stage, 0.04f, 8, 2.0f, Fade(themeCol, 0.60f * pulse + 0.20f));
+    float tick = 18.0f, pad = 2.0f, th = 2.4f;
+    Color tc = grandFinal ? C_AMBER : winTagCol;
+    DrawLineEx((Vector2){stage.x + pad, stage.y + pad}, (Vector2){stage.x + pad + tick, stage.y + pad}, th, tc);
+    DrawLineEx((Vector2){stage.x + pad, stage.y + pad}, (Vector2){stage.x + pad, stage.y + pad + tick}, th, tc);
+    DrawLineEx((Vector2){stage.x + stage.width - pad, stage.y + pad}, (Vector2){stage.x + stage.width - pad - tick, stage.y + pad}, th, tc);
+    DrawLineEx((Vector2){stage.x + stage.width - pad, stage.y + pad}, (Vector2){stage.x + stage.width - pad, stage.y + pad + tick}, th, tc);
+    DrawLineEx((Vector2){stage.x + pad, stage.y + stage.height - pad}, (Vector2){stage.x + pad + tick, stage.y + stage.height - pad}, th, tc);
+    DrawLineEx((Vector2){stage.x + pad, stage.y + stage.height - pad}, (Vector2){stage.x + pad, stage.y + stage.height - pad - tick}, th, tc);
+    DrawLineEx((Vector2){stage.x + stage.width - pad, stage.y + stage.height - pad}, (Vector2){stage.x + stage.width - pad - tick, stage.y + stage.height - pad}, th, tc);
+    DrawLineEx((Vector2){stage.x + stage.width - pad, stage.y + stage.height - pad}, (Vector2){stage.x + stage.width - pad, stage.y + stage.height - pad - tick}, th, tc);
+}
+
+/* Placar dos rounds limpo e compacto no topo da coluna direita */
+static void DrawResultScoreboard(Rectangle r, CharId c0, const char *t0, Color col0, int w0,
+                                 CharId c1, const char *t1, Color col1, int w1, Color accent)
+{
+    DrawRectangleRounded(r, 0.14f, 8, (Color){10, 15, 30, 238});
+    DrawRectangleRoundedLinesEx(r, 0.14f, 8, 1.6f, Fade(accent, 0.55f));
+    float cx = r.x + r.width * 0.5f;
+
+    /* Lado esquerdo (1P) */
+    float tw0 = fmaxf(40.0f, TxtW(t0, 14) + 14.0f);
+    Rectangle b0 = {r.x + 14.0f, r.y + 11.0f, tw0, 20.0f};
+    DrawRectangleRounded(b0, 0.25f, 4, col0);
+    TxtC(t0, b0.x + b0.width * 0.5f, b0.y + 3.0f, 14, C_INK);
+    Txt(NAME[c0], b0.x + b0.width + 8.0f, r.y + 12.0f, 17, w0 > w1 ? C_WHITE : C_DIM);
+    for (int k = 0; k < 2; k++)
+    {
+        Rectangle pip = {r.x + 16.0f + k * 22.0f, r.y + 40.0f, 16.0f, 8.0f};
+        DrawRectangleRounded(pip, 0.3f, 4, k < w0 ? col0 : Fade(C_DIM, 0.22f));
+    }
+
+    /* Placar central (ex: 2 x 1) */
+    char scTxt[32];
+    snprintf(scTxt, sizeof scTxt, "%d  x  %d", w0, w1);
+    TxtO(scTxt, cx, r.y + 10.0f, 26, C_AMBER, C_INK);
+    TxtC("ROUNDS", cx, r.y + 40.0f, 10, C_DIM);
+
+    /* Lado direito (2P / CPU) */
+    float tw1 = fmaxf(40.0f, TxtW(t1, 14) + 14.0f);
+    Rectangle b1 = {r.x + r.width - 14.0f - tw1, r.y + 11.0f, tw1, 20.0f};
+    DrawRectangleRounded(b1, 0.25f, 4, col1);
+    TxtC(t1, b1.x + b1.width * 0.5f, b1.y + 3.0f, 14, C_INK);
+    float nw1 = TxtW(NAME[c1], 17);
+    Txt(NAME[c1], b1.x - 8.0f - nw1, r.y + 12.0f, 17, w1 > w0 ? C_WHITE : C_DIM);
+    for (int k = 0; k < 2; k++)
+    {
+        Rectangle pip = {r.x + r.width - 32.0f - k * 22.0f, r.y + 40.0f, 16.0f, 8.0f};
+        DrawRectangleRounded(pip, 0.3f, 4, k < w1 ? col1 : Fade(C_DIM, 0.22f));
+    }
+}
+
+/* Caixa de frase de vitoria limpa com tipografia grande e quebra automatica por palavras */
+static void DrawResultQuoteCard(Rectangle q, CharId w, bool alt, const char *roleBadge, bool grandFinal)
+{
+    Color c = alt ? AltCol(CHCOL[w]) : CHCOL[w];
+    DrawRectangleRounded(q, 0.08f, 8, (Color){10, 15, 30, 238});
+    DrawRectangle((int)q.x + 4, (int)q.y + 10, 5, (int)q.height - 20, c);
+    DrawRectangleRoundedLinesEx(q, 0.08f, 8, 1.6f, Fade(c, 0.58f));
+
+    Txt(NAME[w], q.x + 22.0f, q.y + 14.0f, 22, c);
+    TxtR(roleBadge, q.x + q.width - 18.0f, q.y + 18.0f, 13, C_DIM);
+    DrawLine((int)q.x + 22, (int)q.y + 44, (int)(q.x + q.width - 22), (int)q.y + 44, Fade(c, 0.26f));
+
+    /* Quebra por palavras em fonte grande (23px) para a fala ter destaque */
+    const char *quote = WINQ[w];
+    const int fs = 23;
+    const float maxW = q.width - 44.0f;
+    char lines[4][128];
+    int nLines = 0;
+    const char *p = quote;
+    while (*p && nLines < 4)
+    {
+        while (*p == ' ') p++;
+        if (!*p) break;
+        char cur[128] = "";
+        int curLen = 0;
+        while (*p)
+        {
+            const char *wStart = p;
+            while (*p && *p != ' ') p++;
+            int wLen = (int)(p - wStart);
+            char test[128];
+            int pos = 0;
+            if (curLen > 0) { memcpy(test, cur, (size_t)curLen); test[curLen] = ' '; pos = curLen + 1; }
+            if (pos + wLen >= 126) break;
+            memcpy(test + pos, wStart, (size_t)wLen);
+            test[pos + wLen] = '\0';
+            if (curLen > 0 && TxtW(test, fs) > maxW)
+            {
+                p = wStart;
+                break;
+            }
+            memcpy(cur, test, (size_t)(pos + wLen + 1));
+            curLen = pos + wLen;
+            while (*p == ' ') p++;
+        }
+        if (curLen == 0) break;
+        memcpy(lines[nLines++], cur, (size_t)curLen + 1);
+    }
+
+    float lineH = 32.0f;
+    float areaTop = q.y + 56.0f;
+    float areaH = q.height - (grandFinal ? 92.0f : 68.0f);
+    float startY = areaTop + fmaxf(0.0f, (areaH - nLines * lineH) * 0.5f);
+    for (int i = 0; i < nLines; i++)
+    {
+        Txt(lines[i], q.x + 22.0f + 1.0f, startY + i * lineH + 1.5f, fs, Fade(C_INK, 0.85f));
+        Txt(lines[i], q.x + 22.0f, startY + i * lineH, fs, C_WHITE);
+    }
+
+    if (grandFinal)
+    {
+        Txt("As três rivais foram derrotadas. A arena é sua!", q.x + 22.0f, q.y + q.height - 28.0f, 14, C_AMBER);
+    }
+}
+
+static Rectangle ResultBtnRect(int i)
+{
+    return (Rectangle){778.0f, 444.0f + i * 68.0f, 436.0f, 54.0f};
+}
+
+static void DrawResultActionButtons(const char *titles[3], const char *subs[3], const Color cols[3])
+{
+    (void)subs;
+    float pulse = 0.72f + 0.28f * sinf(gt * 3.2f);
+    float slide = 3.0f + 2.4f * sinf(gt * 9.0f);
+    for (int i = 0; i < 3; i++)
+    {
+        Rectangle r = ResultBtnRect(i);
+        bool on = (resSel == i);
+        Color c = cols[i];
+
+        DrawIafCyberCard(r, c, on, 12.0f);
+
+        if (on)
+        {
+            Txt(">>", r.x + 20.0f + slide, r.y + r.height * 0.5f - 10.0f, 19, C_AMBER);
+            Txt("<", r.x + r.width - 28.0f - slide * 0.6f, r.y + r.height * 0.5f - 10.0f, 19, Fade(c, 0.95f));
+        }
+        else
+        {
+            DrawRectangle((int)(r.x + r.width - 18.0f), (int)(r.y + r.height * 0.5f - 2.5f), 5, 5, Fade(c, 0.50f * pulse));
+        }
+
+        float cx = r.x + r.width * 0.5f + (on ? 2.0f : 0.0f);
+        float ty = r.y + r.height * 0.5f - 11.0f;
+        TxtC(titles[i], cx + 1.5f, ty + 1.5f, 21, Fade(C_INK, 0.90f));
+        TxtC(titles[i], cx, ty, 21, on ? C_WHITE : (Color){210, 228, 242, 230});
+    }
+}
+
 static void IafDrawResult(bool final)
 {
     CharId me = (CharId)playerCh, op = (CharId)ladder[ladderPos];
     CharId w = lastWon ? me : op, l = lastWon ? op : me;
-    DrawBackdrop(CHCOL[w]);
-    /* palco do vencedor */
-    DrawEllipse(SCREEN_WIDTH / 2 - 180, 560, 170, 26, Fade(CHCOL[w], 0.25f));
-    DrawEllipseLines(SCREEN_WIDTH / 2 - 180, 560, 175, 28, CHCOL[w]);
-    g_altPal = (!lastWon && me == op);
-    DrawCharacterBig(w, SCREEN_WIDTH / 2.0f - 180, 560, 1, 1.5f, ST_WIN);
-    g_altPal = (lastWon && me == op);
-    DrawCharacterBig(l, SCREEN_WIDTH / 2.0f + 260, 600, -1, 0.9f, ST_KO);
-    g_altPal = false;
-    const char *title = final ? "RINHA CONQUISTADA!" : (lastWon ? "VITÓRIA!" : "DERROTA");
-    TxtO(title, SCREEN_WIDTH / 2.0f, 40, 80, lastWon ? CHCOL[me] : C_RED, C_INK);
-    char b[96];
-    snprintf(b, sizeof b, "%s VENCE A LUTA  (%d x %d)", NAME[w], lastWon ? wins[0] : wins[1], lastWon ? wins[1] : wins[0]);
-    TxtC(b, SCREEN_WIDTH / 2.0f, 132, 24, C_WHITE);
-    Rectangle q = {SCREEN_WIDTH / 2.0f + 20, 200, 560, 120};
-    DrawRectangleRounded(q, 0.15f, 6, (Color){12, 14, 30, 230});
-    DrawRectangleRoundedLinesEx(q, 0.15f, 6, 2, CHCOL[w]);
-    Txt(NAME[w], q.x + 20, q.y + 14, 22, CHCOL[w]);
-    Txt(WINQ[w], q.x + 20, q.y + 52, 17, C_WHITE);
-    if (final) TxtC("As três rivais foram derrotadas. A arena é sua.", SCREEN_WIDTH / 2.0f, 650, 20, C_AMBER);
-    if (final) TxtC("ENTER / A: voltar à seleção", SCREEN_WIDTH / 2.0f, 684, 16, C_DIM);
+    bool winAlt = (!lastWon && me == op);
+    bool loseAlt = (lastWon && me == op);
+    Color wCol = winAlt ? AltCol(CHCOL[w]) : CHCOL[w];
+
+    DrawBackdrop(lastWon ? wCol : C_RED);
+
+    /* 1. Titulo Arcade 3D no topo */
+    if (final)
+    {
+        DrawIafResultTitleLogo("RINHA", "CONQUISTADA!", 74.0f, 20.0f, false,
+                               (Color){255, 238, 90, 255}, (Color){255, 148, 30, 255}, (Color){226, 44, 30, 255});
+    }
     else if (lastWon)
     {
-        snprintf(b, sizeof b, "ENTER / A: próximo desafio (%d de 3)    ESC / B: seleção", ladderPos + 2);
-        TxtC(b, SCREEN_WIDTH / 2.0f, 684, 16, C_DIM);
+        DrawIafResultTitleLogo("VITÓRIA", "ARCADE!", 80.0f, 18.0f, false,
+                               (Color){255, 235, 80, 255}, (Color){255, 142, 28, 255}, (Color){226, 44, 30, 255});
     }
-    else TxtC("ENTER / A: tentar de novo    ESC / B: seleção", SCREEN_WIDTH / 2.0f, 684, 16, C_DIM);
+    else
+    {
+        DrawIafResultTitleLogo("DERROTA", NULL, 84.0f, 18.0f, true,
+                               (Color){255, 120, 125, 255}, (Color){215, 30, 42, 255}, (Color){108, 8, 20, 255});
+    }
+
+    /* 2. Palco amplo a esquerda com foco total nos personagens */
+    DrawResultStage(w, winAlt, lastWon ? "1P" : "CPU", lastWon ? PCOL[0] : C_AMBER,
+                    l, loseAlt, true, !lastWon, final);
+
+    /* 3. Placar compacto a direita */
+    Rectangle scoreRec = {752.0f, 132.0f, 488.0f, 62.0f};
+    DrawResultScoreboard(scoreRec, me, "1P", PCOL[0], wins[0], op, "CPU", C_AMBER, wins[1],
+                         final ? C_AMBER : (lastWon ? C_GREEN : C_RED));
+
+    /* 4. Caixa de frase de vitoria limpa com texto grande */
+    Rectangle quoteRec = {752.0f, 210.0f, 488.0f, 212.0f};
+    char roleBadge[48];
+    if (final) snprintf(roleBadge, sizeof roleBadge, "CAMPEAO  //  3 DE 3");
+    else if (lastWon) snprintf(roleBadge, sizeof roleBadge, "DESAFIO %d DE 3", ladderPos + 1);
+    else snprintf(roleBadge, sizeof roleBadge, "CPU  //  DESAFIO %d DE 3", ladderPos + 1);
+    DrawResultQuoteCard(quoteRec, w, winAlt, roleBadge, final);
+
+    /* 5. Botoes de acao compactos (DrawIafCyberCard) */
+    char nextTitle[64];
+    const char *emptySubs[3] = {"", "", ""};
+    if (final)
+    {
+        const char *titles[3] = {"NOVA CAMPANHA", "REVANCHE NA FINAL", "MENU DO MODO"};
+        const Color cols[3]   = {C_AMBER, C_CYAN, C_GREEN};
+        DrawResultActionButtons(titles, emptySubs, cols);
+    }
+    else if (lastWon)
+    {
+        snprintf(nextTitle, sizeof nextTitle, "PRÓXIMO DESAFIO (%d/3)", ladderPos + 2);
+        const char *titles[3] = {nextTitle, "TROCAR LUTADOR", "MENU DO MODO"};
+        const Color cols[3]   = {C_GREEN, C_AMBER, C_CYAN};
+        DrawResultActionButtons(titles, emptySubs, cols);
+    }
+    else
+    {
+        const char *titles[3] = {"TENTAR NOVAMENTE", "TROCAR LUTADOR", "MENU DO MODO"};
+        const Color cols[3]   = {C_AMBER, C_CYAN, C_RED};
+        DrawResultActionButtons(titles, emptySubs, cols);
+    }
+
+    TxtC("W/S, SETAS, CONTROLE ou MOUSE: escolher    ENTER / A: confirmar    ESC / B: seleção",
+         SCREEN_WIDTH / 2.0f, SCREEN_HEIGHT - 24, 14, C_DIM);
+}
+
+static void UpdateResultSolo(bool final)
+{
+    if (NavUpP() || NavLeftP()) resSel = (resSel + 2) % 3;
+    if (NavDownP() || NavRightP()) resSel = (resSel + 1) % 3;
+
+    bool ok = (scT > 0.6f && NavOkP());
+    Vector2 m = GetVirtualMouse();
+    bool moved = (m.x != arMouseLast.x || m.y != arMouseLast.y);
+    arMouseLast = m;
+    for (int i = 0; i < 3; i++)
+    {
+        if (CheckCollisionPointRec(m, ResultBtnRect(i)))
+        {
+            if (moved && resSel != i) resSel = i;
+            if (scT > 0.6f && IsMouseButtonPressed(MOUSE_BUTTON_LEFT)) { resSel = i; ok = true; }
+        }
+    }
+
+    if (scT > 0.6f && NavBackP())
+    {
+        soloPick = 0;
+        soloReadyT = 0;
+        iafScreen = SC_SELECT;
+        scT = 0;
+        return;
+    }
+    if (!ok) return;
+
+    if (final)
+    {
+        if (resSel == 0) { soloPick = 0; soloReadyT = 0; iafScreen = SC_SELECT; }
+        else if (resSel == 1) { iafScreen = SC_VERSUS; }
+        else { iafScreen = SC_MODE; }
+    }
+    else if (lastWon)
+    {
+        if (resSel == 0) { ladderPos++; iafScreen = SC_VERSUS; }
+        else if (resSel == 1) { soloPick = 0; soloReadyT = 0; iafScreen = SC_SELECT; }
+        else { iafScreen = SC_MODE; }
+    }
+    else
+    {
+        if (resSel == 0) { iafScreen = SC_VERSUS; }
+        else if (resSel == 1) { soloPick = 0; soloReadyT = 0; iafScreen = SC_SELECT; }
+        else { iafScreen = SC_MODE; }
+    }
+    scT = 0;
 }
 
 /* ------------------------------------------------------------------ tela de controles */
@@ -5420,17 +5872,24 @@ static Color LogoMix(Color a, Color b, float t)
     return (Color){(unsigned char)(a.r + (b.r - a.r) * t), (unsigned char)(a.g + (b.g - a.g) * t),
                    (unsigned char)(a.b + (b.b - a.b) * t), 255};
 }
-static float LogoAdv(const Font *f, char ch, float sc)
+static float LogoAdv(const Font *f, int cp, float sc)
 {
-    int idx = GetGlyphIndex(*f, ch);
+    int idx = GetGlyphIndex(*f, cp);
     float adv = f->glyphs[idx].advanceX > 0 ? (float)f->glyphs[idx].advanceX : f->recs[idx].width;
     return adv * sc + 3.0f;
 }
 static float LogoWidth(const Font *f, const char *s, float sc)
 {
     float w = 0;
-    for (int i = 0; s[i]; i++) w += LogoAdv(f, s[i], sc);
-    return w - 3.0f;
+    const char *p = s;
+    while (*p)
+    {
+        int bytes = 0;
+        int cp = GetCodepointNext(p, &bytes);
+        p += (bytes > 0 ? bytes : 1);
+        w += LogoAdv(f, cp, sc);
+    }
+    return w > 3.0f ? w - 3.0f : 0.0f;
 }
 /* mode 0 = cor chapada; mode 1 = gradiente top/mid/bot + brilho especular em 'sweep' */
 static void LogoPass(const Font *f, const char *s, float x, float y, float px, float ox, float oy,
@@ -5438,9 +5897,13 @@ static void LogoPass(const Font *f, const char *s, float x, float y, float px, f
 {
     const float skew = 0.20f, stepDst = 4.0f;
     float sc = px / (float)f->baseSize, pen = x;
-    for (int i = 0; s[i]; i++)
+    const char *p = s;
+    while (*p)
     {
-        int idx = GetGlyphIndex(*f, s[i]);
+        int bytes = 0;
+        int cp = GetCodepointNext(p, &bytes);
+        p += (bytes > 0 ? bytes : 1);
+        int idx = GetGlyphIndex(*f, cp);
         Rectangle rec = f->recs[idx];
         float gx = pen + f->glyphs[idx].offsetX * sc;
         float gy = y + f->glyphs[idx].offsetY * sc;
@@ -5463,7 +5926,7 @@ static void LogoPass(const Font *f, const char *s, float x, float y, float px, f
             DrawTexturePro(f->texture, (Rectangle){rec.x, rec.y + sy, rec.width, h},
                            (Rectangle){dx, dy + oy, rec.width * sc, dh + 0.7f}, (Vector2){0, 0}, 0, col);
         }
-        pen += LogoAdv(f, s[i], sc);
+        pen += LogoAdv(f, cp, sc);
     }
 }
 static void Tri2(Vector2 a, Vector2 b, Vector2 c, Color col)
@@ -5763,17 +6226,18 @@ static void UpdateSelectVs(float dt)
     {
         if (CheckCollisionPointRec(m, GridCell(i)))
         {
-            if (i < CH_N && targetP >= 0)
+            int ch = SLOT_CHAR[i];
+            if (ch >= 0 && ch < CH_N && targetP >= 0)
             {
-                if (moved && selP[targetP] != i) { selP[targetP] = i; PlaySfx(SFX_MOVE); }
+                if (moved && selP[targetP] != ch) { selP[targetP] = ch; PlaySfx(SFX_MOVE); }
                 if (scT > 0.15f && IsMouseButtonPressed(MOUSE_BUTTON_LEFT))
                 {
-                    selP[targetP] = i;
+                    selP[targetP] = ch;
                     readyP[targetP] = true;
                     PlaySfx(SFX_OK);
                 }
             }
-            else if (i >= CH_N && scT > 0.15f && IsMouseButtonPressed(MOUSE_BUTTON_LEFT))
+            else if ((ch < 0 || ch >= CH_N) && scT > 0.15f && IsMouseButtonPressed(MOUSE_BUTTON_LEFT))
             {
                 PlaySfx(SFX_DENY);
             }
@@ -5851,40 +6315,69 @@ static void UpdateSelectVs(float dt)
 }
 
 /* ------------------------------------------------------------------ 1 x 1: vencedor */
-static const char *RES_OPT[3] = {"REVANCHE", "TROCAR LUTADORES", "MENU"};
+static const char *RES_OPT[3] = {"REVANCHE", "TROCAR LUTADORES", "MENU DO MODO"};
 static void DrawResultVs(void)
 {
     int w = wins[0] >= 2 ? 0 : 1;
-    Fighter *fw = &fz[w];
+    Fighter *fw = &fz[w], *fl = &fz[1 - w];
     Color c = FCol(fw);
+    Color pCol = (w == 0) ? C_CYAN : C_RED;
+
     DrawBackdrop(c);
-    DrawEllipse(SCREEN_WIDTH / 2 - 220, 590, 170, 26, Fade(c, 0.25f));
-    DrawEllipseLines(SCREEN_WIDTH / 2 - 220, 590, 175, 28, c);
-    g_altPal = fw->alt;
-    DrawCharacterBig(fw->ch, SCREEN_WIDTH / 2.0f - 220, 590, 1, 1.5f, ST_WIN);
-    g_altPal = false;
-    char b[64];
-    snprintf(b, sizeof b, "P%d VENCE!", w + 1);
-    TxtO(b, SCREEN_WIDTH / 2.0f, 40, 88, w == 0 ? C_CYAN : C_RED, C_INK);
-    snprintf(b, sizeof b, "%s  (%d x %d)", NAME[fw->ch], wins[w], wins[1 - w]);
-    TxtC(b, SCREEN_WIDTH / 2.0f, 140, 26, C_WHITE);
-    Txt(WINQ[fw->ch], SCREEN_WIDTH / 2.0f - 20, 214, 17, C_DIM);
-    for (int i = 0; i < 3; i++)
-    {
-        Rectangle r = {SCREEN_WIDTH / 2.0f + 40, 290.0f + i * 92, 420, 72};
-        bool on = i == resSel;
-        if (on) DrawRectangleRounded((Rectangle){r.x - 6, r.y - 6, r.width + 12, r.height + 12}, 0.25f, 8, Fade(c, 0.25f + 0.1f * sinf(gt * 5)));
-        DrawRectangleRounded(r, 0.22f, 8, (Color){14, 18, 36, 255});
-        DrawRectangleRoundedLinesEx(r, 0.22f, 8, on ? 3 : 1.5f, on ? c : Fade(c, 0.4f));
-        TxtC(RES_OPT[i], r.x + r.width / 2, r.y + 20, 32, on ? C_WHITE : C_DIM);
-    }
-    TxtC("W/S, SETAS ou CONTROLE: escolher    ENTER / A: confirmar", SCREEN_WIDTH / 2.0f, SCREEN_HEIGHT - 30, 16, C_DIM);
+
+    /* 1. Titulo Arcade 3D em chamas ('1P VENCE!' ou '2P VENCE!') */
+    Color p0Top = (w == 0) ? (Color){230, 252, 255, 255} : (Color){255, 160, 150, 255};
+    Color p0Mid = (w == 0) ? C_CYAN                      : (Color){240, 64, 68, 255};
+    Color p0Bot = (w == 0) ? (Color){36, 110, 220, 255}  : (Color){155, 14, 28, 255};
+    DrawIafResultTitleLogo(w == 0 ? "1P" : "2P", "VENCE!", 82.0f, 18.0f, false, p0Top, p0Mid, p0Bot);
+
+    /* 2. Palco sci-fi a esquerda com o vencedor em ST_WIN e o perdedor em ST_KO (preservando g_altPal) */
+    DrawResultStage(fw->ch, fw->alt, w == 0 ? "1P" : "2P", pCol,
+                    fl->ch, fl->alt, true, false, false);
+
+    /* 3. Placar compacto a direita */
+    Rectangle scoreRec = {752.0f, 132.0f, 488.0f, 62.0f};
+    DrawResultScoreboard(scoreRec, fz[0].ch, "1P", C_CYAN, wins[0], fz[1].ch, "2P", C_RED, wins[1], pCol);
+
+    /* 4. Caixa de frase de vitoria limpa com texto grande */
+    Rectangle quoteRec = {752.0f, 210.0f, 488.0f, 212.0f};
+    DrawResultQuoteCard(quoteRec, fw->ch, fw->alt, w == 0 ? "1P  //  VERSUS" : "2P  //  VERSUS", false);
+
+    /* 5. Botoes de acao compactos (DrawIafCyberCard) */
+    const char *emptySubs[3] = {"", "", ""};
+    const Color cols[3] = {C_CYAN, C_AMBER, C_RED};
+    DrawResultActionButtons(RES_OPT, emptySubs, cols);
+
+    TxtC("W/S, SETAS, CONTROLE ou MOUSE: escolher    ENTER / A: confirmar    ESC / B: seleção",
+         SCREEN_WIDTH / 2.0f, SCREEN_HEIGHT - 24, 14, C_DIM);
 }
 static void UpdateResultVs(void)
 {
-    if (NavUpP()) resSel = (resSel + 2) % 3;
-    if (NavDownP()) resSel = (resSel + 1) % 3;
-    if (scT < 0.8f || !NavOkP()) return;
+    if (NavUpP() || NavLeftP()) resSel = (resSel + 2) % 3;
+    if (NavDownP() || NavRightP()) resSel = (resSel + 1) % 3;
+
+    bool ok = (scT >= 0.6f && NavOkP());
+    Vector2 m = GetVirtualMouse();
+    bool moved = (m.x != arMouseLast.x || m.y != arMouseLast.y);
+    arMouseLast = m;
+    for (int i = 0; i < 3; i++)
+    {
+        if (CheckCollisionPointRec(m, ResultBtnRect(i)))
+        {
+            if (moved && resSel != i) resSel = i;
+            if (scT >= 0.6f && IsMouseButtonPressed(MOUSE_BUTTON_LEFT)) { resSel = i; ok = true; }
+        }
+    }
+
+    if (scT >= 0.6f && NavBackP())
+    {
+        readyP[0] = readyP[1] = false;
+        readyT = 0;
+        iafScreen = SC_SELECT;
+        scT = 0;
+        return;
+    }
+    if (!ok) return;
     if (resSel == 0) { iafScreen = SC_VERSUS; }                                                    /* revanche: mesmos lutadores */
     else if (resSel == 1) { readyP[0] = readyP[1] = false; readyT = 0; iafScreen = SC_SELECT; } /* trocar lutadores */
     else { iafScreen = SC_MODE; }
@@ -6151,17 +6644,11 @@ void IafUpdate(GameState *game, float dt)
         break;
     case SC_FIGHT: UpdateFight(game, dt); break;
     case SC_RESULT:
-        if (versusMode) { UpdateResultVs(); break; }
-        if (scT > 0.6f && NavOkP())
-        {
-            if (lastWon) ladderPos++;
-            iafScreen = SC_VERSUS;
-            scT = 0;
-        }
-        else if (NavBackP()) { soloPick = 0; soloReadyT = 0; iafScreen = SC_SELECT; scT = 0; }
+        if (versusMode) UpdateResultVs();
+        else UpdateResultSolo(false);
         break;
     case SC_FINAL:
-        if (scT > 0.6f && (NavOkP() || NavBackP())) { soloPick = 0; soloReadyT = 0; iafScreen = SC_SELECT; scT = 0; }
+        UpdateResultSolo(true);
         break;
     }
     bool justLocked = (readyP[0] && !pR0) || (readyP[1] && !pR1) || (trainPick != pTP) || (soloPick != pSP) || (soloReadyT > 0 && pSR <= 0);
