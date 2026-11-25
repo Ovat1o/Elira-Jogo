@@ -90,11 +90,13 @@ static const EFrame *EFGet(int f, Texture2D *tex)
 }
 /* desenha o quadro f com os pes em (x, yFeet); espelha quando face < 0 */
 static float EliraScale(float sc) { return fmaxf(0.5f, roundf(sc * IAF_ELIRA_PIX * 2) / 2); } /* pixel inteiro */
+/* quadros HD do atlas novo (parada e chute pulando, indice >= E2_HD_FIRST) ja estao em px de tela: 1x na luta */
+static float EliraFrameScale(int f, float sc) { return (f >= EF2_BASE + E2_HD_FIRST) ? EliraScale(sc) / IAF_ELIRA_PIX : EliraScale(sc); }
 static void DrawEF(int f, float x, float yFeet, int face, float sc, Color tint, float flash)
 {
     Texture2D tex;
     const EFrame *e = EFGet(f, &tex);
-    sc = EliraScale(sc);
+    sc = EliraFrameScale(f, sc);
     Rectangle src = {e->x, e->y, e->w, e->h};
     float w = e->w * sc, h = e->h * sc;
     float left = face > 0 ? x - e->ax * sc : x - (e->w - e->ax) * sc;
@@ -113,7 +115,7 @@ static void DrawEFC(int f, Vector2 c, int face, float sc, Color tint)
 {
     Texture2D tex;
     const EFrame *e = EFGet(f, &tex);
-    sc = EliraScale(sc);
+    sc = EliraFrameScale(f, sc);
     Rectangle src = {e->x, e->y, e->w, e->h};
     float ax = face > 0 ? e->ax : e->w - e->ax;
     if (face < 0) src.width = -src.width;
@@ -155,7 +157,7 @@ static const Atk ATK[CH_N][AT_SPECIAL] = {
     [CH_ELIRA] = {{0}, {0.06f, 0.08f, 0.15f, 34, 112, 168, 46, 0.20f, 170, 0},
                   {0.14f, 0.12f, 0.26f, 95, 112, 200, 95, 0.45f, 300, 0}, /* chute alto (forte); alcances na ponta da arte */
                   {0.08f, 0.09f, 0.20f, 42, 150, 46, 44, 0.30f, 150, 1},
-                  {0.05f, 0.16f, 0.10f, 55, 105, 125, 76, 0.32f, 160, 2}, /* aereo: pe do chute entre 49 e 125 px acima dos pes */
+                  {0.05f, 0.16f, 0.10f, 48, 185, 62, 66, 0.32f, 160, 2}, /* aereo (chute pulando HD): pe esticado dos quadros 4-5 ate 185 px a frente, rente a linha dos pes */
                   {0.20f, 0.10f, 0.30f, 90, 128, 168, 50, 0.45f, 330, 0},  /* soco longo */
                   {0.08f, 0.14f, 0.32f, 80, 90, 300, 270, 0.50f, 120, 0}}, /* uppercut (chute alto) */
     [CH_CLAUDE] = {{0}, {0.07f, 0.08f, 0.15f, 39, 216, 100, 50, 0.20f, 170, 0}, /* alcances na ponta do desenho (6x), ~10 px antes */
@@ -983,7 +985,7 @@ static int EliraFrameIdxV2(Fighter *a, float *yoff)
         case AT_FWDH: return AtkFrame2(a, E2_PUNCH_HEAVY, 3, 4, d->st, d->ac, d->rc);   /* 7: passo, avanco, canhao esticado (3-4) */
         case AT_UPPER: return AtkFrame2(a, E2_UPPER, 3, 4, d->st, d->ac, d->rc);        /* 8: agacha, sobe com o punho (3-4), cai */
         case AT_LOW: return AtkFrame2(a, E2_SWEEP, 3, 4, d->st, d->ac, d->rc);          /* 7: perna estica (3-4) e recolhe */
-        case AT_AIR: return AtkFrame2(a, E2_AIR, 2, 3, d->st, d->ac, d->rc);            /* 6: encolhida, chute esticado (2-3) */
+        case AT_AIR: return AtkFrame2(a, E2_AIR, 3, 4, d->st, d->ac, d->rc);            /* 6 (HD): encolhida, prepara (1-2), VOADORA com o pe esticado (3-4), encolhe */
         case AT_SPECIAL:
         { /* 10: guarda, firma, segura, carga (3-5) no preparo; o quadro do DISPARO (6) comeca junto com o
              nucleo do jogo (SpawnProj em t = SP_ST) e fica IAF_ELIRA_SP_FLASH s; depois recuo, volta e guarda */
@@ -1010,6 +1012,7 @@ static int EliraFrameIdxV2(Fighter *a, float *yoff)
         int n = E2_COUNT[E2_CROUCH]; /* o quadro 0 e a guarda em pe */
         return E2Frame(E2_CROUCH, 1 + (int)(a->stT / 0.15f * (n - 1)));
     }
+    if (a->st == ST_IDLE) return E2Frame(E2_IDLE, (int)(gt * 9) % E2_COUNT[E2_IDLE]); /* parada HD: respira e pisca */
     return -1;
 }
 static int EliraFrameIdx(Fighter *a, float *yoff)
@@ -3766,7 +3769,7 @@ static void DrawCharacterBig(CharId ch, float x, float yFeet, int face, float sc
 {
     if (ch == CH_ELIRA)
     {
-        int f = EAFrame(EA_IDLE, (int)(gt * 9) % EA_COUNT[EA_IDLE]);
+        int f = EliraV2() ? E2Frame(E2_IDLE, (int)(gt * 9) % E2_COUNT[E2_IDLE]) : EAFrame(EA_IDLE, (int)(gt * 9) % EA_COUNT[EA_IDLE]);
         float yo = 0;
         if (st == ST_WIN) f = EliraV2() ? E2Frame(E2_WIN, E2_COUNT[E2_WIN] - 3 + ((int)(gt * 3) % 3)) : EAFrame(EA_WIN, EA_COUNT[EA_WIN] - 3 + ((int)(gt * 3) % 3));
         if (st == ST_KO) f = EliraV2() ? E2Frame(E2_DEFEAT, E2_COUNT[E2_DEFEAT] - 1) : EAFrame(EA_DEFEAT, (int)(gt * 12) % EA_COUNT[EA_DEFEAT]);
