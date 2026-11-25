@@ -56,7 +56,7 @@ typedef struct { const char *name, *tag; const char *file[AL_N]; int kind; const
 static const ArenaDef ARENAS[] = {
     {"POSTO VICE 2026", "posto de gasolina ao entardecer, em 2026", AR_IMAGEM("arena_vice2026.png"), AR_PNG, "musica_vice2026.ogg"},
     {"CESAR SCHOOL (BRUM)", "prédio Brum da faculdade no Bairro do Recife", AR_IMAGEM("arena_cesar.png"), AR_PNG, NULL}, /* sem trilha propria: toca a musica_luta */
-    {"CESAR SCHOOL (TIRADENTES)", "prédio Tiradentes da faculdade no Bairro do Recife", AR_IMAGEM("arena_cesar_tiradentes.png"), AR_PNG, NULL},
+    {"CESAR SCHOOL (TIRADENTES)", "prédio Tiradentes da faculdade no Bairro do Recife", AR_IMAGEM("arena_cesar_tiradentes.png"), AR_PNG, "musica_tiradentes.ogg"},
     {"Dengfeng (China)", "Centro de treinamento kung fu shaolin", AR_IMAGEM("arena_china.png"), AR_PNG, "musica_china.ogg"},
     {"MARCO ZERO", "", AR_IMAGEM("arena_marco_zero.png"), AR_PNG, NULL},
     AR_EM_BREVE,
