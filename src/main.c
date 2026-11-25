@@ -68,6 +68,7 @@ static bool ValidateRequiredAssets(void)
         IAF_IARA_ATLAS,
         IAF_AURA67_ATLAS,
         IAF_LIA_ATLAS,
+        IAF_DEEPSEEK_ATLAS,
         "assets/sprites/iafight/arena_vice2026.png",
         IAF_AUDIO_DIR "musica_menu.ogg",
         IAF_AUDIO_DIR "musica_vice2026.ogg",

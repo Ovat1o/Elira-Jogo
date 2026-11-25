@@ -144,6 +144,7 @@
 #endif
 #define IAF_AURA67_ATLAS    "assets/sprites/iafight/aura67_luta.png" /* atlas de luta da AURA_67 (personagem de colab), ja na escala da luta */
 #define IAF_LIA_ATLAS       "assets/sprites/iafight/lia_luta.png" /* atlas de luta da LIA (personagem de colab), ja na escala da luta */
+#define IAF_DEEPSEEK_ATLAS  "assets/sprites/iafight/deepseek_luta.png" /* atlas de luta do DEEPSEEK (baleia mestre de kung fu), ja na escala da luta */
 #define IAF_GROUND_Y        622.0f   /* linha do chao da arena (pes dos lutadores) */
 #define IAF_WALL_L          70.0f    /* limite esquerdo da arena */
 #define IAF_WALL_R          1210.0f  /* limite direito da arena */
