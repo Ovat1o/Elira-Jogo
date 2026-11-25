@@ -957,7 +957,7 @@ typedef struct
 #define NSTAGE 5
 static const Stage ST[NSTAGE] = {
     {"1990", "PRIVACIDADE DE DADOS", "Rastreadores coletam tudo o que você faz.", "O COLETOR", "\"Cada arquivo seu já tem uma cópia comigo.\"",
-     {25, 32, 48, 255}, {21, 27, 41, 255}, {34, 44, 64, 255}, {40, 80, 100, 255}, {38, 48, 66, 255}, {96, 206, 232, 255}, PK_FLOPPY, 110},
+     {25, 32, 48, 255}, {21, 27, 41, 255}, {34, 44, 64, 255}, {40, 80, 100, 255}, {38, 48, 66, 255}, {96, 206, 232, 255}, PK_FLOPPY, 80},
     {"2008", "FALSOS POSITIVOS", "Nem todo alerta é real: tiro vazado não fere.", "O FILTRO", "\"Ameaça detectada. Ameaça detectada. Ameaça...\"",
      {24, 40, 44, 255}, {20, 34, 38, 255}, {34, 56, 60, 255}, {50, 112, 90, 255}, {38, 60, 64, 255}, {110, 220, 140, 255}, PK_CD, 190},
     {"2026", "VIÉS ALGORÍTMICO", "O sistema castiga o lado em que você mais fica.", "O ALGORITMO", "\"Eu só mostro o que você já escolheu.\"",
@@ -1126,7 +1126,7 @@ static const PowerUp PU[PU_COUNT] = {
     {"TIRO DUPLO", "Dispara dois projéteis por vez.", "Dois canais paralelos de transmissão.", "\"Redundância nunca é demais.\"", "II", {96, 206, 232, 255}},
     {"OVERCLOCK", "Cadência de tiro +15%.", "O processador trabalhando acima do limite de fábrica.", "\"Só mais um pouco de velocidade.\"", "O", {240, 140, 50, 255}},
     {"BLINDAGEM", "+1 coração máximo.", "Uma camada extra de proteção nos dados vitais.", "\"Ainda estou aqui.\"", "+", {226, 84, 84, 255}},
-    {"TURBO", "Velocidade de movimento +35.", "Menos latência entre decidir e agir.", "\"Ela calcula rápido. Eu me mexo mais rápido.\"", "T", {110, 220, 140, 255}},
+    {"TURBO", "Velocidade de movimento +15.", "Menos latência entre decidir e agir.", "\"Ela calcula rápido. Eu me mexo mais rápido.\"", "T", {110, 220, 140, 255}},
     {"CALIBRE", "Dano +0.4.", "Pacotes maiores, entregues de uma vez.", "\"Mensagem recebida.\"", "D", {232, 190, 92, 255}},
     {"ALCANCE", "Seus tiros vão mais longe e mais rápido.", "Sinal amplificado: chega onde antes se perdia.", "\"Não adianta se esconder no canto.\"", "A", {170, 110, 230, 255}},
 };
@@ -1138,7 +1138,7 @@ static void ApplyPU(int id)
     case PU_FIREWALL: pl.shieldUp = true; break;
     case PU_OVERCLOCK: pl.fireDelay *= 0.87f; break;
     case PU_ARMOR: pl.maxhp += 2; pl.hp += 2; break;
-    case PU_TURBO: pl.speed += 35; break;
+    case PU_TURBO: pl.speed += 15; break;
     case PU_CALIBER: pl.dmg += 0.4f; break;
     case PU_RANGE: pl.shotSpeed += 60; break;
     default: break;
@@ -1462,7 +1462,7 @@ static void GrantUpTo(int s) /* teste: pular estagio ja com as melhorias anterio
 {
     if (s > 0 && !pl.floppies) { pl.floppies = 1; pl.dmg += 0.7f; }
     if (s > 1 && !pl.cds) { pl.cds = 1; pl.fireDelay *= 0.68f; }
-    if (s > 2 && !pl.ssds) { pl.ssds = 1; pl.speed += 50; pl.shotSpeed += 120; }
+    if (s > 2 && !pl.ssds) { pl.ssds = 1; pl.speed += 20; pl.shotSpeed += 120; }
     if (s > 3 && !pl.heartups) { pl.heartups = 1; pl.maxhp += 2; }
     for (int k = 0; k < 4 && k < s; k++)
         if (!pl.pu[k]) ApplyPU(k);
@@ -1475,7 +1475,7 @@ static void NewGame(int s)
     pl.hp = pl.maxhp = 10; /* 5 coracoes no Modo Invasao */
     pl.fireDelay = 0.33f;
     pl.dmg = 1.0f;
-    pl.speed = 250;
+    pl.speed = 320;
     pl.shotSpeed = 560;
     pl.face = V2(0, 1);
     memset(talkSeen, 0, sizeof talkSeen);
@@ -1575,44 +1575,33 @@ static void KillDecoys(void)
         if (en[i].on && en[i].type == EN_DECOY) { Burst(en[i].p, 10, C_DIM, 160); en[i].on = false; }
 }
 
-/* 1990: rajadas, garras que roubam cadencia e succao */
+/* 1990: rajadas moderadas e garras que roubam cadencia (sem puxao/succao) */
 static void BossCollector(Enemy *e, float dt, bool hard)
 {
     Rectangle f = FLOOR_R();
     e->anchor = V2(f.x + f.width / 2, f.y + 120);
-    Hover(e, dt, 300, 24, hard ? 0.8f : 0.55f);
-    if (e->state < 0) /* sugando */
-    {
-        e->t3 -= dt;
-        e->t4 -= dt;
-        Vector2 d = VNorm(VSub(e->p, pl.p));
-        pl.p = VAdd(pl.p, VScale(d, 115 * dt));
-        if (e->t4 <= 0) { FireAimed(e->p, 1, 0, 250, BK_REAL, -1); e->t4 = 0.4f; }
-        if (e->t3 <= 0) { e->state = 2; e->t2 = 1.0f; }
-        return;
-    }
+    Hover(e, dt, 260, 20, hard ? 0.65f : 0.45f);
     e->t2 -= dt;
     if (e->t2 > 0) return;
-    e->state = (e->state + 1) % 3;
+    e->state = (e->state + 1) % 2;
     e->flash = 0.06f;
-    if (e->state == 0) FireRing(e->p, 14, 190, e->t, 0);
-    else if (e->state == 1)
+    if (e->state == 0)
+    {
+        FireRing(e->p, hard ? 10 : 8, 165, e->t, 0);
+    }
+    else
     {
         for (int k = -1; k <= 1; k++)
         {
             float a = atan2f(pl.p.y - e->p.y, pl.p.x - e->p.x) + k * 0.7f;
-            AddBullet(e->p, V2(cosf(a) * 170, sinf(a) * 170), 11, false, BK_STEAL, 0, 5.0f);
+            AddBullet(e->p, V2(cosf(a) * 145, sinf(a) * 145), 11, false, BK_STEAL, 0, 4.5f);
+        }
+        if (hard && CountType(EN_TRACKER) < 2)
+        {
+            AddEnemy(EN_TRACKER, e->p.x, e->p.y + 55);
         }
     }
-    else
-    {
-        e->state = -1;
-        e->t3 = 2.2f;
-        e->t4 = 0.3f;
-        if (hard && CountType(EN_TRACKER) < 3) { AddEnemy(EN_TRACKER, e->p.x - 90, e->p.y + 50); AddEnemy(EN_TRACKER, e->p.x + 90, e->p.y + 50); }
-        return;
-    }
-    e->t2 = hard ? 1.25f : 1.7f;
+    e->t2 = hard ? 1.55f : 2.0f;
 }
 
 /* 2008: copias falsas; so o verdadeiro tem sombra e tiro cheio */
@@ -1899,6 +1888,14 @@ static void KillEnemy(Enemy *e)
         for (int i = 0; i < MAXE; i++) en[i].on = false;
         for (int i = 0; i < MAXB; i++) bl[i].on = false;
         rainSide = rainNext = -1;
+        /* Teleporta Elira para a entrada inferior segura da sala para nao pegar itens/portal sem querer */
+        Rectangle f = FLOOR_R();
+        Vector2 fc = FloorCenter();
+        Burst(pl.p, 16, C_CYAN, 180);
+        pl.p = V2(fc.x, f.y + f.height - 32.0f);
+        pl.vel = V2(0, 0);
+        pl.face = V2(0, -1);
+        Burst(pl.p, 22, C_CYAN, 200);
         char t[64];
         snprintf(t, sizeof t, "%s DERROTADO", ST[stage].bossName);
         Msg(t, stage < 4 ? "Entre no portal para o próximo estágio." : "O núcleo está aberto. Entre no portal.");
@@ -1914,7 +1911,7 @@ static void OnRoomCleared(void)
     if (rm->type == RT_BOSS)
     {
         AddPickup(PK_PORTAL, V2(c.x, c.y - 50));
-        AddPickup(PK_HEART, V2(c.x, c.y + 150));
+        AddPickup(PK_HEART, V2(c.x, c.y + 110));
         if (stage < 4)
         { /* escolha 1 de 2 melhorias */
             int pool[6], n = 0;
@@ -1952,8 +1949,8 @@ static void Collect(Pickup *p)
         Msg("CD DE MEMÓRIA", "CADÊNCIA DE TIRO +47%");
         break;
     case PK_SSD:
-        pl.ssds++; pl.speed += 50; pl.shotSpeed += 120;
-        Msg("SSD DAS ESCOLHAS", "VELOCIDADE +50");
+        pl.ssds++; pl.speed += 20; pl.shotSpeed += 120;
+        Msg("SSD DAS ESCOLHAS", "VELOCIDADE +20");
         break;
     case PK_HEARTUP:
         pl.heartups++; pl.maxhp += 2; pl.hp = pl.maxhp;
@@ -2931,7 +2928,7 @@ static void DrawPickupBalloon(Pickup *k)
         title = "SSD DAS ESCOLHAS";
         desc = "Guarda o momento em que a IA começou a sugerir e decidir por nós.";
         quote = "\"Ela repetiu o que os dados repetiam. O viés era nosso.\"";
-        effect = "VELOCIDADE +50";
+        effect = "VELOCIDADE +20";
         acc = ST[2].accent;
         break;
     case PK_HEARTUP:
