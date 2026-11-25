@@ -91,7 +91,7 @@ static const EFrame *EFGet(int f, Texture2D *tex)
 /* desenha o quadro f com os pes em (x, yFeet); espelha quando face < 0 */
 static float EliraScale(float sc) { return fmaxf(0.5f, roundf(sc * IAF_ELIRA_PIX * 2) / 2); } /* pixel inteiro */
 /* quadros HD do atlas novo (parada e chute pulando, indice >= E2_HD_FIRST) ja estao em px de tela: 1x na luta */
-static float EliraFrameScale(int f, float sc) { return (f >= EF2_BASE + E2_HD_FIRST) ? EliraScale(sc) / IAF_ELIRA_PIX : EliraScale(sc); }
+static float EliraFrameScale(int f, float sc) { return (f >= EF2_BASE + E2_HD_FIRST) ? EliraScale(sc) / IAF_ELIRA_PIX : EliraScale(sc) * IAF_ELIRA_ESCALA; }
 static void DrawEF(int f, float x, float yFeet, int face, float sc, Color tint, float flash)
 {
     Texture2D tex;
@@ -157,12 +157,13 @@ typedef struct { float st, ac, rc, dmg, rx, top, h, stun, push; int type; } Atk;
    Dano do fraco (34 a 39) cerca de 25% abaixo do original: apertar so o fraco nao rende tanto quanto o forte. */
 #define IRK(v) ((v) * IAF_IARA_ESCALA) /* medida da Iara em px da escala 1 -> px da luta */
 static const Atk ATK[CH_N][AT_SPECIAL] = {
-    [CH_ELIRA] = {{0}, {0.06f, 0.08f, 0.15f, 34, 112, 168, 46, 0.20f, 170, 0},
-                  {0.14f, 0.12f, 0.26f, 95, 140, 228, 120, 0.45f, 300, 0}, /* chute alto giratorio (HD): pe e arco ciano ate 140 px, de 108 a 228 px de altura */
-                  {0.08f, 0.09f, 0.20f, 42, 150, 46, 44, 0.30f, 150, 1},
-                  {0.05f, 0.16f, 0.10f, 48, 185, 62, 66, 0.32f, 160, 2}, /* aereo (chute pulando HD): pe esticado dos quadros 4-5 ate 185 px a frente, rente a linha dos pes */
-                  {0.20f, 0.10f, 0.30f, 90, 128, 168, 50, 0.45f, 330, 0},  /* soco longo */
-                  {0.08f, 0.14f, 0.32f, 80, 90, 300, 270, 0.50f, 120, 0}}, /* uppercut (chute alto) */
+    /* Elira (guarda de 214 px, como a LIA): alcances medidos no atlas HD */
+    [CH_ELIRA] = {{0}, {0.06f, 0.08f, 0.15f, 34, 125, 160, 55, 0.20f, 170, 0}, /* jab com a mao livre (punho ate 130; a estrela nao conta) */
+                  {0.14f, 0.12f, 0.26f, 95, 125, 205, 105, 0.45f, 300, 0}, /* chute alto giratorio (HD): pe e arco ciano ate 125 px, de 100 a 205 px de altura */
+                  {0.08f, 0.09f, 0.20f, 42, 150, 55, 53, 0.30f, 150, 1}, /* rasteira: a perna esticada rente ao chao (ate 154) */
+                  {0.05f, 0.16f, 0.10f, 48, 168, 55, 59, 0.32f, 160, 2}, /* aereo (chute pulando HD): pe esticado dos quadros 4-5 ate 168 px a frente, rente a linha dos pes */
+                  {0.20f, 0.10f, 0.30f, 90, 150, 150, 80, 0.45f, 330, 0},  /* soco longo: canhao esticado e a onda de choque (ate 157) */
+                  {0.08f, 0.14f, 0.32f, 80, 100, 330, 270, 0.50f, 120, 0}}, /* uppercut: canhao subindo em arco (ate 371 de altura) */
     [CH_CLAUDE] = {{0}, {0.07f, 0.08f, 0.15f, 39, 216, 100, 50, 0.20f, 170, 0}, /* alcances na ponta do desenho (6x), ~10 px antes */
                    {0.17f, 0.10f, 0.30f, 106, 165, 105, 60, 0.45f, 380, 0},   /* chute frontal */
                    {0.10f, 0.08f, 0.22f, 50, 135, 33, 33, 0.32f, 160, 1},     /* rasteira: o desenho desliza so ~110 px; alcance menor que o antigo */
@@ -958,13 +959,16 @@ static int EliraKoFrame(Fighter *a, float *yoff)
     {
         int k = a->vy < -200 ? 1 : (a->vy < 200 ? 2 : 3);
         const EFrame *e = &EF2[E2_FIRST[E2_KO] + k];
-        float lift = (e->ay - e->h) * EliraScale(1.0f); /* altura do quadro acima da linha dos pes na grade */
+        float lift = (e->ay - e->h) * EliraFrameScale(E2Frame(E2_KO, k), 1.0f); /* altura do quadro acima da linha dos pes na grade */
         float h = IAF_GROUND_Y - a->y;
         *yoff = lift * (1.0f - Clamp(h / IAF_ELIRA_KO_APEX, 0.0f, 1.0f));
         return E2Frame(E2_KO, k);
     }
     float g = a->groundT;
-    return E2Frame(E2_KO, g < 0.07f ? 4 : (g < 0.14f ? 5 : (g < 0.24f ? 6 : 7)));
+    if (g < 0.07f) return E2Frame(E2_KO, 4);  /* bate de costas */
+    if (g < 0.14f) return E2Frame(E2_KO, 5);  /* quica */
+    if (g < 0.24f) return E2Frame(E2_KO, 6);  /* deitada */
+    return E2Frame(E2_KO, 7 + ((int)(g * 5) % 2)); /* deitada, com as estrelas girando (7-8) */
 }
 /* sprites novos: quadro do estado, ou -1 quando a animacao nao tem arte nova (usa a atual) */
 static int EliraFrameIdxV2(Fighter *a, float *yoff)
@@ -986,8 +990,8 @@ static int EliraFrameIdxV2(Fighter *a, float *yoff)
         /* dano em pe (stT zera a cada acerto): impacto (1) no instante do acerto, tranco maximo (3) no meio do
            atordoamento, recuperacao (4) no fim; atordoamento curto (fraco = 0,20 s) pula o tranco (2) */
         float tot = a->stT + fmaxf(a->stun, 0), p = tot > 0 ? a->stT / tot : 1;
-        if (tot < IAF_ELIRA_HIT_SHORT) return E2Frame(E2_HIT, p < 0.3f ? 1 : (p < 0.65f ? 3 : 4));
-        return E2Frame(E2_HIT, p < 0.2f ? 1 : (p < 0.38f ? 2 : (p < 0.7f ? 3 : 4)));
+        if (tot < IAF_ELIRA_HIT_SHORT) return E2Frame(E2_HIT, p < 0.3f ? 0 : (p < 0.65f ? 2 : 3));
+        return E2Frame(E2_HIT, p < 0.2f ? 0 : (p < 0.38f ? 1 : (p < 0.7f ? 2 : 3)));
     }
     if (a->st == ST_ATK)
     {
@@ -996,10 +1000,10 @@ static int EliraFrameIdxV2(Fighter *a, float *yoff)
         switch (a->atk)
         {
         /* preparo = quadros [0, a0); ativo = [a0, a1] (o de maior alcance, E2_PEAK, no ativo); recuperacao = o resto */
-        case AT_LIGHT: return AtkFrame2(a, E2_PUNCH, 2, 2, d->st, d->ac, d->rc);        /* 5: guarda, recolhe, SOCO, volta, guarda */
+        case AT_LIGHT: return AtkFrame2(a, E2_PUNCH, 3, 3, d->st, d->ac, d->rc);        /* 6 (HD): guarda, recolhe, JAB com a mao livre (3), volta */
         case AT_HEAVY: return AtkFrame2(a, E2_KICK, 3, 4, d->st, d->ac, d->rc);         /* 7: joelho sobe, chute alto (3-4), desce */
-        case AT_FWDH: return AtkFrame2(a, E2_PUNCH_HEAVY, 3, 4, d->st, d->ac, d->rc);   /* 7: passo, avanco, canhao esticado (3-4) */
-        case AT_UPPER: return AtkFrame2(a, E2_UPPER, 3, 4, d->st, d->ac, d->rc);        /* 8: agacha, sobe com o punho (3-4), cai */
+        case AT_FWDH: return AtkFrame2(a, E2_PUNCH_HEAVY, 4, 5, d->st, d->ac, d->rc);   /* 8 (HD): gira e puxa (0-3), CANHAO esticado com a onda (4-5), recolhe */
+        case AT_UPPER: return AtkFrame2(a, E2_UPPER, 3, 5, d->st, d->ac, d->rc);        /* 8 (HD): agacha (0-2), sobe girando o canhao em arco (3-5), cai */
         case AT_LOW: return AtkFrame2(a, E2_SWEEP, 3, 4, d->st, d->ac, d->rc);          /* 7: perna estica (3-4) e recolhe */
         case AT_AIR: return AtkFrame2(a, E2_AIR, 3, 4, d->st, d->ac, d->rc);            /* 6 (HD): encolhida, prepara (1-2), VOADORA com o pe esticado (3-4), encolhe */
         case AT_SPECIAL:
@@ -1021,7 +1025,17 @@ static int EliraFrameIdxV2(Fighter *a, float *yoff)
     }
     if (a->st == ST_DASH) /* agacha, impulso, desliza (2) com o rastro ciano, freia e volta a guarda */
         return E2Frame(E2_DASH, (int)(a->dashT / IAF_DASH_TIME * E2_COUNT[E2_DASH]));
-    if (a->st == ST_JUMP) return -1;
+    if (a->st == ST_JUMP)
+    { /* sai do chao com os jatos (1), sobe encolhendo (2-4), no alto (5), desce abrindo as pernas (6) */
+        if (a->stT < 0.06f && a->vy < 0) return E2Frame(E2_JUMP, 1);
+        float k = Clamp((a->vy + IAF_JUMP_SPEED) / (2 * IAF_JUMP_SPEED), 0.0f, 1.0f);
+        return E2Frame(E2_JUMP, 2 + (int)(k * 4.99f));
+    }
+    if (a->st == ST_WALK && !a->crouch)
+    { /* andar novo: para a frente e para tras, em loop */
+        int anim = (a->vx * a->face) < 0 ? E2_WALK_B : E2_WALK_F;
+        return E2Frame(anim, (int)(a->anim * 12) % E2_COUNT[anim]);
+    }
     if (a->crouch)
     { /* abaixa e fica no ultimo quadro (agachada parada) */
         int n = E2_COUNT[E2_CROUCH]; /* o quadro 0 e a guarda em pe */
@@ -2040,7 +2054,7 @@ static void DrawFighter(Fighter *a)
     float flash = a->flash > 0 ? Clamp(a->flash / 0.12f, 0.0f, 1.0f) * 0.8f : 0;
     float alt = IAF_GROUND_Y - a->y;
     float jx = a->hitShake > 0 ? (Rand01() - 0.5f) * 2 * IAF_HIT_SHAKE_PX : 0; /* tremor no impacto */
-    DrawShadow(a->x, (a->ch == CH_CLAUDE && texClaude.id ? 100 : (a->ch == CH_ANTI && texAnti.id ? 84 : (a->ch == CH_CODEX && texCodex.id ? 84 : (a->ch == CH_IARA && texIara.id ? IRK(62) : (a->ch == CH_AURA && texAura.id ? 66 : (a->ch == CH_LIA && texLia.id ? 58 : (a->ch == CH_DEEP && texDeep.id ? 66 : 52))))))) - fminf(alt, 200) * 0.12f);
+    DrawShadow(a->x, (a->ch == CH_CLAUDE && texClaude.id ? 100 : (a->ch == CH_ANTI && texAnti.id ? 84 : (a->ch == CH_CODEX && texCodex.id ? 84 : (a->ch == CH_IARA && texIara.id ? IRK(62) : (a->ch == CH_AURA && texAura.id ? 66 : (a->ch == CH_LIA && texLia.id ? 58 : (a->ch == CH_DEEP && texDeep.id ? 66 : 46))))))) - fminf(alt, 200) * 0.12f);
     if (a->ch == CH_IARA && texIara.id && alt > 30 && a->st != ST_KO)
     { /* no ar a poca fica no chao: aneis de agua embaixo dela */
         float k = Clamp(1 - alt / 420, 0.3f, 1.0f);
@@ -2217,7 +2231,7 @@ static float AtkTotal(Fighter *a)
 }
 static Rectangle Hurt(Fighter *a)
 {
-    float w = a->ch == CH_CODEX ? 84 : (a->ch == CH_ELIRA ? 96 : 70), h = a->crouch ? (a->ch == CH_ELIRA ? 132 : 128) : (a->ch == CH_ELIRA ? 214 : 200);
+    float w = a->ch == CH_CODEX ? 84 : (a->ch == CH_ELIRA ? 90 : 70), h = a->crouch ? (a->ch == CH_ELIRA ? 128 : 128) : (a->ch == CH_ELIRA ? 205 : 200); /* Elira (guarda de 214): como a LIA, quase a altura toda */
     float lift = 0; /* a caixa sobe junto com o desenho que flutua */
     if (a->ch == CH_CLAUDE) { w = 186; h = a->crouch ? 108 : 150; } /* mascote 6x: tronco ~180 px de largura, ~145 de altura */
     if (a->ch == CH_ANTI) { w = 148; h = a->crouch ? 124 : 164; lift = AntiHover(a); } /* "A" em escala 2x (~180x164 na tela), flutuando ~13 px */
@@ -2231,7 +2245,7 @@ static Rectangle Hurt(Fighter *a)
 }
 /* meia largura do corpo para nao se sobreporem: o tronco do sprite (colunas com pelo menos 35% da
    altura), sem canhao, bracos e cabelo, que podem passar na frente do oponente */
-static float BodyHalf(Fighter *a) { return a->ch == CH_CLAUDE ? 90.0f : (a->ch == CH_ANTI ? 72.0f : (a->ch == CH_CODEX ? 70.0f : (a->ch == CH_IARA ? IRK(50.0f) : (a->ch == CH_AURA ? 54.0f : (a->ch == CH_LIA ? 48.0f : (a->ch == CH_DEEP ? 50.0f : 50.0f)))))); }
+static float BodyHalf(Fighter *a) { return a->ch == CH_CLAUDE ? 90.0f : (a->ch == CH_ANTI ? 72.0f : (a->ch == CH_CODEX ? 70.0f : (a->ch == CH_IARA ? IRK(50.0f) : (a->ch == CH_AURA ? 54.0f : (a->ch == CH_LIA ? 48.0f : (a->ch == CH_DEEP ? 50.0f : 45.0f)))))); } /* Elira: 45 (guarda de 214) */
 static bool Overlap(Rectangle a, Rectangle b) { return a.x < b.x + b.width && b.x < a.x + a.width && a.y < b.y + b.height && b.y < a.y + a.height; }
 static bool OnGround(Fighter *a) { return a->y >= IAF_GROUND_Y - 0.5f; }
 static void SetState(Fighter *a, FState s) { a->st = s; a->stT = 0; }
@@ -2366,9 +2380,9 @@ static void ApplyHit(Fighter *att, Fighter *def, float dmg, float stun, float pu
 #define EL_BEAM_TICK 0.10f
 #define EL_BEAM_HITS 5
 #define EL_BEAM_DMG 27.0f
-#define EL_BEAM_MX 140.0f   /* boca do raio: px a frente dos pes (quadros 6-8 do especial) */
-#define EL_BEAM_MY 137.0f   /* boca do raio: px acima dos pes */
-#define EL_BEAM_H 114.0f    /* grossura do raio (da cabeca a cintura) */
+#define EL_BEAM_MX 124.0f   /* boca do raio: px a frente dos pes (quadros 6-8 do especial) */
+#define EL_BEAM_MY 122.0f   /* boca do raio: px acima dos pes */
+#define EL_BEAM_H 102.0f    /* grossura do raio (da cabeca a cintura) */
 typedef struct { bool on; float x0, x1, y, t; int face, hits; bool blocked, endHidden; } Beam; /* endHidden: o impacto esta perto da ponta */
 static Beam beam[2];
 static void UpdateBeam(Fighter *a, Fighter *o, float dt)
@@ -2411,7 +2425,7 @@ static void UpdateBeam(Fighter *a, Fighter *o, float dt)
 /* desenho do raio, continuo e sem emendas: a fatia vertical do raio_meio (sem o clarao) esticada da boca do canhao
    ate a ponta, na altura e no centro do comeco do raio do quadro; o comeco entra em degrade por cima do quadro e um
    clarao cobre a boca do canhao; faiscas e faixas de brilho correm por cima; espessura e brilho pulsam de leve */
-static const float EL_BEAM_TH[3] = {113, 122, 119}; /* grossura do comeco do raio nos quadros de disparo 6-8 */
+static const float EL_BEAM_TH[3] = {101, 109, 106}; /* grossura do comeco do raio nos quadros de disparo 6-8 */
 static float Hash01(int i) { unsigned h = (unsigned)i * 2654435761u; h ^= h >> 13; h *= 0x5bd1e995u; h ^= h >> 15; return (h & 0xffff) / 65535.0f; }
 static void DrawBeamBody(float x0, float x1, float y, float th, int face, float t, float alpha)
 {
