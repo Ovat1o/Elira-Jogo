@@ -175,8 +175,8 @@ int main(int argc, char **argv)
             {
                 SetMusicVolume(ambientBgm, (game.musicMuted || game.screen == SCREEN_INVASION || game.screen == SCREEN_IAFIGHT) ? 0.0f : g_musicVolume);
             }
-            SetMessage(&game, game.musicMuted ? "Musica ambiente desativada [Mudo]."
-                                              : "Musica ambiente ativada.");
+            SetMessage(&game, game.musicMuted ? "Música ambiente desativada [Mudo]."
+                                              : "Música ambiente ativada.");
         }
 
         /* O modal pausa completamente a tela atual e impede cliques por baixo dele. */
@@ -244,7 +244,7 @@ int main(int argc, char **argv)
                     game.journalYearTab = 1;
                     game.journalPage = 0;
                     game.screen = SCREEN_ROOM_2008;
-                    SetMessage(&game, "Salto temporal concluido: Escritorio de Vigilancia // ANO 2008.");
+                    SetMessage(&game, "Salto temporal concluído: Escritório de Vigilância // ANO 2008.");
                 }
                 break;
             case SCREEN_INTRO_2026:
@@ -255,7 +255,7 @@ int main(int argc, char **argv)
                     game.journalYearTab = 2;
                     game.journalPage = 0;
                     game.screen = SCREEN_ROOM_2026;
-                    SetMessage(&game, "Salto temporal concluido: Redacao Digital // ANO 2026.");
+                    SetMessage(&game, "Salto temporal concluído: Redação Digital // ANO 2026.");
                 }
                 break;
             case SCREEN_INTRO_2046:
