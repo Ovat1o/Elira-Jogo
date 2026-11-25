@@ -190,13 +190,13 @@ static const Atk ATK[CH_N][AT_SPECIAL] = {
                  {0.05f, 0.16f, 0.10f, 55, 88, 212, 110, 0.32f, 160, 2},    /* aereo: cabecada mergulhando */
                  {0.22f, 0.10f, 0.30f, 88, 262, 138, 72, 0.45f, 330, 0},    /* golpe longo: o braco solta em corrente (ate 270) */
                  {0.08f, 0.14f, 0.32f, 80, 90, 330, 300, 0.50f, 120, 0}},   /* uppercut: garras subindo em arco */
-    /* LIA: alcances medidos no atlas (px da luta, guarda de 214 px): ponta do fichario / do tenis / do fio do fone */
-    [CH_LIA] = {{0}, {0.07f, 0.08f, 0.15f, 36, 195, 215, 85, 0.20f, 165, 0},  /* fichariada: o fichario girando na altura do rosto */
-                {0.15f, 0.10f, 0.28f, 98, 132, 185, 90, 0.45f, 320, 0},    /* chute alto e reto com o tenis */
-                {0.09f, 0.09f, 0.21f, 44, 205, 45, 45, 0.30f, 150, 1},     /* rasteira: o tenis varrendo o chao */
-                {0.06f, 0.16f, 0.10f, 52, 150, 110, 100, 0.32f, 160, 2},   /* aereo: o CD lancado em diagonal para baixo */
-                {0.22f, 0.10f, 0.30f, 80, 355, 180, 55, 0.45f, 330, 0},    /* golpe longo: o fio do fone estalando como chicote */
-                {0.08f, 0.14f, 0.32f, 80, 105, 340, 300, 0.50f, 120, 0}},  /* uppercut: o fichario de baixo para cima */
+    /* LIA (folhas chibi): alcances medidos no atlas (px da luta, guarda de 214 px): ponta do fichario / do tenis / do fio do fone */
+    [CH_LIA] = {{0}, {0.07f, 0.08f, 0.15f, 38, 210, 170, 80, 0.20f, 165, 0},  /* fichariada: o fichario girando na altura do peito (ate 217) */
+                {0.14f, 0.10f, 0.27f, 101, 104, 140, 50, 0.45f, 320, 0},   /* chute reto com o tenis (ate 87, + linhas de velocidade) */
+                {0.09f, 0.09f, 0.21f, 44, 165, 50, 50, 0.30f, 150, 1},     /* rasteira: o tenis varrendo o chao (ate 164) */
+                {0.06f, 0.16f, 0.10f, 52, 130, 115, 70, 0.32f, 160, 2},    /* aereo: o CD lancado em diagonal para baixo (ate 129) */
+                {0.22f, 0.10f, 0.30f, 80, 300, 170, 75, 0.45f, 330, 0},    /* golpe longo: o fio do fone estalando como chicote (ate 299) */
+                {0.08f, 0.14f, 0.32f, 80, 90, 335, 290, 0.50f, 120, 0}},   /* uppercut: o fichario de baixo para cima */
 };
 /* especiais: preparo / janela ativa / recuperacao */
 static const float SP_ST[CH_N] = {0.42f, 0.08f, 0.14f, 0.22f, 0.50f, 0.34f, 0.45f}; /* Iara: canta e se transforma antes da onda; AURA_67: some em glitch; LIA: abre o celular */
@@ -1698,7 +1698,7 @@ static int AuraFrameIdx(Fighter *a)
 /* ------------------------------------------------------------------ LIA: atlas de luta (personagem de colab)
    Garota Y2K do jogo parceiro: luta com o fichario rosa, o chute de tenis, o fio do fone do MP3 e o CD. O atlas
    (iafight_lia.h, gerado fora do repositorio a partir das tiras da LIA) ja vem na escala da luta: desenho em 1x,
-   filtro POINT. Sem defesa agachada no pacote: agachada, ela usa o quadro do uppercut atras do fichario.
+   filtro POINT. Todas as folhas no modelo chibi da parada.
    PAPO ENCANTADO: carga, discurso e balao (projetil); se o balao acerta, o oponente fica ENCANTADO (parado) e ela
    faz sozinha a finalizacao (fichariada giratoria), com a->caught = modo finalizacao. */
 #include "iafight_lia.h"
@@ -1800,9 +1800,10 @@ static int LiaFrameIdx(Fighter *a)
         }
     }
     if (a->shieldOn || a->st == ST_BLOCK)
-    { /* ergue o fichario como escudo (0-2) e segura (3); agachada: atras do fichario (uppercut #1, sem arte propria) */
-        if (a->crouch) return LIFrame(LI_BLOCK_CROUCH, 0);
-        return LIFrame(LI_BLOCK, a->shieldHit > 0 ? 3 : (int)(a->shieldT / 0.05f));
+    { /* ergue o fichario como escudo (0-2) e segura (3); agachada: atras do fichario; bloqueou: defesa_impacto */
+        if (a->crouch) return LIFrame(LI_BLOCK_CROUCH, (int)(a->shieldT / 0.05f)); /* agachada atras do fichario */
+        if (a->shieldHit > 0) return LIFrame(LI_BLOCK_HIT, 1 + (int)((0.15f - a->shieldHit) / 0.05f)); /* o fichario treme e volta */
+        return LIFrame(LI_BLOCK, (int)(a->shieldT / 0.05f));
     }
     if (a->st == ST_DASH) return LIFrame(LI_DASH, (int)(a->dashT / IAF_DASH_TIME * LI_COUNT[LI_DASH]));
     if (a->st == ST_JUMP)
@@ -1954,8 +1955,7 @@ static void DrawFighter(Fighter *a)
     else if (a->ch == CH_AURA && texAura.id) DrawUF(AuraFrameIdx(a), a->x + jx, a->y, a->face, 1.0f, a->alt ? IAF_AURA_ALT_TINT : WHITE, flash);
     else if (a->ch == CH_LIA && texLia.id)
     {
-        float bx = (a->st == ST_BLOCK && a->shieldHit > 0) ? (Rand01() - 0.5f) * 8 * Clamp(a->shieldHit / 0.15f, 0.0f, 1.0f) : 0; /* o fichario treme ao defender */
-        DrawLF(LiaFrameIdx(a), a->x + jx + bx, a->y, a->face, 1.0f, a->alt ? IAF_LIA_ALT_TINT : WHITE, flash);
+        DrawLF(LiaFrameIdx(a), a->x + jx, a->y, a->face, 1.0f, a->alt ? IAF_LIA_ALT_TINT : WHITE, flash);
     }
     else
     {
@@ -2071,7 +2071,7 @@ static Rectangle Hurt(Fighter *a)
     if (a->ch == CH_ANTI) { w = 148; h = a->crouch ? 124 : 164; lift = AntiHover(a); } /* "A" em escala 2x (~180x164 na tela), flutuando ~13 px */
     if (a->ch == CH_CODEX) { w = 130; h = a->crouch ? 150 : 198; }  /* nuvem do sprite (~157 de largura; as bordas fofas nao contam) */
     if (a->ch == CH_IARA) { w = IRK(100); h = IRK(a->crouch ? 130 : 205); } /* tronco, cauda e poca (~210 x IAF_IARA_ESCALA com o cabelo) */
-    if (a->ch == CH_LIA) { w = 90; h = a->crouch ? 150 : 215; } /* corpo sem o cabelo solto atras (guarda de 214) */
+    if (a->ch == CH_LIA) { w = 90; h = a->crouch ? 168 : 215; } /* corpo sem o cabelo solto atras (guarda de 214) */
     if (a->ch == CH_AURA) { w = 96; h = a->crouch ? 146 : 214; } /* caveira (~110 de largura) e os bracos embaixo, do topo (228) ao chao */
     if (a->down || a->st == ST_KO) h = 40;
     return (Rectangle){a->x - w / 2, a->y - lift - h, w, h};
@@ -2689,7 +2689,7 @@ static void UpdateFighter(Fighter *a, Fighter *o, IafInput in, float dt)
         if (a->crouch) { if (a->st != ST_CROUCH) SetState(a, ST_CROUCH); a->vx = 0; }
         else if (holdFwd || holdBack)
         {
-            float sp = a->ch == CH_ANTI ? 290 : (a->ch == CH_CODEX ? 300 : (a->ch == CH_AURA ? 285 : 255)); /* a AURA_67 flutua mais solta */
+            float sp = a->ch == CH_ANTI ? 290 : (a->ch == CH_CODEX ? 300 : (a->ch == CH_AURA ? 285 : (a->ch == CH_LIA ? 262 : 255))); /* a AURA_67 flutua mais solta; a LIA anda de passarela */
             a->vx = holdFwd ? a->face * sp : -a->face * sp * 0.8f;
             if (a->st != ST_WALK) SetState(a, ST_WALK);
         }
