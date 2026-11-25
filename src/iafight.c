@@ -2033,9 +2033,10 @@ static bool lastWon = false, paused = false;
 static int pauseSel = 0;
 static void DrawIafCyberCard(Rectangle r, Color accent, bool on, float tickMax);
 
+#define IAF_PAUSE_BTNS 5
 static Rectangle IafPauseBtn(int idx)
 {
-    return (Rectangle){430.0f, 250.0f + idx * 68.0f, 420.0f, 54.0f};
+    return (Rectangle){430.0f, 228.0f + idx * 64.0f, 420.0f, 52.0f};
 }
 static int roundWinner = -1;
 
@@ -2047,6 +2048,9 @@ static bool cpu[2] = {false, true};
 static bool trainMode = false;
 static int trainPick = 0;           /* selecao do treino: 0 = lutador, 1 = boneco */
 static int trainDummy = CH_CLAUDE;  /* lutador do boneco */
+static int soloPick = 0;            /* selecao 1 x CPU: 0 = 1P, 1 = CPU (oponente inicial) */
+static int cpuCh = CH_CLAUDE;       /* lutador inicial da CPU no arcade */
+static float soloReadyT = 0;        /* > 0: mostra o P2/CPU/BONECO sorteado antes de ir para a arena */
 static int dummyMode = 0;           /* boneco: 0 parado, 1 defende sempre, 2 pula, 3 luta (a IA joga com ele) */
 #define DUMMY_MODES 4
 static const char *DUMMY_TXT[DUMMY_MODES] = {"PARADO", "DEFENDE SEMPRE", "PULA", "LUTA (IA)"};
@@ -3286,27 +3290,12 @@ static void DrawPadStatus(bool chips)
 }
 
 /* ------------------------------------------------------------------ fluxo */
-static void BuildLadder(void)
-{
-    int n = 0;
-    if (playerCh == CH_ELIRA) { ladder[0] = CH_CLAUDE; ladder[1] = CH_CODEX; ladder[2] = CH_ANTI; }
-    else if (playerCh == CH_IARA) { ladder[0] = CH_CLAUDE; ladder[1] = CH_CODEX; ladder[2] = CH_ELIRA; } /* convidada: 2 IAs e a chefe */
-    else if (playerCh == CH_AURA) { ladder[0] = CH_ANTI; ladder[1] = CH_IARA; ladder[2] = CH_ELIRA; } /* convidada: a outra colab no meio e a chefe */
-    else if (playerCh == CH_LIA) { ladder[0] = CH_CODEX; ladder[1] = CH_AURA; ladder[2] = CH_ELIRA; } /* convidada: uma IA, a outra colab e a chefe */
-    else
-    {
-        for (int c = CH_CLAUDE; c <= CH_ANTI; c++)
-            if (c != playerCh) ladder[n++] = c;
-        ladder[2] = CH_ELIRA; /* chefe final */
-    }
-    ladderPos = 0;
-}
 static bool voxRoundDone = false, voxLutemDone = false; /* vozes da abertura ja tocaram neste round */
 static void StartRound(void)
 {
     ResetFighter(&fz[0], (CharId)playerCh, 420, 1);
     ResetFighter(&fz[1], (CharId)ladder[ladderPos], 860, -1);
-    fz[1].alt = versusMode && fz[0].ch == fz[1].ch;
+    fz[1].alt = (fz[0].ch == fz[1].ch);
     voxRoundDone = voxLutemDone = false;
     fz[0].meter = fz[1].meter = 0;
     ClearFx();
@@ -3322,13 +3311,28 @@ static int selP[2] = {0, 1};   /* 1 x 1: personagem de cada jogador */
 static bool readyP[2];         /* 1 x 1: jogador ja confirmou */
 static float readyT = 0;       /* atraso depois que os dois confirmam */
 static int modeSel = 0, resSel = 0;
-static void ArenaSortear(void); /* sorteia o cenario (iafight_arena.h) */
+static void ArenaSortear(void);    /* sorteia o cenario (iafight_arena.h) */
+static void ArenaResetReact(void); /* zera a empolgacao da plateia (iafight_arena.h) */
 static void StartMatch(void)
 {
     wins[0] = wins[1] = 0;
     resSel = 0;
     roundNo = 1;
     ArenaSortear(); /* cenario da luta (iafight_arena.h) */
+    StartRound();
+}
+static void RestartMatch(void)
+{
+    wins[0] = wins[1] = 0;
+    resSel = 0;
+    roundNo = 1;
+    trainLast = trainComboDmg = 0;
+    trainComboHits = 0;
+    trainLastBlocked = false;
+    ArenaResetReact();
+    Music *m = IafMusic(musCur);
+    if (m) StopMusicStream(*m);
+    musCur = -1;
     StartRound();
 }
 static void PushApart(void)
@@ -3514,7 +3518,6 @@ static void DrawTrainHud(void)
     Txt("F2 / L3: boneco    F3 / R3: posição", r.x + 14, r.y + 36, 14, C_DIM);
     if (showBoxes) DrawBoxLegend(r.x + 14, r.y + 62);
     else Txt("F1 / SELECT: caixas de colisão", r.x + 14, r.y + 62, 14, C_DIM);
-    if (texElira2.id) TxtC(eliraNovos ? "SPRITES: NOVOS  (F4 troca)" : "SPRITES: ATUAIS  (F4 troca)", SCREEN_WIDTH / 2.0f, 642, 15, eliraNovos ? C_CYAN : C_DIM);
     TxtC("COMBO: fraco > fraco > forte, acertando", SCREEN_WIDTH / 2.0f, 664, 15, C_AMBER);
     TxtC("AGARRÃO: fraco + forte juntos, colado", SCREEN_WIDTH / 2.0f, 686, 15, C_AMBER);
 }
@@ -3545,12 +3548,12 @@ static void UpdateFight(GameState *game, float dt)
             return;
         }
         int prevSel = pauseSel;
-        if (NavUpP()) pauseSel = (pauseSel + 3) % 4;
-        if (NavDownP()) pauseSel = (pauseSel + 1) % 4;
+        if (NavUpP()) pauseSel = (pauseSel + IAF_PAUSE_BTNS - 1) % IAF_PAUSE_BTNS;
+        if (NavDownP()) pauseSel = (pauseSel + 1) % IAF_PAUSE_BTNS;
 
         Vector2 vm = GetVirtualMouse();
         bool mouseClick = false;
-        for (int i = 0; i < 4; i++)
+        for (int i = 0; i < IAF_PAUSE_BTNS; i++)
         {
             if (CheckCollisionPointRec(vm, IafPauseBtn(i)))
             {
@@ -3572,18 +3575,25 @@ static void UpdateFight(GameState *game, float dt)
             else if (pauseSel == 1)
             {
                 paused = false;
+                RestartMatch();
+            }
+            else if (pauseSel == 2)
+            {
+                paused = false;
                 readyP[0] = readyP[1] = false;
                 trainPick = 0;
+                soloPick = 0;
+                soloReadyT = 0;
                 iafScreen = SC_SELECT;
                 scT = 0;
             }
-            else if (pauseSel == 2)
+            else if (pauseSel == 3)
             {
                 paused = false;
                 UpdateIafMusic(-1);
                 if (game) game->screen = SCREEN_TITLE;
             }
-            else if (pauseSel == 3)
+            else if (pauseSel == 4)
             {
                 paused = false;
                 UpdateIafMusic(-1);
@@ -3689,7 +3699,7 @@ static void DrawFightOverlay(void)
     {
         DrawRectangle(0, 0, SCREEN_WIDTH, SCREEN_HEIGHT, Fade(C_INK, 0.76f));
 
-        Rectangle panel = {370.0f, 118.0f, 540.0f, 480.0f};
+        Rectangle panel = {370.0f, 102.0f, 540.0f, 516.0f};
         DrawRectangleRounded(panel, 0.05f, 10, (Color){10, 15, 30, 248});
         DrawRectangleRoundedLinesEx(panel, 0.05f, 10, 2.0f, C_CYAN);
 
@@ -3703,13 +3713,13 @@ static void DrawFightOverlay(void)
         DrawLineEx((Vector2){panel.x + panel.width - pad, panel.y + panel.height - pad}, (Vector2){panel.x + panel.width - pad - tLen, panel.y + panel.height - pad}, 2.4f, C_AMBER);
         DrawLineEx((Vector2){panel.x + panel.width - pad, panel.y + panel.height - pad}, (Vector2){panel.x + panel.width - pad, panel.y + panel.height - pad - tLen}, 2.4f, C_AMBER);
 
-        TxtO("PAUSA", SCREEN_WIDTH / 2.0f, 142.0f, 40, C_WHITE, C_INK);
-        TxtC("Escolha como deseja continuar", SCREEN_WIDTH / 2.0f, 194.0f, 16, C_DIM);
-        DrawLine((int)(panel.x + 36), 226, (int)(panel.x + panel.width - 36), 226, Fade(C_CYAN, 0.35f));
+        TxtO("PAUSA", SCREEN_WIDTH / 2.0f, 126.0f, 40, C_WHITE, C_INK);
+        TxtC("Escolha como deseja continuar", SCREEN_WIDTH / 2.0f, 176.0f, 16, C_DIM);
+        DrawLine((int)(panel.x + 36), 206, (int)(panel.x + panel.width - 36), 206, Fade(C_CYAN, 0.35f));
 
-        static const char *labels[4] = {"CONTINUAR", "VOLTAR À SELEÇÃO", "VOLTAR AO MENU INICIAL", "FECHAR O JOGO"};
-        const Color cols[4] = {C_CYAN, C_GREEN, C_AMBER, C_RED};
-        for (int i = 0; i < 4; i++)
+        static const char *labels[IAF_PAUSE_BTNS] = {"CONTINUAR", "RECOMEÇAR", "VOLTAR À SELEÇÃO", "VOLTAR AO MENU INICIAL", "FECHAR O JOGO"};
+        const Color cols[IAF_PAUSE_BTNS] = {C_CYAN, C_GREEN, (Color){150, 120, 255, 255}, C_AMBER, C_RED};
+        for (int i = 0; i < IAF_PAUSE_BTNS; i++)
         {
             Rectangle r = IafPauseBtn(i);
             bool on = (pauseSel == i);
@@ -3836,9 +3846,10 @@ static void DrawBackdrop(Color accent)
 }
 
 /* ------------------------------------------------------------------ selecao de lutador
-   Paineis grandes do 1P (esquerda) e do 2P/CPU (direita) com o lutador animado em palco sci-fi;
-   no centro, a grade 2x4 (8 slots: 7 lutadores desbloqueados + 1 slot bloqueado 'EM BREVE'). */
+   Paineis grandes do 1P (esquerda) e do 2P/CPU/BONECO (direita) com o lutador animado em palco sci-fi;
+   no centro, a grade 2x4 (7 lutadores + 1 slot 'EM BREVE') e o botao 'ALEATÓRIO' logo abaixo. */
 #define SEL_GRID_SLOTS 8
+#define SEL_RANDOM 8
 static const Color PCOL[2] = {{96, 214, 240, 255}, {230, 80, 84, 255}}; /* cursor/rotulo do 1P e do 2P */
 /* recorte completo de cada lutador no 1o quadro da parada (fminf limita ao tamanho real do quadro) */
 static const Rectangle THUMB_CUT[CH_N] = {
@@ -3884,7 +3895,7 @@ static void DrawThumb(CharId ch, Rectangle dst, bool alt)
     if (ch == CH_ANTI) src.width = -src.width; /* orientacao padrao (vermelho->amarelo->verde) */
     DrawTexturePro(tex, src, (Rectangle){roundf(dst.x + (dst.width - w) / 2), roundf(dst.y + (dst.height - h) / 2), w, h}, (Vector2){0, 0}, 0, tint);
 }
-/* ordem do arcade para quem escolhe 'ch' (a mesma de BuildLadder) */
+/* ordem padrao do arcade para quem escolhe 'ch' */
 static void LadderFor(int ch, int out[3])
 {
     int n = 0;
@@ -3896,28 +3907,64 @@ static void LadderFor(int ch, int out[3])
         if (c != ch) out[n++] = c;
     out[2] = CH_ELIRA;
 }
-/* grade 2 colunas x 4 linhas (8 quadrados iguais no centro da tela) */
+/* monta a escada do arcade respeitando o 1o oponente escolhido/sorteado para a CPU */
+static void BuildLadderWithFirst(int p1, int firstOp)
+{
+    int def[3];
+    LadderFor(p1, def);
+    ladder[0] = firstOp;
+    int pick1 = -1, pick2 = def[2];
+    if (pick2 == firstOp) pick2 = (def[1] != firstOp) ? def[1] : def[0];
+    for (int i = 0; i < 3; i++)
+    {
+        if (def[i] != firstOp && def[i] != pick2) { pick1 = def[i]; break; }
+    }
+    if (pick1 < 0)
+    {
+        for (int c = 0; c < CH_N; c++)
+            if (c != p1 && c != firstOp && c != pick2) { pick1 = c; break; }
+    }
+    if (pick1 < 0) pick1 = firstOp;
+    ladder[1] = pick1;
+    ladder[2] = pick2;
+    ladderPos = 0;
+}
+/* grade 2 colunas x 4 linhas (7 lutadores + 1 'EM BREVE') + slot 'ALEATÓRIO' logo abaixo */
 static Rectangle GridCell(int i)
 {
-    const float cs = 104.0f, gap = 12.0f;
+    const float cs = 100.0f, gap = 10.0f;
     float x0 = SCREEN_WIDTH / 2.0f - cs - gap * 0.5f;
-    float y0 = 120.0f;
+    float y0 = 114.0f;
     return (Rectangle){x0 + (i % 2) * (cs + gap), y0 + (i / 2) * (cs + gap), cs, cs};
 }
-/* navegacao 2x4 pelos lutadores desbloqueados (slots 0..CH_N-1, linhas de 2), pulando os bloqueados:
-   na vertical anda na mesma coluna e da a volta */
+static Rectangle RandomSlotRect(void)
+{
+    const float cs = 100.0f, gap = 10.0f;
+    float x0 = SCREEN_WIDTH / 2.0f - cs - gap * 0.5f;
+    return (Rectangle){x0, 564.0f, cs * 2.0f + gap, 60.0f};
+}
+static Rectangle SlotRect(int i)
+{
+    return (i == SEL_RANDOM) ? RandomSlotRect() : GridCell(i);
+}
+/* navegacao pelos 7 lutadores (0..6) e pelo botao ALEATÓRIO (SEL_RANDOM = 8), pulando o 7 ('EM BREVE') */
 static int SelMove(int c, int dx, int dy)
 {
-    if (c < 0 || c >= CH_N) c = 0;
-    if (dx) return (c + (dx > 0 ? 1 : -1) + CH_N) % CH_N;
-    if (!dy) return c;
-    int rows = (CH_N + 1) / 2, col = c % 2, row = c / 2;
-    for (int k = 0; k < rows; k++)
+    static const int order[8] = {0, 1, 2, 3, 4, 5, 6, SEL_RANDOM};
+    int curIdx = 0;
+    for (int i = 0; i < 8; i++)
+        if (order[i] == c) { curIdx = i; break; }
+    if (dx) return order[(curIdx + (dx > 0 ? 1 : -1) + 8) % 8];
+    if (!dy) return order[curIdx];
+    if (c == SEL_RANDOM) return dy > 0 ? 0 : 6;
+    int col = c % 2, row = c / 2;
+    if (col == 0)
     {
-        row = (row + (dy > 0 ? 1 : -1) + rows) % rows;
-        if (row * 2 + col < CH_N) return row * 2 + col;
+        if (dy > 0) return row < 3 ? (row + 1) * 2 : SEL_RANDOM;
+        return row > 0 ? (row - 1) * 2 : SEL_RANDOM;
     }
-    return c;
+    if (dy > 0) return row < 2 ? (row + 1) * 2 + 1 : SEL_RANDOM;
+    return row > 0 ? (row - 1) * 2 + 1 : SEL_RANDOM;
 }
 
 /* Titulo 'SELECIONE SUA IA' no mesmo estilo de fogo de DrawIafTitleLogo */
@@ -4022,7 +4069,8 @@ static const float PANEL_SC[CH_N] = {1.15f, 1.45f, 1.68f, 1.45f, 1.42f, 1.42f, 1
 static void DrawSelPanel(int side, int ch, const char *tag, Color tagCol, bool alt, bool ready)
 {
     Rectangle r = {side == 0 ? 28.0f : SCREEN_WIDTH - 28.0f - 460.0f, 114.0f, 460.0f, 540.0f};
-    Color c = alt ? AltCol(CHCOL[ch]) : CHCOL[ch];
+    bool isRand = (ch < 0 || ch >= CH_N);
+    Color c = isRand ? C_AMBER : (alt ? AltCol(CHCOL[ch]) : CHCOL[ch]);
     float pulse = 0.70f + 0.30f * sinf(gt * 3.4f);
     int bx = (int)r.x, by = (int)r.y, bw = (int)r.width, bh = (int)r.height;
 
@@ -4087,21 +4135,22 @@ static void DrawSelPanel(int side, int ch, const char *tag, Color tagCol, bool a
     TxtC(tag, tagBox.x + tagBox.width * 0.5f, tagBox.y + 3.0f, 24, C_INK);
 
     /* Nome do lutador com sombra + halo luminoso */
+    const char *dispName = isRand ? "ALEATÓRIO" : NAME[ch];
     float nameSize = 34.0f;
-    float nw = TxtW(NAME[ch], (int)nameSize);
+    float nw = TxtW(dispName, (int)nameSize);
     float nameCX = side == 0 ? (tagBox.x + tagBox.width + 16.0f + nw * 0.5f)
                              : (tagBox.x - 16.0f - nw * 0.5f);
-    TxtC(NAME[ch], nameCX + 2, hdr.y + 10.0f, (int)nameSize, C_INK);
-    TxtC(NAME[ch], nameCX - 1, hdr.y + 8.0f, (int)nameSize, Fade(c, 0.45f));
-    TxtC(NAME[ch], nameCX + 1, hdr.y + 8.0f, (int)nameSize, Fade(c, 0.45f));
-    TxtO(NAME[ch], nameCX, hdr.y + 8.0f, (int)nameSize, C_WHITE, C_INK);
+    TxtC(dispName, nameCX + 2, hdr.y + 10.0f, (int)nameSize, C_INK);
+    TxtC(dispName, nameCX - 1, hdr.y + 8.0f, (int)nameSize, Fade(c, 0.45f));
+    TxtC(dispName, nameCX + 1, hdr.y + 8.0f, (int)nameSize, Fade(c, 0.45f));
+    TxtO(dispName, nameCX, hdr.y + 8.0f, (int)nameSize, C_WHITE, C_INK);
 
-    /* Sub-linha do cabecalho: titulo do especial / paleta alternativa */
-    const char *subInfo = alt ? "PALETA ALTERNATIVA  //  ESPELHO" : SPNAME[ch];
+    /* Sub-linha do cabecalho: titulo do especial / paleta alternativa / sorteio */
+    const char *subInfo = isRand ? "SORTEIO AUTOMÁTICO DE LUTADOR" : (alt ? "PALETA ALTERNATIVA  //  ESPELHO" : SPNAME[ch]);
     (void)SPDESC;
     float subW = TxtW(subInfo, 13);
     float subX = side == 0 ? (hdr.x + 14.0f) : (hdr.x + hdr.width - 14.0f - subW);
-    Txt(subInfo, subX, hdr.y + 50.0f, 13, alt ? C_AMBER : Fade(c, 0.92f));
+    Txt(subInfo, subX, hdr.y + 50.0f, 13, (alt || isRand) ? C_AMBER : Fade(c, 0.92f));
 
     /* 5. Plataforma / Pedestal Holografico Luminoso sob os pes */
     DrawEllipse((int)cx, (int)fy + 5, 162, 22, Fade(C_INK, 0.70f));
@@ -4116,10 +4165,22 @@ static void DrawSelPanel(int side, int ch, const char *tag, Color tagCol, bool a
         DrawLineEx((Vector2){mx - 6, fy + 16}, (Vector2){mx + 6, fy + 16}, 2.5f, Fade(c, 0.80f));
     }
 
-    /* 6. Personagem animado em destaque no palco */
-    g_altPal = alt;
-    DrawCharacterBig((CharId)ch, cx, fy, side == 0 ? 1 : -1, PANEL_SC[ch], ST_IDLE);
-    g_altPal = false;
+    /* 6. Personagem animado em destaque no palco (ou holograma '?' no modo aleatorio) */
+    if (isRand)
+    {
+        float bob = sinf(gt * 3.2f) * 8.0f;
+        Vector2 hc = {cx, r.y + 305.0f + bob};
+        DrawCircleV(hc, 66.0f, Fade(C_AMBER, 0.08f + 0.04f * pulse));
+        DrawRing(hc, 60.0f, 63.0f, gt * 42.0f, gt * 42.0f + 130.0f, 24, Fade(C_AMBER, 0.60f));
+        DrawRing(hc, 60.0f, 63.0f, gt * 42.0f + 180.0f, gt * 42.0f + 310.0f, 24, Fade(C_CYAN, 0.60f));
+        TxtO("?", hc.x, hc.y - 62.0f, 124, ColorLerp(C_AMBER, C_WHITE, 0.35f * pulse), C_INK);
+    }
+    else
+    {
+        g_altPal = alt;
+        DrawCharacterBig((CharId)ch, cx, fy, side == 0 ? 1 : -1, PANEL_SC[ch], ST_IDLE);
+        g_altPal = false;
+    }
 
     /* 7. Moldura externa, trilhos de telemetria e cantoneiras sci-fi nos 4 cantos */
     DrawRectangleRoundedLinesEx(r, 0.05f, 8, ready ? 3.2f : 2.0f,
@@ -4233,41 +4294,101 @@ static void DrawSelectGridSlot(int i, bool on)
     }
 }
 
+/* Botao dedicado de escolha aleatoria logo abaixo da grade 2x4 (sem substituir o 'EM BREVE') */
+static void DrawRandomSlot(bool on)
+{
+    Rectangle g = RandomSlotRect();
+    float pulse = 0.72f + 0.28f * sinf(gt * 3.5f);
+    int gx = (int)g.x, gy = (int)g.y, gw = (int)g.width, gh = (int)g.height;
+
+    DrawRectangleRounded((Rectangle){g.x + 3, g.y + 4, g.width, g.height}, 0.14f, 6, Fade(C_INK, 0.60f));
+    DrawRectangleRounded(g, 0.14f, 6, (Color){14, 19, 38, 248});
+    DrawRectangleGradientH(gx + 2, gy + 2, gw - 4, gh - 4,
+                           Fade(C_AMBER, on ? 0.30f : 0.11f), Fade(C_CYAN, on ? 0.28f : 0.10f));
+    DrawRectangle(gx + 5, gy + 3, gw - 10, 14, Fade(C_WHITE, on ? 0.08f : 0.03f));
+
+    Vector2 rc = {g.x + 34.0f, g.y + g.height * 0.5f};
+    DrawRing(rc, 20.0f, 22.0f, gt * 40.0f, gt * 40.0f + 220.0f, 22, Fade(C_CYAN, on ? 0.85f : 0.48f));
+    DrawRing(rc, 15.0f, 16.6f, -gt * 50.0f, -gt * 50.0f + 190.0f, 18, Fade(C_AMBER, on ? 0.90f : 0.52f));
+    TxtO("?", rc.x, rc.y - 16.0f, 32, on ? C_WHITE : ColorLerp(C_AMBER, C_WHITE, 0.25f * pulse), C_INK);
+
+    Txt("ALEATÓRIO", g.x + 66.0f, g.y + 11.0f, 20, on ? C_WHITE : C_AMBER);
+    Txt("SORTEAR LUTADOR", g.x + 66.0f, g.y + 36.0f, 11, on ? C_CYAN : C_DIM);
+
+    DrawRectangleRoundedLinesEx(g, 0.14f, 6, on ? 2.4f : 1.6f, on ? C_WHITE : Fade(C_AMBER, 0.55f * pulse + 0.18f));
+    float tk = on ? 12.0f : 8.0f, pd = 2.0f, th = on ? 2.4f : 1.8f;
+    Color tc = on ? C_CYAN : C_AMBER;
+    DrawLineEx((Vector2){g.x + pd, g.y + pd}, (Vector2){g.x + pd + tk, g.y + pd}, th, tc);
+    DrawLineEx((Vector2){g.x + pd, g.y + pd}, (Vector2){g.x + pd, g.y + pd + tk}, th, tc);
+    DrawLineEx((Vector2){g.x + g.width - pd, g.y + pd}, (Vector2){g.x + g.width - pd - tk, g.y + pd}, th, tc);
+    DrawLineEx((Vector2){g.x + g.width - pd, g.y + pd}, (Vector2){g.x + g.width - pd, g.y + pd + tk}, th, tc);
+    DrawLineEx((Vector2){g.x + pd, g.y + g.height - pd}, (Vector2){g.x + pd + tk, g.y + g.height - pd}, th, tc);
+    DrawLineEx((Vector2){g.x + pd, g.y + g.height - pd}, (Vector2){g.x + pd, g.y + g.height - pd - tk}, th, tc);
+    DrawLineEx((Vector2){g.x + g.width - pd, g.y + g.height - pd}, (Vector2){g.x + g.width - pd - tk, g.y + g.height - pd}, th, tc);
+    DrawLineEx((Vector2){g.x + g.width - pd, g.y + g.height - pd}, (Vector2){g.x + g.width - pd, g.y + g.height - pd - tk}, th, tc);
+}
+
 static void DrawSelectScreen(bool vs)
 {
-    int lad[3];
-    LadderFor(sel, lad);
-    int cur[2] = {vs ? selP[0] : sel, vs ? selP[1] : lad[0]};
-    bool tr = !vs && trainMode, dum = tr && trainPick == 1; /* treino; escolhendo o boneco */
-    if (tr) { cur[0] = dum ? playerCh : sel; cur[1] = dum ? sel : trainDummy; }
-    bool mirror = vs && cur[0] == cur[1];
-    DrawBackdrop(vs ? C_DIM : CHCOL[sel]);
+    bool tr = !vs && trainMode;
+    int p2Step = tr ? trainPick : soloPick;
+    int defLad[3] = {CH_CLAUDE, CH_CODEX, CH_ELIRA};
+    if (!vs && !tr && p2Step == 0 && sel >= 0 && sel < CH_N) LadderFor(sel, defLad);
+
+    int cur[2];
+    bool ready0 = false, ready1 = false;
+    if (vs)
+    {
+        cur[0] = selP[0];
+        cur[1] = selP[1];
+        ready0 = readyP[0];
+        ready1 = readyP[1];
+    }
+    else if (tr)
+    {
+        cur[0] = (trainPick == 0) ? sel : playerCh;
+        cur[1] = (soloReadyT > 0) ? trainDummy : ((trainPick == 1) ? sel : trainDummy);
+        ready0 = (trainPick == 1) || (soloReadyT > 0);
+        ready1 = (soloReadyT > 0);
+    }
+    else
+    {
+        cur[0] = (soloPick == 0) ? sel : playerCh;
+        cur[1] = (soloReadyT > 0) ? cpuCh : ((soloPick == 1) ? sel : (sel >= 0 && sel < CH_N ? defLad[0] : cpuCh));
+        ready0 = (soloPick == 1) || (soloReadyT > 0);
+        ready1 = (soloReadyT > 0);
+    }
+
+    bool mirror = (cur[0] == cur[1]) && (cur[0] >= 0 && cur[0] < CH_N);
+    DrawBackdrop(vs ? C_DIM : (cur[0] >= 0 && cur[0] < CH_N ? CHCOL[cur[0]] : C_AMBER));
 
     /* 1. Titulo em chamas 'SELECIONE SUA IA' ampliado (sem subtitulo redundante) */
     DrawIafSelectLogo();
 
-    /* 2. Palcos laterais de preview dos lutadores (sem os antigos cards de especial embaixo) */
-    DrawSelPanel(0, cur[0], "1P", PCOL[0], false, (vs && readyP[0]) || dum);
-    if (vs) DrawSelPanel(1, cur[1], "2P", PCOL[1], mirror, readyP[1]);
-    else if (tr) DrawSelPanel(1, cur[1], "BONECO", C_GREEN, false, false);
-    else DrawSelPanel(1, cur[1], "CPU", C_AMBER, false, false);
+    /* 2. Palcos laterais de preview dos lutadores */
+    DrawSelPanel(0, cur[0], "1P", PCOL[0], false, ready0);
+    if (vs) DrawSelPanel(1, cur[1], "2P", PCOL[1], mirror, ready1);
+    else if (tr) DrawSelPanel(1, cur[1], "BONECO", C_GREEN, mirror, ready1);
+    else DrawSelPanel(1, cur[1], "CPU", C_AMBER, mirror, ready1);
 
-    /* 3. Grade central 2x4 (8 quadrados: 7 lutadores + 1 bloqueado) */
+    /* 3. Grade central 2x4 (7 lutadores + 1 bloqueado 'EM BREVE') e botao 'ALEATÓRIO' abaixo */
+    int numCursors = (vs || p2Step == 1 || soloReadyT > 0) ? 2 : 1;
     for (int i = 0; i < SEL_GRID_SLOTS; i++)
     {
-        bool on = (i < CH_N) && (cur[0] == i || ((vs || dum) && cur[1] == i));
+        bool on = (i < CH_N) && (cur[0] == i || (numCursors == 2 && cur[1] == i));
         DrawSelectGridSlot(i, on);
     }
+    DrawRandomSlot(cur[0] == SEL_RANDOM || (numCursors == 2 && cur[1] == SEL_RANDOM));
 
-    /* 4. Cursores luminosos 1P / 2P / BONECO */
-    for (int p = 0; p < ((vs || dum) ? 2 : 1); p++)
+    /* 4. Cursores luminosos 1P e 2P / BONECO / CPU */
+    for (int p = 0; p < numCursors; p++)
     {
-        Rectangle g = GridCell(cur[p]);
+        Rectangle g = SlotRect(cur[p]);
         float o = (p == 1 && cur[0] == cur[1]) ? 7.0f : 2.5f;
         Rectangle rr = {g.x - o, g.y - o, g.width + 2 * o, g.height + 2 * o};
-        bool rd = (vs && readyP[p]) || (dum && p == 0);
-        Color pc = (dum && p == 1) ? C_GREEN : PCOL[p];
-        const char *tag = (p == 0) ? "1P" : (dum ? "BONECO" : "2P");
+        bool rd = (p == 0) ? ready0 : ready1;
+        Color pc = (p == 0) ? PCOL[0] : (vs ? PCOL[1] : (tr ? C_GREEN : C_AMBER));
+        const char *tag = (p == 0) ? "1P" : (vs ? "2P" : (tr ? "BONECO" : "CPU"));
         float tw = TxtW(tag, 15) + 14.0f;
         float glowA = rd ? 1.0f : (0.70f + 0.30f * sinf(gt * 6.5f));
 
@@ -4282,26 +4403,22 @@ static void DrawSelectScreen(bool vs)
         TxtC(tag, tg.x + tw * 0.5f, tg.y + 2.0f, 15, C_INK);
     }
 
-    /* 5. Informacoes enxutas de modo abaixo da grade central e rodape de controles */
-    float by = GridCell(6).y + GridCell(6).height + 16.0f;
+    /* 5. Rodape dos modos (no modo treino, sem texto extra abaixo dos icones) */
     if (tr)
     {
-        TxtC("VIDA INFINITA E CARGA CHEIA  |  F1: CAIXAS  |  F2: MODO DO BONECO", SCREEN_WIDTH / 2.0f, by, 13, C_DIM);
-        if (dum) TxtC("1P escolhido  -  ESC / B: voltar para trocar o 1P", SCREEN_WIDTH / 2.0f, by + 20.0f, 13, PCOL[0]);
         TxtC("A/D, W/S, SETAS, CONTROLE ou MOUSE: escolher    ENTER / A: confirmar    TAB / SELECT: controles    ESC / B: voltar", SCREEN_WIDTH / 2.0f, SCREEN_HEIGHT - 24, 14, C_DIM);
         return;
     }
     if (!vs)
     {
-        TxtC(lad[2] == CH_ELIRA ? "MELHOR DE 3 ROUNDS  (ELIRA E A CHEFE FINAL)" : "MELHOR DE 3 ROUNDS", SCREEN_WIDTH / 2.0f, by + 6.0f, 13, C_DIM);
+        TxtC("MELHOR DE 3 ROUNDS  -  ESCOLHA O 1P E DEPOIS A CPU", SCREEN_WIDTH / 2.0f, 666.0f, 13, C_DIM);
         TxtC("A/D, W/S, SETAS, CONTROLE ou MOUSE: escolher    ENTER / A: confirmar    TAB / SELECT: controles    ESC / B: voltar", SCREEN_WIDTH / 2.0f, SCREEN_HEIGHT - 24, 14, C_DIM);
         return;
     }
-    TxtC("1 x 1  -  MELHOR DE 3 ROUNDS", SCREEN_WIDTH / 2.0f, by, 14, C_AMBER);
     const char *vsHint = (padNow[0].on || padNow[1].on)
-                       ? "1P: A/D/W/S + J (ou Controle 1)    |    2P: SETAS + 1 (ou Controle 2)"
-                       : "1P: A/D/W/S escolhe, J confirma, K desfaz    |    2P: SETAS escolhem, 1 confirma, 2 desfaz";
-    TxtC(vsHint, SCREEN_WIDTH / 2.0f, by + 20.0f, 13, C_DIM);
+                       ? "1 x 1 (MELHOR DE 3)   |   1P: A/D/W/S + J (ou Controle 1)   |   2P: SETAS + 1 (ou Controle 2)"
+                       : "1 x 1 (MELHOR DE 3)   |   1P: A/D/W/S + J/ENTER (K desfaz)   |   2P: SETAS + 1 (2 desfaz)";
+    TxtC(vsHint, SCREEN_WIDTH / 2.0f, 666.0f, 13, C_DIM);
     if (readyP[0] && readyP[1])
     {
         DrawRectangleRounded((Rectangle){440, 292, 400, 92}, 0.15f, 8, Fade(C_INK, 0.88f));
@@ -4363,6 +4480,26 @@ static void DrawPadlock(Vector2 c, float s, Color col)
 /* a imagem da arena i no retangulo (miniatura do cartao ou previa grande) */
 static void DrawArenaPic(int i, Rectangle dst, bool big)
 {
+    if (ARENAS[i].kind == AR_RANDOM)
+    {
+        DrawStatic(dst, big ? 8 : 5, (unsigned)i + 77);
+        DrawRectangleGradientV((int)dst.x, (int)dst.y, (int)dst.width, (int)dst.height,
+                               Fade(C_CYAN, 0.14f), Fade(C_AMBER, 0.22f));
+        Vector2 center = {dst.x + dst.width * 0.5f, dst.y + dst.height * (big ? 0.44f : 0.50f)};
+        float r = dst.height * (big ? 0.28f : 0.34f);
+        DrawRing(center, r - (big ? 3.0f : 2.0f), r, gt * 32.0f, gt * 32.0f + 250.0f, 32, Fade(C_CYAN, 0.55f));
+        DrawRing(center, r * 0.76f - 1.8f, r * 0.76f, -gt * 42.0f, -gt * 42.0f + 210.0f, 28, Fade(C_AMBER, 0.50f));
+        if (big)
+        {
+            float fy = dst.y + IAF_GROUND_Y * (dst.width / SCREEN_WIDTH);
+            DrawRectangle((int)dst.x, (int)fy + 4, (int)dst.width, (int)(dst.y + dst.height - fy - 4), Fade(C_INK, 0.55f));
+            DrawLineEx((Vector2){dst.x, fy + 4}, (Vector2){dst.x + dst.width, fy + 4}, 2.0f, Fade(C_CYAN, 0.55f));
+        }
+        int qPx = big ? 92 : 44;
+        float pulse = 0.85f + 0.15f * sinf(gt * 4.5f);
+        TxtO("?", center.x, center.y - qPx * 0.50f, qPx, ColorLerp(C_AMBER, C_WHITE, 0.35f * pulse), C_INK);
+        return;
+    }
     if (ArenaLocked(i))
     {
         DrawStatic(dst, big ? 8 : 5, (unsigned)i + 1);
@@ -4382,6 +4519,54 @@ static void DrawArenaPic(int i, Rectangle dst, bool big)
     ArenaLayer(i, AL_CHAO, dst, WHITE);
     ArenaLayer(i, AL_FRENTE, dst, WHITE);
 }
+
+/* Desenha o nome da arena centralizado dentro da faixa inferior do cartao, quebrando em
+   2 linhas ou reduzindo a fonte quando necessario para nunca ultrapassar as bordas. */
+static void DrawArenaCardTitle(const char *nm, Rectangle c, Rectangle p, Color col)
+{
+    float maxW = c.width - 16.0f;
+    float cx = c.x + c.width * 0.5f;
+    float zoneY = p.y + p.height;
+    float zoneH = (c.y + c.height) - zoneY;
+
+    for (int px = 18; px >= 16; px--)
+    {
+        if (TxtW(nm, px) <= maxW)
+        {
+            TxtC(nm, cx, zoneY + (zoneH - px) * 0.5f, px, col);
+            return;
+        }
+    }
+
+    int len = (int)strlen(nm), split = -1, bestDist = len;
+    for (int i = 1; i < len - 1; i++)
+    {
+        if (nm[i] == ' ')
+        {
+            int d = abs(i - len / 2);
+            if (d < bestDist) { bestDist = d; split = i; }
+        }
+    }
+
+    if (split > 0 && split < 63)
+    {
+        char l1[64], l2[64];
+        memcpy(l1, nm, (size_t)split);
+        l1[split] = '\0';
+        snprintf(l2, sizeof l2, "%s", nm + split + 1);
+        int px = 14;
+        while (px > 10 && (TxtW(l1, px) > maxW || TxtW(l2, px) > maxW)) px--;
+        float step = (float)px;
+        float y1 = zoneY + (zoneH - (step + px)) * 0.5f;
+        TxtC(l1, cx, y1, px, col);
+        TxtC(l2, cx, y1 + step, px, col);
+        return;
+    }
+
+    int px = 15;
+    while (px > 10 && TxtW(nm, px) > maxW) px--;
+    TxtC(nm, cx, zoneY + (zoneH - px) * 0.5f, px, col);
+}
 static void DrawArenaSelect(void)
 {
     const ArenaDef *d = &ARENAS[arSel];
@@ -4397,9 +4582,9 @@ static void DrawArenaSelect(void)
     if (!locked)
     {
         float k = pv.width / SCREEN_WIDTH, gy = pv.y + IAF_GROUND_Y * k;
-        CharId a = (CharId)playerCh, b = (CharId)(versusMode ? selP[1] : ladder[ladderPos]);
+        CharId a = (CharId)playerCh, b = (CharId)ladder[ladderPos];
         DrawCharacterBig(a, pv.x + 420 * k, gy, 1, 0.5f, ST_IDLE);
-        g_altPal = versusMode && a == b;
+        g_altPal = (a == b);
         DrawCharacterBig(b, pv.x + 860 * k, gy, -1, 0.5f, ST_IDLE);
         g_altPal = false;
     }
@@ -4424,7 +4609,7 @@ static void DrawArenaSelect(void)
         if (lk) DrawRectangleRec(p, Fade(C_INK, 0.25f));
         DrawRectangleRoundedLinesEx(c, 0.06f, 6, on ? 3 : 1.5f, on ? (lk ? C_RED : C_CYAN) : Fade(lk ? C_DIM : C_CYAN, 0.45f));
         const char *nm = lk ? "EM BREVE" : ARENAS[i].name;
-        TxtC(nm, c.x + c.width / 2, c.y + c.height - 32, 18, lk ? C_DIM : (on ? C_WHITE : Fade(C_WHITE, 0.75f)));
+        DrawArenaCardTitle(nm, c, p, lk ? C_DIM : (on ? C_WHITE : Fade(C_WHITE, 0.75f)));
         if (on)
         { /* cursor: quem pode mexer nele */
             const char *tag = "1P";
@@ -4446,8 +4631,10 @@ static void ArenaConfirm(void)
 }
 static void ArenaBack(void)
 {
+    soloReadyT = 0;
     if (versusMode) { readyP[0] = readyP[1] = false; readyT = 0; }
-    if (trainMode) { trainPick = 1; sel = trainDummy; } /* volta ao boneco */
+    else if (trainMode) { trainPick = 1; sel = trainDummy; } /* volta ao boneco */
+    else { soloPick = 1; sel = cpuCh; }                      /* volta a escolha da CPU */
     iafScreen = SC_SELECT;
     scT = 0;
 }
@@ -4485,8 +4672,19 @@ static void UpdateArenaSelect(float dt)
     if (ok) ArenaConfirm();
 }
 static void DrawSelect(void) { DrawSelectScreen(false); }
-static void UpdateSelect(void)
+static void UpdateSelect(float dt)
 {
+    if (soloReadyT > 0)
+    {
+        soloReadyT += dt;
+        if (soloReadyT > 0.55f)
+        {
+            soloReadyT = 0;
+            OpenArenaSelect();
+        }
+        return;
+    }
+
     if (NavLeftP()) sel = SelMove(sel, -1, 0);
     if (NavRightP()) sel = SelMove(sel, 1, 0);
     if (NavUpP()) sel = SelMove(sel, 0, -1);
@@ -4511,22 +4709,59 @@ static void UpdateSelect(void)
             }
         }
     }
+    if (CheckCollisionPointRec(m, RandomSlotRect()))
+    {
+        if (moved && sel != SEL_RANDOM) { sel = SEL_RANDOM; PlaySfx(SFX_MOVE); }
+        if (scT > 0.15f && IsMouseButtonPressed(MOUSE_BUTTON_LEFT)) { sel = SEL_RANDOM; ok = true; }
+    }
 
     if (ok)
     {
-        if (sel < 0 || sel >= CH_N) { PlaySfx(SFX_DENY); return; }
-        if (trainMode && trainPick == 0) { playerCh = sel; trainPick = 1; sel = trainDummy; PlaySfx(SFX_OK); return; } /* agora o boneco */
+        bool isRand = (sel == SEL_RANDOM);
+        if (!isRand && (sel < 0 || sel >= CH_N)) { PlaySfx(SFX_DENY); return; }
+        int picked = isRand ? GetRandomValue(0, CH_N - 1) : sel;
+
         if (trainMode)
         {
-            trainDummy = sel; sel = playerCh;
-            ladderPos = 0; ladder[0] = trainDummy;
-            trainLast = trainComboDmg = 0; trainComboHits = 0; trainLastBlocked = false;
-            OpenArenaSelect();
+            if (trainPick == 0)
+            { /* 1o passo: define o 1P; se foi aleatorio, mantem o cursor em ALEATÓRIO para o 2o clique */
+                playerCh = picked;
+                trainPick = 1;
+                sel = isRand ? SEL_RANDOM : trainDummy;
+                PlaySfx(SFX_OK);
+                return;
+            }
+            /* 2o passo: define o BONECO e exibe na tela antes de abrir a arena */
+            trainDummy = picked;
+            sel = trainDummy;
+            ladderPos = 0;
+            ladder[0] = trainDummy;
+            trainLast = trainComboDmg = 0;
+            trainComboHits = 0;
+            trainLastBlocked = false;
+            soloReadyT = 0.001f;
+            PlaySfx(SFX_OK);
             return;
         }
-        playerCh = sel;
-        BuildLadder();
-        OpenArenaSelect();
+
+        if (soloPick == 0)
+        { /* 1o passo (1 x CPU): define o 1P; se foi aleatorio, mantem o cursor em ALEATÓRIO para escolher a CPU */
+            playerCh = picked;
+            int lad[3];
+            LadderFor(playerCh, lad);
+            cpuCh = lad[0];
+            soloPick = 1;
+            sel = isRand ? SEL_RANDOM : cpuCh;
+            PlaySfx(SFX_OK);
+            return;
+        }
+
+        /* 2o passo (1 x CPU): define a CPU e monta a escada */
+        cpuCh = picked;
+        sel = cpuCh;
+        BuildLadderWithFirst(playerCh, cpuCh);
+        soloReadyT = 0.001f;
+        PlaySfx(SFX_OK);
     }
 }
 static void DrawVersus(void)
@@ -4538,7 +4773,7 @@ static void DrawVersus(void)
     Tri((Vector2){SCREEN_WIDTH / 2.0f + 20, 0}, (Vector2){SCREEN_WIDTH / 2.0f + 60, SCREEN_HEIGHT}, (Vector2){SCREEN_WIDTH / 2.0f - 20, SCREEN_HEIGHT}, (Color){6, 8, 16, 255});
     float k = EaseOut(scT / 0.4f);
     DrawCharacterBig(a, 300 - (1 - k) * 300, 560, 1, 1.6f, ST_IDLE);
-    g_altPal = versusMode && a == b;
+    g_altPal = (a == b);
     DrawCharacterBig(b, SCREEN_WIDTH - 300 + (1 - k) * 300, 560, -1, 1.6f, ST_IDLE);
     g_altPal = false;
     TxtO(NAME[a], 300, 590, 44, CHCOL[a], C_INK);
@@ -5126,6 +5361,8 @@ static void UpdateMode(void)
         versusMode = modeSel == 1;
         trainMode = modeSel == 2;
         trainPick = 0;
+        soloPick = 0;
+        soloReadyT = 0;
         showBoxes = trainMode; /* no treino as caixas ja comecam ligadas */
         if (versusMode)
         {
@@ -5140,24 +5377,27 @@ static void UpdateMode(void)
     }
 }
 
-/* ------------------------------------------------------------------ 1 x 1: selecao simultanea */
+/* ------------------------------------------------------------------ 1 x 1: selecao de lutadores */
 static void DrawSelectVs(void) { DrawSelectScreen(true); }
 static void UpdateSelectVs(float dt)
 {
-    if (IsKeyPressed(KEY_ESCAPE) || (!readyP[0] && PadPressed(0, VB_BACK)) || (!readyP[1] && PadPressed(1, VB_BACK)))
+    if (IsKeyPressed(KEY_ESCAPE) || (!readyP[0] && !readyP[1] && (PadPressed(0, VB_BACK) || PadPressed(1, VB_BACK))))
     {
         iafScreen = SC_MODE;
         scT = 0;
         return;
     }
+
+    bool wasReady0 = readyP[0];
     Vector2 m = GetVirtualMouse();
     bool moved = (m.x != arMouseLast.x || m.y != arMouseLast.y);
     arMouseLast = m;
+    int targetP = !readyP[0] ? 0 : (!readyP[1] ? 1 : -1);
+
     for (int i = 0; i < SEL_GRID_SLOTS; i++)
     {
         if (CheckCollisionPointRec(m, GridCell(i)))
         {
-            int targetP = !readyP[0] ? 0 : (!readyP[1] ? 1 : -1);
             if (i < CH_N && targetP >= 0)
             {
                 if (moved && selP[targetP] != i) { selP[targetP] = i; PlaySfx(SFX_MOVE); }
@@ -5174,18 +5414,62 @@ static void UpdateSelectVs(float dt)
             }
         }
     }
-    for (int p = 0; p < 2; p++)
+    if (targetP >= 0 && CheckCollisionPointRec(m, RandomSlotRect()))
     {
-        if (!readyP[p])
+        if (moved && selP[targetP] != SEL_RANDOM) { selP[targetP] = SEL_RANDOM; PlaySfx(SFX_MOVE); }
+        if (scT > 0.15f && IsMouseButtonPressed(MOUSE_BUTTON_LEFT))
         {
-            if (PlayerNavP(p, PN_LEFT)) selP[p] = SelMove(selP[p], -1, 0);
-            if (PlayerNavP(p, PN_RIGHT)) selP[p] = SelMove(selP[p], 1, 0);
-            if (PlayerNavP(p, PN_UP)) selP[p] = SelMove(selP[p], 0, -1);
-            if (PlayerNavP(p, PN_DOWN)) selP[p] = SelMove(selP[p], 0, 1);
-            if (scT > 0.15f && PlayerNavP(p, PN_OK) && selP[p] >= 0 && selP[p] < CH_N) readyP[p] = true;
+            selP[targetP] = GetRandomValue(0, CH_N - 1);
+            readyP[targetP] = true;
+            if (targetP == 0 && !readyP[1]) selP[1] = SEL_RANDOM;
+            PlaySfx(SFX_OK);
         }
-        else if (PlayerNavP(p, PN_UNDO)) readyP[p] = false;
     }
+
+    /* P2: controle 2 / setas+numpad sempre funcionam; sem 2o controle, apos o 1P confirmar o controle 1/WASD tambem escolhe o 2P */
+    bool p1FallbackToP2 = wasReady0 && !padNow[1].on;
+    if (!readyP[1])
+    {
+        if (PlayerNavP(1, PN_LEFT) || (p1FallbackToP2 && PlayerNavP(0, PN_LEFT))) selP[1] = SelMove(selP[1], -1, 0);
+        if (PlayerNavP(1, PN_RIGHT) || (p1FallbackToP2 && PlayerNavP(0, PN_RIGHT))) selP[1] = SelMove(selP[1], 1, 0);
+        if (PlayerNavP(1, PN_UP) || (p1FallbackToP2 && PlayerNavP(0, PN_UP))) selP[1] = SelMove(selP[1], 0, -1);
+        if (PlayerNavP(1, PN_DOWN) || (p1FallbackToP2 && PlayerNavP(0, PN_DOWN))) selP[1] = SelMove(selP[1], 0, 1);
+        bool p2Ok = IsKeyPressed(KEY_KP_1) || IsKeyPressed(KEY_KP_ENTER) || PadPressed(1, VB_JUMP) || PadPressed(1, VB_START) ||
+                    (wasReady0 && (IsKeyPressed(KEY_ENTER) && !AltDown())) || (p1FallbackToP2 && PlayerNavP(0, PN_OK));
+        if (scT > 0.15f && p2Ok)
+        {
+            if (selP[1] == SEL_RANDOM) { selP[1] = GetRandomValue(0, CH_N - 1); readyP[1] = true; }
+            else if (selP[1] >= 0 && selP[1] < CH_N) readyP[1] = true;
+        }
+    }
+    else if (PlayerNavP(1, PN_UNDO) || (p1FallbackToP2 && PlayerNavP(0, PN_UNDO)))
+    {
+        readyP[1] = false;
+    }
+
+    if (!wasReady0 && !readyP[0])
+    {
+        if (PlayerNavP(0, PN_LEFT)) selP[0] = SelMove(selP[0], -1, 0);
+        if (PlayerNavP(0, PN_RIGHT)) selP[0] = SelMove(selP[0], 1, 0);
+        if (PlayerNavP(0, PN_UP)) selP[0] = SelMove(selP[0], 0, -1);
+        if (PlayerNavP(0, PN_DOWN)) selP[0] = SelMove(selP[0], 0, 1);
+        bool p1Ok = PlayerNavP(0, PN_OK) || (IsKeyPressed(KEY_ENTER) && !AltDown());
+        if (scT > 0.15f && p1Ok)
+        {
+            if (selP[0] == SEL_RANDOM)
+            {
+                selP[0] = GetRandomValue(0, CH_N - 1);
+                readyP[0] = true;
+                if (!padNow[1].on && !readyP[1]) selP[1] = SEL_RANDOM;
+            }
+            else if (selP[0] >= 0 && selP[0] < CH_N) readyP[0] = true;
+        }
+    }
+    else if (wasReady0 && !readyP[1] && PlayerNavP(0, PN_UNDO))
+    {
+        readyP[0] = false;
+    }
+
     if (readyP[0] && readyP[1])
     {
         readyT += dt;
@@ -5463,6 +5747,8 @@ void IafUpdate(GameState *game, float dt)
     /* estado antes da atualizacao: mudou cursor = som de mover; mudou de tela/confirmou = som de confirmar */
     IafScreen pScr = iafScreen;
     int pSel = sel, pMode = modeSel, pS0 = selP[0], pS1 = selP[1], pRes = resSel, pAr = arSel;
+    int pTP = trainPick, pSP = soloPick;
+    float pSR = soloReadyT;
     bool pR0 = readyP[0], pR1 = readyP[1];
     switch (iafScreen)
     {
@@ -5477,11 +5763,13 @@ void IafUpdate(GameState *game, float dt)
         if (versusMode) { UpdateSelectVs(dt); break; }
         if (NavBackP())
         {
-            if (trainMode && trainPick == 1) { trainPick = 0; sel = playerCh; } /* volta a escolher o lutador */
+            if (soloReadyT > 0) { soloReadyT = 0; }
+            else if (trainMode && trainPick == 1) { trainPick = 0; sel = playerCh; } /* volta a escolher o 1P */
+            else if (!trainMode && soloPick == 1) { soloPick = 0; sel = playerCh; } /* volta a escolher o 1P */
             else { iafScreen = SC_MODE; scT = 0; }
             break;
         }
-        UpdateSelect();
+        UpdateSelect(dt);
         break;
     case SC_ARENA:
         if (ControlsKeyP()) { OpenControls(); break; }
@@ -5500,13 +5788,14 @@ void IafUpdate(GameState *game, float dt)
             iafScreen = SC_VERSUS;
             scT = 0;
         }
-        else if (NavBackP()) { iafScreen = SC_SELECT; scT = 0; }
+        else if (NavBackP()) { soloPick = 0; soloReadyT = 0; iafScreen = SC_SELECT; scT = 0; }
         break;
     case SC_FINAL:
-        if (scT > 0.6f && (NavOkP() || NavBackP())) { iafScreen = SC_SELECT; scT = 0; }
+        if (scT > 0.6f && (NavOkP() || NavBackP())) { soloPick = 0; soloReadyT = 0; iafScreen = SC_SELECT; scT = 0; }
         break;
     }
-    if (sel != pSel || modeSel != pMode || selP[0] != pS0 || selP[1] != pS1 || resSel != pRes || arSel != pAr) PlaySfx(SFX_MOVE);
+    bool justLocked = (readyP[0] && !pR0) || (readyP[1] && !pR1) || (trainPick != pTP) || (soloPick != pSP) || (soloReadyT > 0 && pSR <= 0);
+    if (!justLocked && (sel != pSel || modeSel != pMode || selP[0] != pS0 || selP[1] != pS1 || resSel != pRes || arSel != pAr)) PlaySfx(SFX_MOVE);
     if ((iafScreen != pScr && pScr != SC_FIGHT && iafScreen != SC_FIGHT) || (readyP[0] && !pR0) || (readyP[1] && !pR1)) PlaySfx(SFX_OK);
     UpdateIafMusic(iafScreen == SC_FIGHT ? 1 : 0);
 }
