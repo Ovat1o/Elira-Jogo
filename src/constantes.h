@@ -127,6 +127,12 @@
 #define IAF_CLAUDE_ATLAS    "assets/sprites/iafight/claude_luta.png" /* atlas de luta do Claude */
 #define IAF_CODEX_ATLAS     "assets/sprites/iafight/codex_luta.png"  /* atlas de luta do Codex */
 #define IAF_ANTI_ATLAS      "assets/sprites/iafight/antigravity_luta.png" /* atlas de luta do Antigravity */
+#define IAF_IARA_ATLAS      "assets/sprites/iafight/iara_luta.png" /* atlas de luta da Iara (personagem de colab) */
+#ifndef IAF_IARA_ESCALA
+#define IAF_IARA_ESCALA     1.25f    /* tamanho da Iara na luta (1 = guarda de 210 px). Caixas, alcances e a onda acompanham.
+                                        Para a arte continuar nitida, gere o atlas na mesma escala: iara_tool/montar.py <worktree> <escala> */
+#endif
+#define IAF_AURA67_ATLAS    "assets/sprites/iafight/aura67_luta.png" /* atlas de luta da AURA_67 (personagem de colab), ja na escala da luta */
 #define IAF_GROUND_Y        622.0f   /* linha do chao da arena (pes dos lutadores) */
 #define IAF_WALL_L          70.0f    /* limite esquerdo da arena */
 #define IAF_WALL_R          1210.0f  /* limite direito da arena */
@@ -145,21 +151,16 @@
 #define IAF_ROUND_TIME      60.0f    /* cronometro do round (s); curto para o ritmo de evento */
 #define IAF_INTRO_ROUND     0.7f     /* abertura: "ROUND n" fica ate este instante (s) */
 #define IAF_INTRO_TOTAL     1.2f     /* abertura: "LUTEM!" ate a luta comecar (s) */
-#define IAF_SHOT_STARTUP    0.20f    /* tiro de plasma da Elira: preparo (s) */
-#define IAF_SHOT_ACTIVE     0.06f    /* disparo (s) */
-#define IAF_SHOT_RECOVERY   0.28f    /* recuperacao (s) */
-#define IAF_SHOT_COOLDOWN   0.45f    /* recarga entre tiros (s); so 1 tiro dela na tela */
 #define IAF_MAX_PROJ        12       /* projeteis simultaneos */
 #define IAF_MAX_PARTS       700      /* particulas/textos de efeito simultaneos */
 #define IAF_LUNGE_LIGHT     10.0f    /* avanco do corpo no golpe fraco (px) */
 #define IAF_LUNGE_HEAVY     18.0f    /* avanco do corpo no golpe forte (px) */
 #define IAF_LUNGE_LOW       14.0f    /* avanco do corpo na rasteira (px) */
-#define IAF_HITSTOP_LIGHT   0.05f    /* pausa de impacto: golpe fraco, baixo, aereo e tiro (s) */
+#define IAF_HITSTOP_LIGHT   0.05f    /* pausa de impacto: golpe fraco, baixo e aereo (s) */
 #define IAF_HITSTOP_HEAVY   0.09f    /* pausa de impacto: golpe forte (s) */
 #define IAF_HITSTOP_SPECIAL 0.14f    /* pausa de impacto: especial (s) */
 #define IAF_HIT_SHAKE_PX    3.0f     /* tremor de quem apanha durante a pausa (px) */
 #define IAF_ACTIVE_VISUAL   0.10f    /* o quadro de impacto fica pelo menos isto na tela (s) */
-#define IAF_SHOT_RECOIL     3.0f     /* recuo da Elira ao disparar o tiro de plasma (px) */
 #define IAF_MUZZLE_Y        108.0f   /* altura da boca do canhao da Elira acima dos pes (px) */
 #define IAF_MUZZLE_X        125.0f   /* boca do canhao da Elira a frente da ancora (px) */
 #define IAF_ELIRA_PIX       2.5f     /* px de tela por pixel da arte da Elira (multiplo de 0,5) */
