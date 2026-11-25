@@ -70,6 +70,7 @@ static bool ValidateRequiredAssets(void)
         "assets/sprites/iafight/arena_vice2026.png",
         IAF_AUDIO_DIR "musica_menu.ogg",
         IAF_AUDIO_DIR "musica_vice2026.ogg",
+        IAF_AUDIO_DIR "musica_marco_zero.ogg",
         "assets/sprites/iafight/arena_cesar.png",
         "assets/sprites/iafight/arena_cesar_tiradentes.png",
         "assets/sprites/iafight/arena_china.png",
