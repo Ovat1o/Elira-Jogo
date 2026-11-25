@@ -160,7 +160,7 @@ static const Atk ATK[CH_N][AT_SPECIAL] = {
     /* Elira (guarda de 214 px, como a LIA): alcances medidos no atlas HD */
     [CH_ELIRA] = {{0}, {0.06f, 0.08f, 0.15f, 34, 125, 160, 55, 0.20f, 170, 0}, /* jab com a mao livre (punho ate 130; a estrela nao conta) */
                   {0.14f, 0.12f, 0.26f, 95, 125, 205, 105, 0.45f, 300, 0}, /* chute alto giratorio (HD): pe e arco ciano ate 125 px, de 100 a 205 px de altura */
-                  {0.08f, 0.09f, 0.20f, 42, 150, 55, 53, 0.30f, 150, 1}, /* rasteira: a perna esticada rente ao chao (ate 154) */
+                  {0.08f, 0.09f, 0.20f, 42, 135, 52, 50, 0.30f, 150, 1}, /* rasteira: a perna esticada rente ao chao (ate 137, na escala do agachar) */
                   {0.05f, 0.16f, 0.10f, 48, 155, 66, 50, 0.32f, 160, 2}, /* aereo (chute pulando HD): pe esticado dos quadros 4-5 ate 164 px a frente, de 18 a 66 px acima da linha */
                   {0.20f, 0.10f, 0.30f, 90, 150, 150, 80, 0.45f, 330, 0},  /* soco longo: canhao esticado e a onda de choque (ate 157) */
                   {0.08f, 0.14f, 0.32f, 80, 100, 330, 270, 0.50f, 120, 0}}, /* uppercut: canhao subindo em arco (ate 371 de altura) */
