@@ -433,11 +433,6 @@ static void HitSparks(Vector2 p, Color c, int n, float spd)
     }
     AddPart(p, (Vector2){0, 0}, 0.25f, 40, c, 3);
 }
-/* clarao na boca do canhao (kind 7): nucleo branco, raios curtos e anel */
-static void MuzzleFlash(Vector2 p, float size)
-{
-    AddPart(p, (Vector2){0, 0}, 0.10f, size, C_CYAN, 7);
-}
 /* acerto: estrela de pontas no ponto de contato (kind 4; v.x guarda o giro) */
 static void ImpactSpark(Vector2 p, Color c, float size)
 {
@@ -2222,7 +2217,7 @@ static void ApplyHit(Fighter *att, Fighter *def, float dmg, float stun, float pu
 #define EL_BEAM_MX 140.0f   /* boca do raio: px a frente dos pes (quadros 6-8 do especial) */
 #define EL_BEAM_MY 137.0f   /* boca do raio: px acima dos pes */
 #define EL_BEAM_H 114.0f    /* grossura do raio (da cabeca a cintura) */
-typedef struct { bool on; float x0, x1, y, t; int face, hits; bool blocked; } Beam;
+typedef struct { bool on; float x0, x1, y, t; int face, hits; bool blocked, endHidden; } Beam; /* endHidden: o impacto esta perto da ponta */
 static Beam beam[2];
 static void UpdateBeam(Fighter *a, Fighter *o, float dt)
 {
@@ -2235,6 +2230,7 @@ static void UpdateBeam(Fighter *a, Fighter *o, float dt)
     b->blocked = false;
     Rectangle ho = Hurt(o);
     bool inLine = (o->x - a->x) * a->face > 0 && ho.y < b->y + EL_BEAM_H / 2 && ho.y + ho.height > b->y - EL_BEAM_H / 2;
+    b->endHidden = inLine && fabsf(o->x - b->x1) < 260; /* um so efeito na ponta: o impacto, sem a estrela */
     if (inLine && PrismActive(o) && (a->x - o->x) * o->face > 0)
     { /* prisma: o raio para nele, sem acertar */
         b->x1 = o->x - a->face * (BodyHalf(o) + 10);
@@ -2260,22 +2256,46 @@ static void UpdateBeam(Fighter *a, Fighter *o, float dt)
     AddImpactBeam(at, a->face);
     (void)dt;
 }
-/* meio do raio: a textura do meio repetida de x0 a x1, rolando para a frente */
-static void DrawBeamStrip(float x0, float x1, float y, int face, float scroll, Color tint)
+/* desenho do raio, continuo e sem emendas: a fatia vertical do raio_meio (sem o clarao) esticada da boca do canhao
+   ate a ponta, na altura e no centro do comeco do raio do quadro; o comeco entra em degrade por cima do quadro e um
+   clarao cobre a boca do canhao; faiscas e faixas de brilho correm por cima; espessura e brilho pulsam de leve */
+static const float EL_BEAM_TH[3] = {113, 122, 119}; /* grossura do comeco do raio nos quadros de disparo 6-8 */
+static float Hash01(int i) { unsigned h = (unsigned)i * 2654435761u; h ^= h >> 13; h *= 0x5bd1e995u; h ^= h >> 15; return (h & 0xffff) / 65535.0f; }
+static void DrawBeamBody(float x0, float x1, float y, float th, int face, float t, float alpha)
 {
     const EFrame *e = &EF2[E2_FIRST[E2_BEAM_MID]];
-    float tw = e->w, th = e->h, len = fabsf(x1 - x0);
-    float off = fmodf(scroll, tw);
-    float d = 0;
-    while (d < len)
-    { /* pedaco que comeca em u (coluna da textura) */
-        float u = fmodf(off + d, tw), w = fminf(tw - u, len - d);
-        Rectangle src = {e->x + u, e->y, w, th};
-        float sx = face > 0 ? x0 + d : x0 - d - w;
-        if (face < 0) { src.x = e->x + tw - u - w; src.width = -w; }
-        DrawTexturePro(texElira2, src, (Rectangle){roundf(sx), roundf(y - th / 2), w, th}, (Vector2){0, 0}, 0, tint);
-        d += w;
+    Rectangle src = {e->x + 2, e->y, e->w - 4, e->h}; /* colunas do meio da fatia */
+    float len = fabsf(x1 - x0), lft = fminf(x0, x1);
+    const float FADE = 70; /* comeco em degrade suave (coluna a coluna) por cima do raio do quadro */
+    for (int d = 0; d < (int)FADE; d++)
+    {
+        float u = (d + 0.5f) / FADE, k = u * u * (3 - 2 * u); /* smoothstep */
+        float sx = face > 0 ? x0 + d : x0 - d - 1;
+        DrawTexturePro(texElira2, src, (Rectangle){sx, y - th / 2, 1, th}, (Vector2){0, 0}, 0, Fade(WHITE, alpha * k));
     }
+    float bx = face > 0 ? x0 + FADE : lft;
+    DrawTexturePro(texElira2, src, (Rectangle){bx, y - th / 2, fmaxf(len - FADE, 0), th}, (Vector2){0, 0}, 0, Fade(WHITE, alpha));
+    BeginBlendMode(BLEND_ADDITIVE);
+    /* faixas de brilho correndo para a frente */
+    for (int k = 0; k < 3; k++)
+    {
+        float c = fmodf(t * 1500 + k * 420, len + 300) - 150, w = 120;
+        float cx = face > 0 ? x0 + c : x0 - c;
+        Color cw = Fade(WHITE, 0.28f * alpha), c0 = Fade(WHITE, 0);
+        DrawRectangleGradientH((int)(cx - w), (int)(y - th * 0.30f), (int)w, (int)(th * 0.60f), face > 0 ? c0 : cw, face > 0 ? cw : c0);
+        DrawRectangleGradientH((int)cx, (int)(y - th * 0.30f), (int)w, (int)(th * 0.60f), face > 0 ? cw : c0, face > 0 ? c0 : cw);
+    }
+    /* faiscas: pontos brancos e ciano que correm dentro do raio */
+    for (int i = 0; i < 46; i++)
+    {
+        float sp = 700 + Hash01(i * 3) * 900, d = fmodf(Hash01(i) * len + t * sp, len);
+        float sy = y + (Hash01(i * 7 + 1) - 0.5f) * th * 0.86f, sz = 1.5f + Hash01(i * 5) * 2.5f;
+        float sx = face > 0 ? x0 + d : x0 - d;
+        Color c = Hash01(i * 11) < 0.5f ? Fade(WHITE, 0.85f * alpha) : Fade(C_CYAN, 0.9f * alpha);
+        DrawRectangleRec((Rectangle){sx - sz, sy - 0.5f, sz * 2, 1.5f}, c);
+        DrawRectangleRec((Rectangle){sx - 0.5f, sy - sz, 1.5f, sz * 2}, c);
+    }
+    EndBlendMode();
 }
 static void DrawBeams(void)
 {
@@ -2290,20 +2310,32 @@ static void DrawBeams(void)
             DrawRectangleRec((Rectangle){fminf(b->x0, b->x1), b->y - EL_BEAM_H / 2, fabsf(b->x1 - b->x0), EL_BEAM_H}, Fade(C_CYAN, 0.7f));
             continue;
         }
-        float a = Clamp(b->t / 0.05f, 0.0f, 1.0f) * Clamp((SP_AC[CH_ELIRA] - b->t) / 0.08f, 0.0f, 1.0f);
-        Color tint = Fade(WHITE, a);
-        const EFrame *ef = &EF2[E2_FIRST[E2_BEAM_END] + ((int)(b->t * 14) % E2_COUNT[E2_BEAM_END])];
-        float endBody = ef->w * 0.66f; /* a estrela da ponta fica a ~2/3 do quadro */
-        float xe = b->x1 - b->face * endBody; /* comeco do quadro da ponta */
-        if (b->blocked) xe = b->x1; /* parado no prisma: so o meio, ate o prisma */
-        if ((xe - b->x0) * b->face > 0) DrawBeamStrip(b->x0 - b->face * 6, xe + b->face * 2, b->y, b->face, b->t * 900, tint);
-        if (!b->blocked)
+        float alpha = /* entra cheio (o comeco do quadro ja aparece cheio) e some no fim */ Clamp((SP_AC[CH_ELIRA] - b->t) / 0.08f, 0.0f, 1.0f);
+        /* boca e grossura do comeco do raio no quadro de disparo que esta na tela (5-7) */
+        float yo, mx = b->x0, my = b->y, th = EL_BEAM_H;
+        int fi = EliraFrameIdx(f, &yo), q = fi - EF2_BASE - E2_FIRST[E2_SPECIAL];
+        if (fi >= EF2_BASE && q >= 5 && q <= 7)
         {
-            Rectangle src = {ef->x, ef->y, ef->w, ef->h};
-            float left = b->face > 0 ? xe : xe - ef->w;
-            if (b->face < 0) src.width = -src.width;
-            DrawTexturePro(texElira2, src, (Rectangle){roundf(left), roundf(b->y - ef->ay), ef->w, ef->h}, (Vector2){0, 0}, 0, tint);
+            const EFrame *e = &EF2[fi - EF2_BASE];
+            mx = f->x + f->face * (e->mx - e->ax); my = f->y + yo - (e->ay - e->my); th = EL_BEAM_TH[q - 5];
         }
+        th *= 1.0f + 0.05f * sinf(b->t * 40); /* pulso de espessura */
+        float x0 = mx - f->face * 70; /* o comeco entra 70 px por cima do raio do quadro, em degrade */
+        DrawBeamBody(x0, b->x1, my, th, f->face, b->t, alpha);
+        if (!b->blocked && !b->endHidden)
+        { /* estrela da ponta, centrada na borda */
+            const EFrame *ef = &EF2[E2_FIRST[E2_BEAM_END] + ((int)(b->t * 14) % E2_COUNT[E2_BEAM_END])];
+            Rectangle src = {ef->x, ef->y, ef->w, ef->h};
+            float ax = f->face > 0 ? ef->ax : ef->w - ef->ax;
+            if (f->face < 0) src.width = -src.width;
+            DrawTexturePro(texElira2, src, (Rectangle){roundf(b->x1 - ax), roundf(my - ef->ay), ef->w, ef->h}, (Vector2){0, 0}, 0, Fade(WHITE, alpha));
+        }
+        /* clarao na boca do canhao: esconde a emenda, pulsando */
+        BeginBlendMode(BLEND_ADDITIVE);
+        float r = th * (0.55f + 0.08f * sinf(b->t * 55));
+        DrawCircleGradient((Vector2){mx, my}, r, Fade(WHITE, 0.75f * alpha), Fade(C_CYAN, 0));
+        DrawCircleGradient((Vector2){mx, my}, r * 0.45f, Fade(WHITE, 0.9f * alpha), Fade(WHITE, 0));
+        EndBlendMode();
         if (showBoxes) DrawRectangleLinesEx((Rectangle){fminf(b->x0, b->x1), b->y - EL_BEAM_H / 2, fabsf(b->x1 - b->x0), EL_BEAM_H}, 2, RED);
     }
 }
@@ -2334,13 +2366,13 @@ static void UpdateSpecial(Fighter *a, Fighter *o, float dt)
     switch (a->ch)
     {
     case CH_ELIRA:
-        if (t < st && t > st * 0.4f && (int)(t * 60) % 3 == 0) /* carga: particulas sugadas para a ponta do canhao */
+        if (t < st && t > st * 0.4f && (int)(t * 60) % 3 == 0) /* carga: particulas sugadas para a ponta do canhao (vida curta: somem no disparo) */
         {
             Vector2 m = {a->x + a->face * EL_BEAM_MX, a->y - EL_BEAM_MY};
             float an = Rand01() * 6.283f, r = 50 + Rand01() * 40;
-            AddPart((Vector2){m.x + cosf(an) * r, m.y + sinf(an) * r}, (Vector2){-cosf(an) * r * 3, -sinf(an) * r * 3}, 0.3f, 2 + Rand01() * 2, Rand01() < 0.7f ? C_CYAN : C_WHITE, 1);
+            AddPart((Vector2){m.x + cosf(an) * r, m.y + sinf(an) * r}, (Vector2){-cosf(an) * r * 6, -sinf(an) * r * 6}, 0.15f, 2 + Rand01() * 2, Rand01() < 0.7f ? C_CYAN : C_WHITE, 1);
         }
-        if (t >= st && !a->spawned) { a->spawned = true; beam[Idx(a)].hits = 0; PlaySfx(SFX_SP_FIRE); MuzzleFlash((Vector2){a->x + a->face * EL_BEAM_MX, a->y - EL_BEAM_MY}, 60); a->vx = -a->face * 60; AddText((Vector2){a->x, a->y - 260}, "RAJADA TEMPORAL!", C_CYAN, 22); }
+        if (t >= st && !a->spawned) { a->spawned = true; beam[Idx(a)].hits = 0; PlaySfx(SFX_SP_FIRE); a->vx = -a->face * 60; AddText((Vector2){a->x, a->y - 260}, "RAJADA TEMPORAL!", C_CYAN, 22); }
         if (t >= st && t < st + ac) UpdateBeam(a, o, dt);
         else beam[Idx(a)].on = false;
         break;

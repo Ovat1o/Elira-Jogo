@@ -7,7 +7,7 @@
  * da fileira, para o corpo subir). E2_PEAK = quadro de impacto de cada animacao.
  * Quadros HD (indice >= E2_HD_FIRST: a parada e o chute pulando, elira_hd_tool/montar_hd.py)
  * ficam em px de TELA (guarda de 240 px) e sao desenhados em 1x. Especial em raio, pedacos do raio
- * (meio que repete, ponta, impacto) e chute alto novo: elira_hd_tool/montar_raio.py. No disparo
+ * (fatia do meio esticada, estrela da ponta, impacto) e chute alto novo: elira_hd_tool/montar_raio.py. No disparo
  * (especial 5-7), (mx, my) = boca do raio no quadro.
  * Incluido apenas por iafight.c, depois de iafight_elira.h.
  * ============================================================================= */
@@ -127,17 +127,17 @@ static const EFrame EF2[123] = {
     {997, 1070, 194, 239, 91.5f, 239.0f, -1.0f, -1.0f}, /* IDLE */
     {1193, 1070, 196, 242, 92.9f, 242.0f, -1.0f, -1.0f}, /* IDLE */
     {1391, 1070, 196, 239, 94.1f, 239.0f, -1.0f, -1.0f}, /* IDLE */
-    {1589, 1070, 382, 113, 0.0f, 56.5f, -1.0f, -1.0f}, /* BEAM_MID */
-    {1, 1319, 394, 127, 0.0f, 59.5f, -1.0f, -1.0f}, /* BEAM_END */
-    {397, 1319, 401, 127, 0.0f, 59.5f, -1.0f, -1.0f}, /* BEAM_END */
-    {800, 1319, 397, 132, 0.0f, 64.3f, -1.0f, -1.0f}, /* BEAM_END */
-    {1199, 1319, 369, 131, 0.0f, 64.2f, -1.0f, -1.0f}, /* BEAM_END */
-    {1570, 1319, 66, 71, 27.8f, 43.1f, -1.0f, -1.0f}, /* BEAM_HIT */
-    {1638, 1319, 128, 121, 69.5f, 66.2f, -1.0f, -1.0f}, /* BEAM_HIT */
-    {1768, 1319, 196, 181, 105.1f, 91.7f, -1.0f, -1.0f}, /* BEAM_HIT */
-    {1, 1502, 153, 145, 72.0f, 81.0f, -1.0f, -1.0f}, /* BEAM_HIT */
-    {156, 1502, 130, 125, 59.6f, 70.5f, -1.0f, -1.0f}, /* BEAM_HIT */
-    {288, 1502, 107, 84, 57.5f, 34.9f, -1.0f, -1.0f}, /* BEAM_HIT */
+    {1589, 1070, 8, 113, 0.0f, 56.5f, -1.0f, -1.0f}, /* BEAM_MID */
+    {1599, 1070, 197, 127, 63.0f, 59.5f, -1.0f, -1.0f}, /* BEAM_END */
+    {1798, 1070, 201, 127, 64.7f, 59.5f, -1.0f, -1.0f}, /* BEAM_END */
+    {1, 1319, 199, 132, 64.0f, 64.3f, -1.0f, -1.0f}, /* BEAM_END */
+    {202, 1319, 185, 131, 59.5f, 64.2f, -1.0f, -1.0f}, /* BEAM_END */
+    {389, 1319, 66, 71, 27.8f, 43.1f, -1.0f, -1.0f}, /* BEAM_HIT */
+    {457, 1319, 128, 121, 69.5f, 66.2f, -1.0f, -1.0f}, /* BEAM_HIT */
+    {587, 1319, 196, 181, 105.1f, 91.7f, -1.0f, -1.0f}, /* BEAM_HIT */
+    {785, 1319, 153, 145, 72.0f, 81.0f, -1.0f, -1.0f}, /* BEAM_HIT */
+    {940, 1319, 130, 125, 59.6f, 70.5f, -1.0f, -1.0f}, /* BEAM_HIT */
+    {1072, 1319, 107, 84, 57.5f, 34.9f, -1.0f, -1.0f}, /* BEAM_HIT */
 };
 enum { E2_PUNCH, E2_KICK, E2_PUNCH_HEAVY, E2_UPPER, E2_AIR, E2_SWEEP, E2_CROUCH, E2_HIT_CROUCH, E2_DEF, E2_DEFEAT, E2_WIN, E2_SPECIAL, E2_HIT, E2_KO, E2_GETUP, E2_DASH, E2_IDLE, E2_BEAM_MID, E2_BEAM_END, E2_BEAM_HIT, E2_N };
 static const int E2_FIRST[E2_N] = {0, 81, 5, 12, 88, 20, 27, 31, 35, 40, 46, 94, 54, 60, 68, 75, 104, 112, 113, 117};
