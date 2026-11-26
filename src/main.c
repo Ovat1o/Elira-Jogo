@@ -118,6 +118,11 @@ int main(int argc, char **argv)
     SetExitKey(KEY_NULL);
     InitAudioDevice();
 
+#if defined(PLATFORM_WEB)
+    /* Recupera o ranking salvo no navegador antes de qualquer leitura. */
+    WebStorageInit();
+#endif
+
     /* Localiza, valida e calibra a fonte configurada em constantes.h (GAME_FONT_FILE) */
     GameFontAvailable();
 

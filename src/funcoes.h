@@ -431,6 +431,9 @@ const char *FormatRunTime(double seconds);
 /* UH19 - Ranking (arquivo TXT: Nome | Pontuacao | MM:SS - DD/MM/AAAA HH:MM) */
 int CalculateScore(const GameState *game);
 bool SaveRankingEntry(const char *name, int score, int seconds, const char *ending);
+#if defined(PLATFORM_WEB)
+void WebStorageInit(void);   /* monta a pasta do ranking no IndexedDB do navegador */
+#endif
 int LoadRanking(void);
 const RankingEntry *GetRankingEntries(int *count);
 void FinalizeRun(GameState *game);

@@ -131,7 +131,7 @@ WEB_SHELL       := web/shell.html
 WEB_FLAGS       := -std=c99 -Os -Wall -DPLATFORM_WEB \
                    -sUSE_GLFW=3 -sASYNCIFY -sALLOW_MEMORY_GROWTH=1 \
                    -sINITIAL_MEMORY=268435456 -sSTACK_SIZE=1048576 \
-                   -sFORCE_FILESYSTEM=1
+                   -sFORCE_FILESYSTEM=1 -lidbfs.js
 
 web: $(WEB_OUT_DIR)/index.html
 
