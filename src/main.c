@@ -106,7 +106,13 @@ int main(int argc, char **argv)
         return assetsReady && ValidateRequiredAssets() ? 0 : 1;
     }
 
+#if defined(PLATFORM_WEB)
+    /* No navegador o canvas acompanha o tamanho da aba; o jogo continua
+       desenhado em 1280x720 e e escalonado com faixas pretas (ver passo 2). */
+    SetConfigFlags(FLAG_MSAA_4X_HINT | FLAG_VSYNC_HINT | FLAG_WINDOW_RESIZABLE);
+#else
     SetConfigFlags(FLAG_MSAA_4X_HINT | FLAG_VSYNC_HINT);
+#endif
     InitWindow(SCREEN_WIDTH, SCREEN_HEIGHT, "ELIRA - Escape Run Temporal");
     /* ESC e tratado pela interface do jogo, nunca como encerramento imediato. */
     SetExitKey(KEY_NULL);

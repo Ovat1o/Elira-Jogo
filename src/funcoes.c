@@ -769,6 +769,10 @@ void ApplyResolution(int resIndex)
 {
     if (resIndex < 0 || resIndex >= SETTINGS_RES_COUNT) return;
     g_currentRes = resIndex;
+#if defined(PLATFORM_WEB)
+    /* No navegador quem define o tamanho e a aba: o canvas sempre ocupa a tela toda. */
+    return;
+#endif
     int w = g_resOptions[resIndex].width;
     int h = g_resOptions[resIndex].height;
 
