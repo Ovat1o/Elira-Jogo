@@ -3259,6 +3259,14 @@ static void EndScaled(void)
 
 static int invPauseSel = 0;
 
+/* No navegador o menu de pausa nao tem "FECHAR O JOGO" (ultimo botao). */
+#if defined(PLATFORM_WEB)
+#define INV_PAUSE_BTNS 2
+#else
+#define INV_PAUSE_BTNS 3
+#endif
+#define INV_PAUSE_PANEL_H (412.0f - (3 - INV_PAUSE_BTNS) * 72.0f)
+
 static Rectangle InvPauseBtn(int idx)
 {
     return (Rectangle){440.0f, 294.0f + idx * 72.0f, 400.0f, 56.0f};
@@ -3348,7 +3356,7 @@ static void DrawInvPauseMenu(void)
 {
     DrawRectangle(0, 0, VW, VH, Fade(C_BG, 0.78f));
 
-    Rectangle panel = {390.0f, 152.0f, 500.0f, 412.0f};
+    Rectangle panel = {390.0f, 152.0f, 500.0f, INV_PAUSE_PANEL_H};
     DrawRectangleRounded(panel, 0.05f, 10, (Color){10, 15, 30, 248});
     DrawRectangleRoundedLinesEx(panel, 0.05f, 10, 2.0f, C_CYAN);
 
@@ -3368,7 +3376,7 @@ static void DrawInvPauseMenu(void)
 
     static const char *labels[3] = {"CONTINUAR", "VOLTAR AO MENU INICIAL", "FECHAR O JOGO"};
     const Color cols[3] = {C_CYAN, C_AMBER, C_RED};
-    for (int i = 0; i < 3; i++)
+    for (int i = 0; i < INV_PAUSE_BTNS; i++)
     {
         DrawInvCyberButton(InvPauseBtn(i), labels[i], cols[i], invPauseSel == i);
     }
@@ -3578,12 +3586,12 @@ void InvUpdate(GameState *game, float dt)
     }
     if (gs == GS_PAUSE)
     {
-        if (IsKeyPressed(KEY_W) || IsKeyPressed(KEY_UP)) invPauseSel = (invPauseSel + 2) % 3;
-        if (IsKeyPressed(KEY_S) || IsKeyPressed(KEY_DOWN)) invPauseSel = (invPauseSel + 1) % 3;
+        if (IsKeyPressed(KEY_W) || IsKeyPressed(KEY_UP)) invPauseSel = (invPauseSel + INV_PAUSE_BTNS - 1) % INV_PAUSE_BTNS;
+        if (IsKeyPressed(KEY_S) || IsKeyPressed(KEY_DOWN)) invPauseSel = (invPauseSel + 1) % INV_PAUSE_BTNS;
 
         Vector2 vm = GetVirtualMouse();
         bool mouseClick = false;
-        for (int i = 0; i < 3; i++)
+        for (int i = 0; i < INV_PAUSE_BTNS; i++)
         {
             if (CheckCollisionPointRec(vm, InvPauseBtn(i)))
             {

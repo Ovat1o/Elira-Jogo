@@ -1,5 +1,7 @@
 ![ELIRA](assets/artes/banner.png)
 
+> **Jogue no navegador:** [elira-jogo.vercel.app](https://elira-jogo.vercel.app), sem instalar nada. Detalhes em [Versão web](#versão-web).
+
 ## **1. Visão Geral**
 
 ELIRA é um jogo de ficção científica que aborda o letramento digital e o uso crítico de Inteligência Artificial. A narrativa acompanha Elira, uma jovem que viaja pelas eras do espaço-tempo para desativar a IA tirânica A.R.1.3.L que domina o mundo. Em um futuro distante, a Inteligência Artificial deixou de ser apenas uma ferramenta e passou a mediar praticamente todas as experiências humanas. Filmes, músicas, notícias, lembranças, trabalhos, decisões profissionais e até conversas pessoais são produzidos ou orientados por sistemas de IA. 
@@ -265,7 +267,38 @@ Para quem busca ação rápida no estilo shooter top-down (`Tecla I` no menu pri
 
 ## **9. Download e execução**
 
-Para jogar, acesse a página de [Releases](https://github.com/Ovat1o/Elira-Jogo/releases/latest) e baixe o instalador correspondente à sua máquina:
+### Versão web
+
+A forma mais rápida de jogar é pelo navegador: **[https://elira-jogo.vercel.app](https://elira-jogo.vercel.app)**. Use um navegador atualizado no computador, com teclado e mouse (os testes foram feitos no Chrome).
+
+- O primeiro acesso baixa cerca de 52 MB (sprites, músicas e fontes); nas visitas seguintes o navegador reaproveita o que já baixou.
+- Clique uma vez na tela do jogo para liberar o som, porque o navegador bloqueia áudio até a primeira interação.
+- O ranking fica salvo no próprio navegador e continua lá depois de recarregar a página.
+- No navegador não existe o botão "Fechar o jogo" nos menus de pausa; basta fechar a aba.
+
+**Como foi feita.** O código C99 com raylib é o mesmo da versão de desktop, compilado para WebAssembly com o [Emscripten](https://emscripten.org):
+
+1. `make web` baixa a raylib 6.0 para `.deps/raylib-web/` na primeira vez e a compila para a web (`PLATFORM=PLATFORM_WEB`).
+2. O `emcc` compila o jogo com a opção `-sASYNCIFY`, que permite manter o loop `while` do `main.c` sem reescrevê-lo, e empacota a pasta `assets/` em `index.data`. A página que carrega o jogo vem de `web/shell.html`, com barra de progresso e o canvas ocupando a aba inteira.
+3. As diferenças do navegador ficam em blocos `#if defined(PLATFORM_WEB)`: o jogo continua desenhado em 1280x720 e é escalado para a janela, o botão de fechar some e o ranking é gravado no IndexedDB (sistema de arquivos IDBFS do Emscripten).
+4. A saída em `dist/web/` (`index.html`, `.js`, `.wasm` e `.data`) é um site estático publicado na [Vercel](https://vercel.com).
+
+Para gerar e testar localmente (requer Emscripten, por exemplo `brew install emscripten`):
+
+```bash
+make web        # gera dist/web/
+make run-web    # serve em http://localhost:8080
+```
+
+Para publicar uma nova versão (requer a Vercel CLI e acesso ao projeto):
+
+```bash
+make web && cd dist/web && vercel deploy --prod
+```
+
+### Instaladores
+
+Para jogar sem navegador, acesse a página de [Releases](https://github.com/Ovat1o/Elira-Jogo/releases/latest) e baixe o instalador correspondente à sua máquina:
 
 | Sistema | Instalador |
 | --- | --- |
@@ -375,6 +408,8 @@ Este guia parte de uma máquina sem ferramentas de desenvolvimento instaladas. N
 | `make` | Compila o jogo. |
 | `make run` | Compila, se necessário, e executa o jogo. |
 | `make clean` | Remove o executável e os arquivos-objeto gerados. |
+| `make web` | Gera a versão para navegador em `dist/web/` (requer Emscripten). Veja [Versão web](#versão-web). |
+| `make run-web` | Gera a versão web, se necessário, e a serve em `http://localhost:8080`. |
 
 O executável gerado se chama `ELIRA.exe` no Windows e `ELIRA` no macOS e Linux.
 

@@ -106,11 +106,22 @@ int main(int argc, char **argv)
         return assetsReady && ValidateRequiredAssets() ? 0 : 1;
     }
 
+#if defined(PLATFORM_WEB)
+    /* No navegador o canvas acompanha o tamanho da aba; o jogo continua
+       desenhado em 1280x720 e e escalonado com faixas pretas (ver passo 2). */
+    SetConfigFlags(FLAG_MSAA_4X_HINT | FLAG_VSYNC_HINT | FLAG_WINDOW_RESIZABLE);
+#else
     SetConfigFlags(FLAG_MSAA_4X_HINT | FLAG_VSYNC_HINT);
+#endif
     InitWindow(SCREEN_WIDTH, SCREEN_HEIGHT, "ELIRA - Escape Run Temporal");
     /* ESC e tratado pela interface do jogo, nunca como encerramento imediato. */
     SetExitKey(KEY_NULL);
     InitAudioDevice();
+
+#if defined(PLATFORM_WEB)
+    /* Recupera o ranking salvo no navegador antes de qualquer leitura. */
+    WebStorageInit();
+#endif
 
     /* Localiza, valida e calibra a fonte configurada em constantes.h (GAME_FONT_FILE) */
     GameFontAvailable();
@@ -144,8 +155,22 @@ int main(int argc, char **argv)
     game.screen = SCREEN_TITLE;
     ResetDemo(&game);
 
+#if defined(PLATFORM_WEB)
+    /* No navegador o pedido de saida e tratado dentro do loop (volta ao menu). */
+    while (!WindowShouldClose())
+#else
     while (!WindowShouldClose() && !game.exitRequested)
+#endif
     {
+#if defined(PLATFORM_WEB)
+        /* Encerrar o loop congelaria a pagina: qualquer pedido de saida volta ao menu. */
+        if (game.exitRequested)
+        {
+            game.exitRequested = false;
+            game.phaseMenuOpen = false;
+            game.screen = SCREEN_TITLE;
+        }
+#endif
         float delta = GetFrameTime();
         if (game.messageTimer > 0) game.messageTimer -= delta;
 

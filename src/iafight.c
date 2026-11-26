@@ -2199,7 +2199,13 @@ static bool lastWon = false, paused = false;
 static int pauseSel = 0;
 static void DrawIafCyberCard(Rectangle r, Color accent, bool on, float tickMax);
 
+/* No navegador o menu de pausa nao tem "FECHAR O JOGO" (ultimo botao). */
+#if defined(PLATFORM_WEB)
+#define IAF_PAUSE_BTNS 4
+#else
 #define IAF_PAUSE_BTNS 5
+#endif
+#define IAF_PAUSE_PANEL_H (516.0f - (5 - IAF_PAUSE_BTNS) * 64.0f)
 static Rectangle IafPauseBtn(int idx)
 {
     return (Rectangle){430.0f, 228.0f + idx * 64.0f, 420.0f, 52.0f};
@@ -4049,7 +4055,7 @@ static void DrawFightOverlay(void)
     {
         DrawRectangle(0, 0, SCREEN_WIDTH, SCREEN_HEIGHT, Fade(C_INK, 0.76f));
 
-        Rectangle panel = {370.0f, 102.0f, 540.0f, 516.0f};
+        Rectangle panel = {370.0f, 102.0f, 540.0f, IAF_PAUSE_PANEL_H};
         DrawRectangleRounded(panel, 0.05f, 10, (Color){10, 15, 30, 248});
         DrawRectangleRoundedLinesEx(panel, 0.05f, 10, 2.0f, C_CYAN);
 
@@ -4067,8 +4073,8 @@ static void DrawFightOverlay(void)
         TxtC("Escolha como deseja continuar", SCREEN_WIDTH / 2.0f, 176.0f, 16, C_DIM);
         DrawLine((int)(panel.x + 36), 206, (int)(panel.x + panel.width - 36), 206, Fade(C_CYAN, 0.35f));
 
-        static const char *labels[IAF_PAUSE_BTNS] = {"CONTINUAR", "RECOMEÇAR", "VOLTAR À SELEÇÃO", "VOLTAR AO MENU INICIAL", "FECHAR O JOGO"};
-        const Color cols[IAF_PAUSE_BTNS] = {C_CYAN, C_GREEN, (Color){150, 120, 255, 255}, C_AMBER, C_RED};
+        static const char *labels[] = {"CONTINUAR", "RECOMEÇAR", "VOLTAR À SELEÇÃO", "VOLTAR AO MENU INICIAL", "FECHAR O JOGO"};
+        const Color cols[] = {C_CYAN, C_GREEN, (Color){150, 120, 255, 255}, C_AMBER, C_RED};
         for (int i = 0; i < IAF_PAUSE_BTNS; i++)
         {
             Rectangle r = IafPauseBtn(i);

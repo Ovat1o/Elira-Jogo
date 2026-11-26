@@ -769,6 +769,10 @@ void ApplyResolution(int resIndex)
 {
     if (resIndex < 0 || resIndex >= SETTINGS_RES_COUNT) return;
     g_currentRes = resIndex;
+#if defined(PLATFORM_WEB)
+    /* No navegador quem define o tamanho e a aba: o canvas sempre ocupa a tela toda. */
+    return;
+#endif
     int w = g_resOptions[resIndex].width;
     int h = g_resOptions[resIndex].height;
 
@@ -990,10 +994,15 @@ bool UpdatePhaseControls(GameState *game)
             game->phaseMenuOpen = false;
             game->screen = SCREEN_TITLE;
         }
+#if !defined(PLATFORM_WEB)
+        /* No navegador nao existe "fechar o jogo": o botao nao e exibido. */
         else if (Clicked(exitBtn))
         {
             game->exitRequested = true;
         }
+#else
+        (void)exitBtn;
+#endif
         return true;
     }
 
@@ -1039,7 +1048,11 @@ void DrawPhaseControls(const GameState *game)
     }
 
     DrawRectangle(0, 0, SCREEN_WIDTH, SCREEN_HEIGHT, Fade(BLACK, 0.78f));
+#if defined(PLATFORM_WEB)
+    Rectangle panel = {390, 165, 500, 310};   /* sem o botao FECHAR O JOGO */
+#else
     Rectangle panel = {390, 165, 500, 380};
+#endif
     DrawRectangleRounded(panel, 0.05f, 8, Fade(PANEL_COLOR, 0.99f));
     DrawRectangleRoundedLinesEx(panel, 0.05f, 8, 2.0f, CYAN_COLOR);
 
@@ -1048,7 +1061,9 @@ void DrawPhaseControls(const GameState *game)
 
     DrawButton((Rectangle){440, 300, 400, 54}, "CONTINUAR [ESC]", CYAN_COLOR);
     DrawButton((Rectangle){440, 370, 400, 54}, "VOLTAR AO MENU INICIAL", GOLD_COLOR);
+#if !defined(PLATFORM_WEB)
     DrawButton((Rectangle){440, 440, 400, 54}, "FECHAR O JOGO", RED_COLOR);
+#endif
 }
 
 void DrawBackground(void)
@@ -1368,13 +1383,51 @@ const char *FormatRunTime(double seconds)
 static RankingEntry g_ranking[RANKING_MAX_ENTRIES];
 static int g_rankingCount = 0;
 
+#if defined(PLATFORM_WEB)
+#include <emscripten.h>
+
+/* No navegador o sistema de arquivos e temporario (some ao recarregar).
+   A pasta /elira-dados fica guardada no IndexedDB da pagina: carregamos o
+   conteudo uma vez ao iniciar e gravamos de volta a cada partida salva. */
+#define WEB_SAVE_DIR "/elira-dados"
+
+EM_ASYNC_JS(void, WebMountSaveDir, (void), {
+    try { FS.mkdir('/elira-dados'); } catch (e) {}
+    try {
+        FS.mount(IDBFS, {}, '/elira-dados');
+        await new Promise(function (resolve) {
+            FS.syncfs(true, function (err) {
+                if (err) console.warn('[RANKING] Falha ao ler o IndexedDB:', err);
+                resolve();
+            });
+        });
+    } catch (e) {
+        console.warn('[RANKING] IndexedDB indisponivel; o ranking vale so nesta sessao.', e);
+    }
+});
+
+EM_JS(void, WebFlushSaveDir, (void), {
+    FS.syncfs(false, function (err) {
+        if (err) console.warn('[RANKING] Falha ao gravar no IndexedDB:', err);
+    });
+});
+
+void WebStorageInit(void)
+{
+    WebMountSaveDir();
+}
+#endif
+
 static const char *GetRankingFilePath(void)
 {
     static char path[1024] = {0};
     if (path[0] != '\0') return path;
 
     const char *base = NULL;
-#if defined(_WIN32)
+#if defined(PLATFORM_WEB)
+    (void)base;
+    snprintf(path, sizeof(path), WEB_SAVE_DIR);
+#elif defined(_WIN32)
     base = getenv("APPDATA");
     if (base != NULL && base[0] != '\0')
     {
@@ -1443,6 +1496,9 @@ bool SaveRankingEntry(const char *name, int score, int seconds, const char *endi
     fprintf(f, "%s | %d | %02d:%02d - %s | %s\n", name, score, seconds / 60, seconds % 60, date,
             (ending != NULL && ending[0] != '\0') ? ending : "-");
     fclose(f);
+#if defined(PLATFORM_WEB)
+    WebFlushSaveDir();
+#endif
     return true;
 }
 
