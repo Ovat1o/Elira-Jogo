@@ -704,3 +704,22 @@ Fontes oficiais de referência: [instalação do Git](https://git-scm.com/instal
 | <img src="assets/equipe/maria-vitoria.jpeg" width="90" height="105" alt="Foto de Maria Vitória"> | Maria Vitória | Desenvolvedora em C | [mvitoriapereirac](https://github.com/mvitoriapereirac) | [Maria Vitória Pereira](https://www.linkedin.com/in/mvitoriapereirac/) |
 | <img src="assets/equipe/otavio-sousa.jpeg" width="90" height="105" alt="Foto de Otávio Leão"> | Otávio Leão | Engenheiro de Software | [Ovat1o](https://github.com/Ovat1o) | [Otávio Leão](https://www.linkedin.com/in/otaviosleao/) |
 | <img src="assets/equipe/victor-julius.jpeg" width="90" height="105" alt="Foto de Victor Julius"> | Victor Julius | Desenvolvedor em C | [victorjls21](https://github.com/victorjls21) | [Victor Julius](https://www.linkedin.com/in/victor-julius/) |
+
+---
+
+## Qualidade e Testes de Sistema (QA)
+
+Os testes de sistema das Histórias de Usuário foram executados e documentados com evidências em vídeo (screencasts) anexadas aos cards do Jira.
+
+- **Relatório completo dos casos de teste:** [docs/TESTES_SISTEMA.md](docs/TESTES_SISTEMA.md)
+- **Acompanhamento de Histórias:**
+
+![Quadro de Testes](docs/board-testes-qa.png)
+
+### Registro Atualizado de Bugs e Issues
+
+![Bugs Atualizados](docs/bugs-atualizados.png)
+
+### Registro Atualizado de Bugs e Issues
+
+![Bugs Atualizados](docs/bugs-atualizados.png)
