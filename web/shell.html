@@ -1,0 +1,115 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no">
+    <title>ELIRA - Escape Run Temporal</title>
+    <style>
+        html, body {
+            margin: 0;
+            padding: 0;
+            width: 100%;
+            height: 100%;
+            overflow: hidden;
+            background: #000;
+        }
+
+        /* O canvas ocupa a aba inteira; a raylib ajusta a resolucao interna
+           ao tamanho da janela e o jogo escala 1280x720 com faixas pretas. */
+        #canvas {
+            position: fixed;
+            inset: 0;
+            display: block;
+            width: 100vw;
+            height: 100vh;
+            border: 0;
+            outline: none;
+            background: #000;
+        }
+
+        #carregando {
+            position: fixed;
+            inset: 0;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            gap: 16px;
+            color: #9fe8ff;
+            font: 16px/1.4 ui-monospace, Menlo, Consolas, monospace;
+            letter-spacing: 0.08em;
+            background: #050914;
+            z-index: 1;
+        }
+
+        #carregando[hidden] { display: none; }
+
+        #barra {
+            width: min(320px, 70vw);
+            height: 6px;
+            background: #13233a;
+        }
+
+        #barra > div {
+            width: 0;
+            height: 100%;
+            background: #3ad4ff;
+            transition: width 0.15s linear;
+        }
+    </style>
+</head>
+<body>
+    <div id="carregando">
+        <div>ELIRA</div>
+        <div id="barra"><div></div></div>
+        <div id="status">Carregando...</div>
+    </div>
+
+    <canvas id="canvas" tabindex="-1" oncontextmenu="event.preventDefault()"></canvas>
+
+    <script>
+        var tela = document.getElementById('carregando');
+        var barra = document.querySelector('#barra > div');
+        var status = document.getElementById('status');
+        var canvas = document.getElementById('canvas');
+
+        /* Teclas do jogo nao devem rolar a pagina. */
+        window.addEventListener('keydown', function (e) {
+            if ([' ', 'ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight', 'Tab'].indexOf(e.key) !== -1) {
+                e.preventDefault();
+            }
+        });
+        canvas.addEventListener('mousedown', function () { canvas.focus(); });
+
+        var Module = {
+            canvas: canvas,
+            setStatus: function (texto) {
+                if (!texto) {
+                    tela.hidden = true;
+                    canvas.focus();
+                    return;
+                }
+                var m = texto.match(/\((\d+(\.\d+)?)\/(\d+)\)/);
+                if (m) {
+                    var pct = Math.round(100 * parseFloat(m[1]) / parseInt(m[3], 10));
+                    barra.style.width = pct + '%';
+                    status.textContent = 'Carregando ' + pct + '%';
+                } else {
+                    status.textContent = texto.replace('Downloading data...', 'Carregando...');
+                }
+            },
+            totalDependencies: 0,
+            monitorRunDependencies: function (restantes) {
+                this.totalDependencies = Math.max(this.totalDependencies, restantes);
+                if (!restantes) Module.setStatus('');
+            }
+        };
+
+        /* So avisa erro enquanto a tela de carregamento ainda esta visivel. */
+        window.onerror = function () {
+            if (!tela.hidden) status.textContent = 'Erro ao iniciar o jogo. Recarregue a pagina.';
+        };
+    </script>
+    {{{ SCRIPT }}}
+</body>
+</html>

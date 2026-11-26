@@ -106,11 +106,22 @@ int main(int argc, char **argv)
         return assetsReady && ValidateRequiredAssets() ? 0 : 1;
     }
 
+#if defined(PLATFORM_WEB)
+    /* No navegador o canvas acompanha o tamanho da aba; o jogo continua
+       desenhado em 1280x720 e e escalonado com faixas pretas (ver passo 2). */
+    SetConfigFlags(FLAG_MSAA_4X_HINT | FLAG_VSYNC_HINT | FLAG_WINDOW_RESIZABLE);
+#else
     SetConfigFlags(FLAG_MSAA_4X_HINT | FLAG_VSYNC_HINT);
+#endif
     InitWindow(SCREEN_WIDTH, SCREEN_HEIGHT, "ELIRA - Escape Run Temporal");
     /* ESC e tratado pela interface do jogo, nunca como encerramento imediato. */
     SetExitKey(KEY_NULL);
     InitAudioDevice();
+
+#if defined(PLATFORM_WEB)
+    /* Recupera o ranking salvo no navegador antes de qualquer leitura. */
+    WebStorageInit();
+#endif
 
     /* Localiza, valida e calibra a fonte configurada em constantes.h (GAME_FONT_FILE) */
     GameFontAvailable();
@@ -144,8 +155,22 @@ int main(int argc, char **argv)
     game.screen = SCREEN_TITLE;
     ResetDemo(&game);
 
+#if defined(PLATFORM_WEB)
+    /* No navegador o pedido de saida e tratado dentro do loop (volta ao menu). */
+    while (!WindowShouldClose())
+#else
     while (!WindowShouldClose() && !game.exitRequested)
+#endif
     {
+#if defined(PLATFORM_WEB)
+        /* Encerrar o loop congelaria a pagina: qualquer pedido de saida volta ao menu. */
+        if (game.exitRequested)
+        {
+            game.exitRequested = false;
+            game.phaseMenuOpen = false;
+            game.screen = SCREEN_TITLE;
+        }
+#endif
         float delta = GetFrameTime();
         if (game.messageTimer > 0) game.messageTimer -= delta;
 
@@ -176,8 +201,8 @@ int main(int argc, char **argv)
             {
                 SetMusicVolume(ambientBgm, (game.musicMuted || game.screen == SCREEN_INVASION || game.screen == SCREEN_IAFIGHT) ? 0.0f : g_musicVolume);
             }
-            SetMessage(&game, game.musicMuted ? "Musica ambiente desativada [Mudo]."
-                                              : "Musica ambiente ativada.");
+            SetMessage(&game, game.musicMuted ? "Música ambiente desativada [Mudo]."
+                                              : "Música ambiente ativada.");
         }
 
         /* O modal pausa completamente a tela atual e impede cliques por baixo dele. */
@@ -245,7 +270,7 @@ int main(int argc, char **argv)
                     game.journalYearTab = 1;
                     game.journalPage = 0;
                     game.screen = SCREEN_ROOM_2008;
-                    SetMessage(&game, "Salto temporal concluido: Escritorio de Vigilancia // ANO 2008.");
+                    SetMessage(&game, "Salto temporal concluído: Escritório de Vigilância // ANO 2008.");
                 }
                 break;
             case SCREEN_INTRO_2026:
@@ -256,7 +281,7 @@ int main(int argc, char **argv)
                     game.journalYearTab = 2;
                     game.journalPage = 0;
                     game.screen = SCREEN_ROOM_2026;
-                    SetMessage(&game, "Salto temporal concluido: Laboratorio de Sintese // ANO 2026.");
+                    SetMessage(&game, "Salto temporal concluído: Redação Digital // ANO 2026.");
                 }
                 break;
             case SCREEN_INTRO_2046:

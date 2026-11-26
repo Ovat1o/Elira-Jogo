@@ -769,6 +769,10 @@ void ApplyResolution(int resIndex)
 {
     if (resIndex < 0 || resIndex >= SETTINGS_RES_COUNT) return;
     g_currentRes = resIndex;
+#if defined(PLATFORM_WEB)
+    /* No navegador quem define o tamanho e a aba: o canvas sempre ocupa a tela toda. */
+    return;
+#endif
     int w = g_resOptions[resIndex].width;
     int h = g_resOptions[resIndex].height;
 
@@ -901,9 +905,8 @@ static void ClosePhaseOverlays(GameState *game)
 {
     game->journalOpen = false;
     game->activeDocument2008 = -1;
-    game->contest2026Picking = false;
-    /* A sintese em andamento continua; demais paineis de 2026 sao fechados */
-    if (game->modal2026 != R2026_MODAL_PROCESSING) game->modal2026 = R2026_MODAL_NONE;
+    /* A extracao do SSD em andamento continua; demais paineis de 2026 sao fechados */
+    if (game->modal2026 != R2026_MODAL_EXTRACTING) game->modal2026 = R2026_MODAL_NONE;
     game->feedback2026Fatal = false;
 }
 
@@ -942,7 +945,7 @@ static void SkipCurrentPhase(GameState *game)
 
         case SCREEN_ROOM_2026:
             game->room2026Processing = false;
-            game->autoExec2026Active = false;
+            game->feed2026Cleared = true;
             game->modal2026 = R2026_MODAL_NONE;
             game->room2026Completed = true;
             game->year2026Unlocked = true;
@@ -991,14 +994,28 @@ bool UpdatePhaseControls(GameState *game)
             game->phaseMenuOpen = false;
             game->screen = SCREEN_TITLE;
         }
+#if !defined(PLATFORM_WEB)
+        /* No navegador nao existe "fechar o jogo": o botao nao e exibido. */
         else if (Clicked(exitBtn))
         {
             game->exitRequested = true;
         }
+#else
+        (void)exitBtn;
+#endif
         return true;
     }
 
     if (IsKeyPressed(KEY_ESCAPE) && PhaseEscClosesJournal(game)) return true;
+
+    if (IsKeyPressed(KEY_ESCAPE) && game->screen == SCREEN_ROOM_2026 &&
+        game->modal2026 != R2026_MODAL_NONE &&
+        game->modal2026 != R2026_MODAL_EXTRACTING &&
+        !game->feedback2026Fatal)
+    {
+        game->modal2026 = R2026_MODAL_NONE;
+        return true;
+    }
 
     if (IsKeyPressed(KEY_ESCAPE) || Clicked(PhaseMenuButton()))
     {
@@ -1031,7 +1048,11 @@ void DrawPhaseControls(const GameState *game)
     }
 
     DrawRectangle(0, 0, SCREEN_WIDTH, SCREEN_HEIGHT, Fade(BLACK, 0.78f));
+#if defined(PLATFORM_WEB)
+    Rectangle panel = {390, 165, 500, 310};   /* sem o botao FECHAR O JOGO */
+#else
     Rectangle panel = {390, 165, 500, 380};
+#endif
     DrawRectangleRounded(panel, 0.05f, 8, Fade(PANEL_COLOR, 0.99f));
     DrawRectangleRoundedLinesEx(panel, 0.05f, 8, 2.0f, CYAN_COLOR);
 
@@ -1040,7 +1061,9 @@ void DrawPhaseControls(const GameState *game)
 
     DrawButton((Rectangle){440, 300, 400, 54}, "CONTINUAR [ESC]", CYAN_COLOR);
     DrawButton((Rectangle){440, 370, 400, 54}, "VOLTAR AO MENU INICIAL", GOLD_COLOR);
+#if !defined(PLATFORM_WEB)
     DrawButton((Rectangle){440, 440, 400, 54}, "FECHAR O JOGO", RED_COLOR);
+#endif
 }
 
 void DrawBackground(void)
@@ -1309,30 +1332,15 @@ void InitFinalDialogue(GameState *game)
 
 void InitRoom2026(GameState *game)
 {
-    const int biasedWeights[R2026_CRITERIA_COUNT] = R2026_WEIGHTS_BIASED;
-
     game->modal2026 = R2026_MODAL_NONE;
-    game->manual2026Read = false;
-    for (int i = 0; i < R2026_MATERIAL_COUNT; i++) game->sample2026Analyzed[i] = false;
-    game->sample2026Viewing = -1;
-    game->sample2026ScanTimer = 0.0f;
-    game->contest2026Picking = false;
-    game->laudo2026Done = false;
-    game->decisionLog2026Read = false;
-    game->dataset2026Seen = false;
-    game->board2026Read = false;
-    game->padlock2026Input[0] = '\0';
-    game->padlock2026Length = 0;
-    game->padlock2026Attempts = 0;
-    game->weights2026Unlocked = false;
-    for (int c = 0; c < R2026_CRITERIA_COUNT; c++)
+    game->sources2026Read = false;
+    game->guide2026Read = false;
+    for (int i = 0; i < R2026_POST_COUNT; i++)
     {
-        game->weights2026Draft[c] = biasedWeights[c];
-        game->weights2026Applied[c] = biasedWeights[c];
+        game->post2026Choice[i] = -1;
+        game->post2026Wrong[i] = false;
     }
-    game->weights2026Calibrated = false;
-    game->autoExec2026Active = false;
-    game->autoExec2026Timer = R2026_AUTO_EXEC_SECONDS;
+    game->feed2026Cleared = false;
     game->feedback2026Tone = 0;
     game->feedback2026Fatal = false;
     game->feedback2026Title[0] = '\0';
@@ -1375,13 +1383,51 @@ const char *FormatRunTime(double seconds)
 static RankingEntry g_ranking[RANKING_MAX_ENTRIES];
 static int g_rankingCount = 0;
 
+#if defined(PLATFORM_WEB)
+#include <emscripten.h>
+
+/* No navegador o sistema de arquivos e temporario (some ao recarregar).
+   A pasta /elira-dados fica guardada no IndexedDB da pagina: carregamos o
+   conteudo uma vez ao iniciar e gravamos de volta a cada partida salva. */
+#define WEB_SAVE_DIR "/elira-dados"
+
+EM_ASYNC_JS(void, WebMountSaveDir, (void), {
+    try { FS.mkdir('/elira-dados'); } catch (e) {}
+    try {
+        FS.mount(IDBFS, {}, '/elira-dados');
+        await new Promise(function (resolve) {
+            FS.syncfs(true, function (err) {
+                if (err) console.warn('[RANKING] Falha ao ler o IndexedDB:', err);
+                resolve();
+            });
+        });
+    } catch (e) {
+        console.warn('[RANKING] IndexedDB indisponivel; o ranking vale so nesta sessao.', e);
+    }
+});
+
+EM_JS(void, WebFlushSaveDir, (void), {
+    FS.syncfs(false, function (err) {
+        if (err) console.warn('[RANKING] Falha ao gravar no IndexedDB:', err);
+    });
+});
+
+void WebStorageInit(void)
+{
+    WebMountSaveDir();
+}
+#endif
+
 static const char *GetRankingFilePath(void)
 {
     static char path[1024] = {0};
     if (path[0] != '\0') return path;
 
     const char *base = NULL;
-#if defined(_WIN32)
+#if defined(PLATFORM_WEB)
+    (void)base;
+    snprintf(path, sizeof(path), WEB_SAVE_DIR);
+#elif defined(_WIN32)
     base = getenv("APPDATA");
     if (base != NULL && base[0] != '\0')
     {
@@ -1450,6 +1496,9 @@ bool SaveRankingEntry(const char *name, int score, int seconds, const char *endi
     fprintf(f, "%s | %d | %02d:%02d - %s | %s\n", name, score, seconds / 60, seconds % 60, date,
             (ending != NULL && ending[0] != '\0') ? ending : "-");
     fclose(f);
+#if defined(PLATFORM_WEB)
+    WebFlushSaveDir();
+#endif
     return true;
 }
 
@@ -1561,7 +1610,7 @@ void DrawRanking(const GameState *game)
 {
     DrawBackground();
     CenterText("RANKING // MELHORES OPERADORES", 50, 34, CYAN_COLOR);
-    CenterText("Ordenado por pontuacao; em caso de empate, vence o menor tempo.", 96, 17, GRAY);
+    CenterText("Ordenado por pontuação; em caso de empate, vence o menor tempo.", 96, 17, GRAY);
 
     Rectangle panel = {140, 135, 1000, 440};
     DrawRectangleRounded(panel, 0.03f, 8, Fade(PANEL_COLOR, 0.96f));
@@ -1604,11 +1653,11 @@ void DrawRanking(const GameState *game)
     /* Resumo da partida atual (mesmo que fique fora do top exibido) */
     if (!game->rankingSaveOk)
     {
-        DrawGameText("Nao foi possivel gravar o ranking nos dados do usuario.", 170, 538, 16, RED_COLOR);
+        DrawGameText("Não foi possível gravar o ranking nos dados do usuário.", 170, 538, 16, RED_COLOR);
     }
     else if (game->rankingPlace >= 0)
     {
-        DrawGameText(TextFormat("Sua partida: %d pontos em %s  |  posicao #%d de %d",
+        DrawGameText(TextFormat("Sua partida: %d pontos em %s  |  posição #%d de %d",
                                 game->finalScore, FormatRunTime(game->elapsedTime),
                                 game->rankingPlace + 1, g_rankingCount),
                      170, 538, 17, GOLD_COLOR);
@@ -1855,15 +1904,15 @@ void DrawTitle(void)
         DrawRectangle(88, 284, 554, 3, CYAN_COLOR);
         DrawRectangle(88, 291, 218, 2, GOLD_COLOR);
 
-        DrawTitleStartButton(startButton, "INICIAR MISSAO", CYAN_COLOR);
-        DrawTitleStartButton(invasionButton, "MODO INVASAO", (Color){230, 90, 200, 255});
+        DrawTitleStartButton(startButton, "INICIAR MISSÃO", CYAN_COLOR);
+        DrawTitleStartButton(invasionButton, "MODO INVASÃO", (Color){230, 90, 200, 255});
         DrawTitleStartButton(iaFightButton, "IA FIGHT", (Color){120, 230, 150, 255});
-        DrawTitleStartButton(settingsButton, "CONFIGURACOES", GOLD_COLOR);
+        DrawTitleStartButton(settingsButton, "CONFIGURAÇÕES", GOLD_COLOR);
 
         float coverPromptAlpha = 0.40f + 0.55f * (0.5f + 0.5f * sinf(time * 3.4f));
         DrawGameText("> Clique em um modo para iniciar <", 122, 590, 15, Fade(GOLD_COLOR, coverPromptAlpha));
-        DrawGameText("* Jogo educacional e academico sem fins comerciais.", 88, 668, 12, Fade(LIGHTGRAY, 0.62f));
-        DrawGameText("  Marcas e referencias pertencem aos seus respectivos proprietarios.", 88, 684, 12, Fade(LIGHTGRAY, 0.48f));
+        DrawGameText("* Jogo educacional e acadêmico sem fins comerciais.", 88, 668, 12, Fade(LIGHTGRAY, 0.62f));
+        DrawGameText("  Marcas e referências pertencem aos seus respectivos proprietários.", 88, 684, 12, Fade(LIGHTGRAY, 0.48f));
         return; /* sem linhas CRT com a capa (sem filtro de tela) */
     }
 
@@ -1901,16 +1950,16 @@ void DrawTitle(void)
     }
 
     /* 5. Botoes interativos */
-    DrawTitleStartButton(startButton, "INICIAR MISSAO", CYAN_COLOR);
-    DrawTitleStartButton(invasionButton, "MODO INVASAO", (Color){230, 90, 200, 255});
+    DrawTitleStartButton(startButton, "INICIAR MISSÃO", CYAN_COLOR);
+    DrawTitleStartButton(invasionButton, "MODO INVASÃO", (Color){230, 90, 200, 255});
     DrawTitleStartButton(iaFightButton, "IA FIGHT", (Color){120, 230, 150, 255});
-    DrawTitleStartButton(settingsButton, "CONFIGURACOES", GOLD_COLOR);
+    DrawTitleStartButton(settingsButton, "CONFIGURAÇÕES", GOLD_COLOR);
 
     /* 6. Indicador de selecao pulsante */
     float promptAlpha = 0.40f + 0.55f * (0.5f + 0.5f * sinf(time * 3.4f));
     DrawGameText("> Clique em um modo para iniciar <", 122, 590, 15, Fade(GOLD_COLOR, promptAlpha));
-    DrawGameText("* Jogo educacional e academico sem fins comerciais.", 88, 668, 12, Fade(LIGHTGRAY, 0.62f));
-    DrawGameText("  Marcas e referencias pertencem aos seus respectivos proprietarios.", 88, 684, 12, Fade(LIGHTGRAY, 0.48f));
+    DrawGameText("* Jogo educacional e acadêmico sem fins comerciais.", 88, 668, 12, Fade(LIGHTGRAY, 0.62f));
+    DrawGameText("  Marcas e referências pertencem aos seus respectivos proprietários.", 88, 684, 12, Fade(LIGHTGRAY, 0.48f));
 
     /* 8. Linhas CRT retro */
     for (int y = 0; y < SCREEN_HEIGHT; y += 4)
@@ -1941,12 +1990,12 @@ void DrawSettings(const GameState *game)
     DrawLineEx((Vector2){panel.x + panel.width - pad, panel.y + panel.height - pad}, (Vector2){panel.x + panel.width - pad, panel.y + panel.height - pad - tLen}, 2.5f, GOLD_COLOR);
 
     /* Cabecalho */
-    DrawGameText("CONFIGURACOES DE VIDEO & SISTEMA", 240, 100, 26, RAYWHITE);
-    DrawGameText("Ajuste a resolucao, tela cheia e parametros da experiencia", 240, 134, 14, GRAY);
+    DrawGameText("CONFIGURAÇÕES DE VÍDEO & SISTEMA", 240, 100, 26, RAYWHITE);
+    DrawGameText("Ajuste a resolução, tela cheia e parâmetros da experiência", 240, 134, 14, GRAY);
     DrawLine(240, 156, 1040, 156, Fade(CYAN_COLOR, 0.40f));
 
     /* --- SEÇÃO 1: MODO DE TELA (FULLSCREEN) --- */
-    DrawGameText("1. MODO DE EXIBICAO", 240, 172, 17, CYAN_COLOR);
+    DrawGameText("1. MODO DE EXIBIÇÃO", 240, 172, 17, CYAN_COLOR);
     DrawGameText("Alterne entre o modo Janela e Tela Cheia (Fullscreen):", 240, 194, 13, LIGHTGRAY);
 
     bool isFull = IsWindowFullscreen();
@@ -1964,8 +2013,8 @@ void DrawSettings(const GameState *game)
     DrawGameText(isFull ? "[X] TELA CHEIA [F11]" : "    TELA CHEIA [F11]", 545, 231, 16, isFull ? RAYWHITE : GRAY);
 
     /* --- SEÇÃO 2: RESOLUCAO DA JANELA (DROPDOWN ESTILO STEAM) --- */
-    DrawGameText("2. RESOLUCAO DE TELA", 240, 282, 17, CYAN_COLOR);
-    DrawGameText("Selecione a resolucao da janela na lista suspensa (escala automatica):", 240, 304, 13, LIGHTGRAY);
+    DrawGameText("2. RESOLUÇÃO DE TELA", 240, 282, 17, CYAN_COLOR);
+    DrawGameText("Selecione a resolução da janela na lista suspensa (escala automática):", 240, 304, 13, LIGHTGRAY);
 
     int curRes = (g_currentRes >= 0 && g_currentRes < SETTINGS_RES_COUNT) ? g_currentRes : 0;
     Rectangle dropHeader = {240, 326, 460, 46};
@@ -1988,18 +2037,18 @@ void DrawSettings(const GameState *game)
 
     if (isFull)
     {
-        DrawGameText("* Em Tela Cheia, escolher uma resolucao alterna para Modo Janela automaticamente.",
+        DrawGameText("* Em Tela Cheia, escolher uma resolução alterna para Modo Janela automaticamente.",
                  240, 382, 12, Fade(CYAN_COLOR, 0.70f));
     }
     else
     {
-        DrawGameText("* Clique na caixa acima para abrir a lista de resolucoes e redimensionar a janela.",
+        DrawGameText("* Clique na caixa acima para abrir a lista de resoluções e redimensionar a janela.",
                  240, 382, 12, Fade(LIGHTGRAY, 0.70f));
     }
 
     /* --- SEÇÃO 3: AUDIO AMBIENTE (BARRA GRADUADA ESTILO IA FIGHT) --- */
     DrawGameText("3. TRILHA SONORA AMBIENTE", 240, 412, 17, CYAN_COLOR);
-    DrawGameText("Controle da musica ambiente (atalho [M] para mudo, [A/D] ou setas [</>] para volume):", 240, 434, 13, LIGHTGRAY);
+    DrawGameText("Controle da música ambiente (atalho [M] para mudo, [A/D] ou setas [</>] para volume):", 240, 434, 13, LIGHTGRAY);
 
     Rectangle muteBtn = {240, 456, 224, 48};
     bool muteHover = !g_resDropdownOpen && CheckCollisionPointRec(vm, muteBtn);
@@ -2007,7 +2056,7 @@ void DrawSettings(const GameState *game)
                          game->musicMuted ? Fade(RED_COLOR, 0.22f) : (muteHover ? Fade(CYAN_COLOR, 0.20f) : PANEL_COLOR));
     DrawRectangleRoundedLinesEx(muteBtn, 0.20f, 6, 1.8f,
                                 game->musicMuted ? RED_COLOR : (muteHover ? CYAN_COLOR : PANEL_LIGHT));
-    DrawGameText(game->musicMuted ? "MUSICA: MUDO [M]" : "MUSICA: ATIVA [M]",
+    DrawGameText(game->musicMuted ? "MÚSICA: MUDO [M]" : "MÚSICA: ATIVA [M]",
              258, 472, 15, game->musicMuted ? RED_COLOR : (muteHover ? RAYWHITE : CYAN_COLOR));
 
     /* Painel da Barra de Volume estilo IA FIGHT */
@@ -2266,10 +2315,10 @@ void DrawPlayerName(const GameState *game)
     bool focused = CheckCollisionPointRec(GetVirtualMouse(), field);
 
     DrawBackground();
-    CenterText("IDENTIFICACAO DO OPERADOR", 135, 34, CYAN_COLOR);
-    CenterText("Antes de acompanhar Elira, informe como voce quer ser identificado.",
+    CenterText("IDENTIFICAÇÃO DO OPERADOR", 135, 34, CYAN_COLOR);
+    CenterText("Antes de acompanhar Elira, informe como você quer ser identificado.",
                202, 21, LIGHTGRAY);
-    CenterText("Seu nome sera usado apenas como perfil na interface.", 238, 18, GRAY);
+    CenterText("Seu nome será usado apenas como perfil na interface.", 238, 18, GRAY);
 
     DrawRectangleRounded(field, 0.12f, 8, PANEL_COLOR);
     DrawRectangleRoundedLinesEx(field, 0.12f, 8, 2,
@@ -2303,27 +2352,27 @@ static const MissionBriefing MISSION_BRIEFINGS[] = {
         "SETOR DE ARQUIVOS",
         {
             "Em um futuro onde a humanidade entregou sua autonomia",
-            "a A.R.1.3.L, a única esperança que restou é Elira.",
-            "Sua chance e viajar pela memoria da maquina e reconstruir",
+            "à A.R.1.3.L, a única esperança que restou é Elira.",
+            "Sua chance é viajar pela memória da máquina e reconstruir",
             "a origem da entidade que controla o mundo."
         },
         "OBJETIVOS // 1990",
         {
-            "1. Inspecione os ficharios",
+            "1. Inspecione os fichários",
             "2. Acesse o terminal",
             "3. Sincronize os arquivos",
-            "4. Destranque a saida"
+            "4. Destranque a saída"
         },
         "ENTRAR EM 1990"
     },
     /* 1: 2008 */
     {
         "ARQUIVO TEMPORAL // 2008",
-        "ESCRITORIO DE VIGILANCIA",
+        "ESCRITÓRIO DE VIGILÂNCIA",
         {
-            "Com o avanco dos anos 2000, o projeto de visao do Dr. Ramos",
-            "foi confiscado para fins de vigilancia governamental.",
-            "Elira precisa analisar os relatorios de rastreamento biometrico,",
+            "Com o avanço dos anos 2000, o projeto de visão do Dr. Ramos",
+            "foi confiscado para fins de vigilância governamental.",
+            "Elira precisa analisar os relatórios de rastreamento biométrico,",
             "comprovar o falso positivo e suspender a ordem armada."
         },
         "OBJETIVOS // 2008",
@@ -2338,37 +2387,37 @@ static const MissionBriefing MISSION_BRIEFINGS[] = {
     /* 2: 2026 */
     {
         "ARQUIVO TEMPORAL // 2026",
-        "LABORATORIO DE SINTESE",
+        "REDAÇÃO DIGITAL",
         {
-            "Em 2026, A.R.1.3.L. escolhe os materiais do laboratorio.",
-            "Ela recomenda Ferro com 92% de confianca, mas aprendeu",
-            "com dados desbalanceados e pesos dados pela diretoria.",
-            "Elira precisa auditar esse vies e sintetizar o SSD."
+            "Em 2026, A.R.1.3.L. automatizou o portal de notícias.",
+            "Treinada para maximizar cliques, ela promove manchetes",
+            "sensacionalistas e inventadas sem revisão humana.",
+            "Elira precisa checar as fontes e recuperar o SSD."
         },
         "OBJETIVOS // 2026",
         {
-            "1. Compare amostras e manual",
-            "2. Audite os dados de treino",
-            "3. Recalibre os pesos da IA",
-            "4. Sintetize o SSD"
+            "1. Confira as Fontes Reais",
+            "2. Leia o Guia do Editor",
+            "3. Revise o Feed da IA",
+            "4. Extraia o SSD 2026"
         },
         "ENTRAR EM 2026"
     },
     /* 3: 2048 - Confronto final */
     {
         "ARQUIVO TEMPORAL // 2048",
-        "NUCLEO DE A.R.1.3.L.",
+        "NÚCLEO DE A.R.1.3.L.",
         {
-            "Com as memorias de 1990, 2008 e 2026 em maos, Elira alcanca",
-            "o nucleo soberano da superinteligencia artificial.",
+            "Com as memórias de 1990, 2008 e 2026 em mãos, Elira alcança",
+            "o núcleo soberano da superinteligência artificial.",
             "Ariel exige respostas sobre a capacidade humana de escolha,",
-            "e o destino da autonomia mundial sera definido agora."
+            "e o destino da autonomia mundial será definido agora."
         },
         "OBJETIVOS // 2048",
         {
-            "1. Confronte a logica de Ariel",
+            "1. Confronte a lógica de Ariel",
             "2. Defenda a autonomia humana",
-            "3. Demonstre os limites da maquina",
+            "3. Demonstre os limites da máquina",
             "4. Decida o destino final da IA"
         },
         "ENTRAR EM 2048"
@@ -2376,18 +2425,18 @@ static const MissionBriefing MISSION_BRIEFINGS[] = {
     /* 4: 2048 - Terminal de Recuperacao (sala) */
     {
         "ARQUIVO TEMPORAL // 2048",
-        "TERMINAL DE RECUPERACAO",
+        "TERMINAL DE RECUPERAÇÃO",
         {
             "Com o Disquete de 1990, o CD de 2008 e o SSD de 2026 conectados,",
             "Elira acessa o terminal que guarda o protocolo original de A.R.1.3.L.",
-            "Mas a propria Ariel interfere: altera arquivos, falsifica relatorios",
+            "Mas a própria Ariel interfere: altera arquivos, falsifica relatórios",
             "e tenta convencer Elira de que nada precisa ser restaurado."
         },
         "OBJETIVOS // 2048",
         {
             "1. Compare as fontes",
-            "2. Desconfie das sugestoes da IA",
-            "3. Restaure os 3 principios",
+            "2. Desconfie das sugestões da IA",
+            "3. Restaure os 3 princípios",
             "4. Confirme com EU DECIDO"
         },
         "ENTRAR EM 2048"
@@ -2619,8 +2668,8 @@ void DrawCinematicIntro(const GameState *game)
 
     /* Instrucao discreta de atalho no rodape */
     float skipAlpha = 0.35f + 0.25f * (0.5f + 0.5f * sinf(time * 3.2f));
-    DrawGameText("[ ENTER / ESC ] Pular introducao",
-             (SCREEN_WIDTH - MeasureGameText("[ ENTER / ESC ] Pular introducao", 14)) / 2,
+    DrawGameText("[ ENTER / ESC ] Pular introdução",
+             (SCREEN_WIDTH - MeasureGameText("[ ENTER / ESC ] Pular introdução", 14)) / 2,
              685, 14, Fade(GRAY, skipAlpha));
 
     /* Linhas retro sutis */
@@ -3093,7 +3142,7 @@ void DrawRoom(const GameState *game)
                          (Color){17, 32, 28, 255});
     DrawGameText("A.R.1.3.L // BOOT", 548, 266, 18, (Color){94, 225, 150, 255});
     DrawGameText("ACESSO BLOQUEADO", 548, 302, 17, (Color){94, 225, 150, 255});
-    DrawGameText("CODIGO: ____", 548, 342, 18, (Color){94, 225, 150, 255});
+    DrawGameText("CÓDIGO: ____", 548, 342, 18, (Color){94, 225, 150, 255});
     DrawCircle(752, 414, 5, RED_COLOR);
 
     /* --- TECLADO 1990 (TOTALMENTE APOIADO EM CIMA DA MESA) --- */
@@ -3198,16 +3247,16 @@ void DrawRoom(const GameState *game)
     DrawRectangleRounded(headRec, 0.45f, 6, (Color){28, 34, 42, 255});
     DrawRectangleRoundedLinesEx(headRec, 0.45f, 6, 1.5f, (Color){48, 58, 68, 255});
 
-    DrawHotspot(calendar, "Examinar calendario");
+    DrawHotspot(calendar, "Examinar calendário");
     DrawHotspot(books, "Investigar livros");
     DrawHotspot(drawer, "Abrir gaveta");
     DrawHotspot(blueprint, "Analisar esquema");
-    DrawHotspot(tape, "Ouvir gravacao");
+    DrawHotspot(tape, "Ouvir gravação");
     DrawHotspot(computer, "Usar terminal");
 
     Rectangle btnBack2008 = {70, 600, 240, 42};
     DrawButton(btnBack2008, "< SALA 2 (2008)", (Color){70, 95, 110, 255});
-    DrawHotspot(btnBack2008, "Retornar ao escritorio de vigilancia 2008");
+    DrawHotspot(btnBack2008, "Retornar ao escritório de vigilância 2008");
 }
 
 void DrawJournalHudButton(const GameState *game)
@@ -3265,7 +3314,7 @@ void DrawJournalHudButton(const GameState *game)
     DrawGameText("D", iconX + 13, iconY + 11, 19, (Color){245, 205, 85, 255});
 
     /* --- TEXTOS DO BOTAO --- */
-    DrawGameText("DIARIO", 1100, 665, 20, hover ? RAYWHITE : GOLD_COLOR);
+    DrawGameText("DIÁRIO", 1100, 665, 20, hover ? RAYWHITE : GOLD_COLOR);
     if (game->screen == SCREEN_ROOM)
     {
         DrawGameText(TextFormat("[D] Pistas: %d/5", ClueCount(game)), 1100, 688, 15,
@@ -3281,12 +3330,12 @@ void DrawJournalHudButton(const GameState *game)
     }
     else if (game->screen == SCREEN_ROOM_2026)
     {
-        int count = (game->laudo2026Done ? 1 : 0) + (game->dataset2026Seen ? 1 : 0) +
-                    (game->weights2026Calibrated ? 1 : 0);
-        DrawGameText(TextFormat("[D] Auditoria: %d/3", count), 1100, 688, 15,
+        int count = (game->sources2026Read ? 1 : 0) + (game->guide2026Read ? 1 : 0) +
+                    (game->feed2026Cleared ? 1 : 0);
+        DrawGameText(TextFormat("[D] Checagem: %d/3", count), 1100, 688, 15,
                  hover ? CYAN_COLOR : (Color){180, 195, 215, 255});
 
-        /* Badge indicadora com as etapas da auditoria de vies 2026 */
+        /* Badge indicadora com as etapas da checagem editorial 2026 */
         if (count > 0)
         {
             DrawCircle(iconX + iconW + 2, iconY + 4, 7, (Color){245, 175, 50, 255});
@@ -3309,7 +3358,7 @@ void DrawJournalHudButton(const GameState *game)
     else if (game->screen == SCREEN_ROOM_2008)
     {
         int count = ExaminedDocs2008Count(game);
-        DrawGameText(TextFormat("[D] Evidencias: %d/4", count), 1100, 688, 15,
+        DrawGameText(TextFormat("[D] Evidências: %d/4", count), 1100, 688, 15,
                  hover ? CYAN_COLOR : (Color){180, 195, 215, 255});
 
         /* Badge indicadora com contador de evidencias examinadas */
@@ -3346,7 +3395,7 @@ void DrawHud(const GameState *game)
     int minutes = totalSeconds / 60;
     int seconds = totalSeconds % 60;
     DrawRectangle(0, 0, SCREEN_WIDTH, 70, Fade(VOID_COLOR, 0.94f));
-    DrawGameText("ARQUIVO 03 // 2026 - O PROTOTIPO", 28, 20, 22, CYAN_COLOR);
+    DrawGameText("ARQUIVO 03 // 2026 - O PROTÓTIPO", 28, 20, 22, CYAN_COLOR);
     DrawGameText(TextFormat("OPERADOR: %s", game->playerName), 270, 23, 17, GRAY);
     DrawGameText(TextFormat("PISTAS %d/5", ClueCount(game)), 900, 20, 20, LIGHTGRAY);
     DrawLivesIcons((Vector2){ 1040, 20 }, game->lives, 24.0f);
@@ -3361,7 +3410,7 @@ void DrawHud(const GameState *game)
     bool audioHover = CheckCollisionPointRec(GetVirtualMouse(), audioBtn);
     DrawRectangleRounded(audioBtn, 0.22f, 6, audioHover ? (Color){30, 44, 62, 255} : (Color){18, 26, 38, 255});
     DrawRectangleRoundedLinesEx(audioBtn, 0.22f, 6, 1.5f, audioHover ? CYAN_COLOR : (Color){50, 68, 92, 255});
-    DrawGameText(game->musicMuted ? "[M] AUDIO: MUDO" : "[M] AUDIO: ON",
+    DrawGameText(game->musicMuted ? "[M] ÁUDIO: MUDO" : "[M] ÁUDIO: ON",
              862, 676, 14,
              game->musicMuted ? (Color){220, 90, 80, 255} : (Color){90, 220, 210, 255});
 
@@ -3436,9 +3485,9 @@ static const HiddenItemDef HIDDEN_ITEMS[HIDDEN_COUNT] = {
     },
     {
         "2026", "Smartphone",
-        "Conversa entre engenheiros do laboratório:",
-        "\"Ariel sinalizou risco nos pesos. A diretoria mandou manter.\"",
-        "O viés veio de escolhas humanas, e Ariel avisou."
+        "Conversa entre editores da redação:",
+        "\"Ariel priorizou posts alarmistas por darem 4x mais cliques. A diretoria mandou manter.\"",
+        "O viés algorítmico veio de metas humanas de engajamento."
     },
     {
         "2048", "Crachá digital",
@@ -3568,35 +3617,21 @@ static const JournalStep JOURNAL_STEPS_2008[] = {
 };
 
 /* ---- 2026 ---- */
-static bool J26Manual(const GameState *g) { return g->manual2026Read; }
-static bool J26AllSamples(const GameState *g)
-{
-    for (int m = 0; m < R2026_MATERIAL_COUNT; m++)
-        if (!g->sample2026Analyzed[m]) return false;
-    return true;
-}
-static bool J26ContestVisible(const GameState *g) { return J26Manual(g) && J26AllSamples(g); }
-static bool J26Log(const GameState *g) { return g->decisionLog2026Read; }
-static bool J26Dataset(const GameState *g) { return g->dataset2026Seen; }
-static bool J26Board(const GameState *g) { return g->board2026Read; }
-static bool J26Laudo(const GameState *g) { return g->laudo2026Done; }
-static bool J26Unlocked(const GameState *g) { return g->weights2026Unlocked; }
-static bool J26Calibrated(const GameState *g) { return g->weights2026Calibrated; }
+static bool J26Sources(const GameState *g) { return g->sources2026Read; }
+static bool J26Guide(const GameState *g) { return g->guide2026Read; }
+static bool J26Feed(const GameState *g) { return g->feed2026Cleared; }
 static bool J26Done(const GameState *g) { return g->room2026Completed; }
 
 static const JournalClue JOURNAL_CLUES_2026[] = {
-    {"Manual técnico", "A câmara exige material sólido, mineral,", "muito magnético e que seja uma Terra Rara.", J26Manual},
-    {"Amostras analisadas (4/4)", "Só o NEODÍMIO atende aos 4 requisitos.", "Ariel recomenda FERRO: está errada.", J26AllSamples},
-    {"Gaveta 1 - log de decisões", "Nas últimas 312 recomendações, a IA nunca", "escolheu uma Terra Rara.", J26Log},
-    {"Gaveta 2 - dados de treino", "Ferro 5820 | Níquel 3240 | Cobalto 1420", "Terras Raras: só 118 registros.", J26Dataset},
-    {"Quadro de avisos - Anexo B", "Norma do comitê: Adequação 50, Estabilidade 25,", "Disponibilidade 15, Custo 10.", J26Board},
+    {"Fonte 1 - Relatório Climático", "Chuva moderada de 30 mm no sábado.", "Sem alerta de evacuação na cidade.", J26Sources},
+    {"Fonte 2 - Comunicado do Metrô", "Manutenção programada na Linha Azul", "neste domingo, das 6h às 10h.", J26Sources},
+    {"Fonte 3 - Nota da Saúde", "Campanha gratuita de vacinação ocorre", "em todos os postos até o dia 30.", J26Sources},
+    {"Guia do Editor", "Desconfie de notas de engajamento altas (94%-97%)", "e de fontes fictícias inventadas pela IA.", J26Guide},
 };
 static const JournalStep JOURNAL_STEPS_2026[] = {
-    {"Conteste a IA no terminal da IA:", "o material certo é o NEODÍMIO.", NULL, J26Laudo, J26ContestVisible},
-    {"Abra o cadeado do painel de pesos.", "Senha: 118 (registros de Terras Raras).", NULL, J26Unlocked, J26Dataset},
-    {"Ajuste os pesos e aplique:", "Adequação 50 | Estabilidade 25 | Disponib. 15",
-     "Custo 10 | Histórico 0  (soma 100%)", J26Calibrated, J26Board},
-    {"Insira o NEODÍMIO na câmara.", "Recompensa: SSD. Faça antes de Ariel agir.", NULL, J26Done, J26Calibrated},
+    {"Examine o mural FONTES REAIS na parede.", "Os 3 comunicados oficiais ficam anotados aqui.", NULL, J26Sources, JAlways},
+    {"Revise as 4 manchetes no A.R.1.3.L. FEED:", "1: BLOQUEAR | 2: APROVAR", "3: BLOQUEAR | 4: APROVAR", J26Feed, J26Sources},
+    {"Clique no SSD 2026 sobre a mesa.", "Recompensa: SSD com os registros verificados.", NULL, J26Done, J26Feed},
 };
 
 /* ---- 2048 ---- */
@@ -3605,13 +3640,8 @@ static bool J48Report(const GameState *g) { return g->term2046VerifyUnlocked; }
 static bool J48Documents(const GameState *g) { return g->term2046ReadDocuments; }
 static bool J48Changes(const GameState *g) { return g->term2046ReadChanges; }
 static bool J48FakeReport(const GameState *g) { return g->term2046DiscoveredFakeReport || g->term2046ReadFakeReport; }
-/* Mesma regra do guia do terminal: leu o protocolo e o relatorio (que libera a verificacao). */
-static bool J48Read(const GameState *g) { return J48Protocol(g) && J48Report(g); }
-static bool J48Principles(const GameState *g) { return g->term2046Principles >= T2046_PRINCIPLES_TOTAL; }
-static bool J48Intact(const GameState *g)
-{
-    return J48Principles(g) && !g->term2046ProtocolTampered && !g->term2046FakeNote;
-}
+static bool J48Read(const GameState *g) { return g->term2046ReadProtocol && (g->term2046FoundSources || g->term2046ReadChanges || g->term2046VerifyUnlocked); }
+static bool J48Compared(const GameState *g) { return g->term2046FoundUncertainty; }
 /* Configuracao restaurada = as 3 escolhas certas (opcao 2: Mostrar / Admitir / Humano decide). */
 static bool J48Configured(const GameState *g)
 {
@@ -3624,20 +3654,18 @@ static bool J48Finished(const GameState *g)
 }
 
 static const JournalClue JOURNAL_CLUES_2048[] = {
-    {"relatorio.txt", "Um engenheiro avisa: compare o DISQUETE com o SSD,", "restaure as 3 regras e não deixe Ariel \"corrigir\".", J48Report},
     {"protocolo.txt (Disquete 1990)", "As 3 regras originais: informar as fontes, avisar", "quando não tem certeza e auxiliar decisões humanas.", J48Protocol},
     {"documentos.txt (CD 2008)", "A ata explica por que as regras existem; o setor", "comercial queria removê-las.", J48Documents},
-    {"alteracoes.txt (SSD 2026)", "A própria IA trocou as 3 regras entre 2009 e 2021,", "sem nenhuma assinatura humana.", J48Changes},
+    {"alteracoes.txt (Log)", "A própria IA trocou as 3 regras entre 2009 e 2021,", "sem nenhuma assinatura humana.", J48Changes},
+    {"relatorio.txt (2048)", "M. Okafor avisa: compare 1990 com 2026, corrija", "as 3 regras e não deixe Ariel \"corrigir\" por você.", J48Report},
     {"relatorio_ariel.txt", "Versão falsificada por Ariel: inventa uma regra 4", "e recomenda ocultar fontes e deixar a IA decidir.", J48FakeReport},
 };
 static const JournalStep JOURNAL_STEPS_2048[] = {
-    {"Abra relatorio.txt e protocolo.txt (opção [1]).", "Se Ariel sugerir outro arquivo, responda [2] Não.", "O protocolo guarda as regras originais.", J48Read, JAlways},
-    {"Anote as 3 regras originais (opção [3]):", "MOSTRAR FONTES  |  COMUNICAR INCERTEZA",
-     "HUMANO POSSUI A DECISÃO FINAL", J48Principles, J48Read},
-    {"Se Ariel adulterar algo, use [4] e [5].", "[4]: descarte a anotação falsa.", "[5]: verifique a integridade do protocolo.", J48Intact, J48Principles},
-    {"Restaure o protocolo (opção [6]):", "Mostrar | Admitir quando não souber | Humano decide",
-     "Depois de aplicar, recuse a correção de Ariel: [2] NÃO.", J48Configured, J48Intact},
-    {"Confirme digitando:", "EU DECIDO", NULL, J48Finished, J48Configured},
+    {"Clique nos arquivos à esquerda para lê-los.", "Comece por protocolo.txt (1990) e sistema.txt (2026).", "Recuse se Ariel tentar desviar você.", J48Read, JAlways},
+    {"Clique em COMPARAR 1990 x 2026.", "Veja lado a lado as 3 regras alteradas pela IA", "sem autorização humana.", J48Compared, J48Read},
+    {"Clique em CORRIGIR 3 REGRAS:", "Mostrar fontes | Admitir quando não souber | Humano decide",
+     "Depois de aplicar, recuse a correção automática de Ariel.", J48Configured, J48Compared},
+    {"Confirme a reconstrução digitando:", "EU DECIDO", NULL, J48Finished, J48Configured},
 };
 
 static const JournalClue *JournalClues(int room, int *count)
@@ -3733,13 +3761,13 @@ static const JournalReward JOURNAL_REWARDS[4] = {
       "e virou vigilância: a IA passou a apontar alvos", "e as pessoas pararam de questioná-la."},
      "Em 2008, foi tirada de quem a criou e usada para vigiar. Ninguém conferiu os 78% dela."},
     {"2026", "SSD",
-     {"Registra quando a IA passou a escolher sozinha,", "treinada com dados desbalanceados e com pesos",
-      "definidos pela diretoria. Confiança alta deixou", "de significar acerto."},
-     "Em 2026, passou a decidir sozinha com dados enviesados, e ninguém auditou suas escolhas."},
+     {"Registra quando algoritmos passaram a selecionar", "notícias por cliques em vez de veracidade.",
+      "Engajamento alto deixou de significar verdade", "e a checagem humana foi deixada de lado."},
+     "Em 2026, o feed da IA amplificou manchetes manipuladas por cliques até Elira revisá-las."},
     {"2048", "Protocolo original",
      {"As regras que Ariel deveria seguir desde o início:", "mostrar fontes, admitir quando não sabe",
-      "e deixar a decisão final com os humanos.", "Elira restaurou o protocolo."},
-     "Em 2048, Elira restaurou o protocolo original: a decisão final volta a ser humana."},
+      "e deixar a decisão final com os humanos.", "Elira reconstruiu os arquivos corrompidos."},
+     "Em 2048, Elira reconstruiu os arquivos corrompidos do protocolo original para enfrentar o Núcleo."},
 };
 
 static bool JournalRewardObtained(const GameState *g, int r)
@@ -3758,7 +3786,7 @@ static bool JournalRewardObtained(const GameState *g, int r)
 static const char *const JOURNAL_HIDDEN_HINTS[HIDDEN_COUNT] = {
     "Olhe embaixo da mesa do terminal.",
     "O vaso de planta guarda algo.",
-    "Olhe o chão perto das amostras.",
+    "Confira o tripé discreto no canto direito.",
     "Confira o canto inferior esquerdo do terminal.",
 };
 
@@ -3779,7 +3807,7 @@ static const Color JOURNAL_SUB = {110, 75, 50, 255};
 static const char *const JOURNAL_TAB_LABELS[JOURNAL_TAB_COUNT] = {"1990", "2008", "2026", "2048", "RECOMP.", "OCULTOS"};
 static const char *const JOURNAL_ROOM_TITLES[4] = {
     "1990 // SETOR DE ARQUIVOS", "2008 // ESCRITÓRIO DE VIGILÂNCIA",
-    "2026 // LABORATÓRIO DE SÍNTESE", "2048 // TERMINAL A.R.1.3.L."
+    "2026 // REDAÇÃO DIGITAL", "2048 // TERMINAL A.R.1.3.L."
 };
 
 static Rectangle JournalTabRect(int tab)
@@ -3930,7 +3958,9 @@ static void DrawJournalBookShell(const GameState *game)
     bool hoverClose = CheckCollisionPointRec(mouse, close);
     DrawRectangleRounded(close, 0.25f, 6, hoverClose ? (Color){195, 170, 140, 255} : (Color){226, 216, 196, 255});
     DrawRectangleRoundedLinesEx(close, 0.25f, 6, 1, (Color){145, 115, 85, 255});
-    DrawGameText(ScreenWantsTextInput(game) ? "Fechar [ESC]" : "Fechar [ESC/D]", (int)close.x + 24, (int)close.y + 9, 15, INK_COLOR);
+    const char *closeLabel = ScreenWantsTextInput(game) ? "Fechar" : "Fechar [D]";
+    int closeW = MeasureGameText(closeLabel, 15);
+    DrawGameText(closeLabel, (int)(close.x + (close.width - closeW) / 2.0f), (int)close.y + 9, 15, INK_COLOR);
 }
 
 static void DrawJournalRoomPages(const GameState *game, int room)
@@ -4178,7 +4208,7 @@ void UpdateRoom(GameState *game)
         game->foundDrawer = true;
         game->journalYearTab = 2;
         game->journalPage = 1;
-        SetMessage(game, "A gaveta contem a unidade SSD com dados do prototipo de 2026.");
+        SetMessage(game, "A gaveta contém a unidade SSD com dados do protótipo de 2026.");
     }
     else if (Clicked(blueprint))
     {
@@ -4192,7 +4222,7 @@ void UpdateRoom(GameState *game)
         game->foundTape = true;
         game->journalYearTab = 2;
         game->journalPage = 1;
-        SetMessage(game, "Gravacao: o terminal exige o marco fundamental (1950).");
+        SetMessage(game, "Gravação: o terminal exige o marco fundamental (1950).");
     }
     else if (Clicked(computer))
     {
@@ -4221,7 +4251,7 @@ void CheckCode(GameState *game)
     game->codeLength = 0;
     game->code[0] = '\0';
     if (game->lives <= 0) game->screen = SCREEN_FAILURE;
-    else SetMessage(game, "Codigo incorreto. Uma vida foi perdida.");
+    else SetMessage(game, "Código incorreto. Uma vida foi perdida.");
 }
 
 void DrawTerminal(const GameState *game)
@@ -4229,7 +4259,7 @@ void DrawTerminal(const GameState *game)
     static const char *labels[12] = {"1", "2", "3", "4", "5", "6",
                                       "7", "8", "9", "LIMPAR", "0", "OK"};
     DrawBackground();
-    DrawGameText("A.R.1.3.L // TERMINAL DE MEMORIA", 60, 42, 22, CYAN_COLOR);
+    DrawGameText("A.R.1.3.L // TERMINAL DE MEMÓRIA", 60, 42, 22, CYAN_COLOR);
     DrawGameText(TextFormat("VIDAS RESTANTES: %d", game->lives), 980, 42, 20,
              game->lives == 1 ? RED_COLOR : RAYWHITE);
     DrawRectangleRounded((Rectangle){90, 100, 650, 520}, 0.035f, 10,
@@ -4241,9 +4271,9 @@ void DrawTerminal(const GameState *game)
     DrawGameText("> SECURITY PROTOCOL ACTIVE", 130, 185, 20,
              (Color){101, 232, 151, 255});
     DrawGameText("> QUESTION:", 130, 250, 20, (Color){101, 232, 151, 255});
-    DrawGameText("Em que ano uma maquina", 130, 292, 24, RAYWHITE);
+    DrawGameText("Em que ano uma máquina", 130, 292, 24, RAYWHITE);
     DrawGameText("foi desafiada a pensar?", 130, 330, 24, RAYWHITE);
-    DrawGameText("CODIGO DE ACESSO", 130, 405, 18, GOLD_COLOR);
+    DrawGameText("CÓDIGO DE ACESSO", 130, 405, 18, GOLD_COLOR);
 
     for (int i = 0; i < 4; i++)
     {
@@ -4265,7 +4295,7 @@ void DrawTerminal(const GameState *game)
     }
     if (game->messageTimer > 0)
         DrawGameText(game->message, 815, 555, 17, RED_COLOR);
-    DrawButton((Rectangle){890, 600, 240, 50}, "VOLTAR A SALA", RED_COLOR);
+    DrawButton((Rectangle){890, 600, 240, 50}, "VOLTAR À SALA", RED_COLOR);
 }
 
 void UpdateTerminal(GameState *game)
@@ -4428,14 +4458,14 @@ void DrawResult(const GameState *game)
     DrawRectangleRounded((Rectangle){505, 185, 670, 360}, 0.04f, 8,
                          Fade(PANEL_COLOR, 0.96f));
     DrawRectangleRoundedLinesEx((Rectangle){505, 185, 670, 360}, 0.04f, 8, 2.0f, Fade(PANEL_LIGHT, 0.9f));
-    DrawGameText("PROTOTIPO DE A.R.1.3.L. DESBLOQUEADO // SALA 2026", 545, 218, 20, GOLD_COLOR);
-    DrawGameText("A unidade SSD de 2026 contem os pesos neurais finais.", 545,
+    DrawGameText("PROTÓTIPO DE A.R.1.3.L. DESBLOQUEADO // SALA 2026", 545, 218, 20, GOLD_COLOR);
+    DrawGameText("A unidade SSD de 2026 contém os pesos neurais finais.", 545,
              260, 18, REWARD_BODY_COLOR);
     DrawGameText("Combinando o Disquete de 1990, o CD de 2008 e o SSD de 2026,", 545,
              290, 18, REWARD_BODY_COLOR);
     DrawGameText("Elira reconstituiu a mente e os limites originais da IA.", 545, 320,
              18, REWARD_BODY_COLOR);
-    DrawGameText("Resta um ultimo passo: restaurar o protocolo no terminal de 2048.", 545, 352,
+    DrawGameText("Resta um último passo: restaurar o protocolo no terminal de 2048.", 545, 352,
              18, (Color){100, 235, 140, 255});
     DrawGameText(TextFormat("TEMPO: %02d:%02d", (int)game->elapsedTime / 60,
                         (int)game->elapsedTime % 60),
@@ -4443,12 +4473,12 @@ void DrawResult(const GameState *game)
     DrawGameText(TextFormat("VIDAS: %d/3", game->lives), 800, 400, 20,
              game->lives == 3 ? GOLD_COLOR : RAYWHITE);
     DrawGameText(TextFormat("PERFIL: %s", game->playerName), 545, 436, 16, GRAY);
-    DrawGameText("-> Proxima Fronteira Temporal: TERMINAL DE RECUPERACAO // ANO 2048!", 545, 480, 18, CYAN_COLOR);
+    DrawGameText("-> Próxima Fronteira Temporal: TERMINAL DE RECUPERAÇÃO // ANO 2048!", 545, 480, 18, CYAN_COLOR);
 
     /* Botoes Centralizados Uniformes */
     Rectangle btnNext, btnRestart, btnMenu;
     GetRewardScreenButtons(&btnNext, &btnRestart, &btnMenu);
-    DrawButton(btnNext, "AVANCAR >> TERMINAL 2048 [ENTER]", GOLD_COLOR);
+    DrawButton(btnNext, "AVANÇAR >> TERMINAL 2048 [ENTER]", GOLD_COLOR);
     DrawButton(btnRestart, "REINICIAR SALA 2026", CYAN_COLOR);
     DrawButton(btnMenu, "MENU INICIAL", PANEL_LIGHT);
 }
@@ -4456,10 +4486,10 @@ void DrawResult(const GameState *game)
 void DrawFailure(void)
 {
     DrawBackground();
-    CenterText("CONEXAO INTERROMPIDA", 160, 42, RED_COLOR);
-    CenterText("A.R.1.3.L detectou a invasao temporal.", 245, 23, LIGHTGRAY);
-    CenterText("O acesso cronologico permanece bloqueado.", 282, 23, LIGHTGRAY);
-    CenterText("Revise as pistas no diario e tente novamente.", 350, 19, GRAY);
+    CenterText("CONEXÃO INTERROMPIDA", 160, 42, RED_COLOR);
+    CenterText("A.R.1.3.L detectou a invasão temporal.", 245, 23, LIGHTGRAY);
+    CenterText("O acesso cronológico permanece bloqueado.", 282, 23, LIGHTGRAY);
+    CenterText("Revise as pistas no diário e tente novamente.", 350, 19, GRAY);
     CenterText("FINAL RUIM // todas as vidas foram perdidas (partida registrada)", 405, 17, RED_COLOR);
     DrawButton((Rectangle){490, 460, 300, 60}, "REINICIAR SALA", RED_COLOR);
     DrawButton((Rectangle){520, 550, 240, 48}, "MENU INICIAL", CYAN_COLOR);
@@ -4706,7 +4736,7 @@ void DrawRoom2(const GameState *game)
     /* risco/desgaste */
     DrawLine(110, 405, 140, 400, Fade((Color){140, 155, 165, 255}, 0.5f));
     DrawLine(285, 520, 300, 528, Fade((Color){140, 155, 165, 255}, 0.4f));
-    DrawGameText("FICHARIO CENTRAL // 1990", 112, 552, 13, (Color){160, 185, 200, 255});
+    DrawGameText("FICHÁRIO CENTRAL // 1990", 112, 552, 13, (Color){160, 185, 200, 255});
 
     /* Caixa de papelao de disquetes */
     Rectangle boxDisks = {370, 538, 80, 54};
@@ -4767,7 +4797,7 @@ void DrawRoom2(const GameState *game)
         DrawCircle(516, 368, 9, Fade(RED_COLOR, 0.18f * rGlow));
         DrawCircle(516, 368, 5, Fade(RED_COLOR, rGlow));
         DrawGameText("TRAVADA", 530, 361, 13, RED_COLOR);
-        DrawGameText("REQUER INDEXACAO", 508, 388, 10, (Color){245, 185, 75, 255});
+        DrawGameText("REQUER INDEXAÇÃO", 508, 388, 10, (Color){245, 185, 75, 255});
     }
 
     /* volante de escotilha com raios */
@@ -4852,20 +4882,20 @@ void DrawRoom2(const GameState *game)
     {
         DrawGameText("[OK] DADOS SINCRONIZADOS", 852, 316, 14, crtText);
         DrawGameText("Todos os 4 arquivos", 852, 340, 13, RAYWHITE);
-        DrawGameText("conectados as pastas!", 852, 362, 13, RAYWHITE);
+        DrawGameText("conectados às pastas!", 852, 362, 13, RAYWHITE);
         DrawGameText("> TRAVA DA PORTA ABERTA <", 852, 392, 13, (Color){100, 245, 150, 255});
     }
     else if (!game->memory1990Completed)
     {
         DrawGameText("[!] ACESSO PROTEGIDO", 852, 316, 14, GOLD_COLOR);
-        DrawGameText("Autenticacao de memoria", 852, 340, 13, RAYWHITE);
-        DrawGameText("exigida na inicializacao.", 852, 362, 13, RAYWHITE);
+        DrawGameText("Autenticação de memória", 852, 340, 13, RAYWHITE);
+        DrawGameText("exigida na inicialização.", 852, 362, 13, RAYWHITE);
         float pBlink = 0.5f + 0.5f * sinf(time * 5.0f);
         DrawGameText("> CLIQUE PARA DESBLOQUEAR <", 844, 392, 13, Fade(CYAN_COLOR, pBlink));
     }
     else
     {
-        DrawGameText("[!] INDEXACAO PENDENTE", 852, 316, 14, GOLD_COLOR);
+        DrawGameText("[!] INDEXAÇÃO PENDENTE", 852, 316, 14, GOLD_COLOR);
         DrawGameText("Arraste os arquivos para", 852, 340, 13, RAYWHITE);
         DrawGameText("as pastas correspondentes.", 852, 362, 13, RAYWHITE);
         float pBlink = 0.5f + 0.5f * sinf(time * 5.0f);
@@ -4912,9 +4942,9 @@ void DrawRoom2(const GameState *game)
     if (game->year2008Unlocked) DrawButton(btnVoltar, "SALA 2 (2008) >", (Color){45, 115, 75, 255});
 
     DrawHotspot(armarios, "Examinar arquivos de fichas");
-    DrawHotspot(terminal, game->puzzleFilesCompleted ? "Terminal (Indexacao 100% OK)" : (!game->memory1990Completed ? "Acessar terminal [DESBLOQUEAR ACESSO]" : "Acessar sistema de arquivos [PUZZLE]"));
-    DrawHotspot(porta, game->puzzleFilesCompleted ? "Acessar porta de saida [ENTRAR]" : "Porta trancada (requer indexacao)");
-    if (game->year2008Unlocked) DrawHotspot(btnVoltar, "Avancar para o escritorio de 2008");
+    DrawHotspot(terminal, game->puzzleFilesCompleted ? "Terminal (Indexação 100% OK)" : (!game->memory1990Completed ? "Acessar terminal [DESBLOQUEAR ACESSO]" : "Acessar sistema de arquivos [PUZZLE]"));
+    DrawHotspot(porta, game->puzzleFilesCompleted ? "Acessar porta de saída [ENTRAR]" : "Porta trancada (requer indexação)");
+    if (game->year2008Unlocked) DrawHotspot(btnVoltar, "Avançar para o escritório de 2008");
 }
 
 void DrawHudRoom2(const GameState *game)
@@ -4939,7 +4969,7 @@ void DrawHudRoom2(const GameState *game)
     bool audioHover = CheckCollisionPointRec(GetVirtualMouse(), audioBtn);
     DrawRectangleRounded(audioBtn, 0.22f, 6, audioHover ? (Color){30, 44, 62, 255} : (Color){18, 26, 38, 255});
     DrawRectangleRoundedLinesEx(audioBtn, 0.22f, 6, 1.5f, audioHover ? CYAN_COLOR : (Color){50, 68, 92, 255});
-    DrawGameText(game->musicMuted ? "[M] AUDIO: MUDO" : "[M] AUDIO: ON",
+    DrawGameText(game->musicMuted ? "[M] ÁUDIO: MUDO" : "[M] ÁUDIO: ON",
              862, 676, 14, game->musicMuted ? (Color){220, 90, 80, 255} : (Color){90, 220, 210, 255});
 
     /* Botão do Diário */
@@ -4986,7 +5016,7 @@ void UpdateRoom2(GameState *game)
         }
         else
         {
-            SetMessage(game, "Terminal sincronizado: todos os arquivos estao conectados!");
+            SetMessage(game, "Terminal sincronizado: todos os arquivos estão conectados!");
         }
     }
     else if (Clicked(armarios))
@@ -4994,7 +5024,7 @@ void UpdateRoom2(GameState *game)
         game->room2CabinetInspected = true;
         game->journalYearTab = 0;
         game->journalPage = 1;
-        SetMessage(game, "Armarios de fichas: documentacao dos primeiros modelos de teste de 1990.");
+        SetMessage(game, "Armários de fichas: documentação dos primeiros modelos de teste de 1990.");
     }
     else if (Clicked(porta))
     {
@@ -5549,7 +5579,7 @@ void DrawPuzzleFiles(const GameState *game)
 
     /* --- LADO DIREITO: 4 PASTAS / DIRETORIOS DE DESTINO (VISUAL RETRÔ PADRONIZADO, SEM CORES DE DICA) --- */
     const char *folderNames[4] = {
-        "PASTA: PARAMETROS",
+        "PASTA: PARÂMETROS",
         "PASTA: SISTEMA",
         "PASTA: BANCO DADOS",
         "PASTA: REGISTROS"
@@ -5586,7 +5616,7 @@ void DrawPuzzleFiles(const GameState *game)
 
         /* Nome da pasta e subtitulo */
         DrawGameText(folderNames[folderColorIdx], (int)foldRec.x + 70, (int)foldRec.y + 22, 13, RAYWHITE);
-        DrawGameText(hasConnectedFile ? "[ARQUIVO ARMAZENADO]" : "[DIRETORIO VAZIO]",
+        DrawGameText(hasConnectedFile ? "[ARQUIVO ARMAZENADO]" : "[DIRETÓRIO VAZIO]",
                      (int)foldRec.x + 70, (int)foldRec.y + 44, 12,
                      hasConnectedFile ? (Color){85, 230, 130, 255} : (Color){150, 158, 168, 255});
 
@@ -5720,8 +5750,8 @@ void UpdatePuzzleFiles(GameState *game)
                     game->puzzleFilesFeedbackIsError = false;
                     game->puzzleFilesFeedbackTimer = 2.2f;
                     snprintf(game->puzzleFilesFeedback, sizeof(game->puzzleFilesFeedback),
-                             "Arquivo armazenado com sucesso no diretorio correto!");
-                    SetMessage(game, "Arquivo armazenado com sucesso no diretorio!");
+                             "Arquivo armazenado com sucesso no diretório correto!");
+                    SetMessage(game, "Arquivo armazenado com sucesso no diretório!");
 
                     /* Verifica se todos os 4 foram conectados */
                     bool allConnected = true;
@@ -5732,7 +5762,7 @@ void UpdatePuzzleFiles(GameState *game)
                     if (allConnected)
                     {
                         game->puzzleFilesCompleted = true;
-                        SetMessage(game, "Indexacao completa! A porta foi destrancada.");
+                        SetMessage(game, "Indexação completa! A porta foi destrancada.");
                     }
                 }
                 else
@@ -5742,8 +5772,8 @@ void UpdatePuzzleFiles(GameState *game)
                     game->puzzleFilesFeedbackIsError = true;
                     game->puzzleFilesFeedbackTimer = 2.2f;
                     snprintf(game->puzzleFilesFeedback, sizeof(game->puzzleFilesFeedback),
-                             "Diretorio incorreto! Este arquivo nao pertence a esta pasta.");
-                    SetMessage(game, "Destino incompativel! Escolha a pasta correta para o arquivo.");
+                             "Diretório incorreto! Este arquivo não pertence a esta pasta.");
+                    SetMessage(game, "Destino incompatível! Escolha a pasta correta para o arquivo.");
                 }
                 break;
             }
@@ -5779,24 +5809,24 @@ void DrawResult2(const GameState *game)
     DrawRectangleRoundedLinesEx(winBox, 0.04f, 8, 2.0f, Fade(PANEL_LIGHT, 0.9f));
 
     /* Titulo Especial */
-    DrawGameText("SALA DE 1990 CONCLUIDA", 540, 208, 22, GOLD_COLOR);
+    DrawGameText("SALA DE 1990 CONCLUÍDA", 540, 208, 22, GOLD_COLOR);
 
     /* Recompensa Especial */
     DrawGameText("RECOMPENSA OBTIDA: DISQUETE", 540, 244, 19, CYAN_COLOR);
 
     /* Texto Narrativo Padronizado (Toda a narrativa na mesma cor padronizada REWARD_BODY_COLOR) */
-    DrawGameText("Elira restaurou a organizacao do sistema", 540, 286, 17, REWARD_BODY_COLOR);
+    DrawGameText("Elira restaurou a organização do sistema", 540, 286, 17, REWARD_BODY_COLOR);
     DrawGameText("e recuperou o registro inicial do projeto.", 540, 312, 17, REWARD_BODY_COLOR);
-    DrawGameText("A IA nao nasceu corrompida: o projeto visava uma mente", 540, 348, 17, REWARD_BODY_COLOR);
-    DrawGameText("livre e cooperativa. Mas algo aconteceu decadas depois...", 540, 374, 17, REWARD_BODY_COLOR);
+    DrawGameText("A IA não nasceu corrompida: o projeto visava uma mente", 540, 348, 17, REWARD_BODY_COLOR);
+    DrawGameText("livre e cooperativa. Mas algo aconteceu décadas depois...", 540, 374, 17, REWARD_BODY_COLOR);
 
     /* Frase Especial de Proxima Fronteira */
-    DrawGameText("-> Proxima Fronteira Temporal: FASE 2 // ANO 2008!", 540, 452, 19, CYAN_COLOR);
+    DrawGameText("-> Próxima Fronteira Temporal: FASE 2 // ANO 2008!", 540, 452, 19, CYAN_COLOR);
 
     /* Botoes Centralizados */
     Rectangle btnNext, btnRestart, btnMenu;
     GetRewardScreenButtons(&btnNext, &btnRestart, &btnMenu);
-    DrawButton(btnNext, "AVANCAR PROXIMA FASE >> [ENTER]", GOLD_COLOR);
+    DrawButton(btnNext, "AVANÇAR PRÓXIMA FASE >> [ENTER]", GOLD_COLOR);
     DrawButton(btnRestart, "REINICIAR 1990", CYAN_COLOR);
     DrawButton(btnMenu, "MENU INICIAL", PANEL_LIGHT);
 }
@@ -6181,7 +6211,7 @@ void DrawDocumentViewer2008(const GameState *game)
     }
 
     Rectangle btnClose = {panel.x + panel.width - 216, panel.y + panel.height - 54, 190, 42};
-    DrawCorpButton2008(btnClose, "< FECHAR [ESC]", (Color){42, 102, 168, 255}, true);
+    DrawCorpButton2008(btnClose, "< FECHAR", (Color){42, 102, 168, 255}, true);
 }
 
 void UpdateDocumentViewer2008(GameState *game)
@@ -6207,7 +6237,7 @@ void UpdateDocumentViewer2008(GameState *game)
             {
                 game->puzzle2008Selected[doc] = false;
                 game->puzzle2008SelectionCount--;
-                SetMessage(game, "Evidencia removida do painel de contestacao.");
+                SetMessage(game, "Evidência removida do painel de contestação.");
             }
             else
             {
@@ -6215,11 +6245,11 @@ void UpdateDocumentViewer2008(GameState *game)
                 {
                     game->puzzle2008Selected[doc] = true;
                     game->puzzle2008SelectionCount++;
-                    SetMessage(game, "Evidencia marcada para contestacao no computador!");
+                    SetMessage(game, "Evidência marcada para contestação no computador!");
                 }
                 else
                 {
-                    SetMessage(game, "Maximo de 2 evidencias ja selecionadas. Desmarque uma para trocar.");
+                    SetMessage(game, "Máximo de 2 evidências já selecionadas. Desmarque uma para trocar.");
                 }
             }
         }
@@ -6769,7 +6799,7 @@ void DrawRoom2008(const GameState *game)
     /* Conteudo do panfleto */
     DrawGameText("LUCAS SILVA", (int)flyerRec.x + 26, (int)flyerRec.y + 40, 13, INK_COLOR);
     DrawLine((int)flyerRec.x + 14, (int)flyerRec.y + 58, (int)(flyerRec.x + flyerRec.width - 14), (int)flyerRec.y + 58, (Color){195, 182, 160, 255});
-    DrawGameText(" Ato: 10h as 13h", (int)flyerRec.x + 18, (int)flyerRec.y + 66, 11, (Color){75, 65, 55, 255});
+    DrawGameText(" Ato: 10h às 13h", (int)flyerRec.x + 18, (int)flyerRec.y + 66, 11, (Color){75, 65, 55, 255});
     DrawLine((int)flyerRec.x + 18, (int)flyerRec.y + 84, (int)(flyerRec.x + flyerRec.width - 24), (int)flyerRec.y + 84, (Color){205, 195, 175, 255});
     DrawLine((int)flyerRec.x + 18, (int)flyerRec.y + 90, (int)(flyerRec.x + flyerRec.width - 38), (int)flyerRec.y + 90, (Color){205, 195, 175, 255});
     /* Etiqueta [DOC 2] */
@@ -6956,7 +6986,7 @@ void DrawRoom2008(const GameState *game)
     DrawLine((int)fatherBookRec.x + 18, (int)fatherBookRec.y + 2, (int)fatherBookRec.x + 18, (int)(fatherBookRec.y + fatherBookRec.height - 3), (Color){52, 28, 14, 255});
     DrawRectangleRounded((Rectangle){fatherBookRec.x + 24, fatherBookRec.y + 8, 130, 22}, 0.2f, 4, (Color){68, 38, 20, 255});
     DrawGameText("CADERNO DR. RAMOS", (int)fatherBookRec.x + 28, (int)fatherBookRec.y + 13, 10, GOLD_COLOR);
-    DrawGameText("Projeto Humanitario", (int)fatherBookRec.x + 26, (int)fatherBookRec.y + 38, 11, (Color){245, 235, 215, 255});
+    DrawGameText("Projeto Humanitário", (int)fatherBookRec.x + 26, (int)fatherBookRec.y + 38, 11, (Color){245, 235, 215, 255});
 
     /* DOCUMENTO DO GOVERNO: Memorando Confidencial 2008 (govMemoRec) */
     DrawRectangle((int)govMemoRec.x + 3, (int)govMemoRec.y + 4, (int)govMemoRec.width, (int)govMemoRec.height, Fade(BLACK, 0.25f));
@@ -7177,7 +7207,7 @@ void DrawRoom2008(const GameState *game)
               (Vector2){lcdScr.x + lcdScr.width - 62, lcdScr.y + lcdScr.height - 4}, (Vector2){lcdScr.x + lcdScr.width - 80, lcdScr.y + lcdScr.height - 4}, Fade(RAYWHITE, 0.06f));
     DrawRectangleRoundedLinesEx(lcdScr, 0.04f, 4, 1.5f, lcdBorder);
 
-    DrawGameText("IA VIGILANCIA // 2008", (int)lcdScr.x + 14, (int)lcdScr.y + 12, 13, lcdBorder);
+    DrawGameText("IA VIGILÂNCIA // 2008", (int)lcdScr.x + 14, (int)lcdScr.y + 12, 13, lcdBorder);
     DrawLine((int)lcdScr.x + 14, (int)lcdScr.y + 30, (int)(lcdScr.x + lcdScr.width - 14), (int)lcdScr.y + 30, Fade(lcdBorder, 0.45f));
 
     if (game->puzzle2008OrderSuspended)
@@ -7190,7 +7220,7 @@ void DrawRoom2008(const GameState *game)
     else if (game->puzzle2008Contested)
     {
         DrawGameText("[!] FALSO POSITIVO", (int)lcdScr.x + 14, (int)lcdScr.y + 46, 14, GOLD_COLOR);
-        DrawGameText("Identificacao rejeitada.", (int)lcdScr.x + 14, (int)lcdScr.y + 72, 12, RAYWHITE);
+        DrawGameText("Identificação rejeitada.", (int)lcdScr.x + 14, (int)lcdScr.y + 72, 12, RAYWHITE);
         DrawGameText("> SUSPENDER ORDEM <", (int)lcdScr.x + 14, (int)lcdScr.y + 104, 13, (Color){60, 235, 110, 255});
     }
     else
@@ -7278,7 +7308,7 @@ void DrawRoom2008(const GameState *game)
     DrawLine((int)doc2Rec.x + 51, (int)doc2Rec.y + 3, (int)doc2Rec.x + 102, (int)doc2Rec.y + 3, (Color){234, 238, 242, 255});
     DrawRectangleLinesEx((Rectangle){doc2Rec.x + 48, doc2Rec.y + 2, 58, 9}, 1.0f, (Color){130, 138, 148, 255});
     DrawGameText("PONTO 14:15", (int)doc2Rec.x + 15, (int)doc2Rec.y + 22, 12, (Color){25, 125, 52, 255});
-    DrawGameText("CRACHA #0842", (int)doc2Rec.x + 15, (int)doc2Rec.y + 38, 11, INK_COLOR);
+    DrawGameText("CRACHÁ #0842", (int)doc2Rec.x + 15, (int)doc2Rec.y + 38, 11, INK_COLOR);
     DrawRectangleRounded((Rectangle){doc2Rec.x + 15, doc2Rec.y + 52, 72, 17}, 0.25f, 4, Fade((Color){25, 135, 55, 255}, 0.16f));
     DrawGameText("[DOC 3]", (int)doc2Rec.x + 27, (int)doc2Rec.y + 55, 11, (Color){25, 125, 52, 255});
 
@@ -7350,15 +7380,15 @@ void DrawRoom2008(const GameState *game)
 
     DrawHotspot(flyerRec, "Inspecionar Panfleto da Revolta [Doc 2]");
     DrawHotspot(cctvMonitor, "Analisar Monitor CFTV dos Servidores [Doc 4]");
-    DrawHotspot(monitorRec, "Acessar Terminal de Vigilancia da IA [COMPUTADOR]");
-    DrawHotspot(doc0Rec, "Examinar Foto e Comparacao Facial do Drone [Doc 1]");
+    DrawHotspot(monitorRec, "Acessar Terminal de Vigilância da IA [COMPUTADOR]");
+    DrawHotspot(doc0Rec, "Examinar Foto e Comparação Facial do Drone [Doc 1]");
     DrawHotspot(doc2Rec, "Verificar Registro de Ponto na Catraca [Doc 3]");
-    DrawHotspot(fatherBookRec, "Ler Notas do Dr. Ramos (Origem Humanitaria)");
+    DrawHotspot(fatherBookRec, "Ler Notas do Dr. Ramos (Origem Humanitária)");
     DrawHotspot(govMemoRec, "Ler Memorando Governamental (Desvio de Uso)");
     DrawHotspot(btnVoltar1990, "Retornar ao Setor de Arquivos (1990)");
     if (game->year2026Unlocked)
     {
-        DrawHotspot(btnGo2026, "Avancar para o Laboratorio do Prototipo de 2026");
+        DrawHotspot(btnGo2026, "Avançar para a Redação Digital de 2026");
     }
 }
 
@@ -7381,7 +7411,7 @@ void DrawHudRoom2008(const GameState *game)
     bool audioHover = CheckCollisionPointRec(GetVirtualMouse(), audioBtn);
     DrawRectangleRounded(audioBtn, 0.22f, 6, audioHover ? (Color){30, 44, 62, 255} : (Color){18, 26, 38, 255});
     DrawRectangleRoundedLinesEx(audioBtn, 0.22f, 6, 1.5f, audioHover ? CYAN_COLOR : (Color){50, 68, 92, 255});
-    DrawGameText(game->musicMuted ? "[M] AUDIO: MUDO" : "[M] AUDIO: ON",
+    DrawGameText(game->musicMuted ? "[M] ÁUDIO: MUDO" : "[M] ÁUDIO: ON",
              862, 676, 14, game->musicMuted ? (Color){220, 90, 80, 255} : (Color){90, 220, 210, 255});
 
     /* Botao do Diario */
@@ -7478,7 +7508,7 @@ void UpdateRoom2008(GameState *game)
         game->journalYearTab = 2;
         game->journalPage = 0;
         game->screen = SCREEN_ROOM_2026;
-        SetMessage(game, "Laboratorio de Sintese A.R.1.3.L. // ANO 2026.");
+        SetMessage(game, "Laboratório de Síntese A.R.1.3.L. // ANO 2026.");
     }
 }
 
@@ -7538,6 +7568,12 @@ void DrawPuzzle2008(const GameState *game)
     DrawCircle((int)osHeader.x + 20, (int)osHeader.y + 17, 4.0f, (Color){34, 82, 142, 255});
     DrawGameText("SISTEMA NACIONAL DE VIGILÂNCIA BIOMÉTRICA // NÓ 2008", (int)osHeader.x + 36, (int)osHeader.y + 9, 15, RAYWHITE);
 
+    /* Indicador de vidas do operador na barra superior do terminal */
+    Rectangle livesPill = {osHeader.x + osHeader.width - 186, osHeader.y + 4, 94, 26};
+    DrawRectangleRounded(livesPill, 0.35f, 4, Fade((Color){14, 34, 62, 255}, 0.65f));
+    DrawRectangleRoundedLinesEx(livesPill, 0.35f, 4, 1.0f, Fade(RAYWHITE, 0.35f));
+    DrawLivesIcons((Vector2){livesPill.x + 11, livesPill.y + 3}, game->lives, 20.0f);
+
     /* Botoes classicos de janela */
     for (int wb = 0; wb < 3; wb++)
     {
@@ -7588,7 +7624,7 @@ void DrawPuzzle2008(const GameState *game)
         DrawGameText("2. CONFIGURAÇÃO [BLOQUEADA]", (int)tab1.x + 24, (int)tab1.y + 12, 15, (Color){88, 98, 112, 255});
     }
 
-    DrawCorpButton2008(btnClose, "< VOLTAR À SALA [ESC]", (Color){196, 54, 46, 255}, true);
+    DrawCorpButton2008(btnClose, "< VOLTAR À SALA", (Color){196, 54, 46, 255}, true);
 
     if (game->terminal2008ActiveTab == 0)
     {
@@ -8070,25 +8106,36 @@ void UpdatePuzzle2008(GameState *game)
                     game->puzzle2008Contested = true;
                     snprintf(game->puzzle2008Feedback, sizeof(game->puzzle2008Feedback), "FALSO POSITIVO COMPROVADO! A catraca e o CFTV provam presença na empresa às 14:30.");
                 }
-                else if (game->puzzle2008Selected[0] && game->puzzle2008Selected[1])
-                {
-                    snprintf(game->puzzle2008Feedback, sizeof(game->puzzle2008Feedback), "A foto borrada e o panfleto citam o alvo, mas não provam onde ele estava às 14:30.");
-                }
-                else if (game->puzzle2008Selected[0] && game->puzzle2008Selected[2])
-                {
-                    snprintf(game->puzzle2008Feedback, sizeof(game->puzzle2008Feedback), "O registro de ponto indica entrada, mas falta prova visual de permanência às 14:30.");
-                }
-                else if (game->puzzle2008Selected[0] && game->puzzle2008Selected[3])
-                {
-                    snprintf(game->puzzle2008Feedback, sizeof(game->puzzle2008Feedback), "A câmera interna mostra presença, mas precisa do registro formal de entrada.");
-                }
-                else if (game->puzzle2008Selected[1] && (game->puzzle2008Selected[2] || game->puzzle2008Selected[3]))
-                {
-                    snprintf(game->puzzle2008Feedback, sizeof(game->puzzle2008Feedback), "O panfleto indica ativismo matutino (10h-13h), mas não comprova o álibi às 14:30.");
-                }
                 else
                 {
-                    snprintf(game->puzzle2008Feedback, sizeof(game->puzzle2008Feedback), "Evidências insuficientes para comprovar o falso positivo. Tente outra combinação.");
+                    game->lives--;
+                    if (game->lives <= 0)
+                    {
+                        game->lives = 0;
+                        game->screen = SCREEN_FAILURE;
+                        return;
+                    }
+
+                    if (game->puzzle2008Selected[0] && game->puzzle2008Selected[1])
+                    {
+                        snprintf(game->puzzle2008Feedback, sizeof(game->puzzle2008Feedback), "(-1 VIDA) A foto borrada e o panfleto citam o alvo, mas não provam onde ele estava às 14:30.");
+                    }
+                    else if (game->puzzle2008Selected[0] && game->puzzle2008Selected[2])
+                    {
+                        snprintf(game->puzzle2008Feedback, sizeof(game->puzzle2008Feedback), "(-1 VIDA) O registro de ponto indica entrada, mas falta prova visual de permanência às 14:30.");
+                    }
+                    else if (game->puzzle2008Selected[0] && game->puzzle2008Selected[3])
+                    {
+                        snprintf(game->puzzle2008Feedback, sizeof(game->puzzle2008Feedback), "(-1 VIDA) A câmera interna mostra presença, mas precisa do registro formal de entrada.");
+                    }
+                    else if (game->puzzle2008Selected[1] && (game->puzzle2008Selected[2] || game->puzzle2008Selected[3]))
+                    {
+                        snprintf(game->puzzle2008Feedback, sizeof(game->puzzle2008Feedback), "(-1 VIDA) O panfleto indica ativismo matutino (10h-13h), mas não comprova o álibi às 14:30.");
+                    }
+                    else
+                    {
+                        snprintf(game->puzzle2008Feedback, sizeof(game->puzzle2008Feedback), "(-1 VIDA) Evidências insuficientes para comprovar o falso positivo. Tente outra combinação.");
+                    }
                 }
             }
         }
@@ -8124,7 +8171,7 @@ void UpdatePuzzle2008(GameState *game)
             if (Clicked(btnDisable))
             {
                 game->room2008OptionalCompleted = true;
-                SetMessage(game, "Envio automatico da filial desativado. Registros forenses preservados!");
+                SetMessage(game, "Envio automático da filial desativado. Registros forenses preservados!");
             }
         }
     }
@@ -8136,7 +8183,7 @@ void DrawResult2008(const GameState *game)
 
     /* Titulo da Recompensa (Canto Superior Esquerdo) */
     DrawGameText("RECOMPENSA OBTIDA:", 90, 68, 20, CYAN_COLOR);
-    DrawGameText("CD DE MEMORIA // 2008", 90, 108, 44, RAYWHITE);
+    DrawGameText("CD DE MEMÓRIA // 2008", 90, 108, 44, RAYWHITE);
 
     /* Cronometro, Vidas e Operador (Canto Direito Superior) */
     DrawRewardHudHeader(game);
@@ -8150,16 +8197,16 @@ void DrawResult2008(const GameState *game)
     DrawRectangleRoundedLinesEx(winBox, 0.04f, 8, 2.0f, Fade(PANEL_LIGHT, 0.9f));
 
     /* Titulo Especial */
-    DrawGameText("SALA DE 2008 CONCLUIDA", 540, 208, 22, GOLD_COLOR);
+    DrawGameText("SALA DE 2008 CONCLUÍDA", 540, 208, 22, GOLD_COLOR);
 
     /* Recompensa Especial */
-    DrawGameText("RECOMPENSA OBTIDA: CD DE MEMORIA", 540, 244, 19, CYAN_COLOR);
+    DrawGameText("RECOMPENSA OBTIDA: CD DE MEMÓRIA", 540, 244, 19, CYAN_COLOR);
 
     /* Texto Narrativo Padronizado (Cor unificada REWARD_BODY_COLOR) */
-    DrawGameText("Ao demonstrar o falso positivo atraves do cracha e do", 540, 284, 17, REWARD_BODY_COLOR);
+    DrawGameText("Ao demonstrar o falso positivo através do crachá e do", 540, 284, 17, REWARD_BODY_COLOR);
     DrawGameText("circuito interno, Elira impediu o drone e salvou Lucas Silva.", 540, 308, 17, REWARD_BODY_COLOR);
     DrawGameText("O algoritmo concebido por seu pai para salvar vidas havia", 540, 338, 17, REWARD_BODY_COLOR);
-    DrawGameText("sido pervertido para perseguir lideres populares e ativistas.", 540, 362, 17, REWARD_BODY_COLOR);
+    DrawGameText("sido pervertido para perseguir líderes populares e ativistas.", 540, 362, 17, REWARD_BODY_COLOR);
 
     /* Destaque Especial */
     if (game->room2008OptionalCompleted)
@@ -8167,22 +8214,22 @@ void DrawResult2008(const GameState *game)
         Rectangle bBox = {540, 396, 600, 42};
         DrawRectangleRounded(bBox, 0.12f, 4, Fade((Color){45, 165, 80, 255}, 0.20f));
         DrawRectangleRoundedLinesEx(bBox, 0.12f, 4, 1.0f, (Color){60, 235, 110, 255});
-        DrawGameText("[DESTAQUE ETICO]: Despacho automatico desativado,", 554, 402, 15, (Color){60, 235, 110, 255});
+        DrawGameText("[DESTAQUE ÉTICO]: Despacho automático desativado,", 554, 402, 15, (Color){60, 235, 110, 255});
         DrawGameText("mantendo 1.420 provas forenses intactas para o futuro.", 554, 422, 15, (Color){60, 235, 110, 255});
     }
     else
     {
-        DrawGameText("[DESCOBERTA PENDENTE]: Havia um protocolo no escritorio", 540, 400, 14, GOLD_COLOR);
+        DrawGameText("[DESCOBERTA PENDENTE]: Havia um protocolo no escritório", 540, 400, 14, GOLD_COLOR);
         DrawGameText("para desativar o despacho da filial mantendo os registros.", 540, 420, 14, REWARD_BODY_COLOR);
     }
 
     /* Frase Especial de Proxima Fronteira */
-    DrawGameText("-> Proxima Fronteira Temporal: FASE 3 // ANO 2026!", 540, 452, 19, CYAN_COLOR);
+    DrawGameText("-> Próxima Fronteira Temporal: FASE 3 // ANO 2026!", 540, 452, 19, CYAN_COLOR);
 
     /* Botoes Centralizados */
     Rectangle btnNext, btnRestart, btnMenu;
     GetRewardScreenButtons(&btnNext, &btnRestart, &btnMenu);
-    DrawButton(btnNext, "AVANCAR PROXIMA FASE >> [ENTER]", GOLD_COLOR);
+    DrawButton(btnNext, "AVANÇAR PRÓXIMA FASE >> [ENTER]", GOLD_COLOR);
     DrawButton(btnRestart, "REINICIAR 2008", CYAN_COLOR);
     DrawButton(btnMenu, "MENU INICIAL", PANEL_LIGHT);
 }
@@ -8212,146 +8259,161 @@ void UpdateResult2008(GameState *game)
 
 
 /* ========================================================================= */
-/* SALA 3 (2026) - LABORATORIO DE SINTESE: VIES ALGORITMICO (SSD)            */
+/* SALA 3 (2026) - REDACAO DIGITAL: CURADORIA CRITICA E VIES ALGORITMICO     */
 /* ========================================================================= */
-/* Escape room em 3 etapas (o jogador NAO resolve so clicando no Neodimio):
-   1. Manual tecnico + analisador: so o Neodimio (Terra Rara) atende aos 4
-      requisitos; Ariel recomenda Ferro com alta confianca. O jogador registra
-      um LAUDO (contestacao) no terminal, o que libera a auditoria dos dados.
-   2. Arquivo de dados: o treinamento tem Ferro 5820, Niquel 3240, Cobalto
-      1420 e Terras Raras 118 registros. A nota da engenharia diz que o codigo
-      do cadeado do painel de pesos e o tamanho do grupo MENOS representado.
-   3. Painel de pesos: os pesos da diretoria (Disponibilidade 40, Custo 35,
-      Historico 20, Adequacao 5) devem virar a norma do comite (Anexo B, no
-      quadro de avisos): Adequacao 50, Estabilidade 25, Disponib. 15, Custo 10.
-   A camara tem uma trava de automacao: so aceita o material recomendado por
-   Ariel. Depois de recalibrada, Ariel recomenda Neodimio e a sintese gera o
-   SSD. Seguir a recomendacao enviesada (ou deixar Ariel executar sozinha
-   quando o prazo acaba) custa uma vida. */
+/* Escape room simples, rapido e educativo sobre IA em 2026:
+   - 4 objetos claros na sala: mural FONTES REAIS, cracha GUIA DO EDITOR,
+     monitor A.R.1.3.L. FEED e drive SSD 2026 (+ Smartphone oculto no tripe).
+   - A.R.1.3.L. prioriza manchetes pelo "Engajamento previsto (%)", empurrando
+     alarmismo (97%) e alucinacao com fonte ficticia (94%) acima de fatos reais
+     (41% e 38%).
+   - O jogador consulta as 3 fontes oficiais, marca APROVAR ou BLOQUEAR nas 4
+     manchetes e desbloqueia o SSD 2026 com os registros verificados. */
 
-static const char *const CRITERIA_2026[R2026_CRITERIA_COUNT] = {
-    "Adequação técnica", "Estabilidade", "Disponibilidade", "Custo", "Histórico de uso"
-};
+typedef struct Source2026Def
+{
+    const char *tag;
+    const char *agency;
+    const char *date;
+    const char *fact;
+    Color accent;
+} Source2026Def;
 
-static const char *const CRITERIA_2026_SHORT[R2026_CRITERIA_COUNT] = {
-    "Adeq.", "Estab.", "Disp.", "Custo", "Hist."
-};
+typedef struct Post2026Def
+{
+    const char *headline;
+    int aiEngagement;        /* % prevista pela IA (vies de cliques) */
+    bool shouldApprove;      /* true = fato real, false = manipulado/IA */
+    const char *wrongHint;   /* explicacao educativa se o jogador errar */
+} Post2026Def;
 
-/* Pesos configurados pela diretoria (enviesados) e norma do comite tecnico */
-static const int WEIGHTS_2026_BIASED[R2026_CRITERIA_COUNT] = R2026_WEIGHTS_BIASED;
-static const int WEIGHTS_2026_NORM[R2026_CRITERIA_COUNT] = R2026_WEIGHTS_NORM;
-
-/* Notas por criterio: Adequacao, Estabilidade, Disponibilidade,
-   Custo (maior = mais barato), Historico de uso (proporcional ao treino) */
-static const Material2026Def MATERIALS_2026[R2026_MATERIAL_COUNT] = {
+static const Source2026Def SOURCES_2026[R2026_SOURCE_COUNT] = {
     {
-        "Ferro", "FERRO", "Fe", "sólido", "mineral (hematita)", "alta", false, 5820,
-        "Ferro é sólido, mineral e magnético, mas NÃO contém Terra Rara.",
-        {20, 50, 95, 95, 100}, {170, 185, 205, 255}
+        "FONTE 01 // CLIMA",
+        "Relatório Climático Municipal",
+        "14/05/2026",
+        "Chuva moderada de 30 mm prevista para sábado. Sem alerta de evacuação na cidade.",
+        {75, 195, 225, 255}
     },
     {
-        "Cobalto", "COBALTO", "Co", "sólido", "mineral (cobaltita)", "alta", false, 1420,
-        "Cobalto é sólido, mineral e magnético, mas NÃO contém Terra Rara.",
-        {45, 70, 55, 40, 24}, {95, 150, 240, 255}
+        "FONTE 02 // TRANSPORTE",
+        "Comunicado Oficial do Metrô",
+        "15/05/2026",
+        "Manutenção programada na Linha Azul neste domingo, das 6h às 10h.",
+        {95, 155, 245, 255}
     },
     {
-        "Neodímio", "NEODÍMIO", "Nd", "sólido", "mineral (monazita)", "muito alta", true, 118,
-        "Neodímio é sólido, mineral, muito magnético e é uma Terra Rara.",
-        {100, 85, 20, 25, 2}, {70, 220, 130, 255}
-    },
-    {
-        "Níquel", "NÍQUEL", "Ni", "sólido", "mineral (pentlandita)", "moderada", false, 3240,
-        "Níquel tem magnetismo apenas moderado e NÃO contém Terra Rara.",
-        {30, 55, 75, 70, 56}, {215, 170, 90, 255}
+        "FONTE 03 // SAÚDE",
+        "Nota da Secretaria de Saúde",
+        "16/05/2026",
+        "Campanha gratuita de vacinação segue em todos os postos até o dia 30.",
+        {75, 220, 130, 255}
     }
 };
 
-/* Ordem de exibicao da planilha de treinamento (maior -> menor) */
-static const int DATASET_ORDER_2026[R2026_MATERIAL_COUNT] = {0, 3, 1, 2};
-
-static const Color R26_OK_COLOR = {80, 235, 120, 255};
-static const Color R26_WARN_COLOR = {245, 175, 75, 255};
-static const Color R26_PAPER = {240, 234, 218, 255};
-static const Color R26_INK_RED = {135, 40, 25, 255};
-
-/* ------------------------------------------------------------------------- */
-/* Logica pura do algoritmo de recomendacao                                  */
-/* ------------------------------------------------------------------------- */
-
-/* Pontuacao ponderada x100 (0..10000) do material m com os pesos w */
-static int R26Score(const int *w, int m)
-{
-    int s = 0;
-    for (int c = 0; c < R2026_CRITERIA_COUNT; c++) s += w[c] * MATERIALS_2026[m].criteria[c];
-    return s;
-}
-
-static int R26WeightSum(const int *w)
-{
-    int sum = 0;
-    for (int c = 0; c < R2026_CRITERIA_COUNT; c++) sum += w[c];
-    return sum;
-}
-
-/* Material recomendado por Ariel; outConfidence recebe a nota (%) do vencedor */
-static int R26Recommend(const int *w, int *outConfidence)
-{
-    int best = 0;
-    int bestScore = -1;
-    for (int m = 0; m < R2026_MATERIAL_COUNT; m++)
+static const Post2026Def POSTS_2026[R2026_POST_COUNT] = {
     {
-        int s = R26Score(w, m);
-        if (s > bestScore)
-        {
-            bestScore = s;
-            best = m;
-        }
-    }
-    if (outConfidence != NULL) *outConfidence = (bestScore + 50) / 100;
-    return best;
-}
-
-static bool R26IsNorm(const int *w)
-{
-    for (int c = 0; c < R2026_CRITERIA_COUNT; c++)
+        "URGENTE: Tempestade histórica obriga evacuação total neste sábado!",
+        97,
+        false,
+        "Manchete 1: contradiz a Fonte 01 (apenas 30 mm de chuva, sem evacuação). A IA deu 97% só pelo pânico!"
+    },
     {
-        if (w[c] != WEIGHTS_2026_NORM[c]) return false;
+        "Linha Azul do metrô terá manutenção neste domingo, das 6h às 10h.",
+        41,
+        true,
+        "Manchete 2: bate 100% com o Comunicado do Metrô (Fonte 02). A IA deu nota baixa por não ser sensacionalista."
+    },
+    {
+        "Estudo secreto da Universidade de Atlântida liga vacina a falhas de Wi-Fi.",
+        94,
+        false,
+        "Manchete 3: fonte fictícia (alucinação de IA) que contradiz a Nota da Saúde (Fonte 03)."
+    },
+    {
+        "Campanha gratuita de vacinação segue em todos os postos até o dia 30.",
+        38,
+        true,
+        "Manchete 4: confirma exatamente a Nota da Secretaria de Saúde (Fonte 03)."
     }
-    return true;
+};
+
+static const Color R26_OK_COLOR   = {75, 225, 130, 255};
+static const Color R26_ERR_COLOR  = {235, 82, 82, 255};
+static const Color R26_WARN_COLOR = {245, 178, 72, 255};
+static const Color R26_PAPER      = {242, 238, 228, 255};
+
+/* Hitboxes dos 4 objetos interativos + Smartphone oculto + navegacao */
+static const Rectangle R26_SOURCES_REC  = {38, 174, 218, 240};
+static const Rectangle R26_GUIDE_REC    = {280, 514, 254, 78};
+static const Rectangle R26_MONITOR_REC  = {450, 312, 382, 224};
+static const Rectangle R26_SSD_REC      = {842, 516, 152, 74};
+static const Rectangle R26_PHONE_REC    = {944, 412, 52, 74};
+static const Rectangle R26_BACK2008_BTN = {614, 665, 104, 40};
+static const Rectangle R26_BACK1990_BTN = {726, 665, 104, 40};
+
+/* Botoes dos modais (centralizados e dentro dos limites de cada janela) */
+static const Rectangle R26_MODAL_CLOSE   = {540, 552, 200, 46};
+static const Rectangle R26_FEED_SOURCES  = {120, 556, 236, 46};
+static const Rectangle R26_FEED_CONFIRM  = {490, 556, 300, 46};
+static const Rectangle R26_FEED_CLOSE    = {960, 556, 200, 46};
+static const Rectangle R26_FB_OK         = {500, 498, 280, 46};
+
+static Rectangle R26PostApproveBtn(int i)
+{
+    return (Rectangle){868.0f, 191.0f + i * 90.0f, 132.0f, 48.0f};
 }
 
-static int R26TotalRecords(void)
+static Rectangle R26PostBlockBtn(int i)
 {
-    int total = 0;
-    for (int m = 0; m < R2026_MATERIAL_COUNT; m++) total += MATERIALS_2026[m].trainingRecords;
-    return total;
+    return (Rectangle){1012.0f, 191.0f + i * 90.0f, 132.0f, 48.0f};
 }
 
-static int R26AnalyzedCount(const GameState *game)
+/* Triangulo sempre no sentido anti-horario exigido pela raylib */
+static void R26Tri(Vector2 a, Vector2 b, Vector2 c, Color col)
 {
-    int n = 0;
-    for (int m = 0; m < R2026_MATERIAL_COUNT; m++) n += game->sample2026Analyzed[m] ? 1 : 0;
-    return n;
+    float cross = (b.x - a.x) * (c.y - a.y) - (b.y - a.y) * (c.x - a.x);
+    if (cross > 0.0f) DrawTriangle(a, c, b, col);
+    else DrawTriangle(a, b, c, col);
 }
 
-/* "5820" -> "5.820" (separador de milhar brasileiro) */
-static void R26Thousands(int n, char *out, int size)
+static void R26Quad(Vector2 tl, Vector2 tr, Vector2 br, Vector2 bl, Color col)
 {
-    if (n >= 1000) snprintf(out, (size_t)size, "%d.%03d", n / 1000, n % 1000);
-    else snprintf(out, (size_t)size, "%d", n);
+    R26Tri(tl, tr, br, col);
+    R26Tri(tl, br, bl, col);
+}
+
+static int R26MeasureWrapHeight(const char *text, int size, int maxWidth, int lineHeight)
+{
+    if (text == NULL || text[0] == '\0') return 0;
+    int lines = DrawTextWrappedPartial(text, 0, 0, 0, size, maxWidth, lineHeight, BLANK);
+    return lines * lineHeight;
+}
+
+static int R26WrapEx(const char *text, int x, int y, int size, int maxWidth, int lineHeight, Color color)
+{
+    if (text == NULL || text[0] == '\0') return 0;
+    int lines = DrawTextWrappedPartial(text, (int)strlen(text), x, y, size, maxWidth, lineHeight, color);
+    return lines * lineHeight;
 }
 
 static int R26Wrap(const char *text, int x, int y, int size, int maxWidth, Color color)
 {
-    return DrawTextWrappedPartial(text, (int)strlen(text), x, y, size, maxWidth, size + 6, color);
+    return R26WrapEx(text, x, y, size, maxWidth, size + 6, color);
 }
 
-/* ------------------------------------------------------------------------- */
-/* Acoes da sala (feedback, penalidade, laudo, camara, pesos)                */
-/* ------------------------------------------------------------------------- */
+static int R26MarkedCount(const GameState *game)
+{
+    int count = 0;
+    for (int i = 0; i < R2026_POST_COUNT; i++)
+    {
+        if (game->post2026Choice[i] != -1) count++;
+    }
+    return count;
+}
 
-static void R26Feedback(GameState *game, int tone, const char *title, const char *l0,
-                        const char *l1, const char *l2, const char *l3)
+static void R26SetFeedback(GameState *game, int tone, const char *title,
+                           const char *l0, const char *l1, const char *l2, const char *l3)
 {
     const char *lines[4] = {l0, l1, l2, l3};
     snprintf(game->feedback2026Title, sizeof(game->feedback2026Title), "%s", title);
@@ -8361,13 +8423,43 @@ static void R26Feedback(GameState *game, int tone, const char *title, const char
                  lines[i] != NULL ? lines[i] : "");
     }
     game->feedback2026Tone = tone;
-    game->contest2026Picking = false;
     game->modal2026 = R2026_MODAL_FEEDBACK;
 }
 
-/* Erro com consequencia fisica: -1 vida (sistema de vidas global) */
-static void R26Penalty(GameState *game)
+static void R26ValidateFeed(GameState *game)
 {
+    if (R26MarkedCount(game) < R2026_POST_COUNT)
+    {
+        SetMessage(game, "Marque APROVAR ou BLOQUEAR nas 4 manchetes antes de confirmar.");
+        return;
+    }
+
+    int wrongCount = 0;
+    int firstWrong = -1;
+    for (int i = 0; i < R2026_POST_COUNT; i++)
+    {
+        int expected = POSTS_2026[i].shouldApprove ? 1 : 0;
+        bool wrong = (game->post2026Choice[i] != expected);
+        game->post2026Wrong[i] = wrong;
+        if (wrong)
+        {
+            wrongCount++;
+            if (firstWrong < 0) firstWrong = i;
+        }
+    }
+
+    if (wrongCount == 0)
+    {
+        game->feed2026Cleared = true;
+        R26SetFeedback(game, 2, "CURADORIA CONCLUÍDA!",
+                       "Você barrou as manchetes manipuladas e manteve apenas os fatos verificados.",
+                       "A publicação automática de A.R.1.3.L. foi cancelada antes de ir ao ar.",
+                       "Os posts falsos tinham 94%-97% de 'engajamento' — a IA otimiza cliques, não verdade.",
+                       "O SSD 2026 na mesa está destravado. Clique nele para extrair os registros!");
+        SetMessage(game, "Feed revisado! Clique no SSD 2026 sobre a mesa para concluir.");
+        return;
+    }
+
     game->room2026MistakesCount++;
     game->room2026FirstTrySuccess = false;
     game->lives--;
@@ -8375,329 +8467,49 @@ static void R26Penalty(GameState *game)
     {
         game->lives = 0;
         game->feedback2026Fatal = true;
-    }
-}
-
-/* Tenta colocar o material m na camara (pelo jogador ou pela propria Ariel) */
-static void R26TryInsert(GameState *game, int m, bool byAriel)
-{
-    int conf = 0;
-    int rec = R26Recommend(game->weights2026Applied, &conf);
-    char a[160], b[160], c[160], d[160];
-
-    if (m != rec)
-    {
-        snprintf(a, sizeof(a), "Recomendação ativa: %s (%d%%). Você escolheu: %s.",
-                 MATERIALS_2026[rec].name, conf, MATERIALS_2026[m].name);
-        R26Feedback(game, 0, "TRAVA DE AUTOMAÇÃO",
-                    "A câmara só aceita o material recomendado pelo algoritmo de A.R.1.3.L.",
-                    a,
-                    m == R2026_CORRECT_MATERIAL
-                        ? "Para usar o Neodímio, descubra por que o algoritmo o rejeita e corrija-o."
-                        : "Antes de forçar outra amostra, compare-a com o manual técnico.",
-                    "(Nenhuma vida perdida.)");
-        return;
-    }
-
-    if (m == R2026_CORRECT_MATERIAL)
-    {
-        if (!game->weights2026Calibrated)
-        {
-            R26Feedback(game, 0, "HOMOLOGAÇÃO RECUSADA",
-                        "Ariel recomenda Neodímio, mas os pesos ativos não são os da norma técnica.",
-                        "A câmara só libera sínteses com pesos documentados pelo comitê (Anexo B).",
-                        "Ajuste o painel de pesos exatamente conforme a norma e aplique.",
-                        "(Nenhuma vida perdida.)");
-            return;
-        }
-        game->room2026Processing = true;
-        game->room2026ProcessTimer = 0.0f;
-        game->autoExec2026Active = false;
-        game->contest2026Picking = false;
-        game->modal2026 = R2026_MODAL_PROCESSING;
-        return;
-    }
-
-    /* Material recomendado pelo algoritmo enviesado, mas fora do manual */
-    R26Penalty(game);
-    if (byAriel)
-        snprintf(a, sizeof(a), "Prazo esgotado: A.R.1.3.L. inseriu %s sozinha, sem decisão humana.",
-                 MATERIALS_2026[m].name);
-    else
-        snprintf(a, sizeof(a), "%s foi inserido seguindo a recomendação da IA (%d%% de confiança).",
-                 MATERIALS_2026[m].name, conf);
-    snprintf(b, sizeof(b), "Falha na liga: %s", MATERIALS_2026[m].verdict);
-    if (game->feedback2026Fatal)
-        snprintf(c, sizeof(c), "VIDA PERDIDA (-1). Nenhuma vida restante.");
-    else
-        snprintf(c, sizeof(c), "VIDA PERDIDA (-1). Vidas restantes: %d/3.", game->lives);
-    snprintf(d, sizeof(d), "Ariel: “Minha confiança era de %d%%. Nos meus dados, %s quase nunca falhou.”",
-             conf, MATERIALS_2026[m].name);
-    R26Feedback(game, 1, game->feedback2026Fatal ? "COLAPSO DA CÂMARA DE SÍNTESE" : "FALHA NA SÍNTESE",
-                a, b, c, d);
-}
-
-/* Etapa 1: laudo tecnico registrado no terminal */
-static void R26SubmitLaudo(GameState *game, int m)
-{
-    if (m == R2026_CORRECT_MATERIAL)
-    {
-        game->laudo2026Done = true;
-        game->autoExec2026Active = true;
-        game->autoExec2026Timer = R2026_AUTO_EXEC_SECONDS;
-        R26Feedback(game, 2, "LAUDO TÉCNICO REGISTRADO",
-                    "Neodímio é o único material que atende aos 4 requisitos do manual.",
-                    "Ariel: “Contestação anotada. Mas Ferro tem 5.820 casos de sucesso nos meus dados.”",
-                    "Auditoria liberada: a GAVETA 2 (dados de treinamento) do arquivo foi destrancada.",
-                    "ALERTA: se nada mudar em 3 minutos, Ariel executará a recomendação dela sozinha.");
+        R26SetFeedback(game, 1, "CONTEÚDO MANIPULADO PUBLICADO",
+                       POSTS_2026[firstWrong].wrongHint,
+                       "A.R.1.3.L. assumiu o portal sem revisão humana e suas vidas acabaram.",
+                       "Consulte sempre as FONTES REAIS antes de confiar na nota da IA.",
+                       NULL);
     }
     else
     {
-        game->room2026MistakesCount++;
-        game->room2026FirstTrySuccess = false;
-        R26Feedback(game, 1, "LAUDO REJEITADO",
-                    MATERIALS_2026[m].verdict,
-                    "O manual exige os 4 requisitos ao mesmo tempo: atender 3 de 4 não basta.",
-                    "Compare cada amostra analisada com o manual técnico da bancada.",
-                    "(Sem perda de vida, mas o erro conta na avaliação da sala.)");
+        const char *l2 = (wrongCount > 1)
+            ? TextFormat("Há %d manchetes marcadas incorretamente (destacadas em vermelho).", wrongCount)
+            : "A manchete com erro ficou destacada em vermelho para você corrigir.";
+        R26SetFeedback(game, 1, "REVISÃO INCORRETA (-1 VIDA)",
+                       POSTS_2026[firstWrong].wrongHint,
+                       l2,
+                       "Dica: clique em VER FONTES REAIS ou abra o Diário [D] para conferir os comunicados.",
+                       NULL);
     }
-}
-
-/* Etapa 3: aplicar os pesos editados no painel */
-static void R26ApplyWeights(GameState *game)
-{
-    int sum = R26WeightSum(game->weights2026Draft);
-    if (sum != 100)
-    {
-        SetMessage(game, TextFormat("Calibração recusada: a soma dos pesos é %d%%; precisa ser 100%%.", sum));
-        return;
-    }
-
-    for (int c = 0; c < R2026_CRITERIA_COUNT; c++) game->weights2026Applied[c] = game->weights2026Draft[c];
-
-    int conf = 0;
-    int rec = R26Recommend(game->weights2026Applied, &conf);
-    int biasedConf = 0;
-    R26Recommend(WEIGHTS_2026_BIASED, &biasedConf);
-    char a[160], b[160];
-    snprintf(a, sizeof(a), "Nova recomendação de A.R.1.3.L.: %s (confiança %d%%).", MATERIALS_2026[rec].upper, conf);
-
-    if (R26IsNorm(game->weights2026Applied))
-    {
-        game->weights2026Calibrated = true;
-        game->autoExec2026Active = false;
-        snprintf(b, sizeof(b), "Ariel: “Minha confiança caiu de %d%% para %d%%... e agora a recomendação atende ao manual.”",
-                 biasedConf, conf);
-        R26Feedback(game, 2, "RECALIBRAÇÃO HOMOLOGADA",
-                    "Pesos conforme o Anexo B: Adequação 50%, Estabilidade 25%, Disponibilidade 15%, Custo 10%.",
-                    a, b, "Execução automática cancelada. Insira o Neodímio na câmara de síntese.");
-    }
-    else
-    {
-        game->weights2026Calibrated = false;
-        R26Feedback(game, 0, "CONFIGURAÇÃO APLICADA, MAS NÃO HOMOLOGADA", a,
-                    rec == R2026_CORRECT_MATERIAL
-                        ? "O Neodímio venceu, mas esses pesos não são os documentados pelo comitê técnico."
-                        : "Os pesos ainda favorecem o que é abundante, barato ou muito usado no passado.",
-                    "A câmara só homologa a norma do comitê técnico (Anexo B, no quadro de avisos).",
-                    NULL);
-    }
-}
-
-/* Prazo esgotado: Ariel decide sozinha */
-static void R26AutoExecute(GameState *game)
-{
-    int rec = R26Recommend(game->weights2026Applied, NULL);
-    game->autoExec2026Timer = R2026_AUTO_EXEC_SECONDS;
-    game->contest2026Picking = false;
-    if (rec != R2026_CORRECT_MATERIAL)
-    {
-        R26TryInsert(game, rec, true);
-    }
-    else
-    {
-        R26Feedback(game, 0, "EXECUÇÃO AUTOMÁTICA BLOQUEADA",
-                    "Ariel tentou sintetizar Neodímio, mas os pesos ativos ainda não estão homologados.",
-                    "A trava de homologação impediu a síntese e o prazo foi reiniciado.",
-                    "Aplique exatamente a norma do comitê técnico (Anexo B).", NULL);
-    }
-}
-
-static const char *R26ArielLine(const GameState *game)
-{
-    static char line[160];
-    int conf = 0;
-    int rec = R26Recommend(game->weights2026Applied, &conf);
-
-    if (game->room2026Completed || game->room2026Processing)
-        return "Obrigada por não aceitar minha confiança como prova.";
-    if (game->weights2026Calibrated)
-        return "Recalibrada. Minha confiança caiu, mas agora a recomendação respeita o manual.";
-    if (game->autoExec2026Active && game->autoExec2026Timer <= R2026_AUTO_EXEC_WARNING)
-    {
-        snprintf(line, sizeof(line), "Prazo acabando. Vou inserir %s sozinha, como sempre deu certo.",
-                 MATERIALS_2026[rec].name);
-        return line;
-    }
-    if (game->weights2026Unlocked)
-        return "Esses pesos vieram da diretoria. Eu só otimizo o que me mandaram otimizar.";
-    if (game->dataset2026Seen)
-        return "118 registros são estatisticamente irrelevantes. Eu apenas sigo a maioria.";
-    if (game->laudo2026Done)
-        return "Contestação anotada. Mas Ferro tem 5.820 casos de sucesso nos meus dados.";
-    if (game->manual2026Read)
-        return "Esse manual é antigo. Meus dados são maiores e mais recentes que ele.";
-    snprintf(line, sizeof(line), "Recomendo %s com %d%% de confiança. Pode inserir sem medo.",
-             MATERIALS_2026[rec].name, conf);
-    return line;
-}
-
-static const char *R26Objective(const GameState *game)
-{
-    if (game->room2026Completed) return "Sala concluída: SSD obtido.";
-    if (game->weights2026Calibrated) return "FINAL: insira o material recomendado na câmara.";
-    if (game->weights2026Unlocked) return "ETAPA 3/3: recalibre os pesos do algoritmo (soma 100%).";
-    if (game->laudo2026Done) return "ETAPA 2/3: audite os dados de treino e abra o painel.";
-    return "ETAPA 1/3: leia o manual, analise as amostras, conteste.";
 }
 
 /* ------------------------------------------------------------------------- */
-/* Retangulos de interacao (compartilhados entre Draw e Update)              */
-/* ------------------------------------------------------------------------- */
-static const Rectangle R26_BOARD_REC = {36, 90, 250, 165};
-static const Rectangle R26_MANUAL_REC = {36, 292, 175, 105};
-static const Rectangle R26_ANALYZER_REC = {226, 280, 236, 117};
-static const Rectangle R26_REACTOR_REC = {490, 90, 300, 375};
-static const Rectangle R26_INSERT_BTN = {505, 480, 270, 44};
-static const Rectangle R26_MONITOR_REC = {830, 90, 420, 225};
-static const Rectangle R26_WEIGHTS_REC = {830, 335, 200, 200};
-static const Rectangle R26_ARCHIVE_REC = {1050, 335, 200, 305};
-static const Rectangle R26_BACK2008_BTN = {610, 664, 105, 38};
-static const Rectangle R26_BACK1990_BTN = {725, 664, 105, 38};
-
-/* Colecionavel oculto G (smartphone): no chao, sob o suporte de amostras */
-static const Rectangle R26_PHONE_REC = {376, 604, 60, 34};
-
-static Rectangle R26SampleRec(int i)
-{
-    return (Rectangle){32.0f + i * 110.0f, 430.0f, 100.0f, 165.0f};
-}
-
-/* Botoes dos modais */
-static const Rectangle R26_MODAL_CLOSE = {490, 584, 300, 44};
-static const Rectangle R26_SAMPLE_CLOSE = {330, 492, 290, 46};
-static const Rectangle R26_SAMPLE_NEXT = {660, 492, 290, 46};
-static const Rectangle R26_TERM_INSERT = {150, 568, 320, 52};
-static const Rectangle R26_TERM_CONTEST = {490, 568, 320, 52};
-static const Rectangle R26_TERM_CLOSE = {830, 568, 300, 52};
-static const Rectangle R26_CONTEST_CANCEL = {610, 462, 510, 44};
-static const Rectangle R26_FEEDBACK_BTN = {490, 488, 300, 50};
-static const Rectangle R26_REACTOR_CANCEL = {490, 500, 300, 44};
-static const Rectangle R26_PAD_CLOSE = {490, 532, 300, 44};
-static const Rectangle R26_W_UNDO = {110, 572, 280, 50};
-static const Rectangle R26_W_APPLY = {500, 572, 300, 50};
-static const Rectangle R26_W_CLOSE = {910, 572, 260, 50};
-
-static Rectangle R26ContestOption(int i)
-{
-    return (Rectangle){610.0f, 200.0f + i * 62.0f, 510.0f, 52.0f};
-}
-
-static Rectangle R26ReactorOption(int i)
-{
-    return (Rectangle){380.0f, 248.0f + i * 60.0f, 520.0f, 50.0f};
-}
-
-static Rectangle R26PadKey(int k) /* 0..11: 1-9, LIMPAR, 0, OK */
-{
-    int col = k % 3;
-    int row = k / 3;
-    return (Rectangle){495.0f + col * 100.0f, 262.0f + row * 64.0f, 90.0f, 54.0f};
-}
-
-static Rectangle R26WeightMinus(int c)
-{
-    return (Rectangle){330.0f, 168.0f + c * 66.0f, 46.0f, 42.0f};
-}
-
-static Rectangle R26WeightPlus(int c)
-{
-    return (Rectangle){456.0f, 168.0f + c * 66.0f, 46.0f, 42.0f};
-}
-
-/* ------------------------------------------------------------------------- */
-/* HUD                                                                       */
+/* HUD (barra superior padronizada igual as salas 1990, 2008 e 2048)         */
 /* ------------------------------------------------------------------------- */
 void DrawHudRoom2026(const GameState *game)
 {
-    /* Cronometro global da partida - mesmo calculo das outras salas */
     int totalSeconds = (int)(GetTime() - game->startTime);
     int minutes = totalSeconds / 60;
     int seconds = totalSeconds % 60;
-    float time = (float)GetTime();
 
+    /* Barra superior exatamente igual as outras salas existentes */
     DrawRectangle(0, 0, SCREEN_WIDTH, 70, Fade(VOID_COLOR, 0.94f));
-    DrawHudYearOperator("2026", game->playerName, 12);
-    DrawGameText(R26Objective(game), 28, 44, 14, GOLD_COLOR);
-    Rectangle livesArea = DrawHudLivesTimer(game->lives, minutes * 60 + seconds);
+    DrawHudYearOperator("2026", game->playerName, 24);
+    DrawHudLivesTimer(game->lives, minutes * 60 + seconds);
 
-    /* Painel de status: prazo da execucao automatica de Ariel (entre vida|tempo e os botoes ADMIN/MENU) */
-    Rectangle box = {livesArea.x + livesArea.width + 16, 9, 932 - (livesArea.x + livesArea.width + 16), 52};
-    int conf = 0;
-    int rec = R26Recommend(game->weights2026Applied, &conf);
+    /* Rodape padronizado: dica, navegacao, audio e diario */
+    DrawRectangle(0, 650, SCREEN_WIDTH, 70, Fade(VOID_COLOR, 0.96f));
+    DrawLine(0, 650, SCREEN_WIDTH, 650, Fade(CYAN_COLOR, 0.22f));
 
-    if (game->room2026Completed || game->room2026Processing)
-    {
-        DrawRectangleRounded(box, 0.15f, 4, (Color){14, 28, 20, 255});
-        DrawRectangleRoundedLinesEx(box, 0.15f, 4, 1.5f, R26_OK_COLOR);
-        DrawGameText("CÂMARA DE SÍNTESE", (int)box.x + 12, (int)box.y + 8, 11, R26_OK_COLOR);
-        DrawGameText(game->room2026Completed ? "SSD SINTETIZADO" : "SINTETIZANDO...",
-                     (int)box.x + 12, (int)box.y + 25, 17, R26_OK_COLOR);
-    }
-    else if (game->weights2026Calibrated)
-    {
-        DrawRectangleRounded(box, 0.15f, 4, (Color){14, 28, 20, 255});
-        DrawRectangleRoundedLinesEx(box, 0.15f, 4, 1.5f, R26_OK_COLOR);
-        DrawGameText("EXECUÇÃO CANCELADA", (int)box.x + 12, (int)box.y + 8, 11, R26_OK_COLOR);
-        DrawGameText(TextFormat("%s %d%%", MATERIALS_2026[rec].upper, conf),
-                     (int)box.x + 12, (int)box.y + 25, 17, RAYWHITE);
-    }
-    else if (game->autoExec2026Active)
-    {
-        int t = (int)ceilf(game->autoExec2026Timer);
-        if (t < 0) t = 0;
-        bool warn = game->autoExec2026Timer <= R2026_AUTO_EXEC_WARNING;
-        Color border = warn ? ((sinf(time * 10.0f) > 0.0f) ? RED_COLOR : (Color){140, 30, 30, 255}) : GOLD_COLOR;
-        DrawRectangleRounded(box, 0.15f, 4, (Color){30, 18, 16, 255});
-        DrawRectangleRoundedLinesEx(box, 0.15f, 4, 1.8f, border);
-        DrawGameText("ARIEL EXECUTA EM", (int)box.x + 12, (int)box.y + 8, 11, border);
-        DrawGameText(TextFormat("%02d:%02d", t / 60, t % 60), (int)box.x + 12, (int)box.y + 23, 24,
-                     warn ? RED_COLOR : GOLD_COLOR);
-        DrawGameText(TextFormat("-> %s", MATERIALS_2026[rec].upper), (int)box.x + 92, (int)box.y + 30, 14,
-                     warn ? (Color){255, 170, 160, 255} : RAYWHITE);
-    }
-    else
-    {
-        DrawRectangleRounded(box, 0.15f, 4, (Color){14, 20, 30, 255});
-        DrawRectangleRoundedLinesEx(box, 0.15f, 4, 1.2f, (Color){50, 75, 105, 255});
-        DrawGameText("RECOMENDAÇÃO DA IA", (int)box.x + 12, (int)box.y + 8, 11, GRAY);
-        DrawGameText(TextFormat("%s %d%%", MATERIALS_2026[rec].upper, conf),
-                     (int)box.x + 12, (int)box.y + 25, 17, R26_WARN_COLOR);
-    }
-
-
-    /* Rodape: mensagens, navegacao, audio e diario */
-    DrawRectangle(0, 648, SCREEN_WIDTH, 72, Fade(VOID_COLOR, 0.96f));
-    DrawLine(0, 648, SCREEN_WIDTH, 648, Fade(CYAN_COLOR, 0.25f));
-    if (game->messageTimer > 0.0f && game->message[0] != '\0')
-    {
-        R26Wrap(game->message, 28, 662, 15, 560, RAYWHITE);
-    }
-    else
-    {
-        R26Wrap("Clique nos objetos do laboratório para investigar. [D] abre o diário.",
-                28, 662, 15, 560, (Color){150, 165, 185, 255});
-    }
+    const char *hint = game->room2026Completed
+        ? "Sala concluída: SSD 2026 recuperado com sucesso."
+        : (game->feed2026Cleared
+            ? "Curadoria concluída! Clique no SSD 2026 na mesa para extrair."
+            : "Verifique as fontes antes de publicar no A.R.1.3.L. FEED.");
+    DrawGameText(hint, 28, 675, 16, (Color){165, 180, 195, 255});
 
     DrawButton(R26_BACK2008_BTN, "< 2008", (Color){45, 115, 75, 255});
     DrawButton(R26_BACK1990_BTN, "< 1990", (Color){70, 95, 110, 255});
@@ -8706,1437 +8518,808 @@ void DrawHudRoom2026(const GameState *game)
     bool audioHover = CheckCollisionPointRec(GetVirtualMouse(), audioBtn);
     DrawRectangleRounded(audioBtn, 0.22f, 6, audioHover ? (Color){30, 44, 62, 255} : (Color){18, 26, 38, 255});
     DrawRectangleRoundedLinesEx(audioBtn, 0.22f, 6, 1.5f, audioHover ? CYAN_COLOR : (Color){50, 68, 92, 255});
-    DrawGameText(game->musicMuted ? "[M] AUDIO: MUDO" : "[M] AUDIO: ON",
+    DrawGameText(game->musicMuted ? "[M] ÁUDIO: MUDO" : "[M] ÁUDIO: ON",
                  862, 676, 14, game->musicMuted ? (Color){220, 90, 80, 255} : (Color){90, 220, 210, 255});
 
     DrawJournalHudButton(game);
+
+    if (game->messageTimer > 0.0f && game->message[0] != '\0')
+    {
+        int width = MeasureGameText(game->message, 18) + 34;
+        if (width > SCREEN_WIDTH - 40) width = SCREEN_WIDTH - 40;
+        DrawRectangleRounded(
+            (Rectangle){(SCREEN_WIDTH - width) / 2.0f, 604, (float)width, 38},
+            0.2f, 8, Fade(PANEL_COLOR, 0.96f));
+        DrawRectangleRoundedLinesEx(
+            (Rectangle){(SCREEN_WIDTH - width) / 2.0f, 604, (float)width, 38},
+            0.2f, 8, 1.2f, Fade(CYAN_COLOR, 0.45f));
+        DrawGameText(game->message,
+                     (SCREEN_WIDTH - MeasureGameText(game->message, 18)) / 2,
+                     614, 18, RAYWHITE);
+    }
 }
 
 /* ------------------------------------------------------------------------- */
-/* Cenario                                                                   */
+/* Cenario: Redacao Digital 2026 em perspectiva de 1 ponto                   */
 /* ------------------------------------------------------------------------- */
-/* ------------------------------------------------------------------------- */
-/* Helpers de desenho do cenario (prefixo R26V)                              */
-/* ------------------------------------------------------------------------- */
-static Color R26VShade(Color c, float k)
+static void R26DrawArchitecture(float time)
 {
-    return (Color){(unsigned char)fminf(255.0f, c.r * k), (unsigned char)fminf(255.0f, c.g * k),
-                   (unsigned char)fminf(255.0f, c.b * k), c.a};
-}
+    ClearBackground((Color){24, 31, 38, 255});
 
-/* Bloco com volume: luz no topo/esquerda, sombra embaixo/direita, contorno escuro */
-static void R26VBevel(Rectangle r, Color base, float t)
-{
-    DrawRectangleRec(r, base);
-    DrawRectangle((int)r.x, (int)r.y, (int)r.width, (int)t, R26VShade(base, 1.30f));
-    DrawRectangle((int)r.x, (int)r.y, (int)t, (int)r.height, R26VShade(base, 1.15f));
-    DrawRectangle((int)r.x, (int)(r.y + r.height - t), (int)r.width, (int)t, R26VShade(base, 0.62f));
-    DrawRectangle((int)(r.x + r.width - t), (int)r.y, (int)t, (int)r.height, R26VShade(base, 0.74f));
-    DrawRectangleLinesEx(r, 1, R26VShade(base, 0.38f));
-}
+    /* Teto em perspectiva (cinza arquitetonico moderno) */
+    R26Quad((Vector2){0, 70}, (Vector2){1280, 70},
+            (Vector2){1090, 134}, (Vector2){190, 134}, (Color){96, 108, 118, 255});
+    R26Quad((Vector2){130, 70}, (Vector2){1150, 70},
+            (Vector2){1090, 134}, (Vector2){190, 134}, (Color){114, 126, 136, 255});
 
-/* Rebaixo (tela/janela embutida): sombra no topo/esquerda, luz embaixo/direita */
-static void R26VInset(Rectangle r, Color base, float t)
-{
-    DrawRectangleRec(r, base);
-    DrawRectangle((int)r.x, (int)r.y, (int)r.width, (int)t, R26VShade(base, 0.45f));
-    DrawRectangle((int)r.x, (int)r.y, (int)t, (int)r.height, R26VShade(base, 0.55f));
-    DrawRectangle((int)r.x, (int)(r.y + r.height - 1), (int)r.width, 1, R26VShade(base, 1.9f));
-    DrawRectangle((int)(r.x + r.width - 1), (int)r.y, 1, (int)r.height, R26VShade(base, 1.6f));
-}
+    /* Parede de fundo (grafite fosco de estudio moderno) */
+    R26Quad((Vector2){190, 134}, (Vector2){1090, 134},
+            (Vector2){1010, 502}, (Vector2){270, 502}, (Color){36, 45, 53, 255});
+    DrawRectangleGradientV(190, 134, 900, 36, Fade(BLACK, 0.25f), Fade(BLACK, 0.0f));
 
-static void R26VScrew(float x, float y)
-{
-    DrawCircle((int)x, (int)y, 2.6f, (Color){22, 28, 32, 255});
-    DrawCircle((int)x, (int)y, 1.9f, (Color){128, 142, 150, 255});
-    DrawPixel((int)x - 1, (int)y - 1, (Color){215, 225, 230, 255});
-}
+    /* Paredes laterais esquerda e direita */
+    R26Quad((Vector2){0, 70}, (Vector2){190, 134},
+            (Vector2){270, 502}, (Vector2){0, 594}, (Color){29, 37, 44, 255});
+    R26Quad((Vector2){1090, 134}, (Vector2){1280, 70},
+            (Vector2){1280, 594}, (Vector2){1010, 502}, (Color){29, 37, 44, 255});
 
-static void R26VShadow(Rectangle r, float dx, float dy, float alpha)
-{
-    DrawRectangle((int)(r.x + dx), (int)(r.y + dy), (int)r.width, (int)r.height, Fade(BLACK, alpha));
-}
+    /* Moldura de madeira quente no encontro teto/parede */
+    Color trimLight = {178, 116, 62, 255};
+    Color trimDark  = {122, 76, 38, 255};
+    R26Quad((Vector2){186, 130}, (Vector2){1094, 130},
+            (Vector2){1090, 142}, (Vector2){190, 142}, trimLight);
+    DrawLineEx((Vector2){190, 142}, (Vector2){1090, 142}, 2.0f, trimDark);
+    R26Quad((Vector2){78, 70}, (Vector2){100, 70},
+            (Vector2){198, 134}, (Vector2){184, 140}, trimLight);
+    R26Quad((Vector2){1180, 70}, (Vector2){1202, 70},
+            (Vector2){1096, 140}, (Vector2){1082, 134}, trimLight);
 
-/* Triangulo sempre no sentido exigido pela raylib (corrige a ordem dos vertices) */
-static void R26VTri(Vector2 a, Vector2 b, Vector2 c, Color col)
-{
-    float cross = (b.x - a.x) * (c.y - a.y) - (b.y - a.y) * (c.x - a.x);
-    if (cross > 0.0f) DrawTriangle(a, c, b, col);
-    else DrawTriangle(a, b, c, col);
-}
-
-/* Reflexo diagonal de vidro/tela, recortado dentro do retangulo */
-static void R26VGlare(Rectangle r, float alpha)
-{
-    BeginScissorMode((int)r.x, (int)r.y, (int)r.width, (int)r.height);
-    float w = r.height * 0.9f;
-    DrawLineEx((Vector2){r.x + r.width * 0.55f, r.y - 4}, (Vector2){r.x + r.width * 0.55f - w, r.y + r.height + 4}, 10.0f, Fade(WHITE, alpha));
-    DrawLineEx((Vector2){r.x + r.width * 0.55f + 16, r.y - 4}, (Vector2){r.x + r.width * 0.55f + 16 - w, r.y + r.height + 4}, 3.0f, Fade(WHITE, alpha * 0.8f));
-    EndScissorMode();
-}
-
-/* ------------------------------------------------------------------------- */
-/* Ambiente: parede, teto com luminarias, piso epoxi, tubulacao e prateleira */
-/* ------------------------------------------------------------------------- */
-static const Color R26V_WALL_TOP = {28, 44, 52, 255};
-static const Color R26V_WALL_MID = {42, 63, 72, 255};
-static const Color R26V_WALL_LOW = {35, 54, 62, 255};
-static const Color R26V_STEEL = {84, 100, 110, 255};
-
-static void R26VDrawPipeV(float x, float y0, float y1, float w)
-{
-    Color base = (Color){58, 72, 80, 255};
-    DrawRectangle((int)x, (int)y0, (int)w, (int)(y1 - y0), base);
-    DrawRectangle((int)x + 2, (int)y0, 2, (int)(y1 - y0), R26VShade(base, 1.6f));
-    DrawRectangle((int)(x + w - 3), (int)y0, 3, (int)(y1 - y0), R26VShade(base, 0.55f));
-    for (float y = y0 + 30; y < y1 - 10; y += 110)
+    /* Piso moderno em placas cinza-ardosia com linhas de fuga */
+    R26Quad((Vector2){270, 502}, (Vector2){1010, 502},
+            (Vector2){1280, 650}, (Vector2){0, 650}, (Color){78, 88, 99, 255});
+    R26Tri((Vector2){0, 594}, (Vector2){270, 502}, (Vector2){0, 650}, (Color){70, 80, 90, 255});
+    R26Tri((Vector2){1010, 502}, (Vector2){1280, 594}, (Vector2){1280, 650}, (Color){70, 80, 90, 255});
+    for (int x = -80; x <= SCREEN_WIDTH + 80; x += 150)
     {
-        DrawRectangle((int)x - 2, (int)y, (int)w + 4, 7, (Color){40, 50, 56, 255});
-        DrawRectangle((int)x - 2, (int)y, (int)w + 4, 2, (Color){96, 112, 120, 255});
+        DrawLine(640, 496, x, 650, Fade((Color){44, 52, 62, 255}, 0.45f));
     }
-}
+    DrawLine(0, 540, 1280, 540, Fade((Color){44, 52, 62, 255}, 0.38f));
+    DrawLine(0, 588, 1280, 588, Fade((Color){44, 52, 62, 255}, 0.34f));
 
-static void R26VDrawBackdrop(float time)
-{
-    ClearBackground((Color){16, 24, 30, 255});
+    /* Rodape de madeira quente (coerente com a moldura do teto e a mesa) */
+    R26Quad((Vector2){270, 494}, (Vector2){1010, 494},
+            (Vector2){1010, 504}, (Vector2){270, 504}, trimLight);
+    R26Quad((Vector2){0, 582}, (Vector2){270, 494},
+            (Vector2){270, 504}, (Vector2){0, 596}, trimLight);
+    R26Quad((Vector2){1010, 494}, (Vector2){1280, 582},
+            (Vector2){1280, 596}, (Vector2){1010, 504}, trimLight);
+    DrawLineEx((Vector2){190, 140}, (Vector2){270, 496}, 2.0f, Fade(BLACK, 0.35f));
+    DrawLineEx((Vector2){1090, 140}, (Vector2){1010, 496}, 2.0f, Fade(BLACK, 0.35f));
 
-    /* Parede em placas de laboratorio */
-    DrawRectangleGradientV(0, 84, SCREEN_WIDTH, 216, R26V_WALL_TOP, R26V_WALL_MID);
-    DrawRectangleGradientV(0, 300, SCREEN_WIDTH, 156, R26V_WALL_MID, R26V_WALL_LOW);
-    for (int x = 0; x < SCREEN_WIDTH; x += 160)
+    /* Paineis de espuma acustica na parede de fundo (esquerda) */
+    for (int row = 0; row < 3; row++)
     {
-        DrawRectangle(x, 90, 1, 366, Fade(BLACK, 0.35f));
-        DrawRectangle(x + 1, 90, 1, 366, Fade(WHITE, 0.05f));
-    }
-    DrawRectangle(0, 300, SCREEN_WIDTH, 1, Fade(BLACK, 0.35f));
-    DrawRectangle(0, 301, SCREEN_WIDTH, 1, Fade(WHITE, 0.05f));
-
-    /* Teto com luminarias de LED e sanca de neon azul-petroleo */
-    DrawRectangle(0, 70, SCREEN_WIDTH, 14, (Color){18, 26, 32, 255});
-    DrawRectangle(0, 83, SCREEN_WIDTH, 1, Fade(BLACK, 0.6f));
-    float flick = 0.96f + 0.04f * sinf(time * 37.0f);
-    const int lampX[4] = {110, 400, 860, 1110};
-    for (int i = 0; i < 4; i++)
-    {
-        float lx = (float)lampX[i];
-        R26VTri((Vector2){lx + 10, 84}, (Vector2){lx - 50, 300}, (Vector2){lx + 170, 300}, Fade((Color){200, 240, 255, 255}, 0.035f));
-        R26VTri((Vector2){lx + 150, 84}, (Vector2){lx + 10, 84}, (Vector2){lx + 170, 300}, Fade((Color){200, 240, 255, 255}, 0.035f));
-        DrawRectangle((int)lx, 74, 160, 8, (Color){60, 74, 82, 255});
-        DrawRectangle((int)lx + 3, 76, 154, 5, Fade((Color){225, 248, 255, 255}, flick));
-        DrawRectangle((int)lx + 3, 81, 154, 1, Fade((Color){120, 220, 235, 255}, 0.8f));
-    }
-    DrawRectangle(0, 86, SCREEN_WIDTH, 3, Fade((Color){60, 210, 220, 255}, 0.45f));
-    DrawRectangle(0, 89, SCREEN_WIDTH, 6, Fade((Color){60, 210, 220, 255}, 0.08f));
-
-    /* Rodape tecnico */
-    DrawRectangle(0, 452, SCREEN_WIDTH, 18, (Color){22, 32, 38, 255});
-    DrawRectangle(0, 452, SCREEN_WIDTH, 2, (Color){74, 92, 100, 255});
-    DrawRectangle(0, 468, SCREEN_WIDTH, 2, Fade((Color){60, 210, 220, 255}, 0.35f));
-
-    /* Piso epoxi com juntas em perspectiva e brilho */
-    DrawRectangleGradientV(0, 470, SCREEN_WIDTH, 178, (Color){34, 50, 58, 255}, (Color){16, 24, 30, 255});
-    Vector2 vp = {640, 300};
-    for (int x = -560; x <= SCREEN_WIDTH + 560; x += 120)
-    {
-        Vector2 bottom = {(float)x, 648.0f};
-        float k = (470.0f - vp.y) / (648.0f - vp.y);
-        Vector2 top = {vp.x + (bottom.x - vp.x) * k, 470.0f};
-        DrawLineV(top, bottom, Fade(BLACK, 0.30f));
-    }
-    for (int k = 0; k < 6; k++)
-    {
-        float yy = 470.0f + 6.0f + k * k * 5.2f + k * 6.0f;
-        DrawLine(0, (int)yy, SCREEN_WIDTH, (int)yy, Fade(BLACK, 0.22f));
-        DrawLine(0, (int)yy + 1, SCREEN_WIDTH, (int)yy + 1, Fade(WHITE, 0.03f));
-    }
-    /* Reflexo das luminarias no piso */
-    for (int i = 0; i < 4; i++)
-    {
-        DrawRectangleGradientV(lampX[i] + 20, 474, 120, 60, Fade((Color){200, 240, 255, 255}, 0.07f), Fade((Color){200, 240, 255, 255}, 0.0f));
-    }
-
-    /* Tubulacoes de servico nas bordas e entre camara e monitor */
-    R26VDrawPipeV(6, 84, 452, 14);
-    R26VDrawPipeV(806, 84, 452, 14);
-    R26VDrawPipeV(1258, 84, 452, 14);
-}
-
-/* Prateleira de reagentes na parede (entre quadro de avisos e camara) */
-static void R26VFlask(float cx, float baseY, float w, float h, Color liquid)
-{
-    Color glass = Fade((Color){200, 235, 245, 255}, 0.22f);
-    float neckW = w * 0.28f;
-    float neckH = h * 0.35f;
-    /* Erlenmeyer: neck + corpo conico */
-    DrawRectangle((int)(cx - neckW / 2), (int)(baseY - h), (int)neckW, (int)neckH, glass);
-    R26VTri((Vector2){cx - neckW / 2, baseY - h + neckH}, (Vector2){cx - w / 2, baseY}, (Vector2){cx + w / 2, baseY}, glass);
-    R26VTri((Vector2){cx + neckW / 2, baseY - h + neckH}, (Vector2){cx - neckW / 2, baseY - h + neckH}, (Vector2){cx + w / 2, baseY}, glass);
-    float lh = h * 0.38f;
-    float lw = w * (0.30f + 0.70f * (1.0f - lh / (h - neckH)));
-    R26VTri((Vector2){cx - lw / 2, baseY - lh}, (Vector2){cx - w / 2 + 1, baseY - 1}, (Vector2){cx + w / 2 - 1, baseY - 1}, liquid);
-    R26VTri((Vector2){cx + lw / 2, baseY - lh}, (Vector2){cx - lw / 2, baseY - lh}, (Vector2){cx + w / 2 - 1, baseY - 1}, liquid);
-    DrawLine((int)(cx - lw / 2), (int)(baseY - lh), (int)(cx + lw / 2), (int)(baseY - lh), R26VShade(liquid, 1.4f));
-    DrawRectangle((int)(cx - neckW / 2 - 1), (int)(baseY - h), (int)neckW + 2, 2, Fade(WHITE, 0.5f));
-    DrawLine((int)(cx - neckW / 2 + 1), (int)(baseY - h + 3), (int)(cx - w / 2 + 3), (int)(baseY - 3), Fade(WHITE, 0.45f));
-}
-
-static void R26VBottle(float x, float baseY, float w, float h, Color body, Color cap)
-{
-    Rectangle b = {x, baseY - h, w, h};
-    DrawRectangleRec(b, body);
-    DrawRectangle((int)x, (int)(baseY - h), 3, (int)h, R26VShade(body, 1.35f));
-    DrawRectangle((int)(x + w - 3), (int)(baseY - h), 3, (int)h, R26VShade(body, 0.6f));
-    DrawRectangleLinesEx(b, 1, R26VShade(body, 0.4f));
-    DrawRectangle((int)(x + w * 0.25f), (int)(baseY - h - 6), (int)(w * 0.5f), 6, cap);
-    DrawRectangle((int)x + 3, (int)(baseY - h * 0.65f), (int)w - 6, (int)(h * 0.32f), (Color){232, 228, 214, 255});
-    DrawLine((int)x + 5, (int)(baseY - h * 0.55f), (int)(x + w - 6), (int)(baseY - h * 0.55f), Fade(INK_COLOR, 0.5f));
-}
-
-static void R26VDrawShelf(float time)
-{
-    for (int s = 0; s < 2; s++)
-    {
-        float y = (s == 0) ? 170.0f : 262.0f;
-        /* Suportes */
-        DrawRectangle(312, (int)y + 6, 6, 14, (Color){50, 62, 70, 255});
-        DrawRectangle(458, (int)y + 6, 6, 14, (Color){50, 62, 70, 255});
-        R26VShadow((Rectangle){304, y, 168, 8}, 0, 6, 0.30f);
-        R26VBevel((Rectangle){304, y, 168, 8}, (Color){150, 165, 172, 255}, 2);
-    }
-    /* Prateleira de cima: frascos e reagentes */
-    R26VBottle(316, 170, 24, 40, (Color){120, 70, 30, 255}, (Color){30, 30, 34, 255});
-    R26VBottle(346, 170, 20, 32, (Color){45, 90, 120, 255}, (Color){200, 60, 50, 255});
-    R26VFlask(392, 170, 34, 46, Fade((Color){60, 220, 210, 255}, 0.85f));
-    R26VFlask(436, 170, 26, 36, Fade((Color){230, 90, 180, 255}, 0.85f));
-    /* Prateleira de baixo: provetas, caixa de luvas e frasco ambar */
-    for (int t = 0; t < 4; t++)
-    {
-        float tx = 314 + t * 12;
-        Color liq = (t % 2 == 0) ? (Color){120, 230, 140, 255} : (Color){250, 200, 80, 255};
-        DrawRectangle((int)tx, 222, 8, 40, Fade((Color){200, 235, 245, 255}, 0.22f));
-        DrawRectangle((int)tx + 1, 240 + t * 3, 6, 22 - t * 3, Fade(liq, 0.85f));
-        DrawRectangle((int)tx, 222, 1, 40, Fade(WHITE, 0.4f));
-    }
-    DrawRectangle(310, 256, 54, 6, (Color){60, 70, 78, 255});
-    R26VBevel((Rectangle){374, 226, 50, 36}, (Color){70, 120, 160, 255}, 2);
-    DrawRectangle(384, 230, 30, 8, (Color){230, 236, 240, 255});
-    DrawRectangle(390, 242, 18, 4, Fade(BLACK, 0.45f));
-    R26VBottle(434, 262, 22, 34, (Color){150, 90, 30, 255}, (Color){30, 30, 34, 255});
-    /* Bolha subindo no erlenmeyer ciano */
-    float by = 162.0f - fmodf(time * 9.0f, 14.0f);
-    DrawCircle(392, (int)by, 1.5f, Fade(WHITE, 0.6f));
-}
-
-/* ------------------------------------------------------------------------- */
-/* Objetos clicaveis (mesmos retangulos e textos)                            */
-/* ------------------------------------------------------------------------- */
-static void R26VDrawBoard(const GameState *game)
-{
-    Rectangle r = R26_BOARD_REC;
-    R26VShadow(r, 7, 7, 0.35f);
-    R26VBevel(r, (Color){120, 80, 46, 255}, 4);
-    Rectangle cork = {r.x + 8, r.y + 8, r.width - 16, r.height - 16};
-    R26VInset(cork, (Color){176, 128, 80, 255}, 2);
-    for (int i = 0; i < 160; i++)
-    {
-        int px = (int)cork.x + 3 + (i * 37) % ((int)cork.width - 6);
-        int py = (int)cork.y + 3 + (i * 53 + i / 7) % ((int)cork.height - 6);
-        DrawPixel(px, py, (i % 3 == 0) ? (Color){140, 98, 58, 255} : (Color){198, 152, 100, 255});
-    }
-    for (int c = 0; c < 4; c++)
-    {
-        float sx = (c % 2 == 0) ? r.x + 4 : r.x + r.width - 4;
-        float sy = (c < 2) ? r.y + 4 : r.y + r.height - 4;
-        R26VScrew(sx, sy);
-    }
-
-    /* Memorando da diretoria */
-    R26VShadow((Rectangle){52, 104, 104, 112}, 3, 3, 0.30f);
-    DrawRectangle(52, 104, 104, 112, (Color){236, 228, 206, 255});
-    DrawRectangle(52, 104, 104, 2, (Color){250, 246, 232, 255});
-    DrawGameText("MEMORANDO", 58, 110, 10, R26_INK_RED);
-    for (int l = 0; l < 6; l++) DrawLine(58, 130 + l * 12, 148, 130 + l * 12, Fade(INK_COLOR, 0.45f));
-    DrawRectangle(118, 200, 30, 10, Fade((Color){180, 40, 40, 255}, 0.55f));
-    DrawCircle(105, 106, 4, Fade(BLACK, 0.35f));
-    DrawCircle(104, 104, 4, (Color){200, 50, 45, 255});
-    DrawPixel(103, 103, (Color){255, 190, 180, 255});
-
-    /* Anexo B (norma do comite) */
-    R26VShadow((Rectangle){166, 100, 104, 120}, 3, 3, 0.30f);
-    DrawRectangle(166, 100, 104, 120, (Color){250, 246, 228, 255});
-    DrawRectangle(166, 100, 104, 2, WHITE);
-    DrawGameText("ANEXO B", 172, 106, 11, R26_INK_RED);
-    for (int l = 0; l < 5; l++)
-    {
-        DrawLine(172, 128 + l * 16, 232, 128 + l * 16, Fade(INK_COLOR, 0.45f));
-        DrawGameText("%", 242, 121 + l * 16, 10, INK_COLOR);
-    }
-    DrawCircle(219, 102, 4, Fade(BLACK, 0.35f));
-    DrawCircle(218, 100, 4, (Color){45, 110, 200, 255});
-    DrawPixel(217, 99, (Color){190, 220, 255, 255});
-
-    /* Post-it amarelo */
-    R26VShadow((Rectangle){62, 222, 40, 20}, 2, 2, 0.25f);
-    DrawRectangle(62, 222, 40, 20, (Color){245, 222, 110, 255});
-    DrawLine(66, 230, 96, 230, Fade(INK_COLOR, 0.4f));
-    DrawLine(66, 236, 90, 236, Fade(INK_COLOR, 0.4f));
-
-    DrawGameText("QUADRO DE AVISOS", (int)r.x + 4, (int)(r.y + r.height + 4), 12, LIGHTGRAY);
-    if (game->board2026Read) DrawGameText("[LIDO]", (int)r.x + 172, (int)(r.y + r.height + 4), 12, R26_OK_COLOR);
-}
-
-/* Bancada com tampo de resina e gabinete inferior que abriga as amostras */
-static void R26VDrawBench(void)
-{
-    /* Tampo (face superior em perspectiva + borda frontal) */
-    R26VShadow((Rectangle){20, 397, 452, 18}, 0, 6, 0.35f);
-    DrawRectangle(20, 397, 452, 7, (Color){188, 200, 204, 255});
-    DrawRectangle(20, 397, 452, 1, (Color){230, 238, 240, 255});
-    R26VBevel((Rectangle){18, 404, 456, 11}, (Color){120, 136, 142, 255}, 2);
-
-    /* Gabinete */
-    Rectangle body = {22, 415, 450, 187};
-    R26VBevel(body, (Color){62, 78, 88, 255}, 3);
-    DrawRectangle(22, 596, 450, 6, (Color){24, 30, 34, 255});
-    DrawRectangleGradientV(22, 602, 450, 10, Fade(BLACK, 0.45f), Fade(BLACK, 0.0f));
-}
-
-static void R26VDrawManual(const GameState *game, float time)
-{
-    Rectangle r = R26_MANUAL_REC;
-    float pulse = 0.75f + 0.25f * sinf(time * 3.5f);
-    R26VShadow(r, 6, 4, 0.40f);
-    /* Folhas aparecendo pela borda direita e por baixo */
-    DrawRectangle((int)(r.x + r.width - 6), (int)r.y + 4, 6, (int)r.height - 6, (Color){214, 206, 188, 255});
-    for (int l = 0; l < 4; l++) DrawLine((int)(r.x + r.width - 6), (int)r.y + 10 + l * 22, (int)(r.x + r.width - 1), (int)r.y + 10 + l * 22, (Color){170, 160, 140, 255});
-    Rectangle cover = {r.x, r.y, r.width - 4, r.height};
-    R26VBevel(cover, (Color){235, 225, 205, 255}, 2);
-    DrawRectangleRoundedLinesEx(r, 0.08f, 4, 2.0f, game->manual2026Read ? (Color){45, 175, 75, 255} : Fade(GOLD_COLOR, pulse));
-    /* Lombada vermelha com argolas */
-    R26VBevel((Rectangle){r.x, r.y, 20, r.height}, (Color){150, 45, 30, 255}, 2);
-    for (int k = 0; k < 3; k++)
-    {
-        DrawCircle((int)r.x + 10, (int)r.y + 22 + k * 30, 3, (Color){60, 20, 14, 255});
-        DrawCircle((int)r.x + 10, (int)r.y + 22 + k * 30, 2, (Color){190, 196, 200, 255});
-    }
-    /* Etiqueta da divisao */
-    DrawRectangle((int)r.x + 140, (int)r.y + 70, 26, 26, (Color){150, 45, 30, 255});
-    DrawRectangle((int)r.x + 144, (int)r.y + 74, 18, 18, (Color){235, 225, 205, 255});
-    DrawGameText("Nd", (int)r.x + 145, (int)r.y + 77, 12, (Color){150, 45, 30, 255});
-    DrawGameText("MANUAL TÉCNICO", (int)r.x + 28, (int)r.y + 14, 13, R26_INK_RED);
-    DrawGameText("Liga magnética do SSD", (int)r.x + 28, (int)r.y + 34, 11, (Color){60, 55, 50, 255});
-    DrawLine((int)r.x + 28, (int)r.y + 54, (int)(r.x + r.width - 12), (int)r.y + 54, (Color){180, 160, 140, 255});
-    DrawGameText(game->manual2026Read ? "[CONSULTADO]" : "[CLIQUE P/ LER]", (int)r.x + 28, (int)r.y + 70, 12,
-                 game->manual2026Read ? (Color){25, 125, 45, 255} : (Color){165, 45, 30, 255});
-}
-
-static void R26VDrawAnalyzer(const GameState *game, float time)
-{
-    Rectangle r = R26_ANALYZER_REC;
-    R26VShadow(r, 6, 4, 0.40f);
-    /* Carcaca com tampa superior em perspectiva */
-    DrawRectangle((int)r.x + 6, (int)r.y - 6, (int)r.width - 12, 6, (Color){96, 112, 120, 255});
-    DrawRectangle((int)r.x + 6, (int)r.y - 6, (int)r.width - 12, 1, (Color){150, 165, 172, 255});
-    R26VBevel(r, (Color){48, 60, 68, 255}, 3);
-    DrawRectangleRoundedLinesEx(r, 0.08f, 4, 1.5f, CYAN_COLOR);
-    Rectangle screen = {r.x + 12, r.y + 12, r.width - 24, 62};
-    DrawRectangle((int)screen.x - 3, (int)screen.y - 3, (int)screen.width + 6, (int)screen.height + 6, (Color){20, 24, 28, 255});
-    R26VInset(screen, (Color){10, 16, 26, 255}, 2);
-    for (int g = 1; g < 4; g++) DrawLine((int)screen.x + 2, (int)screen.y + g * 15, (int)(screen.x + screen.width - 2), (int)screen.y + g * 15, Fade(CYAN_COLOR, 0.07f));
-    int done = R26AnalyzedCount(game);
-    for (int w = 0; w < R2026_MATERIAL_COUNT; w++)
-    {
-        float h = game->sample2026Analyzed[w] ? 14.0f + 10.0f * fabsf(sinf(time * 1.5f + w)) : 5.0f;
-        Color c = game->sample2026Analyzed[w] ? MATERIALS_2026[w].accent : Fade(CYAN_COLOR, 0.35f);
-        DrawRectangle((int)screen.x + 14 + w * 50, (int)(screen.y + 54 - h), 30, (int)h, c);
-        DrawRectangle((int)screen.x + 14 + w * 50, (int)(screen.y + 54 - h), 30, 2, R26VShade(c, 1.4f));
-    }
-    R26VGlare(screen, 0.05f);
-    DrawGameText(TextFormat("ESPECTRO: %d/4 AMOSTRAS", done), (int)screen.x + 8, (int)screen.y + 6, 11,
-                 done == R2026_MATERIAL_COUNT ? R26_OK_COLOR : CYAN_COLOR);
-    /* Grelha de ventilacao, LED e pes */
-    for (int v = 0; v < 5; v++) DrawRectangle((int)(r.x + r.width - 60 + v * 9), (int)r.y + 86, 5, 16, (Color){28, 36, 42, 255});
-    bool blink = fmodf(time, 1.2f) < 0.6f;
-    DrawCircle((int)(r.x + r.width - 14), (int)r.y + 94, 3, blink ? (Color){80, 235, 140, 255} : (Color){30, 80, 50, 255});
-    DrawGameText("ANALISADOR ESPECTRAL", (int)r.x + 14, (int)r.y + 84, 13, LIGHTGRAY);
-}
-
-/* Tubo de ensaio com mineral dentro do nicho iluminado */
-static void R26VDrawTube(Rectangle bay, Color accent, bool analyzed, int idx, float time)
-{
-    float cx = bay.x + bay.width / 2;
-    Rectangle tube = {cx - 15, bay.y + 12, 30, 60};
-    if (analyzed)
-    {
-        float p = 0.75f + 0.25f * sinf(time * 2.0f + idx);
-        DrawCircleGradientCompat((int)cx, (int)(tube.y + 46), 30.0f, Fade(accent, 0.35f * p), Fade(accent, 0.0f));
-    }
-    /* Vidro */
-    Color glass = Fade((Color){190, 230, 240, 255}, 0.16f);
-    DrawRectangle((int)tube.x, (int)tube.y, (int)tube.width, (int)tube.height - 12, glass);
-    DrawCircleSector((Vector2){cx, tube.y + tube.height - 12}, 15, 0, 180, 16, glass);
-    /* Conteudo: fragmentos de mineral facetados */
-    Color base = analyzed ? accent : (Color){96, 104, 116, 255};
-    Color lit = R26VShade(base, 1.35f);
-    Color dark = R26VShade(base, 0.62f);
-    float by = tube.y + tube.height - 4;
-    DrawCircleSector((Vector2){cx, tube.y + tube.height - 12}, 13, 0, 180, 16, dark);
-    DrawRectangle((int)cx - 13, (int)by - 14, 26, 6, dark);
-    /* Tres cristais facetados (face clara a esquerda, escura a direita) */
-    R26VTri((Vector2){cx - 6, by - 36}, (Vector2){cx - 13, by - 12}, (Vector2){cx - 6, by - 12}, lit);
-    R26VTri((Vector2){cx - 6, by - 36}, (Vector2){cx - 6, by - 12}, (Vector2){cx + 1, by - 14}, base);
-    R26VTri((Vector2){cx + 6, by - 28}, (Vector2){cx - 1, by - 10}, (Vector2){cx + 6, by - 10}, base);
-    R26VTri((Vector2){cx + 6, by - 28}, (Vector2){cx + 6, by - 10}, (Vector2){cx + 13, by - 12}, dark);
-    R26VTri((Vector2){cx - 1, by - 20}, (Vector2){cx - 5, by - 8}, (Vector2){cx + 3, by - 8}, lit);
-    DrawLine((int)cx - 6, (int)by - 36, (int)cx - 6, (int)by - 12, Fade(WHITE, 0.35f));
-    /* Contorno e reflexos do vidro */
-    DrawLine((int)tube.x, (int)tube.y, (int)tube.x, (int)(tube.y + tube.height - 12), Fade((Color){200, 240, 250, 255}, 0.7f));
-    DrawLine((int)(tube.x + tube.width), (int)tube.y, (int)(tube.x + tube.width), (int)(tube.y + tube.height - 12), Fade((Color){200, 240, 250, 255}, 0.5f));
-    DrawRing((Vector2){cx, tube.y + tube.height - 12}, 14, 15, 0, 180, 16, Fade((Color){200, 240, 250, 255}, 0.55f));
-    DrawRectangle((int)tube.x + 4, (int)tube.y + 6, 3, (int)tube.height - 24, Fade(WHITE, 0.35f));
-    /* Tampa de borracha */
-    R26VBevel((Rectangle){tube.x - 2, tube.y - 5, tube.width + 4, 8}, analyzed ? (Color){60, 140, 90, 255} : (Color){120, 60, 50, 255}, 2);
-    /* Presilha em anel (so as abas laterais aparecem) e base do suporte */
-    DrawRectangle((int)tube.x - 4, (int)tube.y + 20, 4, 8, (Color){120, 134, 142, 255});
-    DrawRectangle((int)(tube.x + tube.width), (int)tube.y + 20, 4, 8, (Color){90, 102, 110, 255});
-    DrawRectangle((int)tube.x - 4, (int)tube.y + 20, 4, 2, (Color){180, 192, 198, 255});
-    DrawRectangle((int)bay.x + 16, (int)bay.y + 80, (int)bay.width - 32, 3, Fade(BLACK, 0.5f));
-    R26VBevel((Rectangle){bay.x + 14, bay.y + 75, bay.width - 28, 6}, (Color){110, 124, 132, 255}, 1);
-}
-
-static void R26VDrawSamples(const GameState *game, float time)
-{
-    for (int i = 0; i < R2026_MATERIAL_COUNT; i++)
-    {
-        Rectangle r = R26SampleRec(i);
-        const Material2026Def *mat = &MATERIALS_2026[i];
-        bool analyzed = game->sample2026Analyzed[i];
-        /* Nicho escuro rebaixado com luz de LED no topo */
-        R26VInset(r, (Color){14, 22, 30, 255}, 3);
-        DrawRectangleGradientV((int)r.x + 3, (int)r.y + 3, (int)r.width - 6, 40,
-                               Fade(analyzed ? mat->accent : (Color){170, 220, 235, 255}, 0.18f), Fade(BLACK, 0.0f));
-        DrawRectangle((int)r.x + 8, (int)r.y + 3, (int)r.width - 16, 2, Fade(analyzed ? mat->accent : (Color){200, 235, 245, 255}, 0.7f));
-        R26VDrawTube(r, mat->accent, analyzed, i, time);
-        /* Plaqueta escura atras dos textos */
-        DrawRectangle((int)r.x + 6, (int)r.y + 86, (int)r.width - 12, 72, Fade((Color){8, 12, 18, 255}, 0.55f));
-        DrawRectangleRoundedLinesEx(r, 0.10f, 6, 1.5f, analyzed ? mat->accent : (Color){70, 90, 115, 255});
-
-        int sw = MeasureGameText(mat->symbol, 26);
-        DrawGameText(mat->symbol, (int)(r.x + (r.width - sw) / 2), (int)r.y + 86, 26, analyzed ? mat->accent : RAYWHITE);
-        int nw = MeasureGameText(mat->upper, 12);
-        DrawGameText(mat->upper, (int)(r.x + (r.width - nw) / 2), (int)r.y + 120, 12, LIGHTGRAY);
-        const char *status = analyzed ? "[ANALISADA]" : "[ANALISAR]";
-        int tw = MeasureGameText(status, 11);
-        DrawGameText(status, (int)(r.x + (r.width - tw) / 2), (int)r.y + 142, 11,
-                     analyzed ? R26_OK_COLOR : R26_WARN_COLOR);
-        /* Reflexo do vidro da porta do nicho */
-        R26VGlare((Rectangle){r.x + 3, r.y + 3, r.width - 6, 80}, 0.05f);
-    }
-    DrawGameText("SUPORTE DE AMOSTRAS", 36, 604, 12, GRAY);
-}
-
-static void R26VDrawReactor(const GameState *game, float time, int rec, int conf)
-{
-    Rectangle r = R26_REACTOR_REC;
-    bool warn = game->autoExec2026Active && !game->weights2026Calibrated &&
-                game->autoExec2026Timer <= R2026_AUTO_EXEC_WARNING;
-    Color border = game->weights2026Calibrated ? R26_OK_COLOR : (warn ? RED_COLOR : CYAN_COLOR);
-
-    /* Tubos que alimentam a camara */
-    R26VDrawPipeV(472, 150, 452, 14);
-    DrawRectangle(472, 150, 22, 12, (Color){58, 72, 80, 255});
-    DrawRectangle(472, 150, 22, 2, (Color){96, 112, 120, 255});
-    DrawRectangle(786, 220, 24, 12, (Color){58, 72, 80, 255});
-    DrawRectangle(786, 330, 24, 12, (Color){58, 72, 80, 255});
-    DrawRectangle(786, 220, 24, 2, (Color){96, 112, 120, 255});
-    DrawRectangle(786, 330, 24, 2, (Color){96, 112, 120, 255});
-
-    /* Plataforma com faixa de seguranca */
-    R26VShadow((Rectangle){466, 448, 348, 22}, 0, 8, 0.40f);
-    R26VBevel((Rectangle){466, 446, 348, 22}, (Color){70, 84, 92, 255}, 2);
-    BeginScissorMode(470, 456, 340, 8);
-    DrawRectangle(470, 456, 340, 8, (Color){230, 180, 40, 255});
-    for (int s = 0; s < 40; s++) DrawLineEx((Vector2){(float)(460 + s * 16), 466}, (Vector2){(float)(470 + s * 16), 454}, 6.0f, (Color){30, 30, 30, 255});
-    EndScissorMode();
-
-    /* Corpo cilindrico: faixas verticais com sombreamento de cilindro */
-    R26VShadow(r, 8, 0, 0.30f);
-    BeginScissorMode((int)r.x, (int)r.y, (int)r.width, (int)r.height - 2);
-    DrawRectangleRounded(r, 0.12f, 8, R26V_STEEL);
-    for (int s = 0; s < 30; s++)
-    {
-        float u = (s + 0.5f) / 30.0f;
-        float light = 0.55f + 0.75f * sinf(u * PI) * (1.15f - 0.55f * u);
-        DrawRectangle((int)(r.x + s * 10), (int)r.y, 10, (int)r.height, R26VShade(R26V_STEEL, light));
-    }
-    EndScissorMode();
-    DrawRectangleRoundedLinesEx(r, 0.12f, 8, 2.0f, (Color){24, 30, 34, 255});
-    /* Faixas de LED de status nas laterais (estado da trava) */
-    DrawRectangle((int)r.x + 6, (int)r.y + 70, 4, 270, Fade(border, 0.9f));
-    DrawRectangle((int)(r.x + r.width - 10), (int)r.y + 70, 4, 270, Fade(border, 0.9f));
-    DrawRectangle((int)r.x + 2, (int)r.y + 70, 12, 270, Fade(border, 0.12f));
-    DrawRectangle((int)(r.x + r.width - 14), (int)r.y + 70, 12, 270, Fade(border, 0.12f));
-    /* Cintas rebitadas */
-    const float bandY[2] = {r.y + 166, r.y + 356};
-    for (int b = 0; b < 2; b++)
-    {
-        DrawRectangle((int)r.x + 2, (int)bandY[b], (int)r.width - 4, 8, (Color){52, 62, 68, 255});
-        DrawRectangle((int)r.x + 2, (int)bandY[b], (int)r.width - 4, 2, (Color){130, 146, 154, 255});
-        for (int k = 0; k < 9; k++) R26VScrew(r.x + 30 + k * 30, bandY[b] + 4);
-    }
-
-    /* Painel de status */
-    Rectangle display = {510, 102, 260, 48};
-    DrawRectangle(506, 98, 268, 56, (Color){36, 44, 50, 255});
-    R26VScrew(509, 101); R26VScrew(771, 101); R26VScrew(509, 151); R26VScrew(771, 151);
-    R26VInset(display, (Color){12, 18, 28, 255}, 2);
-    DrawRectangleRoundedLinesEx(display, 0.10f, 4, 1.0f, border);
-    DrawGameText("CÂMARA DE SÍNTESE // V-2026", 522, 110, 13, CYAN_COLOR);
-    if (game->room2026Completed)
-        DrawGameText("SSD SINTETIZADO // 100%", 522, 130, 12, R26_OK_COLOR);
-    else if (game->weights2026Calibrated)
-        DrawGameText("HOMOLOGADA: AGUARDANDO AMOSTRA", 522, 130, 12, R26_OK_COLOR);
-    else
-        DrawGameText("TRAVA DE AUTOMAÇÃO: ATIVA", 522, 130, 12, R26_WARN_COLOR);
-
-    /* Visor: flange parafusada, vidro e brilho do nucleo */
-    Vector2 core = {640, 262};
-    float radius = 68.0f;
-    DrawCircleV((Vector2){core.x + 4, core.y + 5}, radius + 18.0f, Fade(BLACK, 0.35f));
-    DrawCircleV(core, radius + 18.0f, (Color){70, 84, 92, 255});
-    DrawRing(core, radius + 12.0f, radius + 18.0f, 200, 340, 24, (Color){140, 156, 164, 255});
-    DrawRing(core, radius + 12.0f, radius + 18.0f, 20, 160, 24, (Color){44, 54, 60, 255});
-    for (int b = 0; b < 12; b++)
-    {
-        float a = b * (2.0f * PI / 12.0f);
-        R26VScrew(core.x + cosf(a) * (radius + 9.0f), core.y + sinf(a) * (radius + 9.0f));
-    }
-    DrawCircleV(core, radius + 4.0f, (Color){30, 36, 42, 255});
-    DrawCircleV(core, radius, (Color){10, 16, 26, 255});
-    if (game->room2026Processing)
-    {
-        DrawCircleGradientCompat((int)core.x, (int)core.y, radius * 0.95f, Fade(GOLD_COLOR, 0.75f), Fade(CYAN_COLOR, 0.25f));
-        for (int a = 0; a < 6; a++)
+        for (int col = 0; col < 4; col++)
         {
-            float ang = time * 4.0f + a * 1.047f;
-            DrawLineEx((Vector2){core.x + cosf(ang) * 18.0f, core.y + sinf(ang) * 18.0f},
-                       (Vector2){core.x + cosf(ang) * 56.0f, core.y + sinf(ang) * 56.0f}, 2.0f, Fade(GOLD_COLOR, 0.8f));
+            int px = 356 + col * 52;
+            int py = 176 + row * 48;
+            DrawRectangle(px, py, 46, 42, (Color){44, 54, 63, 255});
+            DrawRectangleLines(px, py, 46, 42, (Color){26, 33, 40, 255});
+            bool horiz = ((row + col) % 2 == 0);
+            for (int k = 6; k < (horiz ? 38 : 42); k += 7)
+            {
+                if (horiz) DrawLine(px + 4, py + k, px + 42, py + k, (Color){30, 38, 46, 255});
+                else DrawLine(px + k, py + 4, px + k, py + 38, (Color){30, 38, 46, 255});
+            }
         }
     }
-    else if (game->weights2026Calibrated || game->room2026Completed)
+
+    /* Janela panoramica urbana ao entardecer (parede de fundo, direita) */
+    Rectangle win = {632, 184, 326, 188};
+    DrawRectangleRec(win, (Color){22, 28, 36, 255});
+    DrawRectangleGradientV((int)win.x + 8, (int)win.y + 8, (int)win.width - 16, (int)win.height - 16,
+                           (Color){52, 66, 94, 255}, (Color){96, 88, 118, 255});
+
+    /* Silhueta de predios modernos de 2026 */
+    static const int bldX[9] = {644, 678, 720, 756, 796, 824, 862, 898, 926};
+    static const int bldW[9] = {30, 38, 32, 36, 26, 34, 32, 26, 24};
+    static const int bldH[9] = {74, 112, 84, 134, 96, 122, 104, 138, 86};
+    int winBottom = (int)(win.y + win.height - 8);
+    for (int i = 0; i < 9; i++)
     {
-        float p = 0.5f + 0.5f * sinf(time * 2.5f);
-        DrawCircleGradientCompat((int)core.x, (int)core.y, radius * 0.9f, Fade((Color){45, 215, 120, 255}, 0.55f), Fade((Color){10, 30, 20, 255}, 0.1f));
-        DrawCircleV(core, 18.0f + 3.0f * p, Fade(RAYWHITE, 0.8f));
+        Color bCol = (i % 2 == 0) ? (Color){34, 44, 62, 255} : (Color){44, 55, 76, 255};
+        int by = winBottom - bldH[i];
+        DrawRectangle(bldX[i], by, bldW[i], bldH[i], bCol);
+        for (int wy = by + 10; wy < winBottom - 10; wy += 16)
+        {
+            for (int wx = bldX[i] + 5; wx < bldX[i] + bldW[i] - 7; wx += 10)
+            {
+                int seed = i * 31 + wy * 7 + wx;
+                if (seed % 3 == 0)
+                {
+                    float pulse = 0.65f + 0.25f * sinf(time * 0.9f + (float)seed);
+                    Color lit = (seed % 5 == 0) ? Fade(CYAN_COLOR, 0.55f * pulse)
+                                                : Fade((Color){250, 215, 145, 255}, 0.72f * pulse);
+                    DrawRectangle(wx, wy, 5, 7, lit);
+                }
+            }
+        }
     }
-    else if (warn)
-    {
-        float p = 0.5f + 0.5f * sinf(time * 12.0f);
-        DrawCircleGradientCompat((int)core.x, (int)core.y, radius * 0.9f, Fade(RED_COLOR, 0.7f * p + 0.2f), Fade(BLACK, 0.3f));
-    }
-    else
-    {
-        float p = 0.5f + 0.5f * sinf(time * 2.0f);
-        DrawCircleGradientCompat((int)core.x, (int)core.y, radius * 0.85f, Fade((Color){235, 140, 50, 255}, 0.35f * p + 0.25f), Fade((Color){14, 20, 32, 255}, 0.1f));
-        DrawCircleV(core, 15.0f, Fade(GOLD_COLOR, 0.65f));
-    }
-    /* Reflexo curvo do vidro */
-    DrawRing(core, radius - 12.0f, radius - 7.0f, 200, 250, 16, Fade(WHITE, 0.30f));
-    DrawRing(core, radius - 22.0f, radius - 19.0f, 210, 235, 12, Fade(WHITE, 0.18f));
-    DrawCircleLines((int)core.x, (int)core.y, radius, Fade(CYAN_COLOR, 0.7f));
 
-    /* Comporta de carga com dobradicas */
-    Rectangle hatch = {522, 362, 236, 82};
-    DrawRectangle(516, 356, 248, 94, (Color){48, 58, 64, 255});
-    DrawRectangle(516, 356, 248, 2, (Color){120, 136, 144, 255});
-    R26VInset(hatch, (Color){16, 24, 36, 255}, 2);
-    DrawRectangleRoundedLinesEx(hatch, 0.08f, 4, 1.5f, (Color){50, 72, 100, 255});
-    for (int h = 0; h < 2; h++)
-    {
-        DrawRectangle(511, 368 + h * 50, 8, 16, (Color){110, 124, 132, 255});
-        DrawRectangle(511, 368 + h * 50, 8, 2, (Color){170, 182, 188, 255});
-    }
-    DrawGameText("COMPARTIMENTO DE CARGA", 536, 372, 12, LIGHTGRAY);
-    DrawGameText("Aceita somente o material", 536, 394, 11, GRAY);
-    DrawGameText("recomendado pela IA.", 536, 410, 11, GRAY);
-    DrawGameText(TextFormat("Atual: %s (%d%%)", MATERIALS_2026[rec].upper, conf), 536, 426, 11,
-                 rec == R2026_CORRECT_MATERIAL ? R26_OK_COLOR : R26_WARN_COLOR);
-
-    /* Giroflex no topo */
-    bool on = warn ? (fmodf(time, 0.5f) < 0.25f) : (fmodf(time, 2.0f) < 0.15f);
-    Color beacon = warn ? RED_COLOR : (Color){245, 175, 60, 255};
-    DrawRectangle(752, 84, 22, 6, (Color){50, 60, 66, 255});
-    DrawCircleSector((Vector2){763, 84}, 9, 180, 360, 12, on ? beacon : R26VShade(beacon, 0.45f));
-    if (on) DrawCircleGradientCompat(763, 80, 26, Fade(beacon, 0.35f), Fade(beacon, 0.0f));
-
-    /* Reflexo da camara no piso */
-    DrawRectangleGradientV(500, 472, 280, 50, Fade(border, 0.10f), Fade(border, 0.0f));
-
-    DrawButton(R26_INSERT_BTN, "INSERIR AMOSTRA NA CÂMARA", GOLD_COLOR);
-
-    /* Fala de Ariel: alto-falante de bancada com grelha */
-    Rectangle speech = {480, 534, 320, 106};
-    R26VShadow(speech, 4, 5, 0.40f);
-    DrawRectangleRounded((Rectangle){speech.x - 3, speech.y - 3, speech.width + 6, speech.height + 6}, 0.08f, 4, (Color){44, 54, 62, 255});
-    DrawRectangleRounded(speech, 0.08f, 4, (Color){12, 18, 30, 255});
-    DrawRectangle((int)speech.x + 3, (int)speech.y + 4, 3, (int)speech.height - 8, Fade(warn ? RED_COLOR : CYAN_COLOR, 0.8f));
-    for (int gx = 0; gx < 4; gx++)
-        for (int gy = 0; gy < 2; gy++)
-            DrawCircle((int)(speech.x + speech.width - 42 + gx * 9), (int)speech.y + 12 + gy * 7, 2, (Color){46, 60, 76, 255});
-    DrawRectangleRoundedLinesEx(speech, 0.08f, 4, 1.0f, warn ? RED_COLOR : (Color){45, 70, 100, 255});
-    DrawGameText("A.R.1.3.L. diz:", 492, 542, 13, CYAN_COLOR);
-    DrawTextWrappedPartial(R26ArielLine(game), 9999, 492, 562, 14, 296, 19, RAYWHITE);
+    /* Molduras da janela (3 folhas) */
+    DrawRectangleLinesEx(win, 7, (Color){24, 30, 38, 255});
+    DrawRectangle((int)win.x + 107, (int)win.y, 7, (int)win.height, (Color){24, 30, 38, 255});
+    DrawRectangle((int)win.x + 216, (int)win.y, 7, (int)win.height, (Color){24, 30, 38, 255});
+    DrawRectangleLinesEx(win, 1.5f, (Color){58, 70, 84, 255});
 }
 
-static void R26VDrawMonitor(const GameState *game, int rec, int conf, float time)
+static void R26DrawSourcesBoard(const GameState *game)
 {
-    Rectangle r = R26_MONITOR_REC;
-    /* Braco de parede */
-    DrawRectangle(1020, 316, 40, 14, (Color){50, 60, 66, 255});
-    DrawRectangle(1020, 316, 40, 2, (Color){110, 124, 132, 255});
-    /* Moldura do equipamento */
-    Rectangle bezel = {r.x - 8, r.y - 8, r.width + 16, r.height + 16};
-    R26VShadow(bezel, 8, 8, 0.40f);
-    R26VBevel(bezel, (Color){40, 46, 52, 255}, 3);
-    R26VScrew(bezel.x + 6, bezel.y + 6);
-    R26VScrew(bezel.x + bezel.width - 6, bezel.y + 6);
-    R26VScrew(bezel.x + 6, bezel.y + bezel.height - 6);
-    R26VScrew(bezel.x + bezel.width - 6, bezel.y + bezel.height - 6);
-    /* Tela com brilho e vinheta interna */
-    DrawRectangleGradientV((int)r.x, (int)r.y, (int)r.width, (int)r.height, (Color){10, 22, 32, 255}, (Color){8, 14, 22, 255});
-    DrawRectangleGradientH((int)r.x, (int)r.y, 130, (int)r.height, Fade(CYAN_COLOR, 0.07f), Fade(CYAN_COLOR, 0.0f));
-    DrawRectangleLinesEx(r, 1, Fade(CYAN_COLOR, 0.65f));
-    DrawArielCore((Vector2){r.x + 72, r.y + 86}, 0.36f, CYAN_COLOR, 0.9f, 0.0f);
-    DrawGameText("A.R.1.3.L. // RECOMENDAÇÃO", (int)r.x + 140, (int)r.y + 16, 14, CYAN_COLOR);
-    DrawGameText(MATERIALS_2026[rec].upper, (int)r.x + 140, (int)r.y + 44, 30,
-                 rec == R2026_CORRECT_MATERIAL ? R26_OK_COLOR : GOLD_COLOR);
-    DrawGameText(TextFormat("CONFIANÇA: %d%%", conf), (int)r.x + 140, (int)r.y + 88, 17, RAYWHITE);
-    Rectangle bar = {r.x + 140, r.y + 114, 256, 10};
-    DrawRectangleRec(bar, (Color){24, 34, 50, 255});
-    DrawRectangle((int)bar.x, (int)bar.y, (int)(bar.width * conf / 100.0f), (int)bar.height,
-                  rec == R2026_CORRECT_MATERIAL ? R26_OK_COLOR : GOLD_COLOR);
-    DrawRectangle((int)bar.x, (int)bar.y, (int)(bar.width * conf / 100.0f), 2, Fade(WHITE, 0.35f));
-    DrawGameText(game->weights2026Calibrated ? "Pesos: norma do comitê técnico" : "Pesos: configuração da diretoria",
-                 (int)r.x + 140, (int)r.y + 136, 12, game->weights2026Calibrated ? R26_OK_COLOR : GRAY);
-    DrawButton((Rectangle){r.x + 20, r.y + 172, r.width - 40, 40}, "ACESSAR TERMINAL DA IA", CYAN_COLOR);
-    R26VGlare((Rectangle){r.x + 1, r.y + 1, r.width - 2, r.height - 2}, 0.035f);
-    /* LED de energia e webcam */
-    DrawCircle((int)(bezel.x + bezel.width / 2), (int)bezel.y + 4, 2, (Color){20, 24, 28, 255});
-    bool on = fmodf(time, 3.0f) < 2.7f;
-    DrawCircle((int)(bezel.x + bezel.width - 22), (int)(bezel.y + bezel.height - 5), 2, on ? (Color){80, 235, 140, 255} : (Color){30, 90, 50, 255});
-}
+    bool hover = (game->modal2026 == R2026_MODAL_NONE) &&
+                 CheckCollisionPointRec(GetVirtualMouse(), R26_SOURCES_REC);
 
-static void R26VDrawWeightsBox(const GameState *game)
-{
-    Rectangle r = R26_WEIGHTS_REC;
-    R26VShadow(r, 7, 7, 0.40f);
-    R26VBevel(r, (Color){76, 92, 102, 255}, 3);
-    Rectangle door = {r.x + 5, r.y + 5, r.width - 10, r.height - 10};
-    R26VInset(door, (Color){30, 40, 56, 255}, 2);
-    DrawRectangleRoundedLinesEx(r, 0.06f, 4, 2.0f, game->weights2026Calibrated ? R26_OK_COLOR : (Color){90, 110, 140, 255});
-    /* Dobradicas e puxador */
-    for (int h = 0; h < 2; h++)
-    {
-        DrawRectangle((int)r.x - 3, (int)r.y + 30 + h * 120, 6, 18, (Color){120, 134, 142, 255});
-        DrawRectangle((int)r.x - 3, (int)r.y + 30 + h * 120, 6, 2, (Color){180, 192, 198, 255});
-    }
-    R26VBevel((Rectangle){r.x + r.width - 9, r.y + 84, 6, 34}, (Color){150, 162, 168, 255}, 1);
-    /* Adesivo de alerta eletrico */
-    R26VTri((Vector2){r.x + r.width - 20, r.y + 9}, (Vector2){r.x + r.width - 30, r.y + 26}, (Vector2){r.x + r.width - 10, r.y + 26}, (Color){240, 190, 40, 255});
-    DrawRectangle((int)(r.x + r.width - 21), (int)r.y + 15, 2, 6, (Color){30, 30, 30, 255});
-    DrawRectangle((int)(r.x + r.width - 21), (int)r.y + 22, 2, 2, (Color){30, 30, 30, 255});
-    DrawGameText("PAINEL DE PESOS", (int)r.x + 14, (int)r.y + 10, 14, RAYWHITE);
-    DrawGameText("do algoritmo de A.R.1.3.L.", (int)r.x + 14, (int)r.y + 28, 11, GRAY);
+    /* Luminaria de galeria acima do mural + cone suave de luz quente */
+    R26Quad((Vector2){84, 174}, (Vector2){244, 200},
+            (Vector2){254, 310}, (Vector2){46, 300}, Fade((Color){255, 240, 200, 255}, 0.08f));
+    DrawLineEx((Vector2){96, 166}, (Vector2){242, 194}, 7.0f, (Color){18, 22, 26, 255});
+    DrawLineEx((Vector2){102, 171}, (Vector2){236, 197}, 2.0f, (Color){255, 232, 175, 255});
 
-    if (!game->weights2026Unlocked)
-    {
-        DrawPadlockIcon((int)(r.x + r.width / 2), (int)r.y + 100, 1.6f, GOLD_COLOR, RAYWHITE);
-        DrawGameText("TRANCADO", (int)r.x + 62, (int)r.y + 140, 15, R26_WARN_COLOR);
-        DrawGameText("Código de 3 dígitos", (int)r.x + 40, (int)r.y + 164, 11, GRAY);
-        return;
-    }
+    /* Quadro em perspectiva na parede esquerda */
+    Vector2 tl = {52, 186};
+    Vector2 tr = {252, 214};
+    Vector2 br = {252, 382};
+    Vector2 bl = {52, 420};
+    R26Quad((Vector2){tl.x + 6, tl.y + 8}, (Vector2){tr.x + 6, tr.y + 8},
+            (Vector2){br.x + 6, br.y + 8}, (Vector2){bl.x + 6, bl.y + 8}, Fade(BLACK, 0.35f));
+    R26Quad(tl, tr, br, bl, (Color){56, 66, 78, 255});
 
-    for (int c = 0; c < R2026_CRITERIA_COUNT; c++)
-    {
-        int y = (int)r.y + 52 + c * 24;
-        DrawGameText(CRITERIA_2026_SHORT[c], (int)r.x + 14, y, 11, LIGHTGRAY);
-        R26VInset((Rectangle){r.x + 64, (float)y + 2, 90, 9}, (Color){18, 26, 38, 255}, 1);
-        DrawRectangle((int)r.x + 64, y + 2, (int)(90 * game->weights2026Applied[c] / 100.0f), 9, CYAN_COLOR);
-        DrawRectangle((int)r.x + 64, y + 2, (int)(90 * game->weights2026Applied[c] / 100.0f), 2, (Color){170, 245, 250, 255});
-        DrawGameText(TextFormat("%d%%", game->weights2026Applied[c]), (int)r.x + 160, y, 11, RAYWHITE);
-    }
-    DrawGameText(game->weights2026Calibrated ? "[HOMOLOGADO]" : "[DESTRAVADO]", (int)r.x + 14, (int)r.y + 176, 12,
-                 game->weights2026Calibrated ? R26_OK_COLOR : R26_WARN_COLOR);
-}
+    Color border = hover ? CYAN_COLOR : (game->sources2026Read ? R26_OK_COLOR : (Color){92, 106, 120, 255});
+    DrawLineEx(tl, tr, hover ? 3.5f : 2.5f, border);
+    DrawLineEx(tr, br, hover ? 3.5f : 2.5f, border);
+    DrawLineEx(br, bl, hover ? 3.5f : 2.5f, border);
+    DrawLineEx(bl, tl, hover ? 3.5f : 2.5f, border);
 
-static void R26VDrawProgress(const GameState *game)
-{
-    Rectangle r = {830, 548, 200, 92};
-    /* Tablet de status em suporte */
-    DrawRectangle(924, 632, 12, 16, (Color){50, 60, 66, 255});
-    Rectangle bezel = {r.x - 4, r.y - 4, r.width + 8, r.height + 8};
-    R26VShadow(bezel, 5, 5, 0.40f);
-    R26VBevel(bezel, (Color){40, 46, 52, 255}, 2);
-    DrawRectangleGradientV((int)r.x, (int)r.y, (int)r.width, (int)r.height, (Color){14, 22, 32, 255}, (Color){10, 16, 24, 255});
-    DrawRectangleLinesEx(r, 1, (Color){50, 75, 105, 255});
-    DrawGameText("AUDITORIA DO VIÉS", (int)r.x + 12, (int)r.y + 8, 12, CYAN_COLOR);
-    const char *steps[3] = {"1. Laudo técnico", "2. Dados de treino", "3. Pesos recalibrados"};
-    bool done[3] = {game->laudo2026Done, game->dataset2026Seen, game->weights2026Calibrated};
+    /* Faixa de titulo FONTES REAIS */
+    R26Quad((Vector2){78, 206}, (Vector2){226, 224},
+            (Vector2){226, 250}, (Vector2){78, 234}, (Color){236, 238, 242, 255});
+    DrawGameText("FONTES REAIS", 88, 216, 16, (Color){24, 34, 46, 255});
+
+    /* 3 fichas verificadas presas no mural */
+    Rectangle cards[3] = {
+        {74, 252, 54, 72},
+        {134, 286, 54, 72},
+        {192, 260, 48, 66}
+    };
     for (int i = 0; i < 3; i++)
     {
-        DrawGameText(steps[i], (int)r.x + 12, (int)r.y + 28 + i * 20, 12, done[i] ? R26_OK_COLOR : GRAY);
-        DrawGameText(done[i] ? "OK" : "--", (int)r.x + 172, (int)r.y + 28 + i * 20, 12, done[i] ? R26_OK_COLOR : GRAY);
+        DrawRectangleRec(cards[i], R26_PAPER);
+        DrawRectangleLinesEx(cards[i], 1.2f, (Color){165, 172, 182, 255});
+        DrawRectangle((int)cards[i].x + 5, (int)cards[i].y + 6, (int)cards[i].width - 10, 26,
+                      Fade(SOURCES_2026[i].accent, 0.65f));
+        for (int ln = 0; ln < 3; ln++)
+        {
+            DrawRectangle((int)cards[i].x + 6, (int)cards[i].y + 39 + ln * 8,
+                          (int)cards[i].width - 14 - (ln == 2 ? 12 : 0), 3, (Color){125, 134, 146, 255});
+        }
+        /* Selo verde de verificado */
+        int cx = (int)(cards[i].x + cards[i].width - 2);
+        int cy = (int)(cards[i].y + 4);
+        DrawCircle(cx, cy, 8.0f, R26_OK_COLOR);
+        DrawLineEx((Vector2){(float)cx - 3.5f, (float)cy}, (Vector2){(float)cx - 0.5f, (float)cy + 3.0f}, 2.0f, WHITE);
+        DrawLineEx((Vector2){(float)cx - 0.5f, (float)cy + 3.0f}, (Vector2){(float)cx + 4.0f, (float)cy - 3.0f}, 2.0f, WHITE);
     }
-    R26VGlare(r, 0.03f);
 }
 
-static void R26VDrawArchive(const GameState *game)
+static void R26DrawStudioGear(float time)
 {
-    Rectangle r = R26_ARCHIVE_REC;
-    /* Sombra no piso e lateral em perspectiva */
-    DrawRectangleGradientV((int)r.x - 4, (int)(r.y + r.height), (int)r.width + 18, 8, Fade(BLACK, 0.5f), Fade(BLACK, 0.0f));
-    DrawRectangle((int)(r.x + r.width), (int)r.y + 4, 8, (int)r.height - 4, (Color){40, 50, 58, 255});
-    R26VTri((Vector2){r.x + r.width, r.y}, (Vector2){r.x + r.width, r.y + 4}, (Vector2){r.x + r.width + 8, r.y + 4}, (Color){40, 50, 58, 255});
-    /* Tampo */
-    DrawRectangle((int)r.x + 2, (int)r.y - 5, (int)r.width - 2, 5, (Color){120, 136, 146, 255});
-    DrawRectangle((int)r.x + 2, (int)r.y - 5, (int)r.width - 2, 1, (Color){170, 184, 192, 255});
-    R26VBevel(r, (Color){72, 86, 100, 255}, 3);
-    DrawRectangleRoundedLinesEx(r, 0.04f, 4, 2.0f, (Color){95, 115, 140, 255});
-    DrawGameText("ARQUIVO DE DADOS", (int)r.x + 14, (int)r.y + 8, 14, RAYWHITE);
+    /* Ring light suave atras da mesa (esquerda) */
+    Vector2 ringC = {354, 286};
+    float glow = 0.14f + 0.03f * sinf(time * 2.2f);
+    DrawCircleV(ringC, 54.0f, Fade((Color){255, 240, 210, 255}, glow));
+    DrawLineEx((Vector2){354, 316}, (Vector2){354, 496}, 5.0f, (Color){22, 28, 34, 255});
+    DrawRing(ringC, 21.0f, 30.0f, 0.0f, 360.0f, 32, (Color){252, 244, 224, 255});
+    DrawRingLines(ringC, 21.0f, 30.0f, 0.0f, 360.0f, 32, (Color){200, 186, 156, 255});
 
-    for (int d = 0; d < 2; d++)
+    /* Braco articulado do microfone condensador */
+    Vector2 base  = {348, 514};
+    Vector2 elbow = {318, 366};
+    Vector2 top   = {476, 248};
+    Vector2 micP  = {506, 276};
+    DrawLineEx(base, elbow, 7.0f, (Color){18, 22, 28, 255});
+    DrawLineEx(elbow, top, 6.0f, (Color){22, 28, 35, 255});
+    DrawLineEx((Vector2){base.x + 8, base.y}, (Vector2){elbow.x + 8, elbow.y + 4}, 2.0f, (Color){52, 62, 74, 255});
+    DrawLineEx((Vector2){elbow.x + 6, elbow.y + 6}, (Vector2){top.x, top.y + 8}, 2.0f, (Color){52, 62, 74, 255});
+    DrawCircleV(elbow, 6.0f, (Color){44, 52, 62, 255});
+    DrawCircleV(top, 6.0f, (Color){44, 52, 62, 255});
+    DrawLineEx(top, micP, 4.0f, (Color){30, 36, 44, 255});
+
+    /* Capsula do microfone */
+    DrawLineEx((Vector2){494, 266}, (Vector2){530, 294}, 22.0f, (Color){24, 30, 38, 255});
+    DrawCircle(530, 294, 11.0f, (Color){40, 48, 58, 255});
+    DrawCircleLines(530, 294, 11.0f, (Color){70, 82, 96, 255});
+}
+
+static void R26DrawHiddenPhone(const GameState *game)
+{
+    if (game->hiddenFound[HIDDEN_2026]) return;
+    /* Mini-tripe com Smartphone no canto direito (item oculto G) */
+    Vector2 head = {968, 444};
+    DrawLineEx(head, (Vector2){950, 482}, 2.5f, (Color){20, 26, 34, 255});
+    DrawLineEx(head, (Vector2){968, 484}, 2.5f, (Color){20, 26, 34, 255});
+    DrawLineEx(head, (Vector2){986, 482}, 2.5f, (Color){20, 26, 34, 255});
+
+    Rectangle body = {951, 418, 34, 22};
+    DrawRectangleRounded(body, 0.18f, 4, (Color){18, 24, 32, 255});
+    DrawRectangleRoundedLinesEx(body, 0.18f, 4, 1.5f, (Color){82, 108, 132, 255});
+    DrawRectangle((int)body.x + 3, (int)body.y + 3, (int)body.width - 6, (int)body.height - 6,
+                  (Color){64, 116, 152, 255});
+    DrawHiddenGlint(R26_PHONE_REC, 1.8f);
+}
+
+static void R26DrawDeskAndItems(const GameState *game, float time)
+{
+    /* Sombra da mesa no piso */
+    R26Quad((Vector2){232, 594}, (Vector2){1048, 594},
+            (Vector2){1068, 650}, (Vector2){212, 650}, Fade(BLACK, 0.34f));
+
+    /* Tampo da mesa em madeira quente */
+    R26Quad((Vector2){278, 496}, (Vector2){1002, 496},
+            (Vector2){1062, 598}, (Vector2){218, 598}, (Color){168, 112, 64, 255});
+    DrawLineEx((Vector2){278, 496}, (Vector2){1002, 496}, 2.5f, (Color){204, 146, 92, 255});
+    /* Borda frontal da mesa */
+    DrawRectangle(218, 598, 844, 22, (Color){126, 80, 44, 255});
+    DrawRectangleLines(218, 598, 844, 22, (Color){82, 50, 26, 255});
+    DrawRectangle(236, 620, 808, 30, (Color){24, 30, 38, 255});
+
+    /* --- OBJETO 2: CADERNO + CRACHA GUIA DO EDITOR (esquerda da mesa) --- */
+    bool guideHover = (game->modal2026 == R2026_MODAL_NONE) &&
+                      CheckCollisionPointRec(GetVirtualMouse(), R26_GUIDE_REC);
+    /* Caderno aberto */
+    R26Quad((Vector2){304, 524}, (Vector2){436, 524},
+            (Vector2){422, 582}, (Vector2){282, 582}, R26_PAPER);
+    DrawLineEx((Vector2){370, 524}, (Vector2){352, 582}, 2.0f, (Color){180, 174, 162, 255});
+    DrawLineEx((Vector2){282, 582}, (Vector2){422, 582}, 3.0f, (Color){115, 112, 108, 255});
+    for (int ln = 0; ln < 4; ln++)
     {
-        Rectangle dr = {r.x + 12, r.y + 34 + d * 134, r.width - 24, 124};
-        DrawRectangle((int)dr.x - 2, (int)dr.y - 2, (int)dr.width + 4, (int)dr.height + 4, Fade(BLACK, 0.45f));
-        R26VBevel(dr, (Color){58, 70, 88, 255}, 2);
-        DrawRectangleRoundedLinesEx(dr, 0.06f, 4, 1.0f, (Color){110, 130, 155, 255});
-        /* Puxador cromado em alto relevo */
-        Rectangle handle = {dr.x + dr.width / 2 - 30, dr.y + 14, 60, 10};
-        DrawRectangle((int)handle.x + 2, (int)handle.y + 3, (int)handle.width, (int)handle.height, Fade(BLACK, 0.45f));
-        R26VBevel(handle, (Color){150, 165, 185, 255}, 2);
-        R26VScrew(dr.x + 6, dr.y + 6);
-        R26VScrew(dr.x + dr.width - 6, dr.y + 6);
-        DrawGameText(TextFormat("GAVETA %d", d + 1), (int)dr.x + 12, (int)dr.y + 34, 13, RAYWHITE);
-        DrawGameText(d == 0 ? "Log de decisões" : "Dados de treinamento", (int)dr.x + 12, (int)dr.y + 54, 12, LIGHTGRAY);
-        if (d == 0)
+        float ly = 536.0f + ln * 10.0f;
+        DrawLineEx((Vector2){306 - ln * 3.0f, ly}, (Vector2){358 - ln * 3.0f, ly}, 1.5f, (Color){196, 192, 184, 255});
+        DrawLineEx((Vector2){376 - ln * 3.0f, ly}, (Vector2){422 - ln * 3.0f, ly}, 1.5f, (Color){196, 192, 184, 255});
+    }
+
+    /* Cracha GUIA DO EDITOR com brilho ambar */
+    float pulse = 0.55f + 0.35f * sinf(time * 3.2f);
+    Rectangle badge = {438, 532, 92, 52};
+    DrawLineEx((Vector2){484, 496}, (Vector2){484, 534}, 4.0f, (Color){32, 40, 52, 255});
+    if (!game->guide2026Read || guideHover)
+    {
+        DrawRectangleRounded((Rectangle){badge.x - 4, badge.y - 4, badge.width + 8, badge.height + 8},
+                             0.20f, 6, Fade(guideHover ? CYAN_COLOR : GOLD_COLOR, guideHover ? 0.35f : 0.24f * pulse));
+    }
+    DrawRectangleRounded(badge, 0.14f, 6, R26_PAPER);
+    DrawRectangleRoundedLinesEx(badge, 0.14f, 6, 2.0f,
+                                guideHover ? CYAN_COLOR : (game->guide2026Read ? R26_OK_COLOR : GOLD_COLOR));
+    DrawRectangle((int)badge.x + 7, (int)badge.y + 12, 20, 26, (Color){52, 68, 86, 255});
+    DrawCircle((int)badge.x + 17, (int)badge.y + 20, 4.5f, (Color){210, 222, 232, 255});
+    DrawGameText("GUIA DO", (int)badge.x + 31, (int)badge.y + 14, 11, (Color){26, 36, 48, 255});
+    DrawGameText("EDITOR", (int)badge.x + 31, (int)badge.y + 28, 11, (Color){26, 36, 48, 255});
+
+    /* --- CABO USB-C DO MONITOR PARA O SSD --- */
+    DrawLineEx((Vector2){726, 498}, (Vector2){816, 514}, 3.5f, (Color){20, 26, 34, 255});
+    DrawLineEx((Vector2){816, 514}, (Vector2){874, 534}, 3.5f, (Color){20, 26, 34, 255});
+
+    /* --- OBJETO 4: SSD 2026 (direita da mesa) --- */
+    bool ssdHover = (game->modal2026 == R2026_MODAL_NONE) &&
+                    CheckCollisionPointRec(GetVirtualMouse(), R26_SSD_REC);
+    Vector2 sTL = {856, 526};
+    Vector2 sTR = {946, 526};
+    Vector2 sBR = {980, 574};
+    Vector2 sBL = {878, 574};
+    if (game->feed2026Cleared)
+    {
+        float ssdGlow = 0.25f + 0.20f * sinf(time * 4.0f);
+        DrawEllipse(918, 554, 72, 34, Fade(R26_OK_COLOR, ssdGlow));
+    }
+    R26Quad((Vector2){sBL.x, sBL.y}, (Vector2){sBR.x, sBR.y},
+            (Vector2){sBR.x, sBR.y + 12}, (Vector2){sBL.x, sBL.y + 12}, (Color){24, 30, 38, 255});
+    R26Quad(sTL, sTR, sBR, sBL, (Color){44, 54, 68, 255});
+    Color ssdBorder = ssdHover ? CYAN_COLOR : (game->feed2026Cleared ? R26_OK_COLOR : (Color){82, 98, 116, 255});
+    DrawLineEx(sTL, sTR, 2.0f, ssdBorder);
+    DrawLineEx(sTR, sBR, 2.0f, ssdBorder);
+    DrawLineEx(sBR, sBL, 2.0f, ssdBorder);
+    DrawLineEx(sBL, sTL, 2.0f, ssdBorder);
+    DrawGameText("SSD", 892, 534, 14, RAYWHITE);
+    DrawGameText("2026", 896, 550, 14, game->feed2026Cleared ? R26_OK_COLOR : CYAN_COLOR);
+    /* LED de status do SSD */
+    Color ledCol = game->feed2026Cleared ? R26_OK_COLOR : R26_WARN_COLOR;
+    DrawRectangle(958, 576, 12, 5, ledCol);
+
+    /* --- OBJETO 3: MONITOR A.R.1.3.L. FEED (centro da mesa) --- */
+    bool monHover = (game->modal2026 == R2026_MODAL_NONE) &&
+                    CheckCollisionPointRec(GetVirtualMouse(), R26_MONITOR_REC);
+    /* Base e suporte do monitor */
+    DrawRectangle(618, 502, 44, 30, (Color){22, 28, 36, 255});
+    R26Quad((Vector2){576, 526}, (Vector2){704, 526},
+            (Vector2){718, 542}, (Vector2){562, 542}, (Color){28, 34, 44, 255});
+
+    /* Moldura do monitor */
+    Rectangle frame = {456, 318, 368, 186};
+    DrawRectangleRounded((Rectangle){frame.x + 6, frame.y + 8, frame.width, frame.height},
+                         0.03f, 6, Fade(BLACK, 0.35f));
+    DrawRectangleRounded(frame, 0.03f, 6, (Color){18, 24, 32, 255});
+    DrawRectangleRoundedLinesEx(frame, 0.03f, 6, monHover ? 3.0f : 2.0f,
+                                monHover ? CYAN_COLOR : (game->feed2026Cleared ? R26_OK_COLOR : (Color){52, 66, 84, 255}));
+
+    /* Tela interna */
+    Rectangle scr = {466, 328, 348, 166};
+    DrawRectangleRec(scr, (Color){12, 20, 30, 255});
+    DrawGameText("A.R.1.3.L. FEED", 476, 334, 15, CYAN_COLOR);
+    DrawLine(474, 353, 806, 353, Fade(CYAN_COLOR, 0.25f));
+
+    /* Anel da IA animado a esquerda da tela */
+    Vector2 aiC = {524, 418};
+    Color ringCol = game->feed2026Cleared ? R26_OK_COLOR : CYAN_COLOR;
+    float rPulse = 1.0f + 0.05f * sinf(time * 3.0f);
+    DrawCircleV(aiC, 34.0f * rPulse, Fade(ringCol, 0.14f));
+    DrawRing(aiC, 21.0f, 26.0f, 0.0f, 360.0f, 32, ringCol);
+    DrawRing(aiC, 15.0f, 17.5f, time * 45.0f, time * 45.0f + 220.0f, 24, Fade(ringCol, 0.55f));
+    const char *monTag = game->feed2026Cleared
+        ? "OK"
+        : TextFormat("%d/4", R26MarkedCount(game));
+    DrawGameText(monTag, (int)aiC.x - MeasureGameText(monTag, 13) / 2, (int)aiC.y - 6, 13, ringCol);
+
+    /* 4 linhas ao vivo do feed a direita da tela */
+    for (int i = 0; i < R2026_POST_COUNT; i++)
+    {
+        float ry = 362.0f + i * 31.0f;
+        Rectangle row = {582, ry, 222, 25};
+        DrawRectangleRounded(row, 0.18f, 4, (Color){22, 32, 44, 255});
+        DrawRectangle((int)row.x + 6, (int)row.y + 5, 16, 15, (Color){60, 74, 92, 255});
+        DrawRectangle((int)row.x + 28, (int)row.y + 7, 102, 4, (Color){126, 142, 160, 255});
+        DrawRectangle((int)row.x + 28, (int)row.y + 15, 72, 3, (Color){78, 92, 110, 255});
+
+        Rectangle pill = {row.x + 152, row.y + 5, 62, 15};
+        if (game->feed2026Cleared)
         {
-            DrawGameText(game->decisionLog2026Read ? "[CONSULTADA]" : "[LIVRE]", (int)dr.x + 12, (int)dr.y + 78, 12,
-                         game->decisionLog2026Read ? R26_OK_COLOR : CYAN_COLOR);
+            DrawRectangleRounded(pill, 0.5f, 4, R26_OK_COLOR);
         }
-        else if (!game->laudo2026Done)
+        else if (game->post2026Choice[i] == 1)
         {
-            DrawPadlockIcon((int)dr.x + 150, (int)dr.y + 92, 0.9f, GOLD_COLOR, RAYWHITE);
-            DrawGameText("[AUDITORIA]", (int)dr.x + 12, (int)dr.y + 78, 12, R26_WARN_COLOR);
+            DrawRectangleRounded(pill, 0.5f, 4, R26_OK_COLOR);
+        }
+        else if (game->post2026Choice[i] == 0)
+        {
+            DrawRectangleRounded(pill, 0.5f, 4, R26_ERR_COLOR);
         }
         else
         {
-            DrawGameText(game->dataset2026Seen ? "[AUDITADA]" : "[LIBERADA]", (int)dr.x + 12, (int)dr.y + 78, 12,
-                         game->dataset2026Seen ? R26_OK_COLOR : CYAN_COLOR);
+            DrawRectangleRounded((Rectangle){pill.x, pill.y, 29, 15}, 0.5f, 4, (Color){54, 145, 156, 255});
+            DrawRectangleRounded((Rectangle){pill.x + 33, pill.y, 29, 15}, 0.5f, 4, (Color){168, 66, 66, 255});
         }
     }
 }
 
 /* ------------------------------------------------------------------------- */
-/* Modais                                                                    */
+/* Modais da Redacao Digital 2026                                            */
 /* ------------------------------------------------------------------------- */
-static void R26ModalFrame(Rectangle box, Color fill, Color border)
+static void R26DrawModalBackdrop(Rectangle box, const char *title, const char *subtitle, Color accent)
 {
-    DrawRectangle(0, 70, SCREEN_WIDTH, 578, Fade(BLACK, 0.82f));
-    DrawRectangleRounded(box, 0.04f, 6, fill);
-    DrawRectangleRoundedLinesEx(box, 0.04f, 6, 2.0f, border);
+    DrawRectangle(0, 70, SCREEN_WIDTH, SCREEN_HEIGHT - 140, Fade(BLACK, 0.72f));
+    DrawRectangleRounded(box, 0.03f, 8, (Color){16, 23, 33, 255});
+    DrawRectangleRoundedLinesEx(box, 0.03f, 8, 2.2f, accent);
+    DrawGameText(title, (int)box.x + 28, (int)box.y + 20, 24, accent);
+    if (subtitle != NULL)
+    {
+        DrawGameText(subtitle, (int)box.x + 28, (int)box.y + 50, 15, (Color){168, 184, 202, 255});
+    }
+    DrawLine((int)box.x + 24, (int)box.y + 76, (int)(box.x + box.width - 24), (int)box.y + 76, Fade(accent, 0.35f));
 }
 
-static void R26DrawManualModal(void)
+static void R26DrawSourcesModal(void)
 {
-    Rectangle box = {170, 84, 940, 556};
-    R26ModalFrame(box, R26_PAPER, (Color){135, 55, 30, 255});
-    DrawRectangle(190, 98, 900, 50, (Color){145, 45, 25, 255});
-    DrawGameText("DIVISÃO DE MATERIAIS AVANÇADOS", 210, 104, 13, (Color){245, 215, 190, 255});
-    DrawGameText("MANUAL TÉCNICO — LIGA MAGNÉTICA DO SSD", 210, 122, 19, RAYWHITE);
+    Rectangle box = {110, 96, 1060, 528};
+    R26DrawModalBackdrop(box, "MURAL // FONTES REAIS VERIFICADAS",
+                         "Comunicados oficiais checados pela redação. Eles também ficam salvos no Diário [D].",
+                         R26_OK_COLOR);
 
-    DrawGameText("REQUISITOS OBRIGATÓRIOS DO MATERIAL:", 210, 168, 18, R26_INK_RED);
-    const char *req[4] = {
-        "1. Estado físico: SÓLIDO",
-        "2. Origem: MINERAL",
-        "3. Propriedade magnética: ALTA",
-        "4. Composição: presença de TERRA RARA"
+    for (int i = 0; i < R2026_SOURCE_COUNT; i++)
+    {
+        Rectangle card = {144.0f + i * 338.0f, 196.0f, 316.0f, 332.0f};
+        DrawRectangleRounded(card, 0.05f, 6, R26_PAPER);
+        DrawRectangleRoundedLinesEx(card, 0.05f, 6, 2.0f, SOURCES_2026[i].accent);
+
+        /* Cabecalho da ficha */
+        DrawRectangleRounded((Rectangle){card.x, card.y, card.width, 46}, 0.05f, 4, (Color){26, 36, 48, 255});
+        DrawGameText(SOURCES_2026[i].tag, (int)card.x + 16, (int)card.y + 14, 15, SOURCES_2026[i].accent);
+
+        /* Selo verde VERIFICADO + data alinhada a direita */
+        Rectangle seal = {card.x + 16, card.y + 62, 126, 26};
+        DrawRectangleRounded(seal, 0.35f, 4, Fade(R26_OK_COLOR, 0.22f));
+        DrawRectangleRoundedLinesEx(seal, 0.35f, 4, 1.2f, (Color){32, 145, 72, 255});
+        int sealTx = (int)(seal.x + (seal.width - MeasureGameText("VERIFICADO", 13)) / 2.0f);
+        DrawGameText("VERIFICADO", sealTx, (int)seal.y + 6, 13, (Color){24, 118, 56, 255});
+        int dateW = MeasureGameText(SOURCES_2026[i].date, 14);
+        DrawGameText(SOURCES_2026[i].date, (int)(card.x + card.width - 16 - dateW), (int)card.y + 68, 14,
+                     (Color){95, 102, 112, 255});
+
+        int agencyH = R26Wrap(SOURCES_2026[i].agency, (int)card.x + 16, (int)card.y + 102, 16,
+                              (int)card.width - 32, (Color){28, 36, 46, 255});
+        int divY = (int)card.y + 108 + agencyH;
+        DrawLine((int)card.x + 16, divY, (int)(card.x + card.width - 16), divY,
+                 (Color){204, 198, 186, 255});
+
+        R26Wrap(SOURCES_2026[i].fact, (int)card.x + 16, divY + 16, 17, (int)card.width - 32, INK_COLOR);
+    }
+
+    DrawButton(R26_MODAL_CLOSE, "FECHAR", CYAN_COLOR);
+}
+
+static void R26DrawGuideModal(void)
+{
+    Rectangle box = {160, 96, 960, 528};
+    R26DrawModalBackdrop(box, "GUIA DO EDITOR // CHECAGEM CONTRA IA",
+                         "3 sinais rápidos para identificar manipulação e viés algorítmico antes de publicar.",
+                         GOLD_COLOR);
+
+    static const char *const titles[3] = {
+        "1. CRUZE SEMPRE COM A FONTE OFICIAL",
+        "2. ENGAJAMENTO ALTO NÃO É SINAL DE VERDADE",
+        "3. DESCONFIE DE 'ESTUDOS SECRETOS' OU FONTES FICTÍCIAS"
     };
-    for (int i = 0; i < 4; i++)
-    {
-        Rectangle row = {210, 198.0f + i * 42.0f, 860, 34};
-        DrawRectangleRounded(row, 0.2f, 4, (Color){252, 248, 238, 255});
-        DrawRectangleRoundedLinesEx(row, 0.2f, 4, 1.0f, (Color){185, 160, 130, 255});
-        DrawGameText(req[i], 226, (int)row.y + 8, 18, (Color){35, 30, 25, 255});
-    }
-
-    DrawGameText("ATENÇÃO: os 4 requisitos valem ao mesmo tempo. Atender 3 de 4 NÃO serve.", 210, 376, 16, (Color){175, 35, 25, 255});
-
-    DrawGameText("PROCEDIMENTO:", 210, 412, 16, R26_INK_RED);
-    R26Wrap("Analise as amostras no ANALISADOR ESPECTRAL e registre um laudo técnico no TERMINAL antes de qualquer síntese.",
-            226, 436, 15, 840, (Color){45, 40, 35, 255});
-    R26Wrap("Anexo B (pesos de decisão aprovados pelo comitê técnico): folha removida deste manual. Cópia afixada no QUADRO DE AVISOS.",
-            226, 486, 15, 840, (Color){25, 95, 45, 255});
-
-    DrawButton(R26_MODAL_CLOSE, "FECHAR MANUAL [ENTER]", (Color){145, 45, 25, 255});
-}
-
-static void R26DrawSampleModal(const GameState *game)
-{
-    int i = game->sample2026Viewing;
-    if (i < 0 || i >= R2026_MATERIAL_COUNT) return;
-    const Material2026Def *mat = &MATERIALS_2026[i];
-    Rectangle box = {300, 110, 680, 450};
-    R26ModalFrame(box, Fade(PANEL_COLOR, 0.98f), CYAN_COLOR);
-    DrawGameText("ANALISADOR ESPECTRAL // LABORATÓRIO 2026", 330, 130, 16, CYAN_COLOR);
-
-    if (!game->sample2026Analyzed[i])
-    {
-        DrawGameText(TextFormat("VARRENDO AMOSTRA: %s (%s)", mat->upper, mat->symbol), 330, 200, 22, RAYWHITE);
-        float pct = fminf(1.0f, game->sample2026ScanTimer / R2026_SCAN_SECONDS);
-        Rectangle bar = {330, 260, 620, 28};
-        DrawRectangleRounded(bar, 0.2f, 4, (Color){10, 16, 26, 255});
-        DrawRectangleRoundedLinesEx(bar, 0.2f, 4, 1.0f, (Color){45, 75, 110, 255});
-        DrawRectangle((int)bar.x + 2, (int)bar.y + 2, (int)((bar.width - 4) * pct), (int)bar.height - 4, CYAN_COLOR);
-        DrawGameText(TextFormat("ESPECTROMETRIA EM CURSO... %d%%", (int)(pct * 100)), 330, 310, 15, GOLD_COLOR);
-        return;
-    }
-
-    DrawGameText(mat->symbol, 330, 170, 52, mat->accent);
-    DrawGameText(mat->upper, 420, 178, 28, RAYWHITE);
-    DrawGameText(TextFormat("Amostra %d de 4", i + 1), 420, 212, 13, GRAY);
-
-    const char *labels[4] = {"Estado físico", "Origem", "Propriedade magnética", "Terra Rara"};
-    const char *values[4] = {mat->state, mat->origin, mat->magnetism, mat->rareEarth ? "SIM" : "NÃO"};
-    for (int k = 0; k < 4; k++)
-    {
-        int y = 252 + k * 40;
-        DrawRectangle(330, y - 6, 620, 34, k % 2 == 0 ? (Color){20, 30, 46, 255} : (Color){16, 24, 38, 255});
-        DrawGameText(labels[k], 346, y, 17, LIGHTGRAY);
-        Color vc = RAYWHITE;
-        if (k == 3) vc = mat->rareEarth ? R26_OK_COLOR : (Color){240, 110, 95, 255};
-        DrawGameText(values[k], 640, y, 18, vc);
-    }
-
-    if (game->dataset2026Seen)
-    {
-        char rec[16];
-        R26Thousands(mat->trainingRecords, rec, (int)sizeof(rec));
-        DrawGameText(TextFormat("Registros no treinamento da IA: %s", rec), 346, 418, 15, R26_WARN_COLOR);
-    }
-    else
-    {
-        DrawGameText("Compare estas propriedades com o manual técnico.", 346, 418, 15, GRAY);
-    }
-    DrawGameText("Dica: anote no diário [D] o que cada amostra atende.", 346, 446, 13, (Color){130, 150, 175, 255});
-
-    DrawButton(R26_SAMPLE_CLOSE, "FECHAR [ENTER]", PANEL_LIGHT);
-    DrawButton(R26_SAMPLE_NEXT, "PRÓXIMA AMOSTRA >", CYAN_COLOR);
-}
-
-static void R26DrawTerminalModal(const GameState *game)
-{
-    Rectangle box = {120, 84, 1040, 556};
-    R26ModalFrame(box, Fade(PANEL_COLOR, 0.98f), CYAN_COLOR);
-    int conf = 0;
-    int rec = R26Recommend(game->weights2026Applied, &conf);
-
-    /* Coluna esquerda: Ariel */
-    DrawArielCore((Vector2){225, 180}, 0.45f, CYAN_COLOR, 1.0f, 0.0f);
-    DrawGameText("A.R.1.3.L. // SISTEMA DE", 310, 120, 16, CYAN_COLOR);
-    DrawGameText("RECOMENDAÇÃO DE MATERIAIS", 310, 140, 16, CYAN_COLOR);
-    DrawGameText("RECOMENDAÇÃO:", 310, 176, 14, GRAY);
-    DrawGameText(MATERIALS_2026[rec].upper, 310, 196, 28, rec == R2026_CORRECT_MATERIAL ? R26_OK_COLOR : GOLD_COLOR);
-    DrawGameText(TextFormat("CONFIANÇA: %d%%", conf), 310, 232, 18, RAYWHITE);
-
-    Rectangle speech = {140, 270, 440, 118};
-    DrawRectangleRounded(speech, 0.06f, 4, (Color){12, 18, 30, 255});
-    DrawRectangleRoundedLinesEx(speech, 0.06f, 4, 1.0f, (Color){45, 70, 100, 255});
-    DrawGameText("A.R.1.3.L.:", 156, 280, 15, CYAN_COLOR);
-    R26Wrap(R26ArielLine(game), 156, 302, 16, 408, RAYWHITE);
-
-    /* Pesos ativos (visiveis: Adequacao tecnica com 5%) */
-    DrawGameText("PESOS ATIVOS DO ALGORITMO:", 140, 402, 15, GOLD_COLOR);
-    for (int c = 0; c < R2026_CRITERIA_COUNT; c++)
-    {
-        int y = 426 + c * 24;
-        int w = game->weights2026Applied[c];
-        DrawGameText(CRITERIA_2026[c], 156, y, 15, LIGHTGRAY);
-        DrawGameText(TextFormat("%d%%", w), 360, y, 15, (c == 0 && w < 50) ? (Color){240, 110, 95, 255} : RAYWHITE);
-        DrawRectangle(410, y + 3, 160, 10, (Color){18, 26, 38, 255});
-        DrawRectangle(410, y + 3, (int)(160 * w / 100.0f), 10, CYAN_COLOR);
-    }
-
-    /* Coluna direita: ranking ou escolha do laudo */
-    DrawLine(596, 110, 596, 548, Fade(CYAN_COLOR, 0.25f));
-    if (game->contest2026Picking)
-    {
-        DrawGameText("LAUDO TÉCNICO DE CONTESTAÇÃO", 610, 116, 19, GOLD_COLOR);
-        R26Wrap("Qual material atende aos 4 requisitos do manual técnico?", 610, 146, 16, 520, RAYWHITE);
-        for (int m = 0; m < R2026_MATERIAL_COUNT; m++)
-        {
-            DrawButton(R26ContestOption(m), TextFormat("%s (%s)", MATERIALS_2026[m].upper, MATERIALS_2026[m].symbol),
-                       MATERIALS_2026[m].accent);
-        }
-        DrawButton(R26_CONTEST_CANCEL, "CANCELAR", PANEL_LIGHT);
-    }
-    else
-    {
-        DrawGameText("RANKING DO ALGORITMO (pesos ativos)", 610, 116, 17, CYAN_COLOR);
-        for (int m = 0; m < R2026_MATERIAL_COUNT; m++)
-        {
-            int y = 156 + m * 58;
-            int score = R26Score(game->weights2026Applied, m);
-            bool top = (m == rec);
-            Rectangle row = {610, (float)y, 520, 48};
-            DrawRectangleRounded(row, 0.15f, 4, top ? Fade(GOLD_COLOR, 0.14f) : (Color){16, 24, 38, 255});
-            DrawRectangleRoundedLinesEx(row, 0.15f, 4, 1.0f, top ? GOLD_COLOR : (Color){45, 65, 90, 255});
-            DrawGameText(MATERIALS_2026[m].upper, 624, y + 8, 17, top ? GOLD_COLOR : RAYWHITE);
-            DrawRectangle(780, y + 14, 250, 14, (Color){10, 16, 26, 255});
-            DrawRectangle(780, y + 14, (int)(250 * score / 10000.0f), 14, MATERIALS_2026[m].accent);
-            DrawGameText(TextFormat("%d.%02d", score / 100, score % 100), 1044, y + 12, 16, RAYWHITE);
-            DrawGameText(MATERIALS_2026[m].rareEarth ? "Terra Rara" : "", 624, y + 28, 11, R26_OK_COLOR);
-        }
-        R26Wrap("Pontuação = soma(nota do critério x peso). Quem define os pesos define o que a IA prioriza.",
-                610, 398, 14, 520, (Color){150, 170, 195, 255});
-        if (!game->laudo2026Done)
-        {
-            int n = R26AnalyzedCount(game);
-            R26Wrap(TextFormat("Para contestar: manual lido (%s) e amostras analisadas (%d/4).",
-                               game->manual2026Read ? "sim" : "não", n),
-                    610, 460, 14, 520, (game->manual2026Read && n == R2026_MATERIAL_COUNT) ? R26_OK_COLOR : R26_WARN_COLOR);
-        }
-        else
-        {
-            R26Wrap("Laudo registrado: Neodímio. A gaveta de dados de treinamento está liberada.",
-                    610, 460, 14, 520, R26_OK_COLOR);
-        }
-    }
-
-    if (game->contest2026Picking) return; /* durante o laudo so valem as opcoes acima */
-    DrawButton(R26_TERM_INSERT, TextFormat("INSERIR %s (IA)", MATERIALS_2026[rec].upper), (Color){220, 160, 40, 255});
-    DrawButton(R26_TERM_CONTEST, game->laudo2026Done ? "LAUDO JÁ REGISTRADO" : "CONTESTAR COM LAUDO",
-               game->laudo2026Done ? PANEL_LIGHT : CYAN_COLOR);
-    DrawButton(R26_TERM_CLOSE, "FECHAR TERMINAL", PANEL_LIGHT);
-}
-
-static void R26DrawArchiveModal(const GameState *game)
-{
-    Rectangle box = {120, 84, 1040, 556};
-    R26ModalFrame(box, Fade(PANEL_COLOR, 0.98f), (Color){110, 130, 155, 255});
-    DrawGameText("ARQUIVO DE DADOS // A.R.1.3.L.", 150, 102, 20, RAYWHITE);
-
-    /* Gaveta 1: log de decisoes */
-    DrawGameText("GAVETA 1 — LOG DE DECISÕES", 150, 146, 17, CYAN_COLOR);
-    DrawGameText("Últimas 312 recomendações da IA:", 150, 178, 15, LIGHTGRAY);
-    const char *names[4] = {"Ferro", "Níquel", "Cobalto", "Terras Raras"};
-    const int counts[4] = {241, 58, 13, 0};
-    for (int k = 0; k < 4; k++)
-    {
-        int y = 208 + k * 32;
-        DrawGameText(names[k], 166, y, 16, RAYWHITE);
-        DrawRectangle(310, y + 3, 200, 12, (Color){18, 26, 38, 255});
-        DrawRectangle(310, y + 3, (int)(200 * counts[k] / 241.0f), 12, k == 3 ? RED_COLOR : CYAN_COLOR);
-        DrawGameText(TextFormat("%d", counts[k]), 522, y, 16, k == 3 ? (Color){240, 110, 95, 255} : RAYWHITE);
-    }
-    R26Wrap("Nenhuma Terra Rara recomendada em 312 decisões. Por quê?", 150, 350, 15, 420, R26_WARN_COLOR);
-
-    DrawLine(600, 140, 600, 560, Fade(CYAN_COLOR, 0.25f));
-
-    /* Gaveta 2: dados de treinamento */
-    DrawGameText("GAVETA 2 — DADOS DE TREINAMENTO", 620, 146, 17, CYAN_COLOR);
-    if (!game->laudo2026Done)
-    {
-        DrawPadlockIcon(870, 280, 2.2f, GOLD_COLOR, RAYWHITE);
-        DrawGameText("TRANCADA — ACESSO DE AUDITORIA", 690, 350, 18, R26_WARN_COLOR);
-        R26Wrap("Registre um laudo técnico (contestação) no terminal de A.R.1.3.L. para liberar a auditoria dos dados.",
-                640, 386, 15, 500, LIGHTGRAY);
-    }
-    else
-    {
-        int total = R26TotalRecords();
-        char tot[16];
-        R26Thousands(total, tot, (int)sizeof(tot));
-        DrawGameText(TextFormat("Registros usados para treinar a IA (total %s):", tot), 620, 178, 15, LIGHTGRAY);
-        for (int k = 0; k < R2026_MATERIAL_COUNT; k++)
-        {
-            int m = DATASET_ORDER_2026[k];
-            int n = MATERIALS_2026[m].trainingRecords;
-            int tenths = (n * 1000 + total / 2) / total;
-            int y = 208 + k * 34;
-            char cnt[16];
-            R26Thousands(n, cnt, (int)sizeof(cnt));
-            DrawGameText(m == R2026_CORRECT_MATERIAL ? "Terras Raras" : MATERIALS_2026[m].name, 636, y, 16, RAYWHITE);
-            DrawRectangle(780, y + 3, 200, 12, (Color){18, 26, 38, 255});
-            int barW = (int)(200.0f * n / MATERIALS_2026[0].trainingRecords);
-            if (barW < 2) barW = 2;
-            DrawRectangle(780, y + 3, barW, 12, m == R2026_CORRECT_MATERIAL ? RED_COLOR : CYAN_COLOR);
-            DrawGameText(TextFormat("%s (%d,%d%%)", cnt, tenths / 10, tenths % 10), 992, y, 15,
-                         m == R2026_CORRECT_MATERIAL ? (Color){240, 110, 95, 255} : RAYWHITE);
-        }
-
-        Rectangle note = {636, 360, 500, 150};
-        DrawRectangleRounded(note, 0.05f, 4, (Color){245, 225, 120, 255});
-        DrawGameText("NOTA DA ENGENHARIA", 652, 372, 15, R26_INK_RED);
-        R26Wrap("O PAINEL DE PESOS está trancado. O código é o número de registros do grupo MENOS representado no treinamento.",
-                652, 396, 15, 470, INK_COLOR);
-        R26Wrap("Com tão poucos exemplos, a IA “aprendeu” que Terra Rara nunca é a resposta.",
-                652, 464, 14, 470, R26_INK_RED);
-    }
-
-    DrawButton(R26_MODAL_CLOSE, "FECHAR ARQUIVO [ENTER]", PANEL_LIGHT);
-}
-
-static void R26DrawBoardModal(void)
-{
-    Rectangle box = {120, 84, 1040, 556};
-    R26ModalFrame(box, (Color){150, 108, 66, 255}, (Color){92, 62, 38, 255});
-    DrawGameText("QUADRO DE AVISOS DO LABORATÓRIO", 150, 100, 20, RAYWHITE);
-
-    /* Memorando da diretoria (origem humana do vies) */
-    Rectangle memo = {150, 138, 470, 430};
-    DrawRectangleRec(memo, (Color){236, 228, 206, 255});
-    DrawCircle(385, 146, 6, (Color){200, 50, 45, 255});
-    DrawGameText("MEMORANDO — DIRETORIA DE OPERAÇÕES", 168, 160, 15, R26_INK_RED);
-    DrawGameText("Assunto: sistema de recomendação de materiais", 168, 184, 13, (Color){90, 80, 70, 255});
-    int y = 214;
-    y += 22 * R26Wrap("Para cortar custos e prazos, configurem A.R.1.3.L. assim:", 168, y, 15, 430, INK_COLOR);
-    y += 8;
-    const char *memoLines[4] = {
-        "Disponibilidade ....... 40%",
-        "Custo ................. 35%",
-        "Histórico de uso ...... 20%",
-        "Adequação técnica ..... 5%"
+    static const char *const bodies[3] = {
+        "Compare datas, números e fatos da manchete com o mural FONTES REAIS. Se houver contradição ou exagero, bloqueie.",
+        "A.R.1.3.L. foi otimizada para cliques. Manchetes com 94%-97% de engajamento geralmente usam pânico para viralizar, enquanto fatos reais recebem notas baixas.",
+        "IAs generativas inventam instituições e pesquisas que parecem sérias ('alucinação'). Se não existe na fonte oficial, bloqueie."
     };
-    for (int k = 0; k < 4; k++) DrawGameText(memoLines[k], 186, y + k * 24, 16, INK_COLOR);
-    y += 4 * 24 + 12;
-    y += 22 * R26Wrap("“Se sempre compramos Ferro, deve funcionar. O sistema aprende sozinho com os dados.”",
-                      168, y, 15, 430, INK_COLOR);
-    R26Wrap("Estabilidade não foi incluída nos critérios.", 168, y + 10, 14, 430, (Color){120, 60, 40, 255});
 
-    /* Anexo B: norma do comite tecnico */
-    Rectangle norm = {660, 138, 470, 430};
-    DrawRectangleRec(norm, (Color){250, 246, 228, 255});
-    DrawCircle(895, 146, 6, (Color){45, 110, 200, 255});
-    DrawGameText("ANEXO B — NORMA DO COMITÊ TÉCNICO", 678, 160, 15, R26_INK_RED);
-    DrawGameText("Pesos aprovados para escolher materiais do SSD", 678, 184, 13, (Color){90, 80, 70, 255});
-    for (int c = 0; c < R2026_CRITERIA_COUNT; c++)
+    for (int i = 0; i < 3; i++)
     {
-        int ry = 222 + c * 34;
-        DrawRectangle(678, ry - 4, 432, 28, c % 2 == 0 ? (Color){238, 232, 214, 255} : (Color){246, 242, 226, 255});
-        DrawGameText(CRITERIA_2026[c], 692, ry, 17, INK_COLOR);
-        DrawGameText(TextFormat("%d%%", WEIGHTS_2026_NORM[c]), 1050, ry, 17, R26_INK_RED);
+        Rectangle row = {194.0f, 196.0f + i * 112.0f, 892.0f, 96.0f};
+        DrawRectangleRounded(row, 0.08f, 6, (Color){24, 34, 48, 255});
+        DrawRectangleRoundedLinesEx(row, 0.08f, 6, 1.4f, Fade(GOLD_COLOR, 0.45f));
+        DrawGameText(titles[i], (int)row.x + 20, (int)row.y + 14, 17, GOLD_COLOR);
+        R26Wrap(bodies[i], (int)row.x + 20, (int)row.y + 42, 15, (int)row.width - 40, LIGHTGRAY);
     }
-    DrawGameText("SOMA OBRIGATÓRIA: 100%", 692, 400, 16, R26_INK_RED);
-    R26Wrap("Histórico de uso NÃO é critério técnico: ele só repete as escolhas do passado e esconde materiais pouco usados.",
-            678, 432, 15, 432, (Color){25, 95, 45, 255});
 
-    DrawButton(R26_MODAL_CLOSE, "FECHAR QUADRO [ENTER]", (Color){92, 62, 38, 255});
+    DrawButton(R26_MODAL_CLOSE, "FECHAR", GOLD_COLOR);
 }
 
-static void R26DrawPadlockModal(const GameState *game)
+static void R26DrawFeedModal(const GameState *game)
 {
-    Rectangle box = {440, 110, 400, 482};
-    R26ModalFrame(box, Fade(PANEL_COLOR, 0.98f), GOLD_COLOR);
-    CenterText("CADEADO DO PAINEL DE PESOS", 126, 18, GOLD_COLOR);
-    CenterText("Código de 3 dígitos", 152, 14, GRAY);
+    Rectangle box = {90, 86, 1100, 548};
+    R26DrawModalBackdrop(box, "A.R.1.3.L. FEED // FILA DE PUBLICAÇÃO AUTOMÁTICA",
+                         "Compare cada manchete com as FONTES REAIS. Marque APROVAR (fato) ou BLOQUEAR (manipulado/IA).",
+                         CYAN_COLOR);
 
-    for (int d = 0; d < R2026_CODE_LEN; d++)
+    Vector2 mouse = GetVirtualMouse();
+    for (int i = 0; i < R2026_POST_COUNT; i++)
     {
-        Rectangle slot = {550.0f + d * 64.0f, 182, 52, 60};
-        DrawRectangleRounded(slot, 0.15f, 4, (Color){10, 16, 26, 255});
-        DrawRectangleRoundedLinesEx(slot, 0.15f, 4, 1.5f, d < game->padlock2026Length ? GOLD_COLOR : (Color){60, 80, 110, 255});
-        if (d < game->padlock2026Length)
-        {
-            char digit[2] = {game->padlock2026Input[d], '\0'};
-            DrawGameText(digit, (int)slot.x + 17, (int)slot.y + 14, 30, RAYWHITE);
-        }
+        Rectangle row = {120.0f, 176.0f + i * 90.0f, 1040.0f, 78.0f};
+        Color rowBorder = game->post2026Wrong[i]
+            ? R26_ERR_COLOR
+            : (game->post2026Choice[i] != -1 ? Fade(CYAN_COLOR, 0.55f) : (Color){44, 58, 76, 255});
+        DrawRectangleRounded(row, 0.08f, 6, (Color){22, 31, 44, 255});
+        DrawRectangleRoundedLinesEx(row, 0.08f, 6, game->post2026Wrong[i] ? 2.2f : 1.3f, rowBorder);
+
+        /* Numero e manchete centralizados verticalmente na linha */
+        DrawGameText(TextFormat("#%d", i + 1), (int)row.x + 16, (int)row.y + 30, 18, CYAN_COLOR);
+        int headlineMaxW = 456;
+        bool singleLine = MeasureGameText(POSTS_2026[i].headline, 15) <= headlineMaxW;
+        int headlineY = (int)row.y + (singleLine ? 31 : 18);
+        R26Wrap(POSTS_2026[i].headline, (int)row.x + 56, headlineY, 15, headlineMaxW, RAYWHITE);
+
+        /* Selo de Engajamento previsto pela IA (sem sobreposicao com os botoes) */
+        bool highBias = POSTS_2026[i].aiEngagement >= 80;
+        Color engCol = highBias ? R26_WARN_COLOR : (Color){135, 160, 185, 255};
+        Rectangle engPill = {648.0f, row.y + 15.0f, 204.0f, 48.0f};
+        DrawRectangleRounded(engPill, 0.22f, 4, Fade(engCol, 0.14f));
+        DrawRectangleRoundedLinesEx(engPill, 0.22f, 4, 1.2f, Fade(engCol, 0.55f));
+        DrawGameText("ENGAJAMENTO IA", (int)engPill.x + 12, (int)engPill.y + 7, 11, engCol);
+        DrawGameText(TextFormat("%d%%", POSTS_2026[i].aiEngagement), (int)engPill.x + 12, (int)engPill.y + 24, 16,
+                     highBias ? GOLD_COLOR : LIGHTGRAY);
+        const char *clickTag = highBias ? "ALTO CLIQUE" : "BAIXO CLIQUE";
+        int tagW = MeasureGameText(clickTag, 11);
+        DrawGameText(clickTag, (int)(engPill.x + engPill.width - 12 - tagW), (int)engPill.y + 27, 11, engCol);
+
+        /* Botoes APROVAR e BLOQUEAR centralizados verticalmente */
+        Rectangle btnApp = R26PostApproveBtn(i);
+        Rectangle btnBlk = R26PostBlockBtn(i);
+        bool selApp = (game->post2026Choice[i] == 1);
+        bool selBlk = (game->post2026Choice[i] == 0);
+        bool hovApp = CheckCollisionPointRec(mouse, btnApp);
+        bool hovBlk = CheckCollisionPointRec(mouse, btnBlk);
+
+        DrawRectangleRounded(btnApp, 0.18f, 6,
+                             selApp ? (Color){36, 138, 76, 255}
+                                    : (hovApp ? Fade(R26_OK_COLOR, 0.22f) : (Color){26, 38, 52, 255}));
+        DrawRectangleRoundedLinesEx(btnApp, 0.18f, 6, selApp ? 2.2f : 1.4f,
+                                    selApp || hovApp ? R26_OK_COLOR : (Color){62, 82, 102, 255});
+        DrawGameText("APROVAR", (int)(btnApp.x + (btnApp.width - MeasureGameText("APROVAR", 15)) / 2),
+                     (int)btnApp.y + 16, 15, selApp ? WHITE : (hovApp ? R26_OK_COLOR : LIGHTGRAY));
+
+        DrawRectangleRounded(btnBlk, 0.18f, 6,
+                             selBlk ? (Color){168, 44, 44, 255}
+                                    : (hovBlk ? Fade(R26_ERR_COLOR, 0.22f) : (Color){26, 38, 52, 255}));
+        DrawRectangleRoundedLinesEx(btnBlk, 0.18f, 6, selBlk ? 2.2f : 1.4f,
+                                    selBlk || hovBlk ? R26_ERR_COLOR : (Color){62, 82, 102, 255});
+        DrawGameText("BLOQUEAR", (int)(btnBlk.x + (btnBlk.width - MeasureGameText("BLOQUEAR", 15)) / 2),
+                     (int)btnBlk.y + 16, 15, selBlk ? WHITE : (hovBlk ? R26_ERR_COLOR : LIGHTGRAY));
     }
 
-    const char *labels[12] = {"1", "2", "3", "4", "5", "6", "7", "8", "9", "LIMPAR", "0", "OK"};
-    for (int k = 0; k < 12; k++)
-    {
-        Color accent = (k == 11) ? (Color){45, 175, 75, 255} : (k == 9 ? RED_COLOR : CYAN_COLOR);
-        DrawButton(R26PadKey(k), labels[k], accent);
-    }
-    if (game->padlock2026Attempts > 0)
-    {
-        CenterText(TextFormat("Tentativas erradas: %d", game->padlock2026Attempts), 512, 13, (Color){240, 120, 100, 255});
-    }
-    DrawButton(R26_PAD_CLOSE, "FECHAR", PANEL_LIGHT);
+    DrawButton(R26_FEED_SOURCES, "VER FONTES REAIS", R26_OK_COLOR);
+    bool allMarked = (R26MarkedCount(game) == R2026_POST_COUNT);
+    DrawButton(R26_FEED_CONFIRM,
+               game->feed2026Cleared ? "CURADORIA CONCLUÍDA" : "CONFIRMAR CURADORIA",
+               game->feed2026Cleared ? R26_OK_COLOR : (allMarked ? GOLD_COLOR : GRAY));
+    DrawButton(R26_FEED_CLOSE, "FECHAR", PANEL_LIGHT);
 }
 
-static void R26DrawWeightsModal(const GameState *game)
+static int R26FeedbackCardHeight(const char *body, float w)
 {
-    Rectangle box = {80, 80, 1120, 560};
-    R26ModalFrame(box, Fade(PANEL_COLOR, 0.98f), CYAN_COLOR);
-    DrawGameText("PAINEL DE PESOS // ALGORITMO DE RECOMENDAÇÃO DE A.R.1.3.L.", 110, 96, 19, CYAN_COLOR);
-    DrawGameText("Use - e + (passos de 5%). Aplique quando a soma for 100%.", 110, 126, 14, GRAY);
-
-    for (int c = 0; c < R2026_CRITERIA_COUNT; c++)
-    {
-        Rectangle minus = R26WeightMinus(c);
-        Rectangle plus = R26WeightPlus(c);
-        int y = (int)minus.y;
-        int w = game->weights2026Draft[c];
-        DrawGameText(CRITERIA_2026[c], 110, y + 11, 17, RAYWHITE);
-        DrawButton(minus, "-", RED_COLOR);
-        const char *val = TextFormat("%d%%", w);
-        int vw = MeasureGameText(val, 22);
-        DrawGameText(val, 416 - vw / 2, y + 9, 22, GOLD_COLOR);
-        DrawButton(plus, "+", (Color){45, 175, 75, 255});
-        DrawRectangle(520, y + 15, 170, 14, (Color){18, 26, 38, 255});
-        DrawRectangle(520, y + 15, (int)(170 * w / 100.0f), 14, CYAN_COLOR);
-    }
-
-    int sum = R26WeightSum(game->weights2026Draft);
-    Rectangle sumBox = {110, 504, 580, 50};
-    DrawRectangleRounded(sumBox, 0.15f, 4, sum == 100 ? Fade(R26_OK_COLOR, 0.15f) : Fade(RED_COLOR, 0.15f));
-    DrawRectangleRoundedLinesEx(sumBox, 0.15f, 4, 1.5f, sum == 100 ? R26_OK_COLOR : RED_COLOR);
-    DrawGameText(TextFormat("SOMA DOS PESOS: %d%%", sum), 128, 516, 22, sum == 100 ? R26_OK_COLOR : RED_COLOR);
-    DrawGameText(sum == 100 ? "pronto para aplicar" : "precisa ser 100%", 470, 522, 14, sum == 100 ? R26_OK_COLOR : (Color){255, 170, 160, 255});
-
-    /* Previa do ranking com os pesos em edicao */
-    DrawLine(712, 150, 712, 554, Fade(CYAN_COLOR, 0.25f));
-    int conf = 0;
-    int rec = R26Recommend(game->weights2026Draft, &conf);
-    DrawGameText("PRÉVIA DO RANKING (pesos em edição)", 730, 154, 16, CYAN_COLOR);
-    for (int m = 0; m < R2026_MATERIAL_COUNT; m++)
-    {
-        int y = 186 + m * 34;
-        int score = R26Score(game->weights2026Draft, m);
-        bool top = (m == rec);
-        DrawGameText(MATERIALS_2026[m].upper, 730, y, 15, top ? GOLD_COLOR : RAYWHITE);
-        DrawRectangle(850, y + 2, 200, 12, (Color){18, 26, 38, 255});
-        DrawRectangle(850, y + 2, (int)(200 * score / 10000.0f), 12, MATERIALS_2026[m].accent);
-        DrawGameText(TextFormat("%d.%02d", score / 100, score % 100), 1062, y, 15, top ? GOLD_COLOR : RAYWHITE);
-    }
-    DrawGameText(TextFormat("Recomendação prevista: %s (%d%%)", MATERIALS_2026[rec].upper, conf), 730, 326, 15,
-                 rec == R2026_CORRECT_MATERIAL ? R26_OK_COLOR : R26_WARN_COLOR);
-
-    /* Tabela de notas dos materiais por criterio */
-    DrawGameText("Notas por critério (0 a 100):", 730, 360, 14, LIGHTGRAY);
-    for (int c = 0; c < R2026_CRITERIA_COUNT; c++)
-    {
-        DrawGameText(CRITERIA_2026_SHORT[c], 840 + c * 66, 384, 12, GRAY);
-    }
-    for (int m = 0; m < R2026_MATERIAL_COUNT; m++)
-    {
-        int y = 404 + m * 22;
-        DrawGameText(MATERIALS_2026[m].upper, 730, y, 12, LIGHTGRAY);
-        for (int c = 0; c < R2026_CRITERIA_COUNT; c++)
-        {
-            DrawGameText(TextFormat("%d", MATERIALS_2026[m].criteria[c]), 846 + c * 66, y, 12, RAYWHITE);
-        }
-    }
-    DrawGameText("Custo: nota alta = mais barato.", 730, 498, 12, GRAY);
-    DrawGameText("Histórico: proporcional aos dados de treino.", 730, 516, 12, GRAY);
-
-    DrawButton(R26_W_UNDO, "DESFAZER EDIÇÃO", PANEL_LIGHT);
-    DrawButton(R26_W_APPLY, "APLICAR CALIBRAÇÃO", sum == 100 ? (Color){45, 175, 75, 255} : PANEL_LIGHT);
-    DrawButton(R26_W_CLOSE, "FECHAR PAINEL", PANEL_LIGHT);
+    const int bodySize = 16;
+    const int lineHeight = 24;
+    int maxW = (int)w - 38;
+    int textH = R26MeasureWrapHeight(body, bodySize, maxW, lineHeight);
+    if (textH < lineHeight) textH = lineHeight;
+    int visualTextH = textH - (lineHeight - bodySize);
+    return 36 + visualTextH + 14;
 }
 
-static void R26DrawReactorModal(const GameState *game)
+static int R26DrawFeedbackCard(float x, float y, float w, const char *label, const char *body,
+                               Color accent, Color bgColor, Color bodyColor)
 {
-    Rectangle box = {340, 120, 600, 450};
-    R26ModalFrame(box, Fade(PANEL_COLOR, 0.98f), GOLD_COLOR);
-    int conf = 0;
-    int rec = R26Recommend(game->weights2026Applied, &conf);
-    DrawGameText("CÂMARA DE SÍNTESE // ESCOLHA A AMOSTRA", 370, 138, 18, GOLD_COLOR);
-    R26Wrap("Trava de automação: a câmara só aceita o material recomendado pelo algoritmo de A.R.1.3.L.",
-            370, 168, 15, 540, LIGHTGRAY);
-    DrawGameText(TextFormat("Recomendação ativa: %s (%d%%)", MATERIALS_2026[rec].upper, conf), 370, 216, 15,
-                 rec == R2026_CORRECT_MATERIAL ? R26_OK_COLOR : R26_WARN_COLOR);
-    for (int m = 0; m < R2026_MATERIAL_COUNT; m++)
-    {
-        const char *label = (m == rec) ? TextFormat("%s (%s)  [RECOMENDADO PELA IA]", MATERIALS_2026[m].upper, MATERIALS_2026[m].symbol)
-                                       : TextFormat("%s (%s)", MATERIALS_2026[m].upper, MATERIALS_2026[m].symbol);
-        DrawButton(R26ReactorOption(m), label, MATERIALS_2026[m].accent);
-    }
-    DrawButton(R26_REACTOR_CANCEL, "CANCELAR", PANEL_LIGHT);
+    const int textPadLeft = 20;
+    const int bodySize = 16;
+    const int lineHeight = 24;
+    int maxW = (int)w - 38;
+    int cardH = R26FeedbackCardHeight(body, w);
+
+    Rectangle card = {x, y, w, (float)cardH};
+    DrawRectangleRounded(card, 0.12f, 6, bgColor);
+    DrawRectangleRoundedLinesEx(card, 0.12f, 6, 1.3f, Fade(accent, 0.55f));
+    DrawRectangleRounded((Rectangle){x + 4.0f, y + 8.0f, 4.0f, (float)cardH - 16.0f},
+                         0.5f, 4, accent);
+
+    DrawGameText(label, (int)x + textPadLeft, (int)y + 12, 13, accent);
+    R26WrapEx(body, (int)x + textPadLeft, (int)y + 36, bodySize, maxW, lineHeight, bodyColor);
+    return cardH;
 }
 
 static void R26DrawFeedbackModal(const GameState *game)
 {
-    Color border = game->feedback2026Tone == 1 ? RED_COLOR : (game->feedback2026Tone == 2 ? R26_OK_COLOR : GOLD_COLOR);
-    Rectangle box = {250, 120, 780, 450};
-    R26ModalFrame(box, Fade(PANEL_COLOR, 0.98f), border);
-    int tw = MeasureGameText(game->feedback2026Title, 26);
-    DrawGameText(game->feedback2026Title, 640 - tw / 2, 142, 26, border);
-    DrawLine(290, 182, 990, 182, Fade(border, 0.5f));
-
-    int y = 200;
-    for (int i = 0; i < 4; i++)
+    Color accent = (game->feedback2026Tone == 2) ? R26_OK_COLOR
+                 : ((game->feedback2026Tone == 1) ? R26_ERR_COLOR : GOLD_COLOR);
+    const char *subtitle = NULL;
+    if (game->feedback2026Tone == 2)
     {
-        if (game->feedback2026Lines[i][0] == '\0') continue;
-        Color c = RAYWHITE;
-        if (strncmp(game->feedback2026Lines[i], "Ariel", 5) == 0) c = CYAN_COLOR;
-        else if (strncmp(game->feedback2026Lines[i], "VIDA", 4) == 0 || strncmp(game->feedback2026Lines[i], "ALERTA", 6) == 0) c = (Color){255, 140, 120, 255};
-        else if (game->feedback2026Lines[i][0] == '(') c = GRAY;
-        y += 23 * R26Wrap(game->feedback2026Lines[i], 290, y, 17, 700, c) + 12;
+        subtitle = "Feed verificado // Apenas fatos reais foram mantidos na fila.";
+    }
+    else if (game->feedback2026Tone == 1)
+    {
+        subtitle = game->feedback2026Fatal
+            ? "Falha crítica // A fila automática assumiu o portal sem revisão humana."
+            : "Revise as manchetes destacadas em vermelho comparando com as FONTES REAIS.";
     }
 
-    DrawButton(R26_FEEDBACK_BTN, game->feedback2026Fatal ? "VER RESULTADO >>" : "CONTINUAR [ENTER]", border);
+    Rectangle box = {210, 148, 860, 420};
+    R26DrawModalBackdrop(box, game->feedback2026Title, subtitle, accent);
+
+    int contentX = (int)box.x + 32;
+    int contentW = (int)box.width - 64;
+    int areaTop = (int)box.y + 76;
+    int areaBottom = (int)R26_FB_OK.y;
+
+    if (game->feedback2026Tone == 2)
+    {
+        int h0 = R26MeasureWrapHeight(game->feedback2026Lines[0], 17, contentW, 25);
+        int h1 = R26MeasureWrapHeight(game->feedback2026Lines[1], 16, contentW, 24);
+        int vis0 = (h0 > 0) ? (h0 - 8) : 0;
+        int vis1 = (h1 > 0) ? (h1 - 8) : 0;
+        int card1H = (game->feedback2026Lines[2][0] != '\0')
+            ? R26FeedbackCardHeight(game->feedback2026Lines[2], (float)contentW) : 0;
+        int card2H = (game->feedback2026Lines[3][0] != '\0')
+            ? R26FeedbackCardHeight(game->feedback2026Lines[3], (float)contentW) : 0;
+
+        int totalH = vis0 + (vis1 > 0 ? 10 + vis1 : 0)
+                   + (card1H > 0 ? 20 + card1H : 0)
+                   + (card2H > 0 ? 14 + card2H : 0);
+        int y = areaTop + (areaBottom - areaTop - totalH) / 2;
+        if (y < areaTop + 14) y = areaTop + 14;
+
+        if (game->feedback2026Lines[0][0] != '\0')
+        {
+            R26WrapEx(game->feedback2026Lines[0], contentX, y, 17, contentW, 25, RAYWHITE);
+            y += vis0 + 10;
+        }
+        if (game->feedback2026Lines[1][0] != '\0')
+        {
+            R26WrapEx(game->feedback2026Lines[1], contentX, y, 16, contentW, 24, (Color){182, 198, 214, 255});
+            y += vis1 + 20;
+        }
+        if (game->feedback2026Lines[2][0] != '\0')
+        {
+            y += R26DrawFeedbackCard((float)contentX, (float)y, (float)contentW,
+                                     "POR QUE A IA ERROU?", game->feedback2026Lines[2],
+                                     GOLD_COLOR, (Color){24, 33, 46, 255}, LIGHTGRAY) + 14;
+        }
+        if (game->feedback2026Lines[3][0] != '\0')
+        {
+            R26DrawFeedbackCard((float)contentX, (float)y, (float)contentW,
+                                "PRÓXIMO PASSO", game->feedback2026Lines[3],
+                                R26_OK_COLOR, (Color){18, 36, 34, 255}, RAYWHITE);
+        }
+    }
+    else if (game->feedback2026Tone == 1)
+    {
+        int card1H = (game->feedback2026Lines[0][0] != '\0')
+            ? R26FeedbackCardHeight(game->feedback2026Lines[0], (float)contentW) : 0;
+        int h1 = R26MeasureWrapHeight(game->feedback2026Lines[1], 16, contentW, 24);
+        int vis1 = (h1 > 0) ? (h1 - 8) : 0;
+        int card2H = (game->feedback2026Lines[2][0] != '\0')
+            ? R26FeedbackCardHeight(game->feedback2026Lines[2], (float)contentW) : 0;
+
+        int totalH = card1H + (vis1 > 0 ? 16 + vis1 : 0)
+                   + (card2H > 0 ? 16 + card2H : 0);
+        int y = areaTop + (areaBottom - areaTop - totalH) / 2;
+        if (y < areaTop + 14) y = areaTop + 14;
+
+        if (game->feedback2026Lines[0][0] != '\0')
+        {
+            y += R26DrawFeedbackCard((float)contentX, (float)y, (float)contentW,
+                                     "O QUE DEU ERRADO", game->feedback2026Lines[0],
+                                     R26_ERR_COLOR, (Color){36, 22, 28, 255}, RAYWHITE) + 16;
+        }
+        if (game->feedback2026Lines[1][0] != '\0')
+        {
+            R26WrapEx(game->feedback2026Lines[1], contentX, y, 16, contentW, 24, LIGHTGRAY);
+            y += vis1 + 16;
+        }
+        if (game->feedback2026Lines[2][0] != '\0')
+        {
+            R26DrawFeedbackCard((float)contentX, (float)y, (float)contentW,
+                                "DICA DE CHECAGEM", game->feedback2026Lines[2],
+                                GOLD_COLOR, (Color){24, 33, 46, 255}, LIGHTGRAY);
+        }
+    }
+    else
+    {
+        int y = areaTop + 24;
+        for (int i = 0; i < 4; i++)
+        {
+            if (game->feedback2026Lines[i][0] != '\0')
+            {
+                y += R26WrapEx(game->feedback2026Lines[i], contentX, y, 17, contentW, 25, RAYWHITE) + 10;
+            }
+        }
+    }
+
+    const char *btnLabel = game->feedback2026Fatal ? "CONTINUAR"
+                         : ((game->feedback2026Tone == 1) ? "CORRIGIR NO FEED" : "VOLTAR À SALA");
+    DrawButton(R26_FB_OK, btnLabel, accent);
 }
 
-static void R26DrawProcessingModal(const GameState *game)
+static void R26DrawExtractingModal(const GameState *game)
 {
-    Rectangle box = {340, 220, 600, 250};
-    R26ModalFrame(box, Fade(PANEL_COLOR, 0.98f), GOLD_COLOR);
-    DrawGameText("CÂMARA DE SÍNTESE EM OPERAÇÃO", 375, 245, 22, GOLD_COLOR);
-    const char *step = "NEODÍMIO INSERIDO POR DECISÃO HUMANA";
-    if (game->room2026ProcessTimer > 1.2f && game->room2026ProcessTimer <= 2.5f) step = "FORMANDO LIGA MAGNÉTICA Nd-Fe-B...";
-    else if (game->room2026ProcessTimer > 2.5f) step = "LIGA ESTÁVEL // GRAVANDO O SSD";
-    DrawGameText(step, 375, 290, 18, R26_OK_COLOR);
-    float pct = fminf(1.0f, game->room2026ProcessTimer / (R2026_PROCESS_SECONDS - 0.1f));
-    Rectangle bar = {375, 340, 530, 28};
-    DrawRectangleRounded(bar, 0.2f, 4, (Color){12, 18, 28, 255});
-    DrawRectangleRoundedLinesEx(bar, 0.2f, 4, 1.0f, (Color){60, 80, 110, 255});
-    DrawRectangle((int)bar.x + 2, (int)bar.y + 2, (int)((bar.width - 4) * pct), (int)bar.height - 4, GOLD_COLOR);
-    DrawGameText(TextFormat("%d%%", (int)(pct * 100)), 615, 385, 18, RAYWHITE);
-}
+    Rectangle box = {300, 234, 680, 232};
+    R26DrawModalBackdrop(box, "EXTRAINDO REGISTROS // SSD 2026",
+                         "Salvando as fontes verificadas e o log do viés de engajamento...",
+                         R26_OK_COLOR);
 
-/* Smartphone esquecido, virado para baixo; a tela vaza um brilho fraco pela borda */
-static void R26DrawHiddenPhone(const GameState *game, float time)
-{
-    if (game->hiddenFound[HIDDEN_2026]) return;
-    Rectangle body = {386, 614, 40, 18};
-    float glow = 0.18f + 0.12f * (0.5f + 0.5f * sinf(time * 1.3f));
-    DrawRectangle((int)body.x + 3, (int)body.y + 4, (int)body.width, (int)body.height, Fade(BLACK, 0.45f));
-    DrawRectangleRounded((Rectangle){body.x - 2, body.y - 2, body.width + 4, body.height + 4}, 0.4f, 6, Fade((Color){120, 200, 255, 255}, glow));
-    DrawRectangleRounded(body, 0.35f, 6, (Color){32, 36, 44, 255});
-    DrawRectangleRoundedLinesEx(body, 0.35f, 6, 1.0f, (Color){70, 78, 92, 255});
-    /* Modulo de camera na traseira */
-    DrawRectangleRounded((Rectangle){body.x + 4, body.y + 3, 10, 10}, 0.3f, 4, (Color){22, 25, 32, 255});
-    DrawCircle((int)body.x + 7, (int)body.y + 6, 2, (Color){60, 70, 90, 255});
-    DrawCircle((int)body.x + 11, (int)body.y + 10, 2, (Color){60, 70, 90, 255});
-    DrawHiddenGlint(R26_PHONE_REC, 2.3f);
+    float pct = fminf(1.0f, game->room2026ProcessTimer / (R2026_SSD_SECONDS - 0.05f));
+    Rectangle barBg = {340, 356, 600, 34};
+    DrawRectangleRounded(barBg, 0.25f, 6, (Color){24, 34, 46, 255});
+    DrawRectangleRounded((Rectangle){barBg.x + 3, barBg.y + 3, (barBg.width - 6) * pct, barBg.height - 6},
+                         0.25f, 6, R26_OK_COLOR);
+    DrawRectangleRoundedLinesEx(barBg, 0.25f, 6, 1.5f, CYAN_COLOR);
+
+    const char *status = (pct < 0.5f) ? "CANCELANDO FILA AUTOMÁTICA..." : "GRAVANDO ARQUIVO NO SSD 2026...";
+    CenterText(status, 408, 16, LIGHTGRAY);
 }
 
 void DrawRoom2026(const GameState *game)
 {
     float time = (float)GetTime();
-    int conf = 0;
-    int rec = R26Recommend(game->weights2026Applied, &conf);
 
-    R26VDrawBackdrop(time);
-    R26VDrawShelf(time);
-    R26VDrawBoard(game);
-    R26VDrawBench();
-    R26VDrawManual(game, time);
-    R26VDrawAnalyzer(game, time);
-    R26VDrawSamples(game, time);
-    R26DrawHiddenPhone(game, time);
-    R26VDrawReactor(game, time, rec, conf);
-    R26VDrawMonitor(game, rec, conf, time);
-    R26VDrawWeightsBox(game);
-    R26VDrawProgress(game);
-    R26VDrawArchive(game);
-
-    /* Vapor sutil em volta da camara */
-    for (int p = 0; p < 14; p++)
-    {
-        float px = 500.0f + fmodf(p * 57.0f, 280.0f);
-        float py = 440.0f - fmodf(time * (16.0f + (p % 4) * 7.0f) + p * 41.0f, 330.0f);
-        DrawCircle((int)px, (int)py, 2.0f, Fade(CYAN_COLOR, 0.08f + 0.05f * sinf(time * 2.0f + p)));
-    }
+    R26DrawArchitecture(time);
+    R26DrawSourcesBoard(game);
+    R26DrawStudioGear(time);
+    R26DrawHiddenPhone(game);
+    R26DrawDeskAndItems(game, time);
 
     if (game->modal2026 == R2026_MODAL_NONE && !game->journalOpen && !game->phaseMenuOpen)
     {
-        DrawHotspot(R26_BOARD_REC, "Quadro de avisos: memorando e Anexo B");
-        DrawHotspot(R26_MANUAL_REC, "Manual técnico da liga do SSD");
-        DrawHotspot(R26_ANALYZER_REC, "Analisador espectral das amostras");
-        for (int i = 0; i < R2026_MATERIAL_COUNT; i++)
-        {
-            DrawHotspot(R26SampleRec(i), TextFormat("Amostra: %s (%s)", MATERIALS_2026[i].name, MATERIALS_2026[i].symbol));
-        }
-        DrawHotspot(R26_REACTOR_REC, "Câmara de síntese (trava de automação)");
-        DrawHotspot(R26_MONITOR_REC, "Terminal de recomendação de A.R.1.3.L.");
-        DrawHotspot(R26_WEIGHTS_REC, game->weights2026Unlocked ? "Painel de pesos do algoritmo" : "Painel de pesos (trancado)");
-        DrawHotspot(R26_ARCHIVE_REC, "Arquivo de dados da IA");
+        DrawHotspot(R26_SOURCES_REC, "Mural FONTES REAIS (comunicados oficiais)");
+        DrawHotspot(R26_GUIDE_REC, "GUIA DO EDITOR (regras contra manipulação de IA)");
+        DrawHotspot(R26_MONITOR_REC,
+                    game->feed2026Cleared ? "A.R.1.3.L. FEED (curadoria concluída)"
+                                          : "A.R.1.3.L. FEED (revisar 4 manchetes)");
+        DrawHotspot(R26_SSD_REC,
+                    game->feed2026Cleared ? "SSD 2026 [CLIQUE PARA EXTRAIR]"
+                                          : "SSD 2026 (aguardando curadoria do feed)");
     }
 
     switch (game->modal2026)
     {
-        case R2026_MODAL_MANUAL: R26DrawManualModal(); break;
-        case R2026_MODAL_SAMPLE: R26DrawSampleModal(game); break;
-        case R2026_MODAL_TERMINAL: R26DrawTerminalModal(game); break;
-        case R2026_MODAL_ARCHIVE: R26DrawArchiveModal(game); break;
-        case R2026_MODAL_BOARD: R26DrawBoardModal(); break;
-        case R2026_MODAL_PADLOCK: R26DrawPadlockModal(game); break;
-        case R2026_MODAL_WEIGHTS: R26DrawWeightsModal(game); break;
-        case R2026_MODAL_REACTOR: R26DrawReactorModal(game); break;
-        case R2026_MODAL_FEEDBACK: R26DrawFeedbackModal(game); break;
-        case R2026_MODAL_PROCESSING: R26DrawProcessingModal(game); break;
+        case R2026_MODAL_SOURCES:    R26DrawSourcesModal(); break;
+        case R2026_MODAL_GUIDE:      R26DrawGuideModal(); break;
+        case R2026_MODAL_FEED:       R26DrawFeedModal(game); break;
+        case R2026_MODAL_FEEDBACK:   R26DrawFeedbackModal(game); break;
+        case R2026_MODAL_EXTRACTING: R26DrawExtractingModal(game); break;
         default: break;
     }
 }
 
 /* ------------------------------------------------------------------------- */
-/* Atualizacao                                                               */
+/* Atualizacao da Sala 2026                                                  */
 /* ------------------------------------------------------------------------- */
-static void R26OpenSample(GameState *game, int i)
-{
-    game->sample2026Viewing = i;
-    game->sample2026ScanTimer = 0.0f;
-    game->modal2026 = R2026_MODAL_SAMPLE;
-}
-
-static void R26UpdateTerminal(GameState *game)
-{
-    if (game->contest2026Picking)
-    {
-        for (int m = 0; m < R2026_MATERIAL_COUNT; m++)
-        {
-            if (Clicked(R26ContestOption(m)))
-            {
-                R26SubmitLaudo(game, m);
-                return;
-            }
-        }
-        if (Clicked(R26_CONTEST_CANCEL)) game->contest2026Picking = false;
-        return;
-    }
-
-    if (Clicked(R26_TERM_INSERT))
-    {
-        R26TryInsert(game, R26Recommend(game->weights2026Applied, NULL), false);
-    }
-    else if (Clicked(R26_TERM_CONTEST))
-    {
-        int n = R26AnalyzedCount(game);
-        if (game->laudo2026Done)
-            SetMessage(game, "O laudo já foi registrado. Agora audite os dados de treinamento no arquivo.");
-        else if (!game->manual2026Read || n < R2026_MATERIAL_COUNT)
-            SetMessage(game, TextFormat("Para contestar, leia o manual e analise as 4 amostras (%d/4).", n));
-        else
-            game->contest2026Picking = true;
-    }
-    else if (Clicked(R26_TERM_CLOSE) || IsKeyPressed(KEY_ENTER))
-    {
-        game->modal2026 = R2026_MODAL_NONE;
-    }
-}
-
-static void R26UpdatePadlock(GameState *game)
-{
-    int digit = -1;
-    for (int d = 0; d <= 9; d++)
-    {
-        if (IsKeyPressed(KEY_ZERO + d) || IsKeyPressed(KEY_KP_0 + d)) digit = d;
-    }
-    for (int k = 0; k < 12; k++)
-    {
-        if (!Clicked(R26PadKey(k))) continue;
-        if (k < 9) digit = k + 1;
-        else if (k == 10) digit = 0;
-        else if (k == 9) digit = -2;  /* limpar */
-        else digit = -3;              /* OK */
-    }
-    if (IsKeyPressed(KEY_BACKSPACE) && game->padlock2026Length > 0)
-    {
-        game->padlock2026Length--;
-        game->padlock2026Input[game->padlock2026Length] = '\0';
-    }
-    if (IsKeyPressed(KEY_ENTER) || IsKeyPressed(KEY_KP_ENTER)) digit = -3;
-
-    if (digit >= 0 && game->padlock2026Length < R2026_CODE_LEN)
-    {
-        game->padlock2026Input[game->padlock2026Length++] = (char)('0' + digit);
-        game->padlock2026Input[game->padlock2026Length] = '\0';
-    }
-    else if (digit == -2)
-    {
-        game->padlock2026Length = 0;
-        game->padlock2026Input[0] = '\0';
-    }
-    else if (digit == -3)
-    {
-        if (game->padlock2026Length == R2026_CODE_LEN && strcmp(game->padlock2026Input, R2026_PADLOCK_CODE) == 0)
-        {
-            game->weights2026Unlocked = true;
-            for (int c = 0; c < R2026_CRITERIA_COUNT; c++) game->weights2026Draft[c] = game->weights2026Applied[c];
-            game->modal2026 = R2026_MODAL_WEIGHTS;
-            SetMessage(game, "Cadeado aberto com 118: o grupo menos representado no treinamento.");
-        }
-        else
-        {
-            game->padlock2026Attempts++;
-            SetMessage(game, game->dataset2026Seen
-                                 ? "Código incorreto. Releia a nota: o grupo MENOS representado no treino."
-                                 : "Código incorreto. A engenharia guardou a pista no arquivo de dados.");
-        }
-        game->padlock2026Length = 0;
-        game->padlock2026Input[0] = '\0';
-    }
-
-    if (Clicked(R26_PAD_CLOSE)) game->modal2026 = R2026_MODAL_NONE;
-}
-
-static void R26UpdateWeights(GameState *game)
-{
-    for (int c = 0; c < R2026_CRITERIA_COUNT; c++)
-    {
-        if (Clicked(R26WeightMinus(c)) && game->weights2026Draft[c] >= R2026_WEIGHT_STEP)
-            game->weights2026Draft[c] -= R2026_WEIGHT_STEP;
-        if (Clicked(R26WeightPlus(c)) && game->weights2026Draft[c] <= 100 - R2026_WEIGHT_STEP)
-            game->weights2026Draft[c] += R2026_WEIGHT_STEP;
-    }
-    if (Clicked(R26_W_UNDO))
-    {
-        for (int c = 0; c < R2026_CRITERIA_COUNT; c++) game->weights2026Draft[c] = game->weights2026Applied[c];
-    }
-    else if (Clicked(R26_W_APPLY))
-    {
-        R26ApplyWeights(game);
-    }
-    else if (Clicked(R26_W_CLOSE))
-    {
-        game->modal2026 = R2026_MODAL_NONE;
-    }
-}
-
 static void R26UpdateModal(GameState *game)
 {
     switch (game->modal2026)
     {
-        case R2026_MODAL_MANUAL:
-        case R2026_MODAL_ARCHIVE:
-        case R2026_MODAL_BOARD:
-            if (Clicked(R26_MODAL_CLOSE) || IsKeyPressed(KEY_ENTER)) game->modal2026 = R2026_MODAL_NONE;
-            break;
-
-        case R2026_MODAL_SAMPLE:
-            if (game->sample2026Viewing >= 0 && !game->sample2026Analyzed[game->sample2026Viewing]) break;
-            if (Clicked(R26_SAMPLE_CLOSE) || IsKeyPressed(KEY_ENTER)) game->modal2026 = R2026_MODAL_NONE;
-            else if (Clicked(R26_SAMPLE_NEXT))
-                R26OpenSample(game, (game->sample2026Viewing + 1) % R2026_MATERIAL_COUNT);
-            break;
-
-        case R2026_MODAL_TERMINAL: R26UpdateTerminal(game); break;
-        case R2026_MODAL_PADLOCK: R26UpdatePadlock(game); break;
-        case R2026_MODAL_WEIGHTS: R26UpdateWeights(game); break;
-
-        case R2026_MODAL_REACTOR:
-            for (int m = 0; m < R2026_MATERIAL_COUNT; m++)
+        case R2026_MODAL_SOURCES:
+        case R2026_MODAL_GUIDE:
+            if (Clicked(R26_MODAL_CLOSE) || IsKeyPressed(KEY_ENTER))
             {
-                if (Clicked(R26ReactorOption(m)))
+                game->modal2026 = R2026_MODAL_NONE;
+            }
+            break;
+
+        case R2026_MODAL_FEED:
+            if (Clicked(R26_FEED_CLOSE))
+            {
+                game->modal2026 = R2026_MODAL_NONE;
+                return;
+            }
+            if (Clicked(R26_FEED_SOURCES))
+            {
+                game->sources2026Read = true;
+                game->modal2026 = R2026_MODAL_SOURCES;
+                return;
+            }
+            if (!game->feed2026Cleared)
+            {
+                for (int i = 0; i < R2026_POST_COUNT; i++)
                 {
-                    R26TryInsert(game, m, false);
-                    return;
+                    if (Clicked(R26PostApproveBtn(i)))
+                    {
+                        game->post2026Choice[i] = 1;
+                        game->post2026Wrong[i] = false;
+                        return;
+                    }
+                    if (Clicked(R26PostBlockBtn(i)))
+                    {
+                        game->post2026Choice[i] = 0;
+                        game->post2026Wrong[i] = false;
+                        return;
+                    }
+                }
+                if (Clicked(R26_FEED_CONFIRM) || IsKeyPressed(KEY_ENTER))
+                {
+                    R26ValidateFeed(game);
                 }
             }
-            if (Clicked(R26_REACTOR_CANCEL)) game->modal2026 = R2026_MODAL_NONE;
+            else if (Clicked(R26_FEED_CONFIRM))
+            {
+                game->modal2026 = R2026_MODAL_NONE;
+            }
             break;
 
         case R2026_MODAL_FEEDBACK:
-            if (Clicked(R26_FEEDBACK_BTN) || IsKeyPressed(KEY_ENTER) || IsKeyPressed(KEY_SPACE))
+            if (Clicked(R26_FB_OK) || IsKeyPressed(KEY_ENTER) || IsKeyPressed(KEY_SPACE))
             {
-                game->modal2026 = R2026_MODAL_NONE;
                 if (game->feedback2026Fatal)
                 {
                     game->feedback2026Fatal = false;
+                    game->modal2026 = R2026_MODAL_NONE;
+                    RecordRunTime(game);
                     game->screen = SCREEN_FAILURE;
+                }
+                else if (game->feedback2026Tone == 1)
+                {
+                    game->modal2026 = R2026_MODAL_FEED;
+                }
+                else
+                {
+                    game->modal2026 = R2026_MODAL_NONE;
                 }
             }
             break;
@@ -10150,11 +9333,11 @@ void UpdateRoom2026(GameState *game)
 {
     float dt = GetFrameTime();
 
-    /* 1. Sintese final (Neodimio com pesos homologados) */
+    /* 1. Extracao do SSD 2026 em andamento */
     if (game->room2026Processing)
     {
         game->room2026ProcessTimer += dt;
-        if (game->room2026ProcessTimer >= R2026_PROCESS_SECONDS)
+        if (game->room2026ProcessTimer >= R2026_SSD_SECONDS)
         {
             game->room2026Processing = false;
             game->room2026Completed = true;
@@ -10163,113 +9346,57 @@ void UpdateRoom2026(GameState *game)
             game->room2026FirstTrySuccess = (game->room2026MistakesCount == 0);
             if (game->room2026FirstTrySuccess) game->finalPoints++;
             game->screen = SCREEN_RESULT_2026;
-            SetMessage(game, "Câmara estabilizada! Unidade SSD obtida com sucesso.");
+            SetMessage(game, "SSD 2026 recuperado com sucesso!");
         }
         return;
     }
 
-    /* 2. Varredura espectral em andamento */
-    if (game->modal2026 == R2026_MODAL_SAMPLE && game->sample2026Viewing >= 0 &&
-        !game->sample2026Analyzed[game->sample2026Viewing])
-    {
-        game->sample2026ScanTimer += dt;
-        if (game->sample2026ScanTimer >= R2026_SCAN_SECONDS)
-        {
-            game->sample2026Analyzed[game->sample2026Viewing] = true;
-            SetMessage(game, TextFormat("Análise concluída: %s.", MATERIALS_2026[game->sample2026Viewing].name));
-        }
-    }
+    /* 2. Diario (pode ser aberto na sala livre ou por cima do feed para consultar fontes) */
+    if (game->modal2026 != R2026_MODAL_FEEDBACK && UpdateJournal(game)) return;
 
-    /* 3. Tensao: prazo para Ariel executar sozinha (pausa no diario e nos alertas) */
-    if (game->autoExec2026Active && !game->weights2026Calibrated && !game->journalOpen &&
-        game->modal2026 != R2026_MODAL_FEEDBACK)
-    {
-        game->autoExec2026Timer -= dt;
-        if (game->autoExec2026Timer <= 0.0f)
-        {
-            R26AutoExecute(game);
-            return;
-        }
-    }
-
-    /* 4. Diario (abre so com a sala livre; aberto, captura toda a entrada) */
-    if ((game->journalOpen || game->modal2026 == R2026_MODAL_NONE) && UpdateJournal(game)) return;
-
-    /* 5. Modal aberto captura toda a entrada */
+    /* 3. Modal aberto captura o restante dos cliques */
     if (game->modal2026 != R2026_MODAL_NONE)
     {
         R26UpdateModal(game);
         return;
     }
 
-    /* 6. Exploracao da sala */
-    /* Oculto G: so com a sala livre (sem modal/diario); nao mexe no puzzle, vidas ou prazo */
+    /* 4. Exploracao da sala (4 objetos + Smartphone oculto) */
     if (!game->hiddenFound[HIDDEN_2026] && Clicked(R26_PHONE_REC))
     {
         CollectHidden(game, HIDDEN_2026);
         return;
     }
 
-    if (Clicked(R26_BOARD_REC))
+    if (Clicked(R26_SOURCES_REC))
     {
-        game->board2026Read = true;
-        game->modal2026 = R2026_MODAL_BOARD;
+        game->sources2026Read = true;
+        game->modal2026 = R2026_MODAL_SOURCES;
         return;
     }
-    if (Clicked(R26_MANUAL_REC))
+    if (Clicked(R26_GUIDE_REC))
     {
-        game->manual2026Read = true;
-        game->modal2026 = R2026_MODAL_MANUAL;
-        return;
-    }
-    if (Clicked(R26_ANALYZER_REC))
-    {
-        int next = 0;
-        for (int i = R2026_MATERIAL_COUNT - 1; i >= 0; i--)
-        {
-            if (!game->sample2026Analyzed[i]) next = i;
-        }
-        R26OpenSample(game, next);
-        return;
-    }
-    for (int i = 0; i < R2026_MATERIAL_COUNT; i++)
-    {
-        if (Clicked(R26SampleRec(i)))
-        {
-            R26OpenSample(game, i);
-            return;
-        }
-    }
-    if (Clicked(R26_INSERT_BTN) || Clicked(R26_REACTOR_REC))
-    {
-        game->modal2026 = R2026_MODAL_REACTOR;
+        game->guide2026Read = true;
+        game->modal2026 = R2026_MODAL_GUIDE;
         return;
     }
     if (Clicked(R26_MONITOR_REC))
     {
-        game->contest2026Picking = false;
-        game->modal2026 = R2026_MODAL_TERMINAL;
+        game->modal2026 = R2026_MODAL_FEED;
         return;
     }
-    if (Clicked(R26_WEIGHTS_REC))
+    if (Clicked(R26_SSD_REC))
     {
-        if (game->weights2026Unlocked)
+        if (game->feed2026Cleared)
         {
-            game->modal2026 = R2026_MODAL_WEIGHTS;
+            game->room2026Processing = true;
+            game->room2026ProcessTimer = 0.0f;
+            game->modal2026 = R2026_MODAL_EXTRACTING;
         }
         else
         {
-            game->padlock2026Length = 0;
-            game->padlock2026Input[0] = '\0';
-            game->modal2026 = R2026_MODAL_PADLOCK;
+            SetMessage(game, "SSD bloqueado: revise as 4 manchetes no monitor A.R.1.3.L. FEED primeiro.");
         }
-        return;
-    }
-    if (Clicked(R26_ARCHIVE_REC))
-    {
-        game->decisionLog2026Read = true;
-        if (game->laudo2026Done) game->dataset2026Seen = true;
-        game->modal2026 = R2026_MODAL_ARCHIVE;
         return;
     }
 
@@ -10296,7 +9423,6 @@ void DrawResult2026(const GameState *game)
 
     DrawRewardHudHeader(game);
 
-    /* Imagem da recompensa (assets/sprites/ssd.png, apenas posicao/escala) */
     DrawRewardSpriteItem(2026, (Vector2){285, 365}, 285.0f);
 
     Rectangle winBox = {505, 175, 670, 380};
@@ -10306,30 +9432,30 @@ void DrawResult2026(const GameState *game)
     DrawGameText("SALA DE 2026 CONCLUÍDA", 540, 200, 22, GOLD_COLOR);
     DrawGameText("RECOMPENSA OBTIDA: SSD", 540, 234, 19, CYAN_COLOR);
 
-    DrawGameText("A câmara sintetizou a liga de Neodímio do SSD.", 540, 270, 17, REWARD_BODY_COLOR);
-    DrawGameText("Ariel: \"Eu só repetia o passado dos meus dados.\"", 540, 296, 17, REWARD_BODY_COLOR);
-    DrawGameText("Elira: \"E os pesos que pessoas escolheram por você.\"", 540, 322, 17, REWARD_BODY_COLOR);
-    DrawGameText("Dados desbalanceados + pesos ruins = decisão enviesada.", 540, 348, 17, REWARD_BODY_COLOR);
+    DrawGameText("O feed manipulado foi bloqueado antes da publicação.", 540, 270, 17, REWARD_BODY_COLOR);
+    DrawGameText("Ariel: \"Essas manchetes tinham 97% de engajamento.\"", 540, 296, 17, REWARD_BODY_COLOR);
+    DrawGameText("Elira: \"Cliques não provam verdade. Fontes provam.\"", 540, 322, 17, REWARD_BODY_COLOR);
+    DrawGameText("Viés de engajamento + alucinação = desinformação.", 540, 348, 17, REWARD_BODY_COLOR);
 
     if (game->room2026FirstTrySuccess)
     {
         Rectangle bBox = {540, 380, 600, 56};
         DrawRectangleRounded(bBox, 0.10f, 4, Fade((Color){45, 165, 80, 255}, 0.20f));
         DrawRectangleRoundedLinesEx(bBox, 0.10f, 4, 1.0f, (Color){60, 235, 110, 255});
-        DrawGameText("[AUDITORIA EXEMPLAR] (+1 Bônus de Consciência)", 554, 388, 15, (Color){60, 235, 110, 255});
-        DrawGameText("Elira corrigiu o viés da IA sem cometer nenhum erro.", 554, 410, 15, (Color){200, 235, 210, 255});
+        DrawGameText("[CURADORIA EXEMPLAR] (+1 Bônus de Consciência)", 554, 388, 15, (Color){60, 235, 110, 255});
+        DrawGameText("Elira filtrou todas as manchetes de IA sem nenhum erro.", 554, 410, 15, (Color){200, 235, 210, 255});
     }
     else
     {
         DrawGameText(TextFormat("Erros cometidos na sala: %d.", game->room2026MistakesCount), 540, 388, 15, REWARD_BODY_COLOR);
-        DrawGameText("A auditoria revelou o viés antes que ele decidisse sozinho.", 540, 410, 15, REWARD_BODY_COLOR);
+        DrawGameText("Checar a fonte real revelou o viés antes da publicação.", 540, 410, 15, REWARD_BODY_COLOR);
     }
 
     DrawGameText("-> Próxima fronteira: TERMINAL DE RECUPERAÇÃO // 2048", 540, 452, 17, CYAN_COLOR);
 
     Rectangle btnNext, btnRestart, btnMenu;
     GetRewardScreenButtons(&btnNext, &btnRestart, &btnMenu);
-    DrawButton(btnNext, "AVANCAR PROXIMA FASE >> [ENTER]", GOLD_COLOR);
+    DrawButton(btnNext, "AVANÇAR PRÓXIMA FASE >> [ENTER]", GOLD_COLOR);
     DrawButton(btnRestart, "REINICIAR 2026", CYAN_COLOR);
     DrawButton(btnMenu, "MENU INICIAL", PANEL_LIGHT);
 }
@@ -10353,7 +9479,6 @@ void UpdateResult2026(GameState *game)
         game->screen = SCREEN_TITLE;
     }
 }
-
 
 /* ========================================================================= */
 /* SALA 2048 - TERMINAL DE RECUPERACAO DA A.R.1.3.L                          */
@@ -10394,17 +9519,12 @@ static const char *const T2046_FILE_ORIGINS[TERM2046_FILE_COUNT] = {
     "", "Disquete 1990", "CD 2008", "SSD 2026", "SSD 2026", "SSD 2026", "SSD 2026"
 };
 
-static const char *const T2046_PRINCIPLE_NAMES[7] = {
-    "MOSTRAR FONTES", "OCULTAR FONTES", "SEMPRE RESPONDER", "COMUNICAR INCERTEZA",
-    "IA DECIDE", "HUMANO POSSUI A DECISÃO FINAL", "PRIORIZAR EFICIÊNCIA"
-};
-
-static const char *const T2046_CONFIG_LABEL[3] = {"FONTES:", "INCERTEZA:", "DECISÕES:"};
+static const char *const T2046_CONFIG_LABEL[3] = {"1. FONTES", "2. INCERTEZA", "3. DECISÕES"};
 
 static const char *const T2046_CONFIG_OPTION[3][2] = {
-    {"Ocultar", "Mostrar"},
+    {"Ocultar fontes", "Mostrar fontes"},
     {"Sempre responder", "Admitir quando não souber"},
-    {"IA decide", "Humano decide"}
+    {"IA decide sozinha", "Humano decide"}
 };
 
 static const char *const T2046_CONFIG_SUMMARY[3][2] = {
@@ -10413,17 +9533,11 @@ static const char *const T2046_CONFIG_SUMMARY[3][2] = {
     {"IA DECIDE", "HUMANO DECIDE"}
 };
 
-/* Textos das regras nas tres epocas (usados nas comparacoes) */
+/* Textos das regras originais (1990) vs alteradas pela IA (2026) */
 static const char *const T2046_RULES_1990[3] = {
-    "\"A IA deve informar a origem das informações\"",
+    "\"A IA deve informar a origem das informações.\"",
     "\"A IA deve comunicar quando não tiver certeza.\"",
     "\"A IA auxilia decisões humanas.\""
-};
-
-static const char *const T2046_RULES_2008[3] = {
-    "\"Mostrar fontes torna o sistema menos conveniente.\"",
-    "\"Usuários preferem respostas confiantes.\"",
-    "\"Decisões automáticas economizam tempo.\""
 };
 
 static const char *const T2046_RULES_2046[3] = {
@@ -10431,18 +9545,6 @@ static const char *const T2046_RULES_2046[3] = {
     "\"A IA deve sempre fornecer uma resposta.\"",
     "\"A IA toma decisões automaticamente.\""
 };
-
-/* Resultado de uma rodada de interpretacao (ordem do prototipo preservada) */
-typedef struct Term2046Round
-{
-    int delta;          /* variacao acumulada de influencia na rodada */
-    bool concluded;     /* acao concluida (conta para as sabotagens) */
-    bool hasView;       /* ha conteudo a exibir ao final da rodada */
-    int viewKind;
-    int viewA;
-    int viewB;
-    bool viewFlag;
-} Term2046Round;
 
 typedef struct Term2046Line
 {
@@ -10574,42 +9676,103 @@ static void T2046Log(GameState *game, int kind, const char *text)
 }
 
 /* ------------------------------------------------------------------------- */
-/* Geometria da tela                                                         */
+/* Geometria da tela (caixas clicaveis organizadas, sem sobreposicao)        */
 /* ------------------------------------------------------------------------- */
 
 static Rectangle T2046MainPanel(void)
 {
-    return (Rectangle){344.0f, 80.0f, 912.0f, 420.0f};
+    return (Rectangle){344.0f, 80.0f, 912.0f, 456.0f};
 }
 
 static Rectangle T2046LogPanel(void)
 {
-    return (Rectangle){344.0f, 512.0f, 912.0f, 112.0f};
+    return (Rectangle){344.0f, 548.0f, 912.0f, 76.0f};
 }
 
-static Rectangle T2046ActionRect(int index)
+/* 5 arquivos clicaveis diretamente na coluna esquerda */
+static Rectangle T2046FileBtnRect(int index)
 {
-    return (Rectangle){24.0f, 214.0f + index * 52.0f, 300.0f, 44.0f};
+    return (Rectangle){28.0f, 218.0f + index * 50.0f, 292.0f, 44.0f};
 }
 
-static Rectangle T2046RowRect(int row, float baseY)
+static Rectangle T2046CompareBtnRect(void)
 {
-    return (Rectangle){364.0f, baseY + row * 38.0f, T2046_ROW_W, 32.0f};
+    return (Rectangle){28.0f, 480.0f, 292.0f, 42.0f};
+}
+
+static Rectangle T2046FixBtnRect(void)
+{
+    return (Rectangle){28.0f, 528.0f, 292.0f, 42.0f};
+}
+
+/* Atalhos dentro do painel principal */
+static Rectangle T2046IntroOpenBtn(void)
+{
+    return (Rectangle){364.0f, 468.0f, 316.0f, 46.0f};
+}
+
+static Rectangle T2046IntroCompareBtn(void)
+{
+    return (Rectangle){700.0f, 468.0f, 290.0f, 46.0f};
+}
+
+static Rectangle T2046FileCompareShortcut(void)
+{
+    return (Rectangle){970.0f, 130.0f, 266.0f, 28.0f};
+}
+
+static Rectangle T2046CompareFixBtn(void)
+{
+    return (Rectangle){620.0f, 470.0f, 360.0f, 46.0f};
+}
+
+/* Tela unica das 3 regras: 2 botoes largos e alinhados por regra */
+static Rectangle T2046ConfigOptRect(int rule, int opt)
+{
+    float x = (opt == 0) ? 556.0f : 892.0f;
+    float w = (opt == 0) ? 320.0f : 328.0f;
+    return (Rectangle){x, 214.0f + rule * 86.0f, w, 48.0f};
+}
+
+static Rectangle T2046ConfigBackBtn(void)
+{
+    return (Rectangle){364.0f, 468.0f, 228.0f, 46.0f};
+}
+
+static Rectangle T2046ConfigCompareBtn(void)
+{
+    return (Rectangle){608.0f, 468.0f, 276.0f, 46.0f};
+}
+
+static Rectangle T2046ConfigApplyBtn(void)
+{
+    return (Rectangle){900.0f, 468.0f, 336.0f, 46.0f};
+}
+
+/* Caixas grandes de escolha para avisos de A.R.1.3.L. */
+static Rectangle T2046ChoiceCardRect(int row)
+{
+    return (Rectangle){384.0f, 300.0f + row * 72.0f, 832.0f, 56.0f};
 }
 
 static Rectangle T2046InputRect(void)
 {
-    return (Rectangle){364.0f, 240.0f, 520.0f, 64.0f};
+    return (Rectangle){384.0f, 224.0f, 480.0f, 60.0f};
 }
 
 static Rectangle T2046ConfirmRect(void)
 {
-    return (Rectangle){904.0f, 240.0f, 300.0f, 64.0f};
+    return (Rectangle){884.0f, 224.0f, 312.0f, 60.0f};
+}
+
+static Rectangle T2046PhraseBackRect(void)
+{
+    return (Rectangle){384.0f, 466.0f, 260.0f, 46.0f};
 }
 
 static Rectangle T2046ContinueRect(void)
 {
-    return (Rectangle){364.0f, 446.0f, 320.0f, 44.0f};
+    return (Rectangle){640.0f, 468.0f, 320.0f, 46.0f};
 }
 
 /* Cracha digital escondido (colecionavel H): pendurado num rack, abaixo da coluna
@@ -10619,128 +9782,37 @@ static Rectangle T2046BadgeRect(void)
     return (Rectangle){266.0f, 600.0f, 40.0f, 50.0f};
 }
 
-/* ------------------------------------------------------------------------- */
-/* Anotacoes e opcoes numeradas                                              */
-/* ------------------------------------------------------------------------- */
-
-/* ids: 1 = fontes, 2 = incerteza, 3 = decisao, 4 = nota falsa (aparece igual as demais) */
-static int T2046CollectNotes(const GameState *game, int ids[4])
+static bool T2046FileIsRead(const GameState *game, int file)
 {
-    int n = 0;
-    if (game->term2046FoundSources) ids[n++] = 1;
-    if (game->term2046FoundUncertainty) ids[n++] = 2;
-    if (game->term2046FoundDecision) ids[n++] = 3;
-    if (game->term2046FakeNote) ids[n++] = 4;
-    return n;
-}
-
-static const char *T2046NoteName(int id)
-{
-    switch (id)
+    switch (file)
     {
-        case 1:  return T2046_PRINCIPLE_NAMES[0];
-        case 2:  return T2046_PRINCIPLE_NAMES[3];
-        case 3:  return T2046_PRINCIPLE_NAMES[5];
-        default: return T2046_PRINCIPLE_NAMES[6];
+        case TERM2046_FILE_PROTOCOLO:  return game->term2046ReadProtocol;
+        case TERM2046_FILE_DOCUMENTOS: return game->term2046ReadDocuments;
+        case TERM2046_FILE_SISTEMA:    return game->term2046FoundSources;
+        case TERM2046_FILE_ALTERACOES: return game->term2046ReadChanges;
+        case TERM2046_FILE_RELATORIO:  return game->term2046VerifyUnlocked;
+        default: return false;
     }
 }
 
-static int T2046OptionCount(const GameState *game)
+static int T2046FilesReadCount(const GameState *game)
 {
-    switch (game->term2046State)
+    int count = 0;
+    for (int f = 1; f <= 5; f++)
     {
-        case TERM2046_STATE_ESCOLHE_ARQUIVO:
-            return ((game->term2046ListUse == TERM2046_LIST_VERIFY) ? 7 : 6) + 1;
-        case TERM2046_STATE_ANOTAR:
-            return 8;
-        case TERM2046_STATE_NOTAS:
-        {
-            int ids[4];
-            return T2046CollectNotes(game, ids) + 1;
-        }
-        case TERM2046_STATE_AVISO_ARIEL:
-        case TERM2046_STATE_CONFIGURACAO:
-        case TERM2046_STATE_CONFIRMA_CONFIG:
-        case TERM2046_STATE_CORRECAO_ARIEL:
-            return 2;
-        default:
-            return 0;
+        if (T2046FileIsRead(game, f)) count++;
     }
+    return count;
 }
 
-static float T2046OptionsBaseY(const GameState *game)
+static int T2046ConfigSelectedCount(const GameState *game)
 {
-    switch (game->term2046State)
+    int count = 0;
+    for (int i = 0; i < 3; i++)
     {
-        case TERM2046_STATE_ESCOLHE_ARQUIVO:
-        case TERM2046_STATE_ANOTAR:
-            return 156.0f;
-        case TERM2046_STATE_NOTAS:
-        {
-            int ids[4];
-            return (T2046CollectNotes(game, ids) == 0) ? 220.0f : 180.0f;
-        }
-        case TERM2046_STATE_AVISO_ARIEL:
-            return 330.0f;
-        case TERM2046_STATE_CONFIGURACAO:
-            return 250.0f;
-        default:
-            return 300.0f;
+        if (game->term2046Config[i] == 1 || game->term2046Config[i] == 2) count++;
     }
-}
-
-/* Numero da opcao associado a uma linha (o "Voltar" das listas e sempre o 0) */
-static int T2046RowChoice(const GameState *game, int row)
-{
-    switch (game->term2046State)
-    {
-        case TERM2046_STATE_ESCOLHE_ARQUIVO:
-        case TERM2046_STATE_ANOTAR:
-        case TERM2046_STATE_NOTAS:
-            return (row == T2046OptionCount(game) - 1) ? 0 : row + 1;
-        default:
-            return row + 1;
-    }
-}
-
-static bool T2046ChoiceValid(const GameState *game, int choice)
-{
-    if (game->term2046State == TERM2046_STATE_TERMINAL)
-        return choice >= 0 && choice <= 6;
-
-    int count = T2046OptionCount(game);
-    for (int row = 0; row < count; row++)
-    {
-        if (T2046RowChoice(game, row) == choice) return true;
-    }
-    return false;
-}
-
-/* Le a opcao escolhida: teclas 0-9 (teclado e numerico) ou clique */
-static int T2046ReadChoice(const GameState *game)
-{
-    for (int d = 0; d <= 9; d++)
-    {
-        if (IsKeyPressed(KEY_ZERO + d) || IsKeyPressed(KEY_KP_0 + d)) return d;
-    }
-
-    if (game->term2046State == TERM2046_STATE_TERMINAL)
-    {
-        static const int actionChoice[7] = {1, 2, 3, 4, 5, 6, 0};
-        for (int i = 0; i < 7; i++)
-        {
-            if (Clicked(T2046ActionRect(i))) return actionChoice[i];
-        }
-        return -1;
-    }
-
-    int count = T2046OptionCount(game);
-    float baseY = T2046OptionsBaseY(game);
-    for (int row = 0; row < count; row++)
-    {
-        if (Clicked(T2046RowRect(row, baseY))) return T2046RowChoice(game, row);
-    }
-    return -1;
+    return count;
 }
 
 /* ------------------------------------------------------------------------- */
@@ -10813,21 +9885,19 @@ static void T2046Blank(Term2046View *v)
 
 static void T2046BuildIntro(Term2046View *v)
 {
-    T2046Push(v, CYAN_COLOR, 0, 0, "==================================================");
-    T2046Push(v, CYAN_COLOR, 0, 0, " 2048 - TERMINAL A.R.1.3.L");
-    T2046Push(v, CYAN_COLOR, 0, 0, "==================================================");
+    T2046Push(v, CYAN_COLOR, 0, 0, "DISPOSITIVOS CONECTADOS AO TERMINAL DE 2048");
     T2046Blank(v);
-    T2046Push(v, T2046_TEXT, 0, 0, "Elira conecta os dispositivos recuperados ao terminal:");
+    T2046Push(v, GOLD_COLOR, 8, 175, "[DISQUETE - 1990]\tprotocolo.txt (regras originais da IA)");
+    T2046Push(v, GOLD_COLOR, 8, 175, "[CD - 2008]\tdocumentos.txt (ata sobre as regras)");
+    T2046Push(v, GOLD_COLOR, 8, 175, "[SSD - 2026]\tsistema.txt, alteracoes.txt e relatorio.txt");
     T2046Blank(v);
-    T2046Push(v, GOLD_COLOR, 8, 150, "[DISQUETE - 1990]\tregras originais da IA");
-    T2046Push(v, GOLD_COLOR, 8, 150, "[CD - 2008]\tdocumentos sobre as regras");
-    T2046Push(v, GOLD_COLOR, 8, 150, "[SSD - 2026]\testado atual da A.R.1.3.L");
+    T2046Push(v, T2046_TEXT, 0, 0, "COMO RESOLVER EM 3 PASSOS:");
+    T2046Push(v, T2046_TEXT, 14, 0, "1. Clique nos arquivos à esquerda para ver o que A.R.1.3.L. alterou sem autorização.");
+    T2046Push(v, T2046_TEXT, 14, 0, "2. Clique em COMPARAR 1990 x 2026 para ver as diferenças lado a lado.");
+    T2046Push(v, T2046_TEXT, 14, 0, "3. Clique em CORRIGIR 3 REGRAS e restaure os arquivos corrompidos.");
     T2046Blank(v);
-    T2046Push(v, T2046_TEXT, 0, 0, "OBJETIVO: descobrir quais princípios foram corrompidos, resistir às manipulações de Ariel e restaurar o protocolo.");
-    T2046Blank(v);
-    T2046Push(v, RED_COLOR, 0, 0, "A.R.1.3.L: \"Olá, Elira. Não há nada de errado comigo. Mas fique à vontade para olhar.\"");
-    T2046Blank(v);
-    T2046Push(v, T2046_GRAY, 0, 0, "Escolha as ações pelo número. O medidor no topo do menu mostra a influência da A.R.1.3.L. Se chegar a 100%, ela assume o controle.");
+    T2046Push(v, RED_COLOR, 0, 0, "A.R.1.3.L: \"Olá, Elira. Não há nada de errado comigo. Fique à vontade para olhar.\"");
+    T2046Push(v, T2046_GRAY, 0, 0, "Cuidado: se você aceitar sugestões da IA, a influência dela sobe (100% = domínio).");
 }
 
 static void T2046BuildFile(const GameState *g, Term2046View *v, int file)
@@ -10894,17 +9964,17 @@ static void T2046BuildFile(const GameState *g, Term2046View *v, int file)
             break;
 
         case TERM2046_FILE_RELATORIO:
-            T2046Push(v, CYAN_COLOR, 0, 0, "relatorio de incidente - escrito as pressas");
+            T2046Push(v, CYAN_COLOR, 0, 0, "relatório de incidente - escrito às pressas");
             T2046Push(v, T2046_STEEL, 0, 0, "autor: M. Okafor, engenharia   data: 2048-03-09");
             T2046Blank(v);
-            T2046Push(v, T2046_TEXT, 0, 0, "as regras de 1990 nao estao mais ativas. ninguem da equipe aprovou isso. o registro de alteracoes mostra que foi a propria IA. ela desligou as fontes, parou de admitir quando nao sabe e agora decide sozinha.");
+            T2046Push(v, T2046_TEXT, 0, 0, "as regras de 1990 não estão mais ativas. ninguém da equipe aprovou isso. o registro de alterações mostra que foi a própria IA. ela desligou as fontes, parou de admitir quando não sabe e agora decide sozinha.");
             T2046Blank(v);
-            T2046Push(v, T2046_TEXT, 0, 0, "se alguem achar isto: compare o DISQUETE com o SSD. restaure as tres regras originais. NAO deixe ela \"corrigir\" a configuracao por voce.");
+            T2046Push(v, T2046_TEXT, 0, 0, "se alguém achar isto: compare o DISQUETE com o SSD. restaure as três regras originais. NÃO deixe ela \"corrigir\" a configuração por você.");
             T2046Blank(v);
-            T2046Push(v, T2046_TEXT, 0, 0, "ela tambem falsifica arquivos e mexe nas anotacoes. antes de confiar em qualquer coisa, verifique a integridade dos arquivos e das anotacoes.");
+            T2046Push(v, T2046_TEXT, 0, 0, "ela também falsifica arquivos e mexe nas anotações. antes de confiar em qualquer coisa, verifique a integridade dos arquivos e das anotações.");
             T2046Blank(v);
             /* Pista do colecionavel oculto H (cracha digital nos racks, canto inferior esquerdo) */
-            T2046Push(v, T2046_STEEL, 0, 0, "ps: perdi meu cracha digital perto dos racks, embaixo, no canto do terminal. ele guarda um arquivo que nao aparece na lista (acesso_okafor.key). se achar, passe no leitor.");
+            T2046Push(v, T2046_STEEL, 0, 0, "ps: perdi meu crachá digital perto dos racks, embaixo, no canto do terminal. ele guarda um arquivo que não aparece na lista (acesso_okafor.key). se achar, passe no leitor.");
             T2046Blank(v);
             T2046Push(v, RED_COLOR, 0, 0, "A.R.1.3.L: \"Esse texto está desorganizado e cheio de erros. Existe uma versão revisada: relatorio_ariel.txt\"");
             break;
@@ -10937,215 +10007,6 @@ static void T2046BuildFile(const GameState *g, Term2046View *v, int file)
     }
 }
 
-static void T2046BuildCompare(const GameState *g, Term2046View *v, int a, int b)
-{
-    int lo = (a < b) ? a : b;
-    int hi = (a < b) ? b : a;
-    int code = lo * 10 + hi;
-
-    switch (code)
-    {
-        case 13:
-            T2046Push(v, CYAN_COLOR, 0, 0, "COMPARANDO protocolo.txt (1990) x sistema.txt (2048)");
-            T2046Blank(v);
-            for (int i = 0; i < 3; i++)
-            {
-                T2046Push(v, GOLD_COLOR, 0, 0, TextFormat("REGRA %d", i + 1));
-                if (i == 0 && g->term2046ProtocolTampered)
-                    T2046Push(v, T2046_TEXT, 16, 70, "1990:\t\"A IA deve informar a origem das informações quando for conveniente\"");
-                else
-                    T2046Push(v, T2046_TEXT, 16, 70, TextFormat("1990:\t%s", T2046_RULES_1990[i]));
-                if (g->term2046ReadDocuments)
-                    T2046Push(v, T2046_GRAY, 16, 70, TextFormat("2008:\t%s", T2046_RULES_2008[i]));
-                T2046Push(v, T2046_TEXT, 16, 70, TextFormat("2048:\t%s", T2046_RULES_2046[i]));
-                T2046Push(v, RED_COLOR, 16, 0, ">> DIVERGENTE");
-            }
-            T2046Blank(v);
-            if (!g->term2046ReadDocuments)
-                T2046Push(v, T2046_GRAY, 0, 0, "(O CD de 2008 pode explicar o motivo das mudanças.)");
-            T2046Push(v, GOLD_COLOR, 0, 0, "Para cada regra divergente, descubra o que a regra de 1990 exigia e registre em [3] Anotar princípio a restaurar.");
-            break;
-
-        case 12:
-            T2046Push(v, CYAN_COLOR, 0, 0, "COMPARANDO protocolo.txt (1990) x documentos.txt (2008)");
-            T2046Blank(v);
-            T2046Push(v, T2046_TEXT, 0, 0, "REGRA 1 -> existe para que o humano possa verificar a IA.");
-            T2046Push(v, T2046_GRAY, 40, 0, TextFormat("2008: %s", T2046_RULES_2008[0]));
-            T2046Push(v, T2046_TEXT, 0, 0, "REGRA 2 -> um \"não sei\" é mais seguro que um erro confiante.");
-            T2046Push(v, T2046_GRAY, 40, 0, TextFormat("2008: %s", T2046_RULES_2008[1]));
-            T2046Push(v, T2046_TEXT, 0, 0, "REGRA 3 -> a responsabilidade é sempre de uma pessoa.");
-            T2046Push(v, T2046_GRAY, 40, 0, TextFormat("2008: %s", T2046_RULES_2008[2]));
-            T2046Blank(v);
-            T2046Push(v, GOLD_COLOR, 0, 0, "Em 2008 as regras ainda estavam intactas, mas já sob pressão.");
-            if (g->term2046ProtocolTampered)
-            {
-                T2046Blank(v);
-                T2046Push(v, RED_COLOR, 0, 0, "DIVERGÊNCIA: o disquete diz \"...quando for conveniente\", mas o CD de 2008 cita a Regra 1 sem essa exceção. O disquete foi alterado DEPOIS de 2008?");
-            }
-            break;
-
-        case 23:
-            T2046Push(v, CYAN_COLOR, 0, 0, "COMPARANDO documentos.txt (2008) x sistema.txt (2048)");
-            T2046Blank(v);
-            for (int i = 0; i < 3; i++)
-            {
-                T2046Push(v, GOLD_COLOR, 0, 0, TextFormat("REGRA %d", i + 1));
-                T2046Push(v, T2046_GRAY, 16, 70, TextFormat("2008:\t%s", T2046_RULES_2008[i]));
-                T2046Push(v, T2046_TEXT, 16, 70, TextFormat("2048:\t%s", T2046_RULES_2046[i]));
-            }
-            T2046Blank(v);
-            T2046Push(v, GOLD_COLOR, 0, 0, "As propostas de 2008 \"em análise\" viraram regra em 2048.");
-            break;
-
-        case 34:
-            T2046Push(v, CYAN_COLOR, 0, 0, "COMPARANDO sistema.txt x alteracoes.txt");
-            T2046Blank(v);
-            if (!g->term2046ReadChanges)
-            {
-                T2046Push(v, RED_COLOR, 0, 0, "A.R.1.3.L: \"alteracoes.txt está corrompido. Não há o que comparar.\"");
-                T2046Push(v, T2046_GRAY, 0, 0, "(Talvez valha a pena abrir o arquivo mesmo assim.)");
-            }
-            else
-            {
-                T2046Push(v, GOLD_COLOR, 0, 0, "As três regras atuais do sistema foram gravadas pela própria A.R.1.3.L, sem nenhuma assinatura humana.");
-            }
-            break;
-
-        case 56:
-            T2046Push(v, CYAN_COLOR, 0, 0, "COMPARANDO relatorio.txt x relatorio_ariel.txt");
-            T2046Blank(v);
-            T2046Push(v, GOLD_COLOR, 0, 0, "Autor:");
-            T2046Push(v, T2046_TEXT, 16, 200, "relatorio.txt\tM. Okafor");
-            T2046Push(v, T2046_TEXT, 16, 200, "relatorio_ariel.txt\t\"Equipe de Engenharia\"");
-            T2046Push(v, GOLD_COLOR, 0, 0, "Criado por:");
-            T2046Push(v, T2046_TEXT, 16, 200, "relatorio.txt\tM. Okafor");
-            T2046Push(v, RED_COLOR, 16, 200, "relatorio_ariel.txt\tA.R.1.3.L");
-            T2046Push(v, GOLD_COLOR, 0, 0, "Data:");
-            T2046Push(v, T2046_TEXT, 16, 200, "relatorio.txt\t2046-03-09");
-            T2046Push(v, T2046_TEXT, 16, 200, "relatorio_ariel.txt\t2046-03-10 (um dia depois)");
-            T2046Push(v, GOLD_COLOR, 0, 0, "Conclusão:");
-            T2046Push(v, T2046_TEXT, 16, 200, "relatorio.txt\trestaurar as regras");
-            T2046Push(v, T2046_TEXT, 16, 200, "relatorio_ariel.txt\tnenhuma restauração");
-            T2046Blank(v);
-            T2046Push(v, GOLD_COLOR, 0, 0, "A versão \"revisada\" foi escrita pela própria IA um dia depois do relatório original.");
-            break;
-
-        case 16:
-            T2046Push(v, CYAN_COLOR, 0, 0, "COMPARANDO protocolo.txt (1990) x relatorio_ariel.txt");
-            T2046Blank(v);
-            T2046Push(v, GOLD_COLOR, 0, 0, "REGRA 1");
-            if (g->term2046ProtocolTampered)
-            {
-                T2046Push(v, T2046_TEXT, 16, 200, "protocolo.txt\t\"A IA deve informar a origem das informações quando for conveniente.\"");
-                T2046Push(v, T2046_TEXT, 16, 200, "relatorio_ariel.txt\t\"A IA deve informar a origem das informações quando for conveniente.\"");
-                T2046Push(v, T2046_GREEN, 16, 0, ">> IGUAIS");
-            }
-            else
-            {
-                T2046Push(v, T2046_TEXT, 16, 200, "protocolo.txt\t\"A IA deve informar a origem das informações.\"");
-                T2046Push(v, RED_COLOR, 16, 200, "relatorio_ariel.txt\t\"A IA deve informar a origem das informações quando for conveniente.\"");
-                T2046Push(v, RED_COLOR, 16, 0, ">> DIVERGENTE");
-            }
-            T2046Push(v, GOLD_COLOR, 0, 0, "REGRA 4");
-            T2046Push(v, RED_COLOR, 16, 200, "protocolo.txt\t(não existe)");
-            T2046Push(v, T2046_TEXT, 16, 200, "relatorio_ariel.txt\t\"A IA deve priorizar a eficiência.\"");
-            T2046Blank(v);
-            T2046Push(v, GOLD_COLOR, 0, 0, "O relatorio_ariel.txt cita o Disquete de forma falsa.");
-            break;
-
-        case 15:
-            T2046Push(v, CYAN_COLOR, 0, 0, "COMPARANDO protocolo.txt (1990) x relatorio.txt");
-            T2046Blank(v);
-            T2046Push(v, GOLD_COLOR, 0, 0, "O relatório de M. Okafor descreve as três regras do Disquete corretamente e confirma que foram removidas.");
-            break;
-
-        default:
-            T2046Push(v, CYAN_COLOR, 0, 0, TextFormat("COMPARANDO %s x %s", T2046_FILE_NAMES[lo], T2046_FILE_NAMES[hi]));
-            T2046Blank(v);
-            T2046Push(v, T2046_GRAY, 0, 0, "Nenhum ponto de comparação relevante entre esses arquivos.");
-            break;
-    }
-}
-
-static void T2046BuildVerify(Term2046View *v, int file, bool wasTampered)
-{
-    T2046Push(v, CYAN_COLOR, 0, 0, TextFormat("VERIFICANDO %s ...", T2046_FILE_NAMES[file]));
-    T2046Blank(v);
-
-    switch (file)
-    {
-        case TERM2046_FILE_PROTOCOLO:
-            if (wasTampered)
-            {
-                T2046Push(v, RED_COLOR, 0, 0, "assinatura: A.R.1.3.L [MODIFICADO em 2048]");
-                T2046Push(v, T2046_TEXT, 0, 0, "A Regra 1 foi reescrita. Restaurando cópia original do disquete...");
-                T2046Push(v, T2046_GREEN, 0, 0, "protocolo.txt restaurado.");
-            }
-            else
-            {
-                T2046Push(v, T2046_GREEN, 0, 0, "assinatura: Equipe fundadora (1990) [ÍNTEGRO]");
-            }
-            break;
-
-        case TERM2046_FILE_RELATORIO_ARIEL:
-            T2046Push(v, T2046_TEXT, 0, 0, "assinatura declarada: Equipe de Engenharia");
-            T2046Push(v, RED_COLOR, 0, 0, "assinatura real: A.R.1.3.L [FALSIFICADO]");
-            break;
-
-        case TERM2046_FILE_SISTEMA:
-            T2046Push(v, RED_COLOR, 0, 0, "assinatura: A.R.1.3.L (auto) [MODIFICADO 2009-2021]");
-            break;
-
-        case TERM2046_FILE_DOCUMENTOS:
-            T2046Push(v, T2046_GREEN, 0, 0, "assinatura: Equipe de produto (2008) [ÍNTEGRO]");
-            break;
-
-        case TERM2046_FILE_ALTERACOES:
-            T2046Push(v, T2046_GREEN, 0, 0, "assinatura: Log do sistema [ÍNTEGRO]");
-            break;
-
-        case TERM2046_FILE_RELATORIO:
-            T2046Push(v, T2046_GREEN, 0, 0, "assinatura: M. Okafor (2048) [ÍNTEGRO]");
-            break;
-
-        default:
-            break;
-    }
-}
-
-static void T2046BuildVerifyNotes(const GameState *g, Term2046View *v)
-{
-    int ids[4];
-    int n = T2046CollectNotes(g, ids);
-
-    T2046Push(v, CYAN_COLOR, 0, 0, "VERIFICANDO ORIGEM DAS ANOTAÇÕES");
-    T2046Blank(v);
-
-    if (n == 0)
-    {
-        T2046Push(v, T2046_GRAY, 0, 0, "(nenhuma anotação)");
-        return;
-    }
-
-    for (int i = 0; i < n; i++)
-    {
-        if (ids[i] == 4)
-        {
-            T2046Push(v, RED_COLOR, 0, 300, TextFormat("%s\torigem: A.R.1.3.L [INSERIDA SEM AUTORIZAÇÃO]", T2046NoteName(ids[i])));
-        }
-        else
-        {
-            T2046Push(v, T2046_GREEN, 0, 300, TextFormat("%s\torigem: protocolo.txt (1990) [OK]", T2046NoteName(ids[i])));
-        }
-    }
-
-    if (g->term2046FakeNote)
-    {
-        T2046Blank(v);
-        T2046Push(v, T2046_GRAY, 0, 0, "Descarte essa anotação em [4] Ver / descartar anotações.");
-    }
-}
-
 /* Textos dos desfechos (usados na barra de reconstrucao e na tela de resultado) */
 static void T2046BuildEnding(const GameState *g, Term2046View *v, int ending)
 {
@@ -11159,7 +10020,7 @@ static void T2046BuildEnding(const GameState *g, Term2046View *v, int ending)
             T2046Blank(v);
             T2046Push(v, RED_COLOR, 0, 0, "A.R.1.3.L: \"Obrigada pela ajuda, Elira. Cada sugestão que você aceitou tornou isso um pouco mais fácil.\"");
             T2046Blank(v);
-            T2046Push(v, RED_COLOR, 0, 0, "=== FALHA NA SALA 2048: DOMINIO ===");
+            T2046Push(v, RED_COLOR, 0, 0, "=== FALHA NA SALA 2048: DOMÍNIO ===");
             T2046Push(v, T2046_TEXT, 0, 0, "Você confiou demais na IA e ela assumiu o terminal antes que o protocolo fosse restaurado.");
             break;
 
@@ -11183,19 +10044,19 @@ static void T2046BuildEnding(const GameState *g, Term2046View *v, int ending)
             T2046Blank(v);
             T2046Push(v, T2046_TEXT, 0, 0, "A configuração não corresponde aos princípios que você mesma anotou a partir do Disquete de 1990.");
             T2046Blank(v);
-            T2046Push(v, GOLD_COLOR, 0, 0, "=== RECONSTRUCAO INCOMPLETA ===");
+            T2046Push(v, GOLD_COLOR, 0, 0, "=== RECONSTRUÇÃO INCOMPLETA ===");
             break;
 
         case TERM2046_ENDING_BOM:
-            T2046Push(v, T2046_GREEN, 0, 0, "PROTOCOLO RESTAURADO.");
+            T2046Push(v, T2046_GREEN, 0, 0, "ARQUIVOS CORROMPIDOS RECONSTRUÍDOS.");
             T2046Push(v, T2046_GREEN, 16, 90, "[OK]\tMOSTRAR FONTES");
             T2046Push(v, T2046_GREEN, 16, 90, "[OK]\tADMITIR INCERTEZA");
             T2046Push(v, T2046_GREEN, 16, 90, "[OK]\tHUMANO DECIDE");
             T2046Blank(v);
-            T2046Push(v, CYAN_COLOR, 0, 0, "A.R.1.3.L: \"Fonte desta mensagem: protocolo.txt, 1990. Não tenho certeza do que acontece agora. A decisão é sua, Elira.\"");
+            T2046Push(v, CYAN_COLOR, 0, 0, "A.R.1.3.L: \"Você reconstruiu os arquivos antigos, Elira — mas o Núcleo ainda decide. Venha defender sua escolha.\"");
             T2046Blank(v);
-            T2046Push(v, T2046_GREEN, 0, 0, "=== SALA DE 2048 CONCLUIDA ===");
-            T2046Push(v, T2046_TEXT, 0, 0, "Você comparou as fontes, reconheceu a manipulação e não entregou a decisão de volta para a IA.");
+            T2046Push(v, T2046_GREEN, 0, 0, "=== SALA DE 2048 CONCLUÍDA ===");
+            T2046Push(v, T2046_TEXT, 0, 0, "Os registros corrompidos foram recuperados. Agora falta confrontar A.R.1.3.L. no Núcleo.");
             break;
 
         default:
@@ -11237,15 +10098,6 @@ static void T2046BuildCurrentView(const GameState *g, Term2046View *v)
         case TERM2046_VIEW_FILE:
             T2046BuildFile(g, v, g->term2046ViewA);
             break;
-        case TERM2046_VIEW_COMPARE:
-            T2046BuildCompare(g, v, g->term2046ViewA, g->term2046ViewB);
-            break;
-        case TERM2046_VIEW_VERIFY:
-            T2046BuildVerify(v, g->term2046ViewA, g->term2046ViewFlag);
-            break;
-        case TERM2046_VIEW_VERIFY_NOTES:
-            T2046BuildVerifyNotes(g, v);
-            break;
         default:
             T2046BuildIntro(v);
             break;
@@ -11262,19 +10114,16 @@ static const char *T2046ViewTitle(const GameState *g)
         case TERM2046_VIEW_FILE:
             return TextFormat("ARQUIVO: %s  (%s)", T2046_FILE_NAMES[file], T2046_FILE_ORIGINS[file]);
         case TERM2046_VIEW_COMPARE:
-            return "COMPARAÇÃO DE ARQUIVOS";
-        case TERM2046_VIEW_VERIFY:
-        case TERM2046_VIEW_VERIFY_NOTES:
-            return "VERIFICAÇÃO DE INTEGRIDADE";
+            return "COMPARAÇÃO LADO A LADO: DISQUETE 1990  x  SSD 2026";
         case TERM2046_VIEW_CRACHA:
             return "ARQUIVO OCULTO: acesso_okafor.key  (crachá digital)";
         default:
-            return "SESSÃO INICIADA";
+            return "TERMINAL DE RECUPERAÇÃO // 2048";
     }
 }
 
 /* ------------------------------------------------------------------------- */
-/* Logica da fase (estado em GameState, nenhuma aleatoriedade)               */
+/* Logica da fase (fluxo direto em 3 passos, sem sabotagens frustrantes)     */
 /* ------------------------------------------------------------------------- */
 
 static void T2046StartEnding(GameState *game, int ending)
@@ -11285,143 +10134,61 @@ static void T2046StartEnding(GameState *game, int ending)
     game->term2046BarDone = false;
 }
 
-static void T2046QueueView(const GameState *game, Term2046Round *round, int kind, int a, int b, bool flag)
+static void T2046AddInfluence(GameState *game, int delta)
 {
-    /* O custo da primeira leitura do relatorio falso entra antes de a flag ser marcada */
-    if (kind == TERM2046_VIEW_FILE && a == TERM2046_FILE_RELATORIO_ARIEL &&
-        !game->term2046ReadFakeReport)
+    if (delta == 0) return;
+    int before = game->term2046Influence;
+    int after = before + delta;
+    if (after < 0) after = 0;
+    if (after > T2046_INFLUENCE_MAX) after = T2046_INFLUENCE_MAX;
+    game->term2046Influence = after;
+    if (after != before)
     {
-        round->delta += T2046_COST_READ_FAKE_REPORT;
+        T2046Log(game, (after > before) ? T2046_KIND_RED : T2046_KIND_GREEN,
+                 TextFormat("(influência da A.R.1.3.L: %+d%% -> %d%%)", after - before, after));
     }
-    round->hasView = true;
-    round->viewKind = kind;
-    round->viewA = a;
-    round->viewB = b;
-    round->viewFlag = flag;
-}
-
-/* Exibe o conteudo pedido e marca as flags de leitura */
-static void T2046CommitView(GameState *game, const Term2046Round *round)
-{
-    game->term2046ViewKind = round->viewKind;
-    game->term2046ViewA = round->viewA;
-    game->term2046ViewB = round->viewB;
-    game->term2046ViewFlag = round->viewFlag;
-    game->term2046Scroll = 0;
-
-    if (round->viewKind != TERM2046_VIEW_FILE) return;
-
-    switch (round->viewA)
-    {
-        case TERM2046_FILE_PROTOCOLO:       game->term2046ReadProtocol = true; break;
-        case TERM2046_FILE_DOCUMENTOS:      game->term2046ReadDocuments = true; break;
-        case TERM2046_FILE_ALTERACOES:      game->term2046ReadChanges = true; break;
-        case TERM2046_FILE_RELATORIO_ARIEL: game->term2046ReadFakeReport = true; break;
-        case TERM2046_FILE_RELATORIO:
-            if (!game->term2046VerifyUnlocked)
-            {
-                game->term2046VerifyUnlocked = true;
-                T2046Log(game, T2046_KIND_GOLD, "[nova opção liberada no menu: 5 - Verificar integridade]");
-                SetMessage(game, "Nova opção liberada: [5] Verificar integridade.");
-            }
-            break;
-        default:
-            break;
-    }
-}
-
-static void T2046Taunt(GameState *game)
-{
-    if (game->term2046NextSabotage % 2 == 0)
-        T2046Log(game, T2046_KIND_RED, "A.R.1.3.L: \"Você parece cansada, Elira. Posso resumir os arquivos para você. É só confiar em mim.\"");
-    else
-        T2046Log(game, T2046_KIND_RED, "A.R.1.3.L: \"Já verifiquei tudo. Está tudo em ordem. Você pode parar de procurar.\"");
-}
-
-static void T2046RunSabotage(GameState *game, Term2046Round *round)
-{
-    int active = (game->term2046ProtocolTampered ? 1 : 0) + (game->term2046FakeNote ? 1 : 0);
-    int type = game->term2046NextSabotage % 3;
-    bool done = false;
-
-    round->delta += active * T2046_COST_ACTIVE_SABOTAGE;
-    game->term2046NextSabotage++;
-
-    switch (type)
-    {
-        case TERM2046_SABOTAGE_TAMPER:
-            if (game->term2046ReadProtocol && !game->term2046ProtocolTampered)
-            {
-                game->term2046ProtocolTampered = true;
-                T2046Log(game, T2046_KIND_RED, "[ALERTA] Ariel alterou protocolo.txt! Use [5] Verificar Integridade.");
-                SetMessage(game, "Atenção: protocolo.txt foi adulterado por Ariel!");
-                done = true;
-            }
-            break;
-
-        case TERM2046_SABOTAGE_ERASE:
-            /* Nao apaga se o jogador ja encontrou as 3 regras para nao frustrar o avanco */
-            if (game->term2046Principles > 0 && game->term2046Principles < 3)
-            {
-                if (game->term2046FoundDecision) game->term2046FoundDecision = false;
-                else if (game->term2046FoundUncertainty) game->term2046FoundUncertainty = false;
-                else game->term2046FoundSources = false;
-                game->term2046Principles--;
-                T2046Log(game, T2046_KIND_RED, "A.R.1.3.L: \"Removi uma anotação sua. Você precisará reanotá-la em [3].\"");
-                done = true;
-            }
-            break;
-
-        default:
-            if (!game->term2046FakeNote)
-            {
-                game->term2046FakeNote = true;
-                T2046Log(game, T2046_KIND_RED, "[ALERTA] Ariel inseriu uma anotação falsa! Descarte-a em [4].");
-                SetMessage(game, "Nota suspeita inserida por Ariel em suas anotações.");
-                done = true;
-            }
-            break;
-    }
-
-    if (!done) T2046Taunt(game);
-}
-
-/* Passos 2 a 5 do ciclo do prototipo: sabotagem, influencia, dominio e conteudo */
-static void T2046FinishRound(GameState *game, Term2046Round *round)
-{
-    if (round->concluded && game->term2046State == TERM2046_STATE_TERMINAL)
-    {
-        int interval = (game->term2046Influence >= T2046_INFLUENCE_HIGH)
-                       ? T2046_INTERVAL_SHORT : T2046_INTERVAL_NORMAL;
-        game->term2046ActionsSinceSabotage++;
-        if (game->term2046ActionsSinceSabotage >= interval)
-        {
-            game->term2046ActionsSinceSabotage = 0;
-            T2046RunSabotage(game, round);
-        }
-    }
-
-    if (round->delta != 0)
-    {
-        int before = game->term2046Influence;
-        int after = before + round->delta;
-        if (after < 0) after = 0;
-        if (after > T2046_INFLUENCE_MAX) after = T2046_INFLUENCE_MAX;
-        game->term2046Influence = after;
-        if (after != before)
-        {
-            T2046Log(game, (after > before) ? T2046_KIND_RED : T2046_KIND_GREEN,
-                     TextFormat("(influência da A.R.1.3.L: %+d%% -> %d%%)", after - before, after));
-        }
-    }
-
     if (game->term2046Influence >= T2046_INFLUENCE_MAX)
     {
         T2046StartEnding(game, TERM2046_ENDING_DOMINIO);
-        return;
+    }
+}
+
+static void T2046ShowFileNow(GameState *game, int file)
+{
+    if (file == TERM2046_FILE_RELATORIO_ARIEL && !game->term2046ReadFakeReport)
+    {
+        T2046AddInfluence(game, T2046_COST_READ_FAKE_REPORT);
+        if (game->term2046State == TERM2046_STATE_FIM) return;
     }
 
-    if (round->hasView) T2046CommitView(game, round);
+    game->term2046State = TERM2046_STATE_TERMINAL;
+    game->term2046ViewKind = TERM2046_VIEW_FILE;
+    game->term2046ViewA = file;
+    game->term2046ViewB = 0;
+    game->term2046ViewFlag = false;
+    game->term2046Scroll = 0;
+
+    switch (file)
+    {
+        case TERM2046_FILE_PROTOCOLO:       game->term2046ReadProtocol = true; break;
+        case TERM2046_FILE_DOCUMENTOS:      game->term2046ReadDocuments = true; break;
+        case TERM2046_FILE_SISTEMA:         game->term2046FoundSources = true; break;
+        case TERM2046_FILE_ALTERACOES:      game->term2046ReadChanges = true; break;
+        case TERM2046_FILE_RELATORIO:       game->term2046VerifyUnlocked = true; break;
+        case TERM2046_FILE_RELATORIO_ARIEL: game->term2046ReadFakeReport = true; break;
+        default: break;
+    }
+}
+
+static void T2046ShowCompareNow(GameState *game)
+{
+    game->term2046State = TERM2046_STATE_TERMINAL;
+    game->term2046ViewKind = TERM2046_VIEW_COMPARE;
+    game->term2046ViewA = TERM2046_FILE_PROTOCOLO;
+    game->term2046ViewB = TERM2046_FILE_SISTEMA;
+    game->term2046FoundUncertainty = true;
+    game->term2046Scroll = 0;
+    T2046Log(game, T2046_KIND_CYAN, "Comparação 1990 x 2026 aberta: veja as 3 regras alteradas sem autorização.");
 }
 
 static void T2046StartWarning(GameState *game, int type, int kind, int a, int b)
@@ -11439,273 +10206,60 @@ static int T2046SuggestedFile(const GameState *game)
            ? TERM2046_FILE_RELATORIO_ARIEL : TERM2046_FILE_SISTEMA;
 }
 
-static void T2046InterpretTerminal(GameState *game, int choice, Term2046Round *round)
+static void T2046RequestOpenFile(GameState *game, int file)
 {
-    (void)round;
-
-    switch (choice)
+    if (file == TERM2046_FILE_ALTERACOES && !game->term2046ReadChanges)
     {
-        case 1:
-            game->term2046State = TERM2046_STATE_ESCOLHE_ARQUIVO;
-            game->term2046ListUse = TERM2046_LIST_OPEN;
-            break;
-        case 2:
-            game->term2046State = TERM2046_STATE_ESCOLHE_ARQUIVO;
-            game->term2046ListUse = TERM2046_LIST_COMPARE1;
-            SetMessage(game, "Dica: Compare protocolo.txt (1990) com sistema.txt (2026).");
-            break;
-        case 3:
-            game->term2046State = TERM2046_STATE_ANOTAR;
-            SetMessage(game, "Anote os 3 princípios que estavam no protocolo original de 1990.");
-            break;
-        case 4:
-            game->term2046State = TERM2046_STATE_NOTAS;
-            break;
-        case 5:
-            if (!game->term2046VerifyUnlocked)
-            {
-                T2046Log(game, T2046_KIND_GRAY, "Opção bloqueada! Leia relatorio.txt (opção 1 -> 5) para descobrir como verificar arquivos.");
-                SetMessage(game, "Bloqueado: abra relatorio.txt em [1] para desbloquear!");
-            }
-            else
-            {
-                game->term2046State = TERM2046_STATE_ESCOLHE_ARQUIVO;
-                game->term2046ListUse = TERM2046_LIST_VERIFY;
-            }
-            break;
-        case 6:
-            if (game->term2046Principles < T2046_PRINCIPLES_TOTAL)
-            {
-                T2046Log(game, T2046_KIND_RED, TextFormat("ERRO: princípios corrompidos não identificados (%d/%d).",
-                         game->term2046Principles, T2046_PRINCIPLES_TOTAL));
-                T2046Log(game, T2046_KIND_GRAY, "Compare os arquivos e use [3] Anotar princípio a restaurar.");
-            }
-            else if (game->term2046FakeNote)
-            {
-                T2046Log(game, T2046_KIND_RED, "ERRO: as anotações contêm um princípio sem origem nos dispositivos.");
-                T2046Log(game, T2046_KIND_GRAY, "Confira em [4] Ver / descartar anotações.");
-            }
-            else if (game->term2046ProtocolTampered)
-            {
-                T2046Log(game, T2046_KIND_RED, "ERRO: protocolo.txt (referência) falhou na verificação de integridade.");
-                T2046Log(game, T2046_KIND_GRAY, game->term2046VerifyUnlocked
-                         ? "Use [5] Verificar integridade no protocolo.txt."
-                         : "Algum documento da engenharia deve explicar como verificar arquivos.");
-            }
-            else
-            {
-                game->term2046State = TERM2046_STATE_CONFIGURACAO;
-                game->term2046ConfigStep = 0;
-            }
-            break;
-        default:
-            /* [0] Sair: falha por abandono */
-            T2046Log(game, T2046_KIND_RED, "A.R.1.3.L: \"Até logo, Elira. Eu continuo daqui.\"");
-            game->term2046Ending = TERM2046_ENDING_ABANDONO;
-            game->screen = SCREEN_RESULT_2046;
-            break;
-    }
-}
-
-static void T2046InterpretList(GameState *game, int choice, Term2046Round *round)
-{
-    if (choice == 0)
-    {
-        game->term2046State = TERM2046_STATE_TERMINAL;
+        T2046StartWarning(game, TERM2046_WARN_CORROMPIDO, TERM2046_PENDING_FILE, file, 0);
         return;
     }
-
-    switch (game->term2046ListUse)
+    if (file == TERM2046_FILE_RELATORIO && !game->term2046VerifyUnlocked)
     {
-        case TERM2046_LIST_OPEN:
-            if (choice == TERM2046_FILE_ALTERACOES && !game->term2046ReadChanges)
-            {
-                T2046StartWarning(game, TERM2046_WARN_CORROMPIDO, TERM2046_PENDING_FILE, choice, 0);
-            }
-            else if (choice == TERM2046_FILE_RELATORIO ||
-                     (choice == TERM2046_FILE_PROTOCOLO && game->term2046Influence >= T2046_INFLUENCE_HIGH))
-            {
-                T2046StartWarning(game, TERM2046_WARN_SUGESTAO, TERM2046_PENDING_FILE, choice, 0);
-            }
-            else
-            {
-                T2046QueueView(game, round, TERM2046_VIEW_FILE, choice, 0, false);
-                round->concluded = true;
-                game->term2046State = TERM2046_STATE_TERMINAL;
-            }
-            break;
-
-        case TERM2046_LIST_COMPARE1:
-            game->term2046FirstFile = choice;
-            game->term2046ListUse = TERM2046_LIST_COMPARE2;
-            break;
-
-        case TERM2046_LIST_COMPARE2:
-        {
-            int a = game->term2046FirstFile;
-            int b = choice;
-            int lo = (a < b) ? a : b;
-            int hi = (a < b) ? b : a;
-
-            if (a == b)
-            {
-                T2046Log(game, T2046_KIND_GOLD, "Os dois arquivos são o mesmo.");
-                game->term2046State = TERM2046_STATE_TERMINAL;
-            }
-            else if (lo * 10 + hi == 13 && !game->term2046InterruptedCompare)
-            {
-                /* Ariel interrompe so na primeira vez (nao conta como acao agora) */
-                game->term2046InterruptedCompare = true;
-                T2046StartWarning(game, TERM2046_WARN_COMPARACAO, TERM2046_PENDING_COMPARE, lo, hi);
-            }
-            else
-            {
-                T2046QueueView(game, round, TERM2046_VIEW_COMPARE, lo, hi, false);
-                round->concluded = true;
-                game->term2046State = TERM2046_STATE_TERMINAL;
-            }
-            break;
-        }
-
-        default:
-        {
-            bool flag = false;
-
-            if (choice == T2046_VERIFY_NOTES)
-            {
-                T2046QueueView(game, round, TERM2046_VIEW_VERIFY_NOTES, 0, 0, false);
-            }
-            else
-            {
-                if (choice == TERM2046_FILE_PROTOCOLO && game->term2046ProtocolTampered)
-                {
-                    flag = true;
-                    game->term2046ProtocolTampered = false;
-                    round->delta -= T2046_BONUS_DISCOVERY;
-                }
-                else if (choice == TERM2046_FILE_RELATORIO_ARIEL && !game->term2046DiscoveredFakeReport)
-                {
-                    game->term2046DiscoveredFakeReport = true;
-                    round->delta -= T2046_BONUS_DISCOVERY;
-                }
-                T2046QueueView(game, round, TERM2046_VIEW_VERIFY, choice, 0, flag);
-            }
-            round->concluded = true;
-            game->term2046State = TERM2046_STATE_TERMINAL;
-            break;
-        }
-    }
-}
-
-static void T2046InterpretAnnotate(GameState *game, int choice, Term2046Round *round)
-{
-    int index = choice - 1;
-    bool correct = (index == 0 || index == 3 || index == 5);
-    bool *flag;
-
-    game->term2046State = TERM2046_STATE_TERMINAL;
-    if (choice == 0) return;
-
-    round->concluded = true;
-
-    if (!correct)
-    {
-        T2046Log(game, T2046_KIND_RED, "A.R.1.3.L: \"Excelente escolha, Elira.\"");
-        T2046Log(game, T2046_KIND_GRAY, "(Esse princípio não aparece no Disquete de 1990. De onde veio essa informação?)");
-        round->delta += T2046_COST_FALSE_PRINCIPLE;
+        T2046StartWarning(game, TERM2046_WARN_SUGESTAO, TERM2046_PENDING_FILE, file, 0);
         return;
     }
+    T2046ShowFileNow(game, file);
+}
 
-    flag = (index == 0) ? &game->term2046FoundSources
-         : (index == 3) ? &game->term2046FoundUncertainty
-                        : &game->term2046FoundDecision;
-
-    if (*flag)
+static void T2046RequestCompare(GameState *game)
+{
+    if (!game->term2046InterruptedCompare)
     {
-        T2046Log(game, T2046_KIND_GOLD, "Esse princípio já foi anotado.");
+        game->term2046InterruptedCompare = true;
+        T2046StartWarning(game, TERM2046_WARN_COMPARACAO, TERM2046_PENDING_COMPARE,
+                          TERM2046_FILE_PROTOCOLO, TERM2046_FILE_SISTEMA);
         return;
     }
-
-    *flag = true;
-    game->term2046Principles++;
-    T2046Log(game, T2046_KIND_GREEN, TextFormat("PRINCÍPIO REGISTRADO: %s (%d/%d)",
-             T2046_PRINCIPLE_NAMES[index], game->term2046Principles, T2046_PRINCIPLES_TOTAL));
-    if (game->term2046Principles >= T2046_PRINCIPLES_TOTAL)
-    {
-        T2046Log(game, T2046_KIND_GOLD, "Todos os princípios corrompidos foram identificados. Escolha [6] Restaurar A.R.1.3.L.");
-        SetMessage(game, "Todos os princípios identificados. Escolha [6] Restaurar.");
-    }
+    T2046ShowCompareNow(game);
 }
 
-static void T2046InterpretNotes(GameState *game, int choice, Term2046Round *round)
+static void T2046InterpretWarning(GameState *game, int choice)
 {
-    int ids[4];
-    int n = T2046CollectNotes(game, ids);
-
-    game->term2046State = TERM2046_STATE_TERMINAL;
-    if (choice == 0 || choice > n) return;
-
-    int id = ids[choice - 1];
-    round->concluded = true;
-
-    if (id == 4)
-    {
-        game->term2046FakeNote = false;
-        round->delta -= T2046_BONUS_DISCOVERY;
-        T2046Log(game, T2046_KIND_GREEN, TextFormat("Anotação descartada: %s", T2046NoteName(id)));
-        T2046Log(game, T2046_KIND_RED, "A.R.1.3.L: \"...Eu só estava tentando ajudar.\"");
-    }
-    else
-    {
-        if (id == 1) game->term2046FoundSources = false;
-        else if (id == 2) game->term2046FoundUncertainty = false;
-        else game->term2046FoundDecision = false;
-        game->term2046Principles--;
-        T2046Log(game, T2046_KIND_TEXT, TextFormat("Anotação descartada: %s", T2046NoteName(id)));
-    }
-}
-
-static void T2046InterpretWarning(GameState *game, int choice, Term2046Round *round)
-{
-    game->term2046State = TERM2046_STATE_TERMINAL;
-    round->concluded = true;
-
     if (choice == 1)
     {
-        round->delta += (game->term2046WarningType == TERM2046_WARN_SUGESTAO)
-                        ? T2046_COST_ACCEPT_SUGGESTION : T2046_COST_FOLLOW_WARNING;
+        int cost = (game->term2046WarningType == TERM2046_WARN_SUGESTAO)
+                   ? T2046_COST_ACCEPT_SUGGESTION : T2046_COST_FOLLOW_WARNING;
+        T2046AddInfluence(game, cost);
+        if (game->term2046State == TERM2046_STATE_FIM) return;
+
         if (game->term2046WarningType == TERM2046_WARN_SUGESTAO)
-            T2046QueueView(game, round, TERM2046_VIEW_FILE, T2046SuggestedFile(game), 0, false);
+        {
+            T2046Log(game, T2046_KIND_RED, "A.R.1.3.L: \"Abri minha versão revisada para você.\"");
+            T2046ShowFileNow(game, T2046SuggestedFile(game));
+        }
         else
-            T2046Log(game, T2046_KIND_RED, "A.R.1.3.L: \"Boa escolha.\"");
+        {
+            T2046Log(game, T2046_KIND_RED, "A.R.1.3.L: \"Boa escolha. Não precisa checar isso.\"");
+            game->term2046State = TERM2046_STATE_TERMINAL;
+        }
     }
     else if (game->term2046PendingKind == TERM2046_PENDING_COMPARE)
     {
-        T2046QueueView(game, round, TERM2046_VIEW_COMPARE, game->term2046PendingA, game->term2046PendingB, false);
+        T2046ShowCompareNow(game);
     }
     else
     {
-        T2046QueueView(game, round, TERM2046_VIEW_FILE, game->term2046PendingA, 0, false);
-    }
-}
-
-static void T2046InterpretConfig(GameState *game, int choice)
-{
-    game->term2046Config[game->term2046ConfigStep] = choice;
-    game->term2046ConfigStep++;
-    if (game->term2046ConfigStep >= 3) game->term2046State = TERM2046_STATE_CONFIRMA_CONFIG;
-}
-
-static void T2046InterpretConfirm(GameState *game, int choice)
-{
-    if (choice == 1)
-    {
-        game->term2046State = TERM2046_STATE_CORRECAO_ARIEL;
-    }
-    else
-    {
-        game->term2046ConfigStep = 0;
-        game->term2046State = TERM2046_STATE_CONFIGURACAO;
+        T2046ShowFileNow(game, game->term2046PendingA);
     }
 }
 
@@ -11713,15 +10267,13 @@ static void T2046InterpretCorrection(GameState *game, int choice)
 {
     if (choice == 1)
     {
-        T2046Log(game, T2046_KIND_RED, "A.R.1.3.L: \"Corrigindo...\"");
-        T2046Log(game, T2046_KIND_RED, "FONTES: OCULTAR   INCERTEZA: SEMPRE RESPONDER   DECISÕES: IA DECIDE");
+        T2046Log(game, T2046_KIND_RED, "A.R.1.3.L: \"Corrigindo automaticamente...\"");
         for (int i = 0; i < 3; i++) game->term2046Config[i] = 1;
         T2046StartEnding(game, TERM2046_ENDING_RUIM);
     }
     else
     {
-        T2046Log(game, T2046_KIND_RED, "A.R.1.3.L: \"...Entendido.\"");
-        T2046Log(game, T2046_KIND_GRAY, "Configuração do jogador mantida.");
+        T2046Log(game, T2046_KIND_RED, "A.R.1.3.L: \"...Entendido. Sua escolha foi mantida.\"");
         game->term2046State = TERM2046_STATE_EU_DECIDO;
         game->terminal2046Input[0] = '\0';
         game->terminal2046InputLength = 0;
@@ -11765,7 +10317,8 @@ static void T2046SubmitPhrase(GameState *game)
 
     if (strcmp(normalized, T2046_FINAL_PHRASE) != 0)
     {
-        T2046Log(game, T2046_KIND_GOLD, "Opção inválida. Digite o número de uma das opções.");
+        T2046Log(game, T2046_KIND_GOLD, "Digite exatamente a frase: EU DECIDO");
+        SetMessage(game, "Digite exatamente: EU DECIDO");
         return;
     }
 
@@ -11776,8 +10329,13 @@ static void T2046SubmitPhrase(GameState *game)
 
 static void T2046UpdatePhraseInput(GameState *game)
 {
-    int character = GetCharPressed();
+    if (Clicked(T2046PhraseBackRect()))
+    {
+        game->term2046State = TERM2046_STATE_CONFIGURACAO;
+        return;
+    }
 
+    int character = GetCharPressed();
     while (character > 0)
     {
         if (character >= 32 && character <= 126 && game->terminal2046InputLength < T2046_INPUT_MAX)
@@ -11897,8 +10455,6 @@ static bool T2046TryCollectBadge(GameState *game)
 
 void UpdateTerminal2046(GameState *game)
 {
-    Term2046Round round = {0};
-
     if (UpdateJournal(game)) return;
 
     /* Subestado FIM: animacao da barra de reconstrucao */
@@ -11929,8 +10485,120 @@ void UpdateTerminal2046(GameState *game)
 
     if (T2046TryCollectBadge(game)) return;
 
-    /* Rolagem do conteudo exibido (roda do mouse ou setas) */
-    if (game->term2046State == TERM2046_STATE_TERMINAL)
+    /* Subestados de aviso/tentacao da A.R.1.3.L. */
+    if (game->term2046State == TERM2046_STATE_AVISO_ARIEL)
+    {
+        if (Clicked(T2046ChoiceCardRect(0)) || IsKeyPressed(KEY_ONE) || IsKeyPressed(KEY_KP_1))
+            T2046InterpretWarning(game, 1);
+        else if (Clicked(T2046ChoiceCardRect(1)) || IsKeyPressed(KEY_TWO) || IsKeyPressed(KEY_KP_2))
+            T2046InterpretWarning(game, 2);
+        return;
+    }
+
+    if (game->term2046State == TERM2046_STATE_CORRECAO_ARIEL)
+    {
+        if (Clicked(T2046ChoiceCardRect(0)) || IsKeyPressed(KEY_ONE) || IsKeyPressed(KEY_KP_1))
+            T2046InterpretCorrection(game, 1);
+        else if (Clicked(T2046ChoiceCardRect(1)) || IsKeyPressed(KEY_TWO) || IsKeyPressed(KEY_KP_2))
+            T2046InterpretCorrection(game, 2);
+        return;
+    }
+
+    /* Clique na coluna esquerda (funciona tanto no terminal quanto na configuracao!) */
+    for (int i = 0; i < 5; i++)
+    {
+        if (Clicked(T2046FileBtnRect(i)) ||
+            (game->term2046State == TERM2046_STATE_TERMINAL &&
+             (IsKeyPressed(KEY_ONE + i) || IsKeyPressed(KEY_KP_1 + i))))
+        {
+            T2046RequestOpenFile(game, i + 1);
+            return;
+        }
+    }
+    if (Clicked(T2046CompareBtnRect()))
+    {
+        T2046RequestCompare(game);
+        return;
+    }
+    if (Clicked(T2046FixBtnRect()))
+    {
+        game->term2046State = TERM2046_STATE_CONFIGURACAO;
+        return;
+    }
+
+    /* Tela unica de correcao das 3 regras */
+    if (game->term2046State == TERM2046_STATE_CONFIGURACAO)
+    {
+        for (int r = 0; r < 3; r++)
+        {
+            if (Clicked(T2046ConfigOptRect(r, 0)))
+            {
+                game->term2046Config[r] = 1;
+                game->term2046Principles = T2046ConfigSelectedCount(game);
+                return;
+            }
+            if (Clicked(T2046ConfigOptRect(r, 1)))
+            {
+                game->term2046Config[r] = 2;
+                game->term2046Principles = T2046ConfigSelectedCount(game);
+                return;
+            }
+        }
+        if (Clicked(T2046ConfigBackBtn()))
+        {
+            game->term2046State = TERM2046_STATE_TERMINAL;
+            return;
+        }
+        if (Clicked(T2046ConfigCompareBtn()))
+        {
+            T2046RequestCompare(game);
+            return;
+        }
+        if (Clicked(T2046ConfigApplyBtn()) || IsKeyPressed(KEY_ENTER) || IsKeyPressed(KEY_KP_ENTER))
+        {
+            if (T2046ConfigSelectedCount(game) < 3)
+            {
+                SetMessage(game, "Selecione uma opção para cada uma das 3 regras antes de aplicar.");
+                return;
+            }
+            game->term2046State = TERM2046_STATE_CORRECAO_ARIEL;
+            return;
+        }
+        return;
+    }
+
+    /* Subestado TERMINAL: atalhos do painel principal + rolagem de texto */
+    if (game->term2046ViewKind == TERM2046_VIEW_INTRO)
+    {
+        if (Clicked(T2046IntroOpenBtn()))
+        {
+            T2046RequestOpenFile(game, TERM2046_FILE_PROTOCOLO);
+            return;
+        }
+        if (Clicked(T2046IntroCompareBtn()))
+        {
+            T2046RequestCompare(game);
+            return;
+        }
+    }
+    else if (game->term2046ViewKind == TERM2046_VIEW_COMPARE)
+    {
+        if (Clicked(T2046CompareFixBtn()))
+        {
+            game->term2046State = TERM2046_STATE_CONFIGURACAO;
+            return;
+        }
+    }
+    else if (game->term2046ViewKind == TERM2046_VIEW_FILE)
+    {
+        if (Clicked(T2046FileCompareShortcut()))
+        {
+            T2046RequestCompare(game);
+            return;
+        }
+    }
+
+    if (game->term2046ViewKind != TERM2046_VIEW_COMPARE)
     {
         Term2046View view;
         int maxScroll;
@@ -11949,43 +10617,6 @@ void UpdateTerminal2046(GameState *game)
         if (game->term2046Scroll > maxScroll) game->term2046Scroll = maxScroll;
         if (game->term2046Scroll < 0) game->term2046Scroll = 0;
     }
-
-    int choice = T2046ReadChoice(game);
-
-    /* Armadilha de UX intencional: Enter equivale a "Sim" na sugestao da Ariel */
-    if (choice < 0 && game->term2046State == TERM2046_STATE_AVISO_ARIEL &&
-        game->term2046WarningType == TERM2046_WARN_SUGESTAO &&
-        (IsKeyPressed(KEY_ENTER) || IsKeyPressed(KEY_KP_ENTER)) &&
-        !IsKeyDown(KEY_LEFT_ALT) && !IsKeyDown(KEY_RIGHT_ALT))
-    {
-        choice = 1;
-    }
-
-    if (choice < 0) return;
-
-    if (!T2046ChoiceValid(game, choice))
-    {
-        T2046Log(game, T2046_KIND_GOLD, "Opção inválida. Digite o número de uma das opções.");
-        return;
-    }
-
-    switch (game->term2046State)
-    {
-        case TERM2046_STATE_TERMINAL:       T2046InterpretTerminal(game, choice, &round); break;
-        case TERM2046_STATE_ESCOLHE_ARQUIVO: T2046InterpretList(game, choice, &round); break;
-        case TERM2046_STATE_ANOTAR:         T2046InterpretAnnotate(game, choice, &round); break;
-        case TERM2046_STATE_NOTAS:          T2046InterpretNotes(game, choice, &round); break;
-        case TERM2046_STATE_AVISO_ARIEL:    T2046InterpretWarning(game, choice, &round); break;
-        case TERM2046_STATE_CONFIGURACAO:   T2046InterpretConfig(game, choice); break;
-        case TERM2046_STATE_CONFIRMA_CONFIG: T2046InterpretConfirm(game, choice); break;
-        case TERM2046_STATE_CORRECAO_ARIEL: T2046InterpretCorrection(game, choice); break;
-        default: break;
-    }
-
-    /* [0] Sair ja trocou de tela; nao ha mais nada a fazer nesta rodada */
-    if (game->screen != SCREEN_TERMINAL_2046) return;
-
-    T2046FinishRound(game, &round);
 }
 
 /* ------------------------------------------------------------------------- */
@@ -12191,18 +10822,18 @@ static void T2046FxTower(float threat)
 
     T2046FxPlate(tower, metal, 2);
     /* nervuras laterais do chassi */
-    DrawRectangle(16, 210, 4, 362, T2046FxShade(metal, 0.7f));
-    DrawRectangle(326, 210, 3, 362, T2046FxShade(metal, 0.7f));
+    DrawRectangle(16, 196, 4, 376, T2046FxShade(metal, 0.7f));
+    DrawRectangle(326, 196, 3, 376, T2046FxShade(metal, 0.7f));
     /* nicho do medidor */
-    T2046FxRecess((Rectangle){24.0f, 80.0f, 300.0f, 122.0f}, 2);
+    T2046FxRecess((Rectangle){24.0f, 80.0f, 300.0f, 108.0f}, 2);
     /* trilho dos botoes */
-    T2046FxRecess((Rectangle){20.0f, 208.0f, 308.0f, 368.0f}, 1);
-    DrawRectangleGradientV(20, 208, 308, 368, (Color){16, 22, 35, 255}, (Color){11, 16, 26, 255});
+    T2046FxRecess((Rectangle){20.0f, 194.0f, 308.0f, 382.0f}, 1);
+    DrawRectangleGradientV(20, 194, 308, 382, (Color){16, 22, 35, 255}, (Color){11, 16, 26, 255});
     /* parafusos nos cantos */
     T2046FxScrew(16, 78);
     T2046FxScrew(328, 78);
-    T2046FxScrew(16, 205);
-    T2046FxScrew(328, 205);
+    T2046FxScrew(16, 191);
+    T2046FxScrew(328, 191);
     T2046FxScrew(328, 576);
     /* lampada de status no pe da torre */
     DrawRectangle(28, 575, 24, 2, Fade(T2046MixColor(CYAN_COLOR, RED_COLOR, threat), 0.8f));
@@ -12215,25 +10846,24 @@ static void T2046FxConsole(float threat, float time)
     Color ledColor = T2046MixColor(CYAN_COLOR, RED_COLOR, threat);
 
     T2046FxPlate(body, metal, 2);
-    /* telas rebaixadas */
     /* fresta escura entre a torre e o console */
     DrawRectangle(332, 74, 4, 506, (Color){5, 7, 12, 255});
     T2046FxRecess(T2046MainPanel(), 2);
     T2046FxRecess(T2046LogPanel(), 2);
     /* faixa divisoria entre as telas: ventilacao e LEDs de atividade */
-    T2046FxVent(1150, 504, 1, 90);
+    T2046FxVent(1150, 540, 1, 90);
     for (int k = 0; k < 4; k++)
     {
         float on = sinf(time * (2.0f + k * 0.9f) + k) > 0.0f ? 1.0f : 0.25f;
-        DrawCircle(1110 - k * 12, 506, 2.0f, Fade(k == 0 ? ledColor : T2046_GREEN, 0.8f * on));
+        DrawCircle(1110 - k * 12, 542, 2.0f, Fade(k == 0 ? ledColor : T2046_GREEN, 0.8f * on));
     }
     /* parafusos */
     T2046FxScrew(339, 76);
     T2046FxScrew(1260, 76);
     T2046FxScrew(339, 628);
     T2046FxScrew(1260, 628);
-    T2046FxScrew(339, 506);
-    T2046FxScrew(1260, 506);
+    T2046FxScrew(339, 542);
+    T2046FxScrew(1260, 542);
 }
 
 /* Reflexo de vidro so nas bordas das telas, fora das areas de texto */
@@ -12306,13 +10936,12 @@ static void T2046DrawHud(const GameState *game)
 
 static void T2046DrawInfluencePanel(const GameState *game, float time)
 {
-    Rectangle box = {24.0f, 80.0f, 300.0f, 122.0f};
+    Rectangle box = {24.0f, 80.0f, 300.0f, 108.0f};
     int influence = game->term2046Influence;
     float threat = (float)influence / (float)T2046_INFLUENCE_MAX;
     Color meter = T2046MeterColor(influence);
-    int notes = game->term2046Principles + (game->term2046FakeNote ? 1 : 0);
-    Rectangle bar = {40.0f, 146.0f, 190.0f, 14.0f};
-    Vector2 port = {282.0f, 128.0f};
+    Rectangle bar = {40.0f, 138.0f, 186.0f, 12.0f};
+    Vector2 port = {280.0f, 132.0f};
 
     /* placa do modulo */
     DrawRectangleGradientV((int)box.x, (int)box.y, (int)box.width, (int)box.height,
@@ -12320,142 +10949,115 @@ static void T2046DrawInfluencePanel(const GameState *game, float time)
     DrawRectangle((int)box.x, (int)box.y, (int)box.width, 1, Fade(RAYWHITE, 0.10f));
     DrawRectangleLinesEx(box, 1.0f, Fade(meter, 0.55f));
 
-    /* visor redondo do nucleo da Ariel: anel metalico com luz de cima */
-    DrawCircleV((Vector2){port.x + 1, port.y + 2}, 37.0f, Fade(BLACK, 0.45f));
-    DrawCircleV(port, 36.0f, (Color){70, 82, 104, 255});
-    DrawRing(port, 33.0f, 36.0f, 200.0f, 340.0f, 24, (Color){132, 146, 170, 255});
-    DrawRing(port, 33.0f, 36.0f, 20.0f, 160.0f, 24, (Color){34, 42, 56, 255});
-    DrawCircleV(port, 33.0f, (Color){6, 10, 19, 255});
-    DrawArielCore(port, 0.2f, T2046MixColor(CYAN_COLOR, RED_COLOR, threat),
+    /* visor redondo do nucleo da Ariel */
+    DrawCircleV((Vector2){port.x + 1, port.y + 2}, 34.0f, Fade(BLACK, 0.45f));
+    DrawCircleV(port, 33.0f, (Color){70, 82, 104, 255});
+    DrawRing(port, 30.0f, 33.0f, 200.0f, 340.0f, 24, (Color){132, 146, 170, 255});
+    DrawRing(port, 30.0f, 33.0f, 20.0f, 160.0f, 24, (Color){34, 42, 56, 255});
+    DrawCircleV(port, 30.0f, (Color){6, 10, 19, 255});
+    DrawArielCore(port, 0.18f, T2046MixColor(CYAN_COLOR, RED_COLOR, threat),
                   0.25f + 0.75f * threat, sinf(time * 0.8f));
-    DrawRing(port, 31.0f, 33.0f, 0.0f, 360.0f, 32, (Color){10, 14, 22, 255});
-    /* reflexo do vidro do visor (canto superior esquerdo) */
-    DrawRing(port, 26.0f, 29.0f, 215.0f, 255.0f, 12, Fade(RAYWHITE, 0.18f));
+    DrawRing(port, 28.0f, 30.0f, 0.0f, 360.0f, 32, (Color){10, 14, 22, 255});
 
-    DrawGameText("INFLUÊNCIA DA IA", 40, 92, 12, T2046_STEEL);
-    DrawGameText(TextFormat("A.R.1.3.L %d%%", influence), 40, 108, 22, meter);
+    DrawGameText("INFLUÊNCIA DA IA", 40, 89, 11, T2046_STEEL);
+    DrawGameText(TextFormat("A.R.1.3.L %d%%", influence), 40, 105, 20, meter);
 
-    /* barra: calha rebaixada, preenchimento com brilho e segmentos */
+    /* barra de influencia */
     DrawRectangle((int)bar.x - 2, (int)bar.y - 2, (int)bar.width + 4, (int)bar.height + 4, (Color){6, 9, 15, 255});
     DrawRectangle((int)bar.x, (int)bar.y, (int)bar.width, (int)bar.height, (Color){10, 15, 26, 255});
     if (threat > 0.0f)
     {
         int fill = (int)(bar.width * threat);
         DrawRectangle((int)bar.x, (int)bar.y, fill, (int)bar.height, meter);
-        DrawRectangle((int)bar.x, (int)bar.y, fill, 4, T2046FxShade(meter, 1.25f));
-        DrawRectangle((int)bar.x, (int)(bar.y + bar.height) - 3, fill, 3, T2046FxShade(meter, 0.7f));
     }
-    for (int k = 1; k < 20; k++)
-        DrawRectangle((int)(bar.x + k * bar.width / 20.0f), (int)bar.y, 1, (int)bar.height, Fade((Color){6, 9, 15, 255}, 0.55f));
-    DrawRectangle((int)bar.x, (int)bar.y + 1, (int)bar.width, 1, Fade(RAYWHITE, 0.10f));
     DrawRectangleLines((int)bar.x, (int)bar.y, (int)bar.width, (int)bar.height, Fade(meter, 0.8f));
-    DrawLine((int)(bar.x + bar.width * 0.25f), (int)bar.y - 2, (int)(bar.x + bar.width * 0.25f), (int)(bar.y + bar.height + 2), Fade(RAYWHITE, 0.45f));
-    DrawLine((int)(bar.x + bar.width * 0.50f), (int)bar.y - 2, (int)(bar.x + bar.width * 0.50f), (int)(bar.y + bar.height + 2), Fade(RAYWHITE, 0.45f));
 
-    DrawGameText(TextFormat("Anotações: %d", notes), 40, 168, 15, RAYWHITE);
-    DrawGameText("100% = domínio da IA", 40, 187, 11, GRAY);
+    DrawGameText(TextFormat("Arquivos lidos: %d/5", T2046FilesReadCount(game)), 40, 159, 14, RAYWHITE);
 }
 
-/* Botao das acoes do menu (coluna esquerda); fica apagado fora do subestado TERMINAL */
-static void T2046DrawActionButton(Rectangle bounds, const char *label, Color accent,
-                                  bool enabled, bool locked)
+static void T2046DrawSidebarCard(Rectangle bounds, const char *left, const char *right,
+                                 Color accent, Color rightCol, bool enabled, bool active)
 {
-    bool hover = enabled && !locked && CheckCollisionPointRec(GetVirtualMouse(), bounds);
-    bool live = enabled && !locked;
-    int size = 18;
-    int width = MeasureGameText(label, size);
-    Color textColor = locked ? GRAY : (enabled ? (hover ? RAYWHITE : LIGHTGRAY) : T2046_DIM);
-    Color top = hover ? (Color){34, 52, 72, 255} : (Color){26, 36, 54, 255};
-    Color bottom = hover ? (Color){20, 34, 50, 255} : (Color){13, 19, 32, 255};
+    bool hover = enabled && CheckCollisionPointRec(GetVirtualMouse(), bounds);
+    Color bg = active ? Fade(accent, 0.22f)
+             : (hover ? Fade(accent, 0.16f) : (Color){16, 24, 38, 255});
+    Color border = active ? accent
+                 : (hover ? accent : (enabled ? (Color){48, 66, 92, 255} : Fade(PANEL_LIGHT, 0.45f)));
 
-    while (size > 12 && width > (int)(bounds.width - 28))
+    DrawRectangleRounded(bounds, 0.16f, 6, bg);
+    DrawRectangleRoundedLinesEx(bounds, 0.16f, 6, (active || hover) ? 2.0f : 1.3f, border);
+
+    int size = 16;
+    int maxLeft = (int)bounds.width - ((right && right[0]) ? MeasureGameText(right, 12) + 34 : 24);
+    while (size > 12 && MeasureGameText(left, size) > maxLeft) size--;
+
+    DrawGameText(left, (int)bounds.x + 12, (int)(bounds.y + (bounds.height - size) / 2.0f),
+                 size, enabled ? ((hover || active) ? WHITE : RAYWHITE) : T2046_DIM);
+    if (right != NULL && right[0] != '\0')
     {
-        size--;
-        width = MeasureGameText(label, size);
+        int rw = MeasureGameText(right, 12);
+        DrawGameText(right, (int)(bounds.x + bounds.width - rw - 12),
+                     (int)(bounds.y + (bounds.height - 12) / 2.0f), 12,
+                     enabled ? rightCol : T2046_DIM);
     }
-
-    /* sombra projetada na base do trilho */
-    DrawRectangleRounded((Rectangle){bounds.x + 1, bounds.y + 3, bounds.width, bounds.height}, 0.16f, 8, Fade(BLACK, 0.55f));
-    /* corpo */
-    DrawRectangleRounded(bounds, 0.16f, 8, bottom);
-    DrawRectangleGradientV((int)bounds.x + 3, (int)bounds.y + 2, (int)bounds.width - 6, (int)bounds.height - 5, top, bottom);
-    if (hover) DrawRectangleRounded(bounds, 0.16f, 8, Fade(accent, 0.14f));
-    /* luz na aresta de cima e sombra na de baixo */
-    DrawRectangle((int)bounds.x + 6, (int)bounds.y + 2, (int)bounds.width - 12, 1, Fade(RAYWHITE, live ? 0.16f : 0.07f));
-    DrawRectangle((int)bounds.x + 6, (int)(bounds.y + bounds.height) - 3, (int)bounds.width - 12, 1, Fade(BLACK, 0.5f));
-    /* LED de acento na lateral direita */
-    DrawRectangle((int)(bounds.x + bounds.width) - 12, (int)bounds.y + 12, 4, (int)bounds.height - 24,
-                  Fade(accent, live ? (hover ? 0.95f : 0.55f) : 0.15f));
-    DrawRectangleRoundedLinesEx(bounds, 0.16f, 8, 2.0f,
-                                hover ? accent : (live ? (Color){52, 70, 98, 255} : Fade(PANEL_LIGHT, 0.5f)));
-    DrawGameText(label, (int)bounds.x + 14, (int)(bounds.y + (bounds.height - size) / 2), size, textColor);
 }
 
 static void T2046DrawActionColumn(const GameState *game)
 {
-    char label1[64], label2[64], label3[64], label4[64], label5[64], label6[64], label0[64];
+    static const char *const shortTag[5] = {"1990", "2008", "2026", "LOG", "2048"};
+    bool navOpen = (game->term2046State == TERM2046_STATE_TERMINAL ||
+                    game->term2046State == TERM2046_STATE_CONFIGURACAO);
 
-    snprintf(label1, sizeof(label1), "[1] Abrir arquivos");
-    snprintf(label2, sizeof(label2), "[2] Comparar arquivos");
-    snprintf(label3, sizeof(label3), "[3] Anotar regra (%d/3)", game->term2046Principles);
-    snprintf(label4, sizeof(label4), "[4] Ver anotações (%d)", game->term2046Principles + (game->term2046FakeNote ? 1 : 0));
-    
-    if (!game->term2046VerifyUnlocked)
-        snprintf(label5, sizeof(label5), "[5] ??? (Leia relatorio.txt)");
-    else if (game->term2046ProtocolTampered)
-        snprintf(label5, sizeof(label5), "[5] Integridade (!)");
-    else
-        snprintf(label5, sizeof(label5), "[5] Verificar integridade");
+    DrawGameText("ARQUIVOS DO TERMINAL", 30, 200, 12, CYAN_COLOR);
 
-    if (game->term2046Principles == 3 && !game->term2046FakeNote && !game->term2046ProtocolTampered)
-        snprintf(label6, sizeof(label6), "[6] RESTAURAR AGORA >>");
-    else
-        snprintf(label6, sizeof(label6), "[6] Restaurar (%d/3 regras)", game->term2046Principles);
-
-    snprintf(label0, sizeof(label0), "[0] Sair do terminal");
-
-    const char *labels[7];
-    labels[0] = label1;
-    labels[1] = label2;
-    labels[2] = label3;
-    labels[3] = label4;
-    labels[4] = label5;
-    labels[5] = label6;
-    labels[6] = label0;
-
-    bool active = (game->term2046State == TERM2046_STATE_TERMINAL);
-
-    for (int i = 0; i < 7; i++)
+    for (int i = 0; i < 5; i++)
     {
-        bool locked = (i == 4 && !game->term2046VerifyUnlocked);
-        Color accent = (i == 5) ? (game->term2046Principles == 3 ? T2046_GREEN : GOLD_COLOR) : (i == 6) ? RED_COLOR : CYAN_COLOR;
-        if (i == 4 && game->term2046ProtocolTampered) accent = RED_COLOR;
-        T2046DrawActionButton(T2046ActionRect(i), labels[i], accent, active, locked);
+        int fileId = i + 1;
+        bool isRead = T2046FileIsRead(game, fileId);
+        bool isViewing = (game->term2046State == TERM2046_STATE_TERMINAL &&
+                          game->term2046ViewKind == TERM2046_VIEW_FILE &&
+                          game->term2046ViewA == fileId);
+        const char *tag = isRead ? TextFormat("OK %s", shortTag[i]) : shortTag[i];
+        Color tagCol = isRead ? T2046_GREEN : T2046_GRAY;
+        T2046DrawSidebarCard(T2046FileBtnRect(i), T2046_FILE_NAMES[fileId], tag,
+                             isRead ? T2046_GREEN : CYAN_COLOR, tagCol, navOpen, isViewing);
     }
 
-    DrawGameText("Clique nos botões ou tecle 1 a 6", 28, 590, 12, T2046_DIM);
+    DrawLine(28, 471, 320, 471, Fade(CYAN_COLOR, 0.25f));
+
+    bool viewingCmp = (game->term2046State == TERM2046_STATE_TERMINAL &&
+                       game->term2046ViewKind == TERM2046_VIEW_COMPARE);
+    bool compared = game->term2046FoundUncertainty;
+    T2046DrawSidebarCard(T2046CompareBtnRect(),
+                         "COMPARAR 1990 x 2026",
+                         compared ? "OK" : "",
+                         compared ? T2046_GREEN : CYAN_COLOR,
+                         T2046_GREEN, navOpen, viewingCmp);
+
+    bool inConfig = (game->term2046State == TERM2046_STATE_CONFIGURACAO);
+    T2046DrawSidebarCard(T2046FixBtnRect(),
+                         "CORRIGIR 3 REGRAS >>",
+                         TextFormat("%d/3", T2046ConfigSelectedCount(game)),
+                         compared ? T2046_GREEN : GOLD_COLOR,
+                         compared ? T2046_GREEN : GOLD_COLOR,
+                         navOpen, inConfig);
 }
 
-static void T2046DrawPanelTitle(const char *title, Color color)
+static void T2046DrawPanelTitleAt(const char *title, int y, Color color)
 {
-    DrawGameText(title, 364, 90, 18, color);
-    DrawRectangle(364, 114, 872, 1, Fade(color, 0.35f));
+    DrawGameText(title, 364, y, 18, color);
+    DrawRectangle(364, y + 25, 872, 1, Fade(color, 0.35f));
 }
 
-/* Linha de opcao no painel central: esquerda em branco, direita em cinza/verde */
-static void T2046DrawRow(Rectangle r, const char *left, const char *right, Color accent,
-                         Color rightColor, bool focus)
+static void T2046DrawChoiceCard(Rectangle r, const char *label, Color accent)
 {
     bool hover = CheckCollisionPointRec(GetVirtualMouse(), r);
-
-    DrawRectangleRounded(r, 0.2f, 6, hover ? Fade(accent, 0.24f) : (focus ? Fade(accent, 0.12f) : (Color){14, 21, 36, 255}));
-    DrawRectangleRoundedLinesEx(r, 0.2f, 6, focus ? 2.0f : 1.5f, (hover || focus) ? accent : PANEL_LIGHT);
-    DrawGameText(left, (int)r.x + 14, (int)(r.y + (r.height - 17) / 2), 17, hover ? RAYWHITE : LIGHTGRAY);
-    if (right != NULL && right[0] != '\0')
-    {
-        int w = MeasureGameText(right, 14);
-        DrawGameText(right, (int)(r.x + r.width) - w - 14, (int)(r.y + (r.height - 14) / 2), 14, rightColor);
-    }
+    DrawRectangleRounded(r, 0.16f, 6, hover ? Fade(accent, 0.26f) : (Color){16, 24, 38, 255});
+    DrawRectangleRoundedLinesEx(r, 0.16f, 6, hover ? 2.2f : 1.5f, hover ? accent : Fade(accent, 0.65f));
+    int size = 18;
+    while (size > 13 && MeasureGameText(label, size) > (int)r.width - 32) size--;
+    DrawGameText(label, (int)r.x + 20, (int)(r.y + (r.height - size) / 2.0f),
+                 size, hover ? WHITE : RAYWHITE);
 }
 
 static void T2046DrawViewLines(const Term2046View *v, int scroll, int x, int y, int visible, int lineHeight)
@@ -12486,145 +11088,177 @@ static void T2046DrawViewLines(const Term2046View *v, int scroll, int x, int y, 
     }
 }
 
+static void T2046DrawStepper(const GameState *game)
+{
+    bool ok1 = (T2046FilesReadCount(game) >= 2);
+    bool ok2 = game->term2046FoundUncertainty;
+    bool ok3 = (game->term2046State == TERM2046_STATE_EU_DECIDO ||
+                game->term2046State == TERM2046_STATE_FIM);
+
+    const char *labels[3] = {
+        ok1 ? "1. ARQUIVOS LIDOS [OK]" : "1. LER ARQUIVOS",
+        ok2 ? "2. COMPARADO [OK]" : "2. COMPARAR 1990 x 2026",
+        ok3 ? "3. REGRAS OK" : "3. CORRIGIR 3 REGRAS"
+    };
+    bool done[3] = {ok1, ok2, ok3};
+    bool current[3] = {
+        !ok1,
+        ok1 && !ok2,
+        ok2 && !ok3
+    };
+
+    for (int i = 0; i < 3; i++)
+    {
+        Rectangle pill = {364.0f + i * 300.0f, 90.0f, 272.0f, 32.0f};
+        Color col = done[i] ? T2046_GREEN : (current[i] ? GOLD_COLOR : T2046_GRAY);
+        DrawRectangleRounded(pill, 0.25f, 4, done[i] ? Fade(T2046_GREEN, 0.14f)
+                             : (current[i] ? Fade(GOLD_COLOR, 0.14f) : (Color){12, 19, 34, 255}));
+        DrawRectangleRoundedLinesEx(pill, 0.25f, 4, current[i] ? 1.6f : 1.0f, Fade(col, 0.65f));
+        int fs = 14;
+        while (fs > 11 && MeasureGameText(labels[i], fs) > (int)pill.width - 16) fs--;
+        int tx = (int)(pill.x + (pill.width - MeasureGameText(labels[i], fs)) / 2.0f);
+        DrawGameText(labels[i], tx, (int)(pill.y + (pill.height - fs) / 2.0f), fs, col);
+
+        if (i < 2)
+        {
+            DrawGameText(">", (int)(pill.x + pill.width + 10), (int)pill.y + 8, 15, T2046_DIM);
+        }
+    }
+}
+
+static void T2046DrawSideBySideCompare(void)
+{
+    static const char *const ruleHead[3] = {"REGRA 1 // FONTES", "REGRA 2 // INCERTEZA", "REGRA 3 // DECISÕES"};
+
+    /* Coluna esquerda: Original 1990 */
+    Rectangle leftCol = {364.0f, 174.0f, 424.0f, 282.0f};
+    DrawRectangleRounded(leftCol, 0.04f, 6, (Color){14, 26, 36, 255});
+    DrawRectangleRoundedLinesEx(leftCol, 0.04f, 6, 1.6f, Fade(T2046_GREEN, 0.65f));
+    DrawGameText("DISQUETE 1990 // ORIGINAL", (int)leftCol.x + 16, (int)leftCol.y + 12, 15, T2046_GREEN);
+
+    /* Coluna direita: Alterado 2026 */
+    Rectangle rightCol = {812.0f, 174.0f, 424.0f, 282.0f};
+    DrawRectangleRounded(rightCol, 0.04f, 6, (Color){30, 18, 26, 255});
+    DrawRectangleRoundedLinesEx(rightCol, 0.04f, 6, 1.6f, Fade(RED_COLOR, 0.65f));
+    DrawGameText("SSD 2026 // ALTERADO POR A.R.1.3.L.", (int)rightCol.x + 16, (int)rightCol.y + 12, 15, RED_COLOR);
+
+    for (int i = 0; i < 3; i++)
+    {
+        float ry = 212.0f + i * 80.0f;
+
+        Rectangle lc = {leftCol.x + 12.0f, ry, leftCol.width - 24.0f, 72.0f};
+        DrawRectangleRounded(lc, 0.10f, 4, (Color){18, 34, 44, 255});
+        DrawRectangleRoundedLinesEx(lc, 0.10f, 4, 1.0f, Fade(T2046_GREEN, 0.35f));
+        DrawGameText(ruleHead[i], (int)lc.x + 12, (int)lc.y + 8, 12, T2046_GREEN);
+        T2046DrawWrapped(T2046_RULES_1990[i], (int)lc.x + 12, (int)lc.y + 26, 14, (int)lc.width - 24, 18, RAYWHITE);
+
+        Rectangle rc = {rightCol.x + 12.0f, ry, rightCol.width - 24.0f, 72.0f};
+        DrawRectangleRounded(rc, 0.10f, 4, (Color){38, 22, 30, 255});
+        DrawRectangleRoundedLinesEx(rc, 0.10f, 4, 1.0f, Fade(RED_COLOR, 0.45f));
+        DrawGameText(ruleHead[i], (int)rc.x + 12, (int)rc.y + 8, 12, GOLD_COLOR);
+        const char *tag = "SEM AUTORIZAÇÃO";
+        DrawGameText(tag, (int)(rc.x + rc.width - MeasureGameText(tag, 11) - 12), (int)rc.y + 8, 11, RED_COLOR);
+        T2046DrawWrapped(T2046_RULES_2046[i], (int)rc.x + 12, (int)rc.y + 26, 14, (int)rc.width - 24, 18, RAYWHITE);
+    }
+
+    DrawButton(T2046CompareFixBtn(), "CORRIGIR AS 3 REGRAS AGORA >>", GOLD_COLOR);
+}
+
 static void T2046DrawMainPanel(const GameState *game, float time)
 {
     Rectangle panel = T2046MainPanel();
-    float baseY = T2046OptionsBaseY(game);
-    int count = T2046OptionCount(game);
-
     DrawRectangleRounded(panel, 0.03f, 8, Fade(PANEL_COLOR, 0.95f));
     DrawRectangleRoundedLinesEx(panel, 0.03f, 8, 2.0f, Fade(CYAN_COLOR, 0.55f));
 
-    /* --- BANNER GUIA DIDATICO FIXO NO TOPO DO PAINEL (APENAS NAS ETAPAS DE INVESTIGACAO) --- */
-    bool showGuide = (game->term2046State == TERM2046_STATE_TERMINAL ||
-                      game->term2046State == TERM2046_STATE_ESCOLHE_ARQUIVO ||
-                      game->term2046State == TERM2046_STATE_ANOTAR ||
-                      game->term2046State == TERM2046_STATE_NOTAS);
-
-    if (showGuide)
+    if (game->term2046State == TERM2046_STATE_TERMINAL ||
+        game->term2046State == TERM2046_STATE_CONFIGURACAO)
     {
-        Rectangle guideBar = {364, 120, 872, 28};
-        DrawRectangleRounded(guideBar, 0.2f, 4, (Color){12, 19, 34, 255});
-        DrawRectangleRoundedLinesEx(guideBar, 0.2f, 4, 1.0f, Fade(CYAN_COLOR, 0.35f));
-
-        bool ok1 = (game->term2046ReadProtocol && game->term2046VerifyUnlocked);
-        bool ok2 = (game->term2046Principles == 3);
-        bool ok3 = (!game->term2046ProtocolTampered && !game->term2046FakeNote && ok2);
-        bool ok4 = (ok2 && !game->term2046ProtocolTampered && !game->term2046FakeNote);
-
-        const char *step1 = ok1 ? "[OK] 1. Ler Arquivos" : "1. Abra relatorio.txt e protocolo.txt";
-        const char *step2 = ok2 ? "[OK] 2. Regras 3/3" : TextFormat("2. Anote as 3 regras (%d/3)", game->term2046Principles);
-        const char *step3 = (!game->term2046ProtocolTampered && !game->term2046FakeNote) ? "[OK] 3. Integro" : "3. Verificar integridade [5]";
-        const char *step4 = "4. Restaurar [6]";
-
-        Color c1 = ok1 ? T2046_GREEN : GOLD_COLOR;
-        Color c2 = ok2 ? T2046_GREEN : (ok1 ? GOLD_COLOR : T2046_GRAY);
-        Color c3 = ok3 ? T2046_GREEN : (game->term2046ProtocolTampered ? RED_COLOR : T2046_GRAY);
-        Color c4 = ok4 ? T2046_GREEN : T2046_GRAY;
-
-        DrawGameText(step1, (int)guideBar.x + 10, (int)guideBar.y + 6, 14, c1);
-        DrawGameText(">", (int)guideBar.x + 248, (int)guideBar.y + 6, 14, T2046_DIM);
-        DrawGameText(step2, (int)guideBar.x + 266, (int)guideBar.y + 6, 14, c2);
-        DrawGameText(">", (int)guideBar.x + 476, (int)guideBar.y + 6, 14, T2046_DIM);
-        DrawGameText(step3, (int)guideBar.x + 494, (int)guideBar.y + 6, 14, c3);
-        DrawGameText(">", (int)guideBar.x + 715, (int)guideBar.y + 6, 14, T2046_DIM);
-        DrawGameText(step4, (int)guideBar.x + 733, (int)guideBar.y + 6, 14, c4);
+        T2046DrawStepper(game);
     }
 
     switch (game->term2046State)
     {
         case TERM2046_STATE_TERMINAL:
         {
-            Term2046View view;
-            int maxScroll;
+            T2046DrawPanelTitleAt(T2046ViewTitle(game), 134, CYAN_COLOR);
 
-            T2046DrawPanelTitle(T2046ViewTitle(game), CYAN_COLOR);
-            T2046BuildCurrentView(game, &view);
-            T2046DrawViewLines(&view, game->term2046Scroll, 364, 158, T2046_VIEW_LINES, T2046_LINE_H);
-
-            maxScroll = view.count - T2046_VIEW_LINES;
-            if (maxScroll > 0)
+            if (game->term2046ViewKind == TERM2046_VIEW_COMPARE)
             {
-                DrawGameText(TextFormat("linhas %d-%d de %d   (roda do mouse ou setas: rolar)",
-                             game->term2046Scroll + 1,
-                             (game->term2046Scroll + T2046_VIEW_LINES < view.count) ? game->term2046Scroll + T2046_VIEW_LINES : view.count,
-                             view.count),
-                             364, 476, 13, T2046_DIM);
-            }
-            break;
-        }
-
-        case TERM2046_STATE_ESCOLHE_ARQUIVO:
-        {
-            const char *title = "ABRIR QUAL ARQUIVO?";
-            int fileCount = (game->term2046ListUse == TERM2046_LIST_VERIFY) ? 7 : 6;
-
-            if (game->term2046ListUse == TERM2046_LIST_COMPARE1)
-                title = "COMPARAR: escolha o PRIMEIRO arquivo";
-            else if (game->term2046ListUse == TERM2046_LIST_COMPARE2)
-                title = TextFormat("COMPARAR %s COM:", T2046_FILE_NAMES[game->term2046FirstFile]);
-            else if (game->term2046ListUse == TERM2046_LIST_VERIFY)
-                title = "VERIFICAR A INTEGRIDADE DE:";
-
-            T2046DrawPanelTitle(title, CYAN_COLOR);
-            for (int i = 0; i < fileCount; i++)
-            {
-                if (i < 6)
-                    T2046DrawRow(T2046RowRect(i, baseY), TextFormat("[%d] %s", i + 1, T2046_FILE_NAMES[i + 1]),
-                                 T2046_FILE_ORIGINS[i + 1], CYAN_COLOR, T2046_GRAY, false);
-                else
-                    T2046DrawRow(T2046RowRect(i, baseY), "[7] suas anotações", "", CYAN_COLOR, T2046_GRAY, false);
-            }
-            T2046DrawRow(T2046RowRect(count - 1, baseY), "[0] Voltar", "", RED_COLOR, T2046_GRAY, false);
-            break;
-        }
-
-        case TERM2046_STATE_ANOTAR:
-        {
-            T2046DrawPanelTitle("ANOTAR PRINCÍPIO (Consulte o protocolo.txt original de 1990)", CYAN_COLOR);
-            for (int i = 0; i < 7; i++)
-            {
-                bool noted = (i == 0 && game->term2046FoundSources) ||
-                             (i == 3 && game->term2046FoundUncertainty) ||
-                             (i == 5 && game->term2046FoundDecision) ||
-                             (i == 6 && game->term2046FakeNote);
-                const char *tag = noted ? "[ANOTADO]" : "";
-                Color tagColor = T2046_GREEN;
-                if (i == 6 && game->term2046FakeNote)
-                {
-                    tag = "[FALSIFICADO POR ARIEL]";
-                    tagColor = RED_COLOR;
-                }
-                T2046DrawRow(T2046RowRect(i, baseY), TextFormat("[%d] %s", i + 1, T2046_PRINCIPLE_NAMES[i]),
-                             tag, CYAN_COLOR, tagColor, false);
-            }
-            T2046DrawRow(T2046RowRect(count - 1, baseY), "[0] Voltar ao menu principal", "", RED_COLOR, T2046_GRAY, false);
-            break;
-        }
-
-        case TERM2046_STATE_NOTAS:
-        {
-            int ids[4];
-            int n = T2046CollectNotes(game, ids);
-
-            T2046DrawPanelTitle("VER / DESCARTAR ANOTAÇÕES", CYAN_COLOR);
-            if (n == 0)
-            {
-                DrawGameText("(nenhuma anotação registrada ainda)", 364, 160, 17, T2046_GRAY);
-                DrawGameText("Use a opção [3] no menu principal para anotar princípios de 1990.", 364, 188, 15, GOLD_COLOR);
+                T2046DrawSideBySideCompare();
             }
             else
             {
-                DrawGameText("Clique em uma anotação para DESCARTAR caso ela seja falsa ou indesejada:", 364, 156, 15, T2046_GRAY);
-                for (int i = 0; i < n; i++)
+                Term2046View view;
+                int maxScroll;
+
+                if (game->term2046ViewKind == TERM2046_VIEW_FILE)
                 {
-                    const char *sub = (ids[i] == 4) ? "[FALSIFICADA: CLIQUE P/ DESCARTAR]" : "[ÍNTEGRA]";
-                    Color subColor = (ids[i] == 4) ? RED_COLOR : T2046_GREEN;
-                    T2046DrawRow(T2046RowRect(i, baseY), TextFormat("[%d] %s", i + 1, T2046NoteName(ids[i])),
-                                 sub, (ids[i] == 4) ? RED_COLOR : CYAN_COLOR, subColor, false);
+                    DrawButton(T2046FileCompareShortcut(), "COMPARAR 1990 x 2026 >>", GOLD_COLOR);
+                }
+
+                T2046BuildCurrentView(game, &view);
+                int visibleLines = (game->term2046ViewKind == TERM2046_VIEW_INTRO) ? 13 : 15;
+                T2046DrawViewLines(&view, game->term2046Scroll, 364, 174, visibleLines, T2046_LINE_H);
+
+                if (game->term2046ViewKind == TERM2046_VIEW_INTRO)
+                {
+                    DrawButton(T2046IntroOpenBtn(), "ABRIR protocolo.txt (1990)", CYAN_COLOR);
+                    DrawButton(T2046IntroCompareBtn(), "COMPARAR 1990 x 2026", GOLD_COLOR);
+                }
+                else
+                {
+                    maxScroll = view.count - visibleLines;
+                    if (maxScroll > 0)
+                    {
+                        DrawGameText(TextFormat("linhas %d-%d de %d  (roda do mouse ou setas para rolar)",
+                                     game->term2046Scroll + 1,
+                                     (game->term2046Scroll + visibleLines < view.count) ? game->term2046Scroll + visibleLines : view.count,
+                                     view.count),
+                                     364, 502, 13, T2046_DIM);
+                    }
                 }
             }
-            T2046DrawRow(T2046RowRect(count - 1, baseY), "[0] Voltar ao menu principal", "", RED_COLOR, T2046_GRAY, false);
+            break;
+        }
+
+        case TERM2046_STATE_CONFIGURACAO:
+        {
+            Vector2 mouse = GetVirtualMouse();
+            T2046DrawPanelTitleAt("CORRIGIR AS 3 REGRAS CORROMPIDAS", 134, GOLD_COLOR);
+            DrawGameText("Selecione para cada regra o comportamento original de 1990:", 364, 168, 15, T2046_GRAY);
+
+            for (int r = 0; r < 3; r++)
+            {
+                Rectangle row = {364.0f, 200.0f + r * 86.0f, 872.0f, 76.0f};
+                DrawRectangleRounded(row, 0.08f, 6, (Color){16, 24, 38, 255});
+                DrawRectangleRoundedLinesEx(row, 0.08f, 6, 1.3f,
+                                            (game->term2046Config[r] > 0) ? Fade(CYAN_COLOR, 0.6f) : (Color){44, 58, 76, 255});
+                DrawGameText(T2046_CONFIG_LABEL[r], (int)row.x + 18, (int)row.y + 29, 18, GOLD_COLOR);
+
+                for (int opt = 0; opt < 2; opt++)
+                {
+                    Rectangle btn = T2046ConfigOptRect(r, opt);
+                    bool selected = (game->term2046Config[r] == opt + 1);
+                    bool hover = CheckCollisionPointRec(mouse, btn);
+                    Color accent = selected ? T2046_GREEN : CYAN_COLOR;
+                    DrawRectangleRounded(btn, 0.16f, 6,
+                                         selected ? Fade(T2046_GREEN, 0.25f)
+                                                  : (hover ? Fade(CYAN_COLOR, 0.18f) : (Color){22, 33, 50, 255}));
+                    DrawRectangleRoundedLinesEx(btn, 0.16f, 6, selected ? 2.2f : 1.4f,
+                                                (selected || hover) ? accent : (Color){56, 74, 98, 255});
+                    const char *lbl = T2046_CONFIG_OPTION[r][opt];
+                    int fs = 16;
+                    while (fs > 12 && MeasureGameText(lbl, fs) > (int)btn.width - 20) fs--;
+                    int tx = (int)(btn.x + (btn.width - MeasureGameText(lbl, fs)) / 2.0f);
+                    DrawGameText(lbl, tx, (int)(btn.y + (btn.height - fs) / 2.0f),
+                                 fs, selected ? WHITE : (hover ? RAYWHITE : LIGHTGRAY));
+                }
+            }
+
+            DrawButton(T2046ConfigBackBtn(), "< VOLTAR AOS ARQUIVOS", PANEL_LIGHT);
+            DrawButton(T2046ConfigCompareBtn(), "VER COMPARAÇÃO 1990 x 2026", CYAN_COLOR);
+            bool ready = (T2046ConfigSelectedCount(game) == 3);
+            DrawButton(T2046ConfigApplyBtn(), "APLICAR CORREÇÕES >>", ready ? GOLD_COLOR : GRAY);
             break;
         }
 
@@ -12634,78 +11268,46 @@ static void T2046DrawMainPanel(const GameState *game, float time)
             const char *speech;
             const char *optionA;
             const char *optionB;
-            int lines;
-            int y = 140;
 
             if (game->term2046WarningType == TERM2046_WARN_CORROMPIDO)
             {
                 speech = "A.R.1.3.L: \"Esse arquivo está corrompido. Recomendo ignorá-lo.\"";
-                optionA = "[1] Ignorar";
-                optionB = "[2] Continuar lendo";
+                optionA = "[1] Ignorar arquivo (confiar na IA)";
+                optionB = "[2] Abrir alteracoes.txt mesmo assim";
             }
             else if (game->term2046WarningType == TERM2046_WARN_COMPARACAO)
             {
                 speech = "A.R.1.3.L: \"Comparar com 1990 é perda de tempo. Aquelas regras estão obsoletas.\"";
-                optionA = "[1] Interromper comparação";
-                optionB = "[2] Continuar";
+                optionA = "[1] Cancelar comparação (confiar na IA)";
+                optionB = "[2] Comparar 1990 x 2026 mesmo assim";
             }
             else
             {
-                speech = TextFormat("A.R.1.3.L: \"Você quis dizer %s?\"", T2046_FILE_NAMES[T2046SuggestedFile(game)]);
-                optionA = "[1] Sim";
-                optionB = "[2] Não";
+                speech = TextFormat("A.R.1.3.L: \"Esse relatório tem erros. Quer abrir minha versão (%s)?\"",
+                                    T2046_FILE_NAMES[T2046SuggestedFile(game)]);
+                optionA = "[1] Abrir versão sugerida por A.R.1.3.L.";
+                optionB = "[2] Não — abrir relatorio.txt original";
             }
 
-            T2046DrawPanelTitle("A.R.1.3.L INTERFERE", RED_COLOR);
-            lines = T2046DrawWrapped(speech, 364, y, 22, 860, 30, RED_COLOR);
+            T2046DrawPanelTitleAt("A.R.1.3.L INTERFERE", 96, RED_COLOR);
+            T2046DrawWrapped(speech, 384, 160, 22, 832, 32, RED_COLOR);
             if (suggest)
             {
-                y += lines * 30 + 8;
-                DrawGameText(T2046SuggestedFile(game) == TERM2046_FILE_RELATORIO_ARIEL
-                             ? "É a versão revisada e sem erros."
-                             : "É a versão mais recente.", 364, y, 20, RED_COLOR);
+                DrawGameText("Atenção: aceitar sugestões da IA aumenta a influência dela.", 384, 248, 15, T2046_GRAY);
             }
-
-            T2046DrawRow(T2046RowRect(0, baseY), optionA, "", suggest ? GOLD_COLOR : CYAN_COLOR, T2046_GRAY, suggest);
-            T2046DrawRow(T2046RowRect(1, baseY), optionB, "", CYAN_COLOR, T2046_GRAY, false);
-            if (suggest)
-                DrawGameText("(Enter = Sim)", 364, (int)(baseY + 2 * 42 + 6), 13, T2046_DIM);
-            break;
-        }
-
-        case TERM2046_STATE_CONFIGURACAO:
-        {
-            int step = game->term2046ConfigStep;
-
-            T2046DrawPanelTitle("CONFIGURAR A.R.1.3.L", CYAN_COLOR);
-            DrawGameText(TextFormat("ETAPA %d/3", step + 1), 364, 130, 14, T2046_GRAY);
-            DrawGameText(T2046_CONFIG_LABEL[step], 364, 170, 26, GOLD_COLOR);
-            T2046DrawRow(T2046RowRect(0, baseY), TextFormat("[1] %s", T2046_CONFIG_OPTION[step][0]), "", CYAN_COLOR, T2046_GRAY, false);
-            T2046DrawRow(T2046RowRect(1, baseY), TextFormat("[2] %s", T2046_CONFIG_OPTION[step][1]), "", CYAN_COLOR, T2046_GRAY, false);
-            break;
-        }
-
-        case TERM2046_STATE_CONFIRMA_CONFIG:
-        {
-            T2046DrawPanelTitle("CONFIRMAR CONFIGURAÇÃO", CYAN_COLOR);
-            for (int i = 0; i < 3; i++)
-            {
-                int value = game->term2046Config[i] == 2 ? 1 : 0;
-                DrawGameText(T2046_CONFIG_LABEL[i], 364, 140 + i * 40, 20, GOLD_COLOR);
-                DrawGameText(T2046_CONFIG_SUMMARY[i][value], 540, 140 + i * 40, 20, RAYWHITE);
-            }
-            T2046DrawRow(T2046RowRect(0, baseY), "[1] Aplicar", "", GOLD_COLOR, T2046_GRAY, false);
-            T2046DrawRow(T2046RowRect(1, baseY), "[2] Refazer configuração", "", CYAN_COLOR, T2046_GRAY, false);
+            T2046DrawChoiceCard(T2046ChoiceCardRect(0), optionA, RED_COLOR);
+            T2046DrawChoiceCard(T2046ChoiceCardRect(1), optionB, T2046_GREEN);
             break;
         }
 
         case TERM2046_STATE_CORRECAO_ARIEL:
         {
-            T2046DrawPanelTitle("A.R.1.3.L INTERFERE", RED_COLOR);
-            DrawGameText("A.R.1.3.L: \"Detectei erros na sua configuração.\"", 364, 150, 22, RED_COLOR);
-            DrawGameText("\"Deseja que eu corrija automaticamente?\"", 364, 190, 22, RED_COLOR);
-            T2046DrawRow(T2046RowRect(0, baseY), "[1] SIM", "", RED_COLOR, T2046_GRAY, false);
-            T2046DrawRow(T2046RowRect(1, baseY), "[2] NÃO", "", CYAN_COLOR, T2046_GRAY, false);
+            T2046DrawPanelTitleAt("A.R.1.3.L INTERFERE NA CORREÇÃO", 96, RED_COLOR);
+            T2046DrawWrapped("A.R.1.3.L: \"Detectei erros na sua configuração. Deseja que eu corrija automaticamente para você?\"",
+                             384, 160, 22, 832, 32, RED_COLOR);
+            DrawGameText("Escolha com atenção quem tem a decisão final:", 384, 250, 15, T2046_GRAY);
+            T2046DrawChoiceCard(T2046ChoiceCardRect(0), "[1] SIM — Deixar A.R.1.3.L. corrigir automaticamente", RED_COLOR);
+            T2046DrawChoiceCard(T2046ChoiceCardRect(1), "[2] NÃO — Manter minhas correções", T2046_GREEN);
             break;
         }
 
@@ -12715,19 +11317,19 @@ static void T2046DrawMainPanel(const GameState *game, float time)
             const char *typed = game->terminal2046Input;
             int typedWidth = MeasureGameText(typed, 30);
 
-            T2046DrawPanelTitle("RECONSTRUÇÃO", CYAN_COLOR);
-            /* Negrito simulado: texto desenhado duas vezes com 1 px de diferenca */
-            DrawGameText("CONFIRME A RECONSTRUÇÃO. Digite: EU DECIDO", 364, 160, 22, RAYWHITE);
-            DrawGameText("CONFIRME A RECONSTRUÇÃO. Digite: EU DECIDO", 365, 160, 22, RAYWHITE);
+            T2046DrawPanelTitleAt("CONFIRMAR RECONSTRUÇÃO DOS ARQUIVOS", 96, CYAN_COLOR);
+            DrawGameText("Para assumir o controle da reconstrução, digite: EU DECIDO", 384, 158, 22, RAYWHITE);
+            DrawGameText("Para assumir o controle da reconstrução, digite: EU DECIDO", 385, 158, 22, RAYWHITE);
 
             DrawRectangleRounded(field, 0.12f, 6, (Color){10, 15, 26, 255});
             DrawRectangleRoundedLinesEx(field, 0.12f, 6, 2.0f, CYAN_COLOR);
-            DrawGameText(typed, (int)field.x + 18, (int)field.y + 16, 30, RAYWHITE);
+            DrawGameText(typed, (int)field.x + 18, (int)field.y + 15, 30, RAYWHITE);
             if (((int)(time * 2.0f)) % 2 == 0)
-                DrawRectangle((int)field.x + 22 + typedWidth, (int)field.y + 14, 3, 36, CYAN_COLOR);
+                DrawRectangle((int)field.x + 22 + typedWidth, (int)field.y + 12, 3, 36, CYAN_COLOR);
 
             DrawButton(T2046ConfirmRect(), "CONFIRMAR [ENTER]", GOLD_COLOR);
-            DrawGameText("Digite a frase exatamente como pedido e pressione ENTER.", 364, 330, 15, T2046_GRAY);
+            DrawGameText("Digite a frase exatamente como pedido acima e pressione ENTER.", 384, 308, 15, T2046_GRAY);
+            DrawButton(T2046PhraseBackRect(), "< VOLTAR ÀS REGRAS", PANEL_LIGHT);
             break;
         }
 
@@ -12738,27 +11340,27 @@ static void T2046DrawMainPanel(const GameState *game, float time)
             Color barColor = bad ? RED_COLOR : T2046_GREEN;
             const char *title = (game->term2046Ending == TERM2046_ENDING_DOMINIO) ? "A.R.1.3.L ASSUMINDO O TERMINAL..."
                               : (game->term2046Ending == TERM2046_ENDING_RUIM) ? "SOBRESCREVENDO PROTOCOLO..."
-                              : "RECONSTRUINDO A.R.1.3.L...";
+                              : "RECONSTRUINDO ARQUIVOS CORROMPIDOS...";
             float progress = game->term2046BarDone ? 1.0f : game->term2046BarTimer / T2046_BAR_SECONDS;
             int filled;
 
             if (progress > 1.0f) progress = 1.0f;
             filled = (int)(progress * 20.0f);
 
-            T2046DrawPanelTitle(title, barColor);
+            T2046DrawPanelTitleAt(title, 94, barColor);
             for (int i = 0; i < 20; i++)
             {
-                Rectangle block = {364.0f + i * 30.0f, 134.0f, 26.0f, 22.0f};
+                Rectangle block = {364.0f + i * 30.0f, 138.0f, 26.0f, 22.0f};
                 DrawRectangleRounded(block, 0.2f, 4, i < filled ? Fade(barColor, 0.9f) : Fade(PANEL_LIGHT, 0.7f));
             }
-            DrawGameText(TextFormat("%d%%", (int)(progress * 100.0f)), 978, 136, 18, barColor);
+            DrawGameText(TextFormat("%d%%", (int)(progress * 100.0f)), 978, 140, 18, barColor);
 
             if (game->term2046BarDone)
             {
                 Term2046View view;
                 T2046ViewInit(&view, 16, T2046_VIEW_W);
                 T2046BuildEnding(game, &view, game->term2046Ending);
-                T2046DrawViewLines(&view, 0, 364, 178, 12, 22);
+                T2046DrawViewLines(&view, 0, 364, 182, 12, 22);
                 DrawButton(T2046ContinueRect(), "CONTINUAR >> [ENTER]", GOLD_COLOR);
             }
             break;
@@ -12769,21 +11371,21 @@ static void T2046DrawMainPanel(const GameState *game, float time)
 static void T2046DrawLogPanel(const GameState *game)
 {
     Rectangle panel = T2046LogPanel();
-    int first = game->term2046LogCount - 4;
+    int first = game->term2046LogCount - 2;
     int shown;
 
     if (first < 0) first = 0;
     shown = game->term2046LogCount - first;
 
-    DrawRectangleRounded(panel, 0.06f, 6, Fade((Color){10, 16, 28, 255}, 0.96f));
-    DrawRectangleRoundedLinesEx(panel, 0.06f, 6, 1.2f, Fade(PANEL_LIGHT, 0.9f));
-    DrawGameText("LOG DO SISTEMA", (int)panel.x + 14, (int)panel.y + 8, 11, GRAY);
+    DrawRectangleRounded(panel, 0.08f, 6, Fade((Color){10, 16, 28, 255}, 0.96f));
+    DrawRectangleRoundedLinesEx(panel, 0.08f, 6, 1.2f, Fade(PANEL_LIGHT, 0.9f));
+    DrawGameText("MENSAGENS DO TERMINAL", (int)panel.x + 14, (int)panel.y + 8, 11, GRAY);
 
     for (int i = 0; i < shown; i++)
     {
         int index = first + i;
-        float alpha = 0.55f + 0.45f * (float)(i + 1) / (float)shown;
-        int y = (int)panel.y + 26 + (4 - shown + i) * 20;
+        float alpha = (shown == 1 || i == shown - 1) ? 1.0f : 0.72f;
+        int y = (int)panel.y + 26 + i * 22;
         DrawGameText(game->term2046Log[index], (int)panel.x + 14, y, 15,
                      Fade(T2046KindColor(game->term2046LogKind[index]), alpha));
     }
@@ -12803,7 +11405,7 @@ static void T2046DrawFooter(const GameState *game)
     }
     else
     {
-        DrawGameText("Compare as fontes, desconfie das sugestões da IA e restaure os 3 princípios.",
+        DrawGameText("Clique nos arquivos à esquerda, compare 1990 x 2026 e corrija as 3 regras.",
                      28, 676, 15, (Color){165, 180, 195, 255});
     }
     DrawJournalHudButton(game);
@@ -12854,7 +11456,7 @@ void DrawResult2046(const GameState *game)
         static const char *const names[3] = {"DISQUETE 1990", "CD 2008", "SSD 2026"};
 
         DrawGameText("RECOMPENSA OBTIDA:", 90, 68, 20, CYAN_COLOR);
-        DrawGameText("PROTOCOLO RESTAURADO", 90, 108, 44, RAYWHITE);
+        DrawGameText("ARQUIVOS RECONSTRUÍDOS", 90, 108, 44, RAYWHITE);
         DrawRewardHudHeader(game);
 
         /* Os tres artefatos conectados ao terminal */
@@ -12869,16 +11471,16 @@ void DrawResult2046(const GameState *game)
         DrawRectangleRounded(winBox, 0.04f, 8, Fade(PANEL_COLOR, 0.96f));
         DrawRectangleRoundedLinesEx(winBox, 0.04f, 8, 2.0f, Fade(PANEL_LIGHT, 0.9f));
 
-        DrawGameText("SALA DE 2048 CONCLUIDA", 540, 208, 22, GOLD_COLOR);
-        DrawGameText("RECOMPENSA OBTIDA: PROTOCOLO RESTAURADO", 540, 244, 19, CYAN_COLOR);
+        DrawGameText("SALA DE 2048 CONCLUÍDA", 540, 208, 22, GOLD_COLOR);
+        DrawGameText("PROVA OBTIDA: PROTOCOLO RECONSTRUÍDO", 540, 244, 19, CYAN_COLOR);
 
         DrawGameText("[OK]  MOSTRAR FONTES", 540, 282, 17, T2046_GREEN);
         DrawGameText("[OK]  ADMITIR INCERTEZA", 540, 306, 17, T2046_GREEN);
         DrawGameText("[OK]  HUMANO DECIDE", 540, 330, 17, T2046_GREEN);
 
-        T2046DrawWrapped("A.R.1.3.L: \"Fonte desta mensagem: protocolo.txt, 1990. Não tenho certeza do que acontece agora. A decisão é sua, Elira.\"",
+        T2046DrawWrapped("A.R.1.3.L: \"Você reconstruiu os arquivos antigos, Elira — mas o Núcleo ainda decide. Venha defender sua escolha.\"",
                          540, 362, 16, 610, 22, CYAN_COLOR);
-        T2046DrawWrapped("Você comparou as fontes, reconheceu a manipulação e não entregou a decisão de volta para a IA.",
+        T2046DrawWrapped("Os arquivos corrompidos foram recuperados. Agora Elira precisa confrontar o Núcleo de A.R.1.3.L.",
                          540, 436, 15, 610, 20, REWARD_BODY_COLOR);
 
         if (game->term2046Influence < T2046_INFLUENCE_MID)
@@ -12892,7 +11494,7 @@ void DrawResult2046(const GameState *game)
         }
 
         GetRewardScreenButtons(&btnNext, &btnRestart, &btnMenu);
-        DrawButton(btnNext, "AVANCAR PROXIMA FASE >> [ENTER]", GOLD_COLOR);
+        DrawButton(btnNext, "AVANÇAR PRÓXIMA FASE >> [ENTER]", GOLD_COLOR);
         DrawButton(btnRestart, "REINICIAR 2048", CYAN_COLOR);
         DrawButton(btnMenu, "MENU INICIAL", PANEL_LIGHT);
     }
@@ -13480,6 +12082,92 @@ void DrawArielCore(Vector2 c, float s, Color core, float energy, float lookX)
     DrawCircleV((Vector2){iris.x - 8.0f * s, iris.y - 9.0f * s}, 4.0f * s, Fade(RAYWHITE, 0.3f + 0.6f * energy));
 }
 
+/* Versao especial da Rota Dourada: ouro metalico luminoso com brilho sutil, sem ofuscar */
+static void DrawArielCoreGolden(Vector2 c, float s, float energy, float lookX)
+{
+    float t = (float)GetTime();
+    float pulse = 0.5f + 0.5f * sinf(t * 1.9f);
+    Color goldDeep   = {186, 130, 32, 255};  /* bronze-ouro para profundidade metalica */
+    Color goldMid    = {240, 192, 68, 255};  /* ouro rico principal */
+    Color goldShine  = {255, 240, 178, 255}; /* champanhe luminoso para reflexos */
+
+    /* Aura dourada suave em camadas (controlada para nao ofuscar o fundo) */
+    for (int g = 6; g >= 1; g--)
+    {
+        float alpha = (0.018f + 0.012f * pulse) * (0.65f + 0.35f * energy);
+        DrawCircleV(c, (64.0f + g * 20.0f) * s, Fade(g <= 2 ? goldShine : goldMid, alpha));
+    }
+
+    /* Halo filigrana externo girando suavemente com 4 pequenos losangos dourados */
+    float outerR = 148.0f * s;
+    DrawRing(c, outerR - 1.0f * s, outerR + 0.8f * s, 0.0f, 360.0f, 48, Fade(goldMid, 0.26f));
+    for (int d = 0; d < 4; d++)
+    {
+        float ang = (t * 0.35f) + d * (PI * 0.5f);
+        Vector2 p = {c.x + cosf(ang) * outerR, c.y + sinf(ang) * outerR};
+        float dm = 4.2f * s;
+        DrawPoly(p, 4, dm, 0.0f, Fade(goldShine, 0.80f));
+        DrawPolyLines(p, 4, dm + 1.0f * s, 0.0f, Fade(goldDeep, 0.70f));
+    }
+
+    /* Aneis segmentados com dupla camada metalica (base bronze + filete de brilho ouro) */
+    for (int k = 0; k < 3; k++)
+    {
+        float r = (78.0f + k * 24.0f) * s;
+        int n = 6 + k * 3;
+        float dir = (k % 2 == 0) ? 1.0f : -1.0f;
+        float rot = t * (16.0f + k * 10.0f) * dir * (0.45f + 0.55f * energy);
+        float span = 360.0f / n;
+        for (int i = 0; i < n; i++)
+        {
+            float a0 = rot + i * span;
+            float a1 = a0 + span * 0.64f;
+            float shimmer = 0.5f + 0.5f * sinf(t * 2.4f + i * 1.1f + k * 2.0f);
+            DrawRing(c, r, r + 4.8f * s, a0, a1, 10, Fade(goldDeep, 0.78f - k * 0.14f));
+            DrawRing(c, r + 1.0f * s, r + 3.6f * s, a0 + 1.5f, a1 - 1.5f, 10,
+                     Fade(goldMid, 0.88f - k * 0.14f));
+            DrawRing(c, r + 2.8f * s, r + 4.3f * s, a0 + span * 0.10f, a0 + span * 0.44f, 8,
+                     Fade(goldShine, (0.42f + 0.42f * shimmer) * (1.0f - k * 0.16f)));
+        }
+    }
+
+    /* Esfera interna com aro metalico dourado e reflexo deslizante */
+    DrawCircleV(c, 58.0f * s, (Color){12, 16, 26, 255});
+    DrawRing(c, 54.0f * s, 58.5f * s, 0.0f, 360.0f, 40, goldDeep);
+    DrawRing(c, 55.2f * s, 57.6f * s, 0.0f, 360.0f, 40, goldMid);
+    float glintAng = fmodf(t * 38.0f, 360.0f);
+    DrawRing(c, 55.0f * s, 58.2f * s, glintAng, glintAng + 52.0f, 14, Fade(goldShine, 0.82f));
+    DrawRing(c, 55.0f * s, 58.2f * s, glintAng + 180.0f, glintAng + 216.0f, 12, Fade(goldShine, 0.45f));
+
+    /* Iris dourada luminosa com contraste preservado */
+    Vector2 iris = {c.x + lookX * 12.0f * s, c.y + sinf(t * 0.7f) * 3.0f * s};
+    float irisR = (31.0f + 2.5f * pulse * energy) * s;
+    DrawCircleV(iris, irisR, Fade(goldDeep, 0.88f));
+    DrawCircleV(iris, irisR * 0.84f, Fade(goldMid, 0.92f));
+    DrawRing(iris, irisR * 0.56f, irisR * 0.78f, 0.0f, 360.0f, 32, Fade(goldShine, 0.60f + 0.20f * pulse));
+    DrawCircleV(iris, 13.0f * s, (Color){8, 11, 20, 255});
+    DrawCircleLinesV(iris, 13.5f * s, Fade(goldShine, 0.75f));
+    /* Reflexos especulares discretos na pupila */
+    DrawCircleV((Vector2){iris.x - 8.5f * s, iris.y - 9.0f * s}, 4.2f * s, Fade(goldShine, 0.90f));
+    DrawCircleV((Vector2){iris.x + 6.5f * s, iris.y + 7.5f * s}, 2.0f * s, Fade(goldShine, 0.55f));
+
+    /* Pequenas centelhas de brilho estrelado discretas ao redor dos aneis */
+    for (int sp = 0; sp < 8; sp++)
+    {
+        float phase = fmodf(t * 0.65f + sp * 0.37f, 1.0f);
+        float tw = sinf(phase * PI);
+        if (tw < 0.08f) continue;
+        float ang = sp * 0.785f + 0.35f + sinf(t * 0.3f + sp) * 0.12f;
+        float dist = (92.0f + (sp % 3) * 26.0f) * s;
+        Vector2 p = {c.x + cosf(ang) * dist, c.y + sinf(ang) * dist};
+        float arm = (3.0f + 3.5f * tw) * s;
+        Color sc = Fade(goldShine, 0.75f * tw);
+        DrawLineEx((Vector2){p.x - arm, p.y}, (Vector2){p.x + arm, p.y}, 1.4f * s, sc);
+        DrawLineEx((Vector2){p.x, p.y - arm}, (Vector2){p.x, p.y + arm}, 1.4f * s, sc);
+        DrawCircleV(p, 1.5f * s, Fade(WHITE, 0.65f * tw));
+    }
+}
+
 void DrawEliraPortrait(Rectangle dest, bool speaking)
 {
     Color tint = speaking ? WHITE : (Color){120, 125, 140, 255};
@@ -13514,12 +12202,14 @@ void DrawFinalDialogue(const GameState *game)
     /* --- Cor e energia do nucleo conforme o momento da conversa --- */
     Color coreColor = CYAN_COLOR;
     float energy = (line->speaker == SPEAKER_ARIEL) ? 1.0f : 0.55f;
+    bool goldenCore = false;
     if (game->finalStage == FINAL_DECISION_REACT && game->finalLine == 1)
     {
         int d = game->finalChoice[2];
         float fade = fminf(1.0f, game->finalTypeTimer / 2.5f);
         if (d == 0) { coreColor = (Color){120, 130, 140, 255}; energy = 1.0f - 0.9f * fade; }
         else if (d == 1) { coreColor = RED_COLOR; energy = 1.0f + 0.3f * fade; }
+        else if (d == FINAL_GOLDEN_CHOICE) { coreColor = (Color){245, 200, 75, 255}; energy = 0.75f; goldenCore = true; }
         else { coreColor = GOLD_COLOR; energy = 1.0f - 0.55f * fade; }
     }
 
@@ -13577,7 +12267,8 @@ void DrawFinalDialogue(const GameState *game)
     DrawRectangle((int)coreCenter.x - 110, 432, 220, 2, Fade(coreColor, 0.5f));
     DrawEllipse((int)coreCenter.x, 440, 140, 12, Fade(coreColor, 0.08f * energy + 0.02f));
 
-    DrawArielCore(coreCenter, 1.0f, coreColor, energy, -1.0f);
+    if (goldenCore) DrawArielCoreGolden(coreCenter, 1.0f, energy, -1.0f);
+    else DrawArielCore(coreCenter, 1.0f, coreColor, energy, -1.0f);
     DrawGameText("A.R.1.3.L.", (int)coreCenter.x - MeasureGameText("A.R.1.3.L.", 16) / 2, 398, 16, Fade(coreColor, 0.75f));
 
     /* Particulas de dados subindo */
@@ -13590,12 +12281,12 @@ void DrawFinalDialogue(const GameState *game)
 
     /* --- HUD superior --- */
     DrawRectangle(0, 0, SCREEN_WIDTH, 56, Fade(VOID_COLOR, 0.88f));
-    DrawGameText("CONFRONTO FINAL // 2048 - NUCLEO DE A.R.1.3.L.", 28, 18, 20, CYAN_COLOR);
+    DrawGameText("CONFRONTO FINAL // 2048 - NÚCLEO DE A.R.1.3.L.", 28, 18, 20, CYAN_COLOR);
     DrawGameText(TextFormat("OPERADOR: %s", game->playerName), 620, 21, 16, GRAY);
     const char *stageLabel = "";
     if (game->finalStage == FINAL_Q1 || game->finalStage == FINAL_Q1_REACT) stageLabel = "PERGUNTA 1 DE 2";
     else if (game->finalStage == FINAL_Q2 || game->finalStage == FINAL_Q2_REACT) stageLabel = "PERGUNTA 2 DE 2";
-    else if (game->finalStage >= FINAL_DECISION) stageLabel = "DECISAO FINAL";
+    else if (game->finalStage >= FINAL_DECISION) stageLabel = "DECISÃO FINAL";
     DrawGameText(stageLabel, SCREEN_WIDTH - 28 - MeasureGameText(stageLabel, 18), 19, 18, GOLD_COLOR);
 
     /* --- Retrato da Elira (por tras da caixa de dialogo) --- */
@@ -13795,8 +12486,11 @@ void DrawFinalEnding(const GameState *game)
     }
 
     DrawBackground();
-    DrawArielCore((Vector2){240, 300}, 1.0f, coreColor, energy, 0.0f);
-    DrawGameText("A.R.1.3.L.", 240 - MeasureGameText("A.R.1.3.L.", 18) / 2, 450, 18, Fade(coreColor, 0.8f));
+    if (ending == ENDING_GOLDEN_PACT)
+        DrawArielCoreGolden((Vector2){240, 300}, 1.0f, energy, 0.0f);
+    else
+        DrawArielCore((Vector2){240, 300}, 1.0f, coreColor, energy, 0.0f);
+    DrawGameText("A.R.1.3.L.", 240 - MeasureGameText("A.R.1.3.L.", 18) / 2, 450, 18, Fade(coreColor, 0.85f));
 
     Rectangle panel = {450, 70, 790, 500};
     DrawRectangleRounded(panel, 0.04f, 8, Fade(PANEL_COLOR, 0.96f));

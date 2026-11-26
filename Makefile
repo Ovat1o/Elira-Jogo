@@ -111,7 +111,47 @@ else
     OUT    := ELIRA
 endif
 
-.PHONY: all run win run-win clean
+.PHONY: all run win run-win web run-web clean
+
+# "make" sem argumentos continua gerando o executavel nativo.
+.DEFAULT_GOAL := all
+
+# -----------------------------------------------------------------------------
+# Versao para navegador (WebAssembly). Requer Emscripten (emcc) e git.
+#   make web      -> gera dist/web/ (index.html, .js, .wasm, .data)
+#   make run-web  -> serve dist/web/ em http://localhost:8080
+# A raylib 6.0 e baixada e compilada para web em .deps/raylib-web/ na 1a vez.
+# -----------------------------------------------------------------------------
+EMCC            ?= emcc
+RAYLIB_WEB_TAG  ?= 6.0
+RAYLIB_WEB_DIR  := $(DEPS_DIR)/raylib-web
+RAYLIB_WEB_LIB  := $(RAYLIB_WEB_DIR)/src/libraylib.web.a
+WEB_OUT_DIR     := dist/web
+WEB_SHELL       := web/shell.html
+WEB_FLAGS       := -std=c99 -Os -Wall -DPLATFORM_WEB \
+                   -sUSE_GLFW=3 -sASYNCIFY -sALLOW_MEMORY_GROWTH=1 \
+                   -sINITIAL_MEMORY=268435456 -sSTACK_SIZE=1048576 \
+                   -sFORCE_FILESYSTEM=1 -lidbfs.js
+
+web: $(WEB_OUT_DIR)/index.html
+
+$(RAYLIB_WEB_LIB):
+	@test -d $(RAYLIB_WEB_DIR)/.git || git clone --depth 1 --branch $(RAYLIB_WEB_TAG) \
+	    --filter=blob:none --sparse https://github.com/raysan5/raylib.git $(RAYLIB_WEB_DIR)
+	cd $(RAYLIB_WEB_DIR) && git sparse-checkout set src
+	$(MAKE) -C $(RAYLIB_WEB_DIR)/src PLATFORM=PLATFORM_WEB CC=$(EMCC)
+
+# Lista recursiva de arquivos em Make puro (funciona tambem no Windows).
+rwildcard = $(foreach d,$(wildcard $(1:=/*)),$(call rwildcard,$d,$2) $(filter $(subst *,%,$2),$d))
+WEB_ASSETS := $(call rwildcard,$(ASSETS_DIR),*)
+
+$(WEB_OUT_DIR)/index.html: $(SRC) $(HEADERS) $(WEB_SHELL) $(RAYLIB_WEB_LIB) $(WEB_ASSETS)
+	@mkdir -p $(WEB_OUT_DIR)
+	$(EMCC) $(SRC) $(CPPFLAGS) $(WEB_FLAGS) $(RAYLIB_WEB_LIB) \
+	    --preload-file $(ASSETS_DIR) --shell-file $(WEB_SHELL) -o $@
+
+run-web: web
+	cd $(WEB_OUT_DIR) && python3 -m http.server 8080
 
 # Alvo padrao: compila o executavel do jogo
 all: $(OUT)
