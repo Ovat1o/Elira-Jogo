@@ -712,11 +712,11 @@ Fontes oficiais de referência: [instalação do Git](https://git-scm.com/instal
 Os testes de sistema das Histórias de Usuário foram executados e documentados com evidências em vídeo (screencasts) anexadas aos cards do Jira.
 
 - **Relatório completo dos casos de teste:** [docs/TESTES_SISTEMA.md](docs/TESTES_SISTEMA.md)
-- **Acompanhamento de Histórias:**
+- **Acompanhamento de Histórias:** [Link Jira](https://csprj-adsr-2p-e4.atlassian.net/jira/software/c/projects/PI2/list?jql=project%20%3D%20PI2%20AND%20parent%20%3D%20PI2-120%20AND%20type%20%3D%20Story%20ORDER%20BY%20cf%5B10019%5D%20ASC)
 
 ![Quadro de Testes](docs/board-testes-qa.png)
 
-### Quadro de armazenmento do Screencast dos testes
+### Quadro de armazenmento do Screencast dos testes [Link Drive](https://drive.google.com/drive/folders/12rPzA6kgxTndvXc8Td696V71XCReXOAW)
 
 ![Quadro Drive Testes](docs/screencasts-tests-qa.png)
 
