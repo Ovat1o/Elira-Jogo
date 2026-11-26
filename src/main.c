@@ -150,8 +150,22 @@ int main(int argc, char **argv)
     game.screen = SCREEN_TITLE;
     ResetDemo(&game);
 
+#if defined(PLATFORM_WEB)
+    /* No navegador o pedido de saida e tratado dentro do loop (volta ao menu). */
+    while (!WindowShouldClose())
+#else
     while (!WindowShouldClose() && !game.exitRequested)
+#endif
     {
+#if defined(PLATFORM_WEB)
+        /* Encerrar o loop congelaria a pagina: qualquer pedido de saida volta ao menu. */
+        if (game.exitRequested)
+        {
+            game.exitRequested = false;
+            game.phaseMenuOpen = false;
+            game.screen = SCREEN_TITLE;
+        }
+#endif
         float delta = GetFrameTime();
         if (game.messageTimer > 0) game.messageTimer -= delta;
 

@@ -994,10 +994,15 @@ bool UpdatePhaseControls(GameState *game)
             game->phaseMenuOpen = false;
             game->screen = SCREEN_TITLE;
         }
+#if !defined(PLATFORM_WEB)
+        /* No navegador nao existe "fechar o jogo": o botao nao e exibido. */
         else if (Clicked(exitBtn))
         {
             game->exitRequested = true;
         }
+#else
+        (void)exitBtn;
+#endif
         return true;
     }
 
@@ -1043,7 +1048,11 @@ void DrawPhaseControls(const GameState *game)
     }
 
     DrawRectangle(0, 0, SCREEN_WIDTH, SCREEN_HEIGHT, Fade(BLACK, 0.78f));
+#if defined(PLATFORM_WEB)
+    Rectangle panel = {390, 165, 500, 310};   /* sem o botao FECHAR O JOGO */
+#else
     Rectangle panel = {390, 165, 500, 380};
+#endif
     DrawRectangleRounded(panel, 0.05f, 8, Fade(PANEL_COLOR, 0.99f));
     DrawRectangleRoundedLinesEx(panel, 0.05f, 8, 2.0f, CYAN_COLOR);
 
@@ -1052,7 +1061,9 @@ void DrawPhaseControls(const GameState *game)
 
     DrawButton((Rectangle){440, 300, 400, 54}, "CONTINUAR [ESC]", CYAN_COLOR);
     DrawButton((Rectangle){440, 370, 400, 54}, "VOLTAR AO MENU INICIAL", GOLD_COLOR);
+#if !defined(PLATFORM_WEB)
     DrawButton((Rectangle){440, 440, 400, 54}, "FECHAR O JOGO", RED_COLOR);
+#endif
 }
 
 void DrawBackground(void)
