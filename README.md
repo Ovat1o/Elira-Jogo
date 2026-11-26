@@ -716,6 +716,10 @@ Os testes de sistema das Histórias de Usuário foram executados e documentados 
 
 ![Quadro de Testes](docs/board-testes-qa.png)
 
+### Quadro de armazenmento do Screencast dos testes
+
+![Quadro Drive Testes](docs/screencasts-tests-qa.png)
+
 ### Registro Atualizado de Bugs e Issues
 
 ![Bugs Atualizados](docs/bugs-atualizados.png)
