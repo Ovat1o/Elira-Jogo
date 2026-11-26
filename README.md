@@ -720,6 +720,3 @@ Os testes de sistema das Histórias de Usuário foram executados e documentados 
 
 ![Bugs Atualizados](docs/bugs-atualizados.png)
 
-### Registro Atualizado de Bugs e Issues
-
-![Bugs Atualizados](docs/bugs-atualizados.png)
