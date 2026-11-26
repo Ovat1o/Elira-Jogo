@@ -38,7 +38,6 @@ Controles do IA FIGHT (jogador 1 no teclado):
 | Golpe forte | `K` | Y/△ |
 | Soco longo / uppercut | frente + `K` / cima + `K` | frente + Y/△ / cima + Y/△ |
 | Golpe baixo / aéreo | agachado + golpe / golpe no ar | igual |
-| Tiro de plasma (Elira) | `I` | B/○ |
 | Especial (metade da barra CARGA) | `L` | RB/RT ou R1/R2 |
 | Dash | `D` `D` (dois toques para a frente) | LB/L1 |
 | Agarrão (colado; mesmo comando escapa) | `J` + `K` juntos | LT/L2 |
@@ -232,6 +231,13 @@ Para quem busca ação rápida no estilo shooter top-down (`Tecla I` no menu pri
 
 **VsCode** - Ambiente de Desenvolvimento
 
+### Uso de inteligência artificial e autoria
+
+| Atividade | Ferramenta | Como a equipe utilizou a IA | Integrantes e contribuições |
+|---|---|---|---|
+| Desenvolvimento do IA FIGHT | Claude | A equipe utilizou o Claude como apoio na construção da base do modo de luta em C. | [Victor Julius, Otavio Leão] |
+| Criação de sprites | ChatGPT e Antigravity | A equipe utilizou o ChatGPT para criar os sprites da protagonista Elira nos três modos de jogo e os sprites dos personagens jogáveis do IA FIGHT. | [Victor Julus, Tales Cavalcante, João Tezzolini, Maria Vitória] ||
+
 ***
 
 ## **3. Backlog e Board**
@@ -251,6 +257,16 @@ Para quem busca ação rápida no estilo shooter top-down (`Tecla I` no menu pri
 **4- SPRINT 1**
 
 ![Backlog](https://pub-181bb6168cd04f80bd48d53b914eecab.r2.dev/WhatsApp%20Image%202026-10-22%20at%2018.29.08.jpeg)
+
+**5- SPRINT 2**
+
+[![Histórias e correções](docs/board-historias-e-bugs.png)](docs/board-historias-e-bugs.png)
+
+**6- SPRINT 3**
+
+[![Sprint Week 17-18](docs/board-week-17-18.png)](docs/board-week-17-18.png)
+
+remover tiro de plasma no README
 
 ***
 
